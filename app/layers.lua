@@ -44,6 +44,7 @@ function Layers:recompose()
     return self.composite
 end
 function Layers:clearHistory()
+    if self.pending then self:finishEdit() end
     self.undoStack={}
     self.redoStack={}
     self.historyBytes=0
@@ -128,6 +129,7 @@ function Layers:add(name)
 end
 function Layers:select(index)
     assertIndex(self,index)
+    if self.pending and index~=self.doc.active_layer then self:finishEdit() end
     self.doc.active_layer=index
     return index
 end
