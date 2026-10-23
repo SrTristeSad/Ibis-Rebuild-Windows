@@ -304,8 +304,10 @@ local function drawEditor(w,h)
             ls:remove(A.doc.active_layer);A.dirty=true;rebuildImage()
             status('Camada removida')
         end,false,count<=1)
-        local start=math.max(1,math.min(A.doc.active_layer-2,count-5))
-        local stop=math.min(count,start+5)
+        -- Reserve the footer actions even at the minimum 640px window height.
+        local rows=math.max(1,math.min(6,math.floor((h-131-475)/30)))
+        local start=math.max(1,math.min(A.doc.active_layer-math.floor(rows/2),count-rows+1))
+        local stop=math.min(count,start+rows-1)
         local y=475
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
@@ -314,25 +316,27 @@ local function drawEditor(w,h)
             y=y+30
         end
         local active=A.doc.layers[A.doc.active_layer]
-        if h>=750 then
-            button(active.visible and 'Ocultar' or 'Mostrar',panel+20,669,109,30,function()
+        do
+            local actionY=h-131
+            local opacityY=h-94
+            button(active.visible and 'Ocultar' or 'Mostrar',panel+20,actionY,109,30,function()
                 ls:setVisible(A.doc.active_layer,not active.visible)
                 A.dirty=true;rebuildImage()
             end,active.visible)
-            button('Acima',panel+139,669,54,30,function()
+            button('Acima',panel+139,actionY,54,30,function()
                 local i=A.doc.active_layer
                 ls:move(i,math.min(count,i+1));A.dirty=true;rebuildImage()
             end,false,A.doc.active_layer==count)
-            button('Abaixo',panel+196,669,52,30,function()
+            button('Abaixo',panel+196,actionY,52,30,function()
                 local i=A.doc.active_layer
                 ls:move(i,math.max(1,i-1));A.dirty=true;rebuildImage()
             end,false,A.doc.active_layer==1)
-            button('−',panel+20,706,42,29,function()
+            button('−',panel+20,opacityY,42,29,function()
                 ls:setOpacity(A.doc.active_layer,math.max(0,active.opacity-.1))
                 A.dirty=true;rebuildImage()
             end)
-            text(('Opacidade %.0f%%'):format(active.opacity*100),panel+68,714,'small')
-            button('+',panel+206,706,42,29,function()
+            text(('Opacidade %.0f%%'):format(active.opacity*100),panel+68,opacityY+8,'small')
+            button('+',panel+206,opacityY,42,29,function()
                 ls:setOpacity(A.doc.active_layer,math.min(1,active.opacity+.1))
                 A.dirty=true;rebuildImage()
             end)
@@ -437,6 +441,15 @@ function love.focus(focused)
 end
 function love.wheelmoved(x,y)
     if A.screen=='editor' and not A.modal then
+        local mx=love.mouse.getPosition()
+        if mx>=love.graphics.getWidth()-268 and A.sideTab=='layers' then
+            local count=#A.doc.layers
+            local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
+            if y~=0 and index~=A.doc.active_layer then
+                A.layerSession:select(index);A.dirty=true
+            end
+            return
+        end
         if love.keyboard.isDown('lshift','rshift')then A.rotation=A.rotation+y*math.pi/36
         else A.zoom=math.max(.05,math.min(32,A.zoom*(1.15^y)))end
     end
