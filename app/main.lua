@@ -301,7 +301,7 @@ function love.update(dt)
                 -- Exercise the real eraser toolbar and undo/redo buttons.
                 local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
                 assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
-                love.draw();love.mousepressed(389,90,1)
+                love.draw();love.mousepressed(354,90,1)
                 assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
                 local ox,oy=canvasTransform()
                 local px=ox+(1.5-A.doc.width/2)*A.zoom
@@ -320,7 +320,7 @@ function love.update(dt)
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
                     'Fixture da seleção não foi restaurada')
-                love.draw();love.mousepressed(548,90,1)
+                love.draw();love.mousepressed(495,90,1)
                 assert(A.tool=='select','Botão de seleção não ativou')
                 love.draw();love.mousepressed(px,py,1)
                 love.mousereleased(px,py,1)
@@ -374,7 +374,7 @@ function love.update(dt)
                     'RBD2 não persistiu escala após reabertura')
                 -- Click real color palette, bucket toolbar, canvas, undo/redo.
                 love.draw()
-                love.mousepressed(472,90,1)
+                love.mousepressed(425,90,1)
                 assert(A.tool=='fill','Botão Balde não selecionou ferramenta')
                 love.draw()
                 love.mousepressed(panel+176,546,1)
@@ -405,12 +405,69 @@ function love.update(dt)
                 local filled=A.store:openProject(A.doc.id)
                 assert(filled.layers[2].pixels:sub(1,4)==string.char(52,124,233,255),
                     'Preenchimento não persistiu no RBD2')
+                -- Test the real shapes toolbar, outline width, color, drag and filled ellipse.
+                love.draw();love.mousepressed(576,90,1)
+                assert(A.tool=='shape','Botão Formas não selecionou ferramenta')
+                love.draw();love.mousepressed(panel+40,510,1)
+                assert(A.shapeWidth==1,'Espessura da forma não foi ajustada')
+                love.draw();love.mousepressed(panel+99,560,1)
+                assert(A.color==0xe53b44ff,'Paleta de formas não selecionou vermelho')
+                local point=function(ix,iy)
+                    return ox+(ix+.5-A.doc.width/2)*A.zoom,
+                        oy+(iy+.5-A.doc.height/2)*A.zoom
+                end
+                local x0,y0=point(5,1)
+                local x1,y1=point(7,3)
+                local previous=Native.readPixel(A.layerSession:activeBuffer(),5,1)
+                local previousInterior=Native.readPixel(A.layerSession:activeBuffer(),6,2)
+                love.draw();love.mousepressed(x0,y0,1)
+                love.mousemoved(x1,y1,x1-x0,y1-y0)
+                assert(A.shapePreview and A.shapePreview.x1==7 and
+                    A.shapePreview.y1==3,'Pré-visualização da forma não acompanha arraste')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==previous,
+                    'Arraste alterou raster antes de soltar o mouse')
+                love.mousereleased(x1,y1,1)
+                assert(not A.shapePreview,'Pré-visualização não foi finalizada')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0xe53b44ff,
+                    'Retângulo não desenhou borda')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),6,2)==previousInterior,
+                    'Contorno desenhou no centro')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==previous,
+                    'Desfazer forma não restaurou pixel original')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0xe53b44ff,
+                    'Refazer forma não restaurou borda')
+                love.draw();love.mousepressed(panel+186,425,1)
+                love.draw();love.mousepressed(panel+186,467,1)
+                assert(A.shapeKind==1 and A.shapeFilled,'Elipse preenchida não selecionada')
+                love.draw();love.mousepressed(panel+138,561,1)
+                assert(A.color==0x20ba84ff,'Paleta de formas não selecionou verde')
+                local ex0,ey0=point(4,4)
+                local ex1,ey1=point(8,6)
+                local outerPrevious=Native.readPixel(A.layerSession:activeBuffer(),4,4)
+                love.draw();love.mousepressed(ex0,ey0,1)
+                love.mousemoved(ex1,ey1,ex1-ex0,ey1-ey0)
+                love.mousereleased(ex1,ey1,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),6,5)==0x20ba84ff,
+                    'Elipse preenchida não desenhou o centro')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==outerPrevious,
+                    'Elipse desenhou fora da região geométrica')
+                saveDoc()
+                local withShapes=A.store:openProject(A.doc.id)
+                local offset=(5*A.doc.width+6)*4+1
+                assert(withShapes.layers[2].pixels:sub(offset,offset+3)==
+                    string.char(32,186,132,255),
+                    'RBD2 não guardou elipse após salvar')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
                     rotation_button=true,nearest_scale_button=true,transform_undo_redo=true,
                     bucket_toolbar=true,bucket_tolerance_buttons=true,bucket_undo_redo=true,
-                    bucket_rbd2_roundtrip=true,persisted_from_real_editor=true}
+                    bucket_rbd2_roundtrip=true,shape_toolbar=true,
+                    shape_drag_preview=true,rectangle_outline=true,ellipse_fill=true,
+                    shapes_undo_redo=true,shapes_rbd2_roundtrip=true,
+                    persisted_from_real_editor=true}
             end)
             if not ok then
                 A.testReport.ok=false
