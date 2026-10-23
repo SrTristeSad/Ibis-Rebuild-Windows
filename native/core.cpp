@@ -138,3 +138,83 @@ rb_i32 rb_get_pixel(const rb_u8* src, rb_u64 capacity, rb_u32 width,
         (static_cast<rb_u32>(p[2]) << 8) | p[3];
     return 0;
 }
+
+
+/* Deterministic desktop canvas primitive, NOT recovered Android brush code.
+   Pixel coverage is a continuous line segment with round caps; one source-over
+   blend per affected pixel. No CRT, heap allocations, callbacks or global state. */
+rb_i32 rb_draw_basic_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, rb_u32 rgba, float opacity) {
+    if (!plane(dst, capacity, width, height)) return -1;
+    // Comparisons intentionally reject NaN and infinities.
+    if (!(diameter >= 1.0f && diameter <= 256.0f) ||
+        !(opacity >= 0.0f && opacity <= 1.0f) ||
+        !(x0 >= -16384.0f && x0 <= 16384.0f) ||
+        !(y0 >= -16384.0f && y0 <= 16384.0f) ||
+        !(x1 >= -16384.0f && x1 <= 16384.0f) ||
+        !(y1 >= -16384.0f && y1 <= 16384.0f))
+        return -1;
+    const float srcAlpha = static_cast<float>(rgba & 255u) * (opacity / 255.0f);
+    if (srcAlpha <= 0.0f) return 0;
+    const float oneMinusSrc = 1.0f - srcAlpha;
+    const float radius = diameter * 0.5f;
+    const float radiusSquared = radius * radius;
+    const float dx = x1 - x0, dy = y1 - y0;
+    const float squaredLength = dx * dx + dy * dy;
+    const float minX = (x0 < x1 ? x0 : x1) - radius - 1.0f;
+    const float maxX = (x0 > x1 ? x0 : x1) + radius + 1.0f;
+    const float minY = (y0 < y1 ? y0 : y1) - radius - 1.0f;
+    const float maxY = (y0 > y1 ? y0 : y1) + radius + 1.0f;
+    if (maxX < 0.0f || maxY < 0.0f ||
+        minX > static_cast<float>(width) ||
+        minY > static_cast<float>(height))
+        return 0;
+    rb_i32 left = static_cast<rb_i32>(minX);
+    rb_i32 right = static_cast<rb_i32>(maxX);
+    rb_i32 top = static_cast<rb_i32>(minY);
+    rb_i32 bottom = static_cast<rb_i32>(maxY);
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    if (right >= static_cast<rb_i32>(width)) right = static_cast<rb_i32>(width) - 1;
+    if (bottom >= static_cast<rb_i32>(height)) bottom = static_cast<rb_i32>(height) - 1;
+    const float srcR = static_cast<float>((rgba >> 24) & 255u);
+    const float srcG = static_cast<float>((rgba >> 16) & 255u);
+    const float srcB = static_cast<float>((rgba >> 8) & 255u);
+    for (rb_i32 y = top; y <= bottom; ++y) {
+        for (rb_i32 x = left; x <= right; ++x) {
+            const float cx = static_cast<float>(x) + 0.5f;
+            const float cy = static_cast<float>(y) + 0.5f;
+            float t = 0.0f;
+            if (squaredLength > 0.0f) {
+                t = ((cx - x0) * dx + (cy - y0) * dy) / squaredLength;
+                if (t < 0.0f) t = 0.0f;
+                if (t > 1.0f) t = 1.0f;
+            }
+            const float ex = cx - (x0 + t * dx);
+            const float ey = cy - (y0 + t * dy);
+            if (ex * ex + ey * ey > radiusSquared) continue;
+            rb_u8* pixel = dst + (static_cast<rb_u64>(y) * width + x) * 4u;
+            const float dstAlpha = static_cast<float>(pixel[3]) / 255.0f;
+            const float outAlpha = srcAlpha + dstAlpha * oneMinusSrc;
+            const rb_u32 outA = static_cast<rb_u32>(outAlpha * 255.0f + 0.5f);
+            if (outA == 0) { pixel[0]=0;pixel[1]=0;pixel[2]=0;pixel[3]=0;continue; }
+            const float dstWeight = dstAlpha * oneMinusSrc;
+            const float srcWeight = srcAlpha;
+            const float invAlpha = 1.0f / outAlpha;
+            float channels[3] = {
+                (srcR * srcWeight + pixel[0] * dstWeight) * invAlpha,
+                (srcG * srcWeight + pixel[1] * dstWeight) * invAlpha,
+                (srcB * srcWeight + pixel[2] * dstWeight) * invAlpha
+            };
+            for (rb_u32 c = 0; c < 3; ++c) {
+                float value = channels[c];
+                if (value > 255.0f) value = 255.0f;
+                if (value < 0.0f) value = 0.0f;
+                pixel[c] = static_cast<rb_u8>(value + 0.5f);
+            }
+            pixel[3] = static_cast<rb_u8>(outA);
+        }
+    }
+    return 0;
+}
