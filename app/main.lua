@@ -135,6 +135,28 @@ local function finishSelection()
     end
     A.selectAction=nil;A.movePreview=nil
 end
+local function applySelectionTransform(turns,scale)
+    finishSelection()
+    assert(A.screen=='editor' and A.tool=='select' and A.selection,
+        'Selecione uma região retangular primeiro')
+    local rect=A.selection
+    local w,h=rect.w,rect.h
+    if turns%2==1 then w,h=h,w end
+    local factor=scale or 1
+    w=math.max(1,math.floor(w*factor+0.5))
+    h=math.max(1,math.floor(h*factor+0.5))
+    assert(w<=A.doc.width and h<=A.doc.height,
+        'O tamanho transformado ultrapassa as dimensões do canvas')
+    local x=math.min(rect.x,A.doc.width-w)
+    local y=math.min(rect.y,A.doc.height-h)
+    local changed=A.layerSession:transformSelection(
+        rect.x,rect.y,rect.w,rect.h,x,y,w,h,turns)
+    if changed then A.dirty=true;rebuildImage() end
+    A.selection={x=x,y=y,w=w,h=h}
+    A.movePreview=nil
+    status(changed and ('Seleção transformada ('..w..' × '..h..
+        ') · Ctrl+Z desfaz') or 'Seleção mantida')
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -308,9 +330,39 @@ function love.update(dt)
                 local persisted=A.store:openProject(A.doc.id)
                 assert(persisted.layers[2].pixels:sub(49,52)==string.char(229,59,68,255),
                     'RBD2 não preservou pixels movidos pela seleção GUI')
+                A.layerSession:pixel(4,1,0x20ba84ff)
+                rebuildImage()
+                A.selection={x=3,y=1,w=2,h=1}
+                love.draw()
+                love.mousepressed(panel+185,470,1)
+                assert(A.selection and A.selection.w==1 and A.selection.h==2,
+                    'Botão 90° não trocou dimensões da seleção')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,2)==0x20ba84ff,
+                    'Rotação pela interface não reposicionou pixels')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,1)==0,
+                    'Rotação não limpou origem')
+                love.draw()
+                love.mousepressed(panel+185,519,1)
+                assert(A.selection.w==2 and A.selection.h==4,
+                    'Botão 200% não redimensionou seleção')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==0x20ba84ff,
+                    'Escala por vizinho próximo incorreta')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==0,
+                    'Desfazer escala falhou')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==0x20ba84ff,
+                    'Refazer escala falhou')
+                saveDoc()
+                local transformed=A.store:openProject(A.doc.id)
+                local offset=(4*A.doc.width+4)*4+1
+                assert(transformed.layers[2].pixels:sub(offset,offset+3)==
+                    string.char(32,186,132,255),
+                    'RBD2 não persistiu escala após reabertura')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
+                    rotation_button=true,nearest_scale_button=true,transform_undo_redo=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -400,6 +452,28 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
+    if A.tool=='select' then
+        text('TRANSFORMAR SELEÇÃO',panel+20,377,'small','muted')
+        local rect=A.selection
+        text(rect and ('Região: '..rect.w..' × '..rect.h..' px')
+            or 'Arraste na tela para selecionar',panel+20,416,'small')
+        button('↶ 90°',panel+20,451,108,37,function()
+            applySelectionTransform(3,1)
+        end,false,not rect or rect.h>A.doc.width or rect.w>A.doc.height)
+        button('90° ↷',panel+140,451,108,37,function()
+            applySelectionTransform(1,1)
+        end,false,not rect or rect.h>A.doc.width or rect.w>A.doc.height)
+        button('− 50%',panel+20,500,108,37,function()
+            applySelectionTransform(0,.5)
+        end,false,not rect)
+        button('+ 200%',panel+140,500,108,37,function()
+            applySelectionTransform(0,2)
+        end,false,not rect or rect.w*2>A.doc.width or rect.h*2>A.doc.height)
+        text('Cada transformação pode ser desfeita.',panel+20,564,'small','muted')
+        text('Rotação: 90° · escala: vizinho próximo',panel+20,592,'small','muted')
+        text('Ctrl+D remove o contorno',panel+20,630,'small','muted')
+        text('Somente a camada ativa é alterada.',panel+20,666,'small','muted')
+    else
     button('Camadas',panel+20,366,107,32,function()A.sideTab='layers'end,A.sideTab=='layers')
     button('Pincel',panel+139,366,109,32,function()A.sideTab='brush'end,A.sideTab=='brush')
     if A.sideTab=='layers' then
@@ -479,6 +553,7 @@ local function drawEditor(w,h)
                 panel+20,646,'small','muted')
         end
         text('Rasterização Android desconhecida',panel+20,705,'small','muted')
+    end
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
     if A.tool=='select' then

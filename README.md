@@ -12,6 +12,8 @@ A etapa 3 introduz camadas raster persistidas no formato independente [RBD2](doc
 
 A etapa 4 traz uma [borracha circular C++ e histórico de desfazer/refazer limitado](docs/ERASER_UNDO_STAGE4.md) por traço, com atalhos Ctrl+Z, Ctrl+Y e Ctrl+Shift+Z. O histórico usa apenas memória local durante a edição (não é persistido no RBD2); operações estruturais invalidam os passos anteriores.
 
+Na etapa 6, a [seleção também pode ser rotacionada em 90° e redimensionada em 50%/200%](docs/SELECTION_TRANSFORM_STAGE6.md), preservando histórico reversível e salvamento RBD2. Não há paridade das transformações Android.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -26,6 +28,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Grupos, máscaras, clipping e composição avançada Android | Pendente |
 | Borracha circular independente e desfazer/refazer por pincelada | Implementados e testados; **não equivalentes ao Android** |
 | Seleção retangular de pixels com movimento e desfazer/refazer | Implementada na etapa 5; não equivale ao Android |
+| Transformação da seleção: 90° e escala por vizinho próximo | Implementação independente da etapa 6, reversível em RBD2 |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Filtros, formas, texto, importação IPV e paridade Android | Pendente |
 

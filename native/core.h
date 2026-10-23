@@ -93,4 +93,17 @@ RB_API rb_i32 rb_erase_basic_stroke(rb_u8* dst, rb_u64 capacity,
 
 /* Native rectangle translation on disjoint scratch and selected raster. */
 RB_API rb_i32 rb_move_rect_rgba(rb_u8* dst, rb_u64 capacity, rb_u32 width, rb_u32 height, rb_i32 sx, rb_i32 sy, rb_u32 rw, rb_u32 rh, rb_i32 tx, rb_i32 ty, rb_u8* scratch, rb_u64 scratch_capacity);
+
+
+/* Independent, 90-degree-step rotated and nearest-neighbor resized RGBA8
+   rectangular selection. source and destination are entirely on canvas.
+   quarter_turns: 0, 1 (clockwise 90), 2, 3 (counterclockwise 90).
+   Scratch: disjoint sourceWidth*sourceHeight*4 bytes; caller owns memory.
+   On invalid input, writes nothing. Snapshot precedes clearing. */
+RB_API rb_i32 rb_transform_rect_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height,
+    rb_i32 sx, rb_i32 sy, rb_u32 sw, rb_u32 sh,
+    rb_i32 tx, rb_i32 ty, rb_u32 tw, rb_u32 th,
+    rb_u32 quarter_turns, rb_u8* scratch, rb_u64 scratch_capacity);
+
 #endif

@@ -198,6 +198,27 @@ function Layers:moveSelection(x,y,w,h,toX,toY)
     self:recompose()
     return self:finishEdit()
 end
+function Layers:transformSelection(x,y,w,h,toX,toY,toW,toH,turns)
+    assert(not self.pending,'Finalize o traço antes de transformar a seleção')
+    local function whole(n) return type(n)=='number' and n%1==0 end
+    assert(whole(x) and whole(y) and whole(w) and whole(h) and
+        whole(toX) and whole(toY) and whole(toW) and whole(toH) and
+        whole(turns) and turns>=0 and turns<=3,
+        'Transformação deve usar dimensões e rotação inteiras')
+    assert(x>=0 and y>=0 and w>=1 and h>=1 and
+        x+w<=self.doc.width and y+h<=self.doc.height,
+        'Seleção fora da tela')
+    assert(toX>=0 and toY>=0 and toW>=1 and toH>=1 and
+        toX+toW<=self.doc.width and toY+toH<=self.doc.height,
+        'Transformação excede os limites da tela')
+    if x==toX and y==toY and w==toW and h==toH and turns==0 then
+        return false
+    end
+    self:beginEdit()
+    Native.transformRect(self:activeBuffer(),x,y,w,h,toX,toY,toW,toH,turns)
+    self:recompose()
+    return self:finishEdit()
+end
 function Layers:pixel(x,y,rgba)
     Native.pixel(self:activeBuffer(),x,y,rgba)
     self:recompose()
