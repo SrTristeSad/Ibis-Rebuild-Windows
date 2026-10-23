@@ -105,6 +105,45 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: python tools/test.py --suite ui --runtime "$env:LOVE_RUNTIME"
 
+      - name: Package source-only Windows smoke-test build after passing all tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Mesa was loaded only to permit real window creation on this GPU-less
+          # CI runner; never ship that alternate renderer in our app artifact.
+          foreach ($file in @('opengl32.dll', 'libgallium_wgl.dll',
+                              'Android1412Rebuild.exe.local')) {
+            Remove-Item (Join-Path 'dist' $file) -ErrorAction SilentlyContinue
+          }
+          $manifest = Get-Content 'dist/build-manifest.json' -Raw | ConvertFrom-Json
+          if (!$manifest.native_included -or !$manifest.offline -or $manifest.webview) {
+            throw 'Refusing artifact: native/offline/no-WebView manifest invalid'
+          }
+          $allowed = @(
+            'Android1412Rebuild.exe', 'rebuild_core.dll', 'LOVE-LICENSE.txt',
+            'README.md', 'build-manifest.json', 'OpenAL32.dll', 'SDL2.dll',
+            'love.dll', 'lua51.dll', 'mpg123.dll', 'msvcp120.dll',
+            'msvcr120.dll'
+          )
+          $files = @(Get-ChildItem 'dist' -File | ForEach-Object { $_.Name })
+          $unexpected = @($files | Where-Object { $allowed -cnotcontains $_ })
+          if ($unexpected.Count -gt 0) { throw "Unexpected distributable files: $unexpected" }
+          foreach ($required in @('Android1412Rebuild.exe','rebuild_core.dll',
+                                  'lua51.dll','love.dll','LOVE-LICENSE.txt')) {
+            if ($files -cnotcontains $required) { throw "Distributable missing $required" }
+          }
+          $destination = Join-Path $env:RUNNER_TEMP 'Android1412Rebuild-win64-tested.zip'
+          Compress-Archive -Path 'dist/*' -DestinationPath $destination -Force
+          "VERIFIED_ZIP=$destination" >> $env:GITHUB_ENV
+
+      - name: Offer tested Windows build as CI artifact (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android1412Rebuild-win64-tested
+          path: ${{ env.VERIFIED_ZIP }}
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Retain diagnostic reports (never publish unverified app)
         if: always()
         uses: actions/upload-artifact@v4
