@@ -63,3 +63,14 @@ Existem módulos de galeria/pastas locais, projeto próprio RBD1 de um plano RGB
 Pincéis, camadas/grupos/máscaras, composição equivalente, estabilização, seleção, transformação, filtros e texto permanecem em investigação. Comportamentos desconhecidos não são apresentados como aproximações equivalentes. O formato RBD1 não é IPV. [Matriz e limites](docs/RESEARCH.md).
 
 Esta publicação não define licença de redistribuição do aplicativo original. Dependências externas mantêm suas próprias licenças; seus binários e fontes não estão incorporados aqui. [Dependências](docs/DEPENDENCIES.md).
+
+
+## Validação Windows x64 e download de teste
+
+A árvore pública independente não contém APKs, backup de celular, DLLs Android nem código do Inkora.
+
+O workflow [Windows x64](.github/workflows/windows-x64.yml) compila o núcleo em MSVC, testa LuaJIT real, persistência, ponte LuaJIT/FFI, ABI C++ e as duas rotas LÖVE (executável fundido e pasta de fontes). No CI hospedado, o OpenGL 1.1 não permite abrir LÖVE; Mesa llvmpipe é aplicado **somente à máquina efêmera de testes**. A [execução 40013508664](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/40013508664) aprovou as três suítes em 23/10/2026. Isso valida apenas a etapa inicial; não comprova equivalência com ibisPaint Android.
+
+O CI disponibiliza um ZIP portátil de teste **somente após todas as suítes passarem**. O ZIP não contém as DLLs Mesa usadas no runner, e não é uma release oficial ou um editor completo.
+
+Para erros de compilador e inicialização na máquina local, consulte [Diagnóstico Windows](docs/WINDOWS_BOOTSTRAP.md) e [Segurança de publicação](docs/SECURITY.md). O sucesso no CI não prova que a máquina pessoal do usuário, que pode ter restrições diferentes de ACL e caminhos, tenha executado o mesmo binário com sucesso.
