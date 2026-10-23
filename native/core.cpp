@@ -429,3 +429,15 @@ rb_i32 rb_transform_rect_rgba(rb_u8* dst, rb_u64 capacity,
             const float rest = da*(1.0f-sa);
             const float oa = sa+rest;
             const float inv = 1.0f/oa;
+            for (rb_u32 c = 0; c < 3; ++c) {
+                float component = (static_cast<float>(src[c])*sa+
+                    static_cast<float>(p[c])*rest)*inv;
+                if (component > 255.0f) component=255.0f;
+                if (component < 0.0f) component=0.0f;
+                p[c]=static_cast<rb_u8>(component+0.5f);
+            }
+            p[3]=static_cast<rb_u8>(oa*255.0f+0.5f);
+        }
+    }
+    return 0;
+}
