@@ -266,7 +266,7 @@ function love.update(dt)
                 -- Exercise the real eraser toolbar and undo/redo buttons.
                 local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
                 assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
-                love.draw();love.mousepressed(590,90,1)
+                love.draw();love.mousepressed(455,90,1)
                 assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
                 local ox,oy=canvasTransform()
                 local px=ox+(1.5-A.doc.width/2)*A.zoom
