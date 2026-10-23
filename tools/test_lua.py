@@ -71,9 +71,15 @@ def run_tests(runtime_path, output):
                                + json.dumps(editing_root) + "))")
             editing = json.loads(native_state.execute(editing_program))
             assert editing.get('passed') and editing.get('history_bounded')
+            select_root=(output / ('selection-' + str(time.time_ns()))).as_posix()
+            select_program=("return require('json').encode(require('tests.test_selection').run("
+                            +json.dumps(select_root)+"))")
+            selection=json.loads(native_state.execute(select_program))
+            assert selection.get('passed') and selection.get('move_native') and selection.get('reopen')
         assert native_state.close_succeeded
         report['native_layers'] = layers
         report['native_edit_history'] = editing
+        report['native_selection'] = selection
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
