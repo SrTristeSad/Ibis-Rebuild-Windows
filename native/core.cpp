@@ -367,3 +367,28 @@ rb_i32 rb_move_rect_rgba(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+
+/* Independent desktop raster transformation, NOT recovered Android code. */
+rb_i32 rb_transform_rect_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height,
+    rb_i32 sx, rb_i32 sy, rb_u32 sw, rb_u32 sh,
+    rb_i32 tx, rb_i32 ty, rb_u32 tw, rb_u32 th,
+    rb_u32 quarter_turns, rb_u8* scratch, rb_u64 scratch_capacity) {
+    if (!plane(dst, capacity, width, height) ||
+        sx < 0 || sy < 0 || tx < 0 || ty < 0 ||
+        sw == 0 || sh == 0 || tw == 0 || th == 0 ||
+        sw > width || sh > height || tw > width || th > height ||
+        static_cast<rb_u32>(sx) > width - sw ||
+        static_cast<rb_u32>(sy) > height - sh ||
+        static_cast<rb_u32>(tx) > width - tw ||
+        static_cast<rb_u32>(ty) > height - th ||
+        quarter_turns > 3) return -1;
+    const rb_u64 count = static_cast<rb_u64>(sw) * sh * 4u;
+    if (!scratch || scratch_capacity < count) return -1;
+    Range dstRange, tempRange;
+    if (!range(dst, static_cast<rb_u64>(width)*height*4u, 1, dstRange) ||
+        !range(scratch, count, 1, tempRange) ||
+        !disjoint(dstRange, tempRange)) return -1;
+    if (sx == tx && sy == ty && sw == tw && sh == th &&
+        quarter_turns == 0) return 0;
