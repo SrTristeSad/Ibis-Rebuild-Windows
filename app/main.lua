@@ -117,6 +117,22 @@ local function canvasPoint(mx,my)
     local ca,sa=math.cos(-A.rotation),math.sin(-A.rotation)
     return dx*ca-dy*sa+A.doc.width/2,dx*sa+dy*ca+A.doc.height/2
 end
+local function clampPixel(value,size)
+    return math.max(0,math.min(size-1,math.floor(value)))
+end
+local function finishSelection()
+    if not A.selectAction then return end
+    if A.selectAction=='move' and A.selection and A.movePreview then
+        local old=A.selection
+        local dst=A.movePreview
+        local changed=A.layerSession:moveSelection(
+            old.x,old.y,old.w,old.h,dst.x,dst.y)
+        if changed then A.dirty=true;rebuildImage() end
+        A.selection={x=dst.x,y=dst.y,w=old.w,h=old.h}
+        status(changed and 'Seleção movida · Ctrl+Z desfaz' or 'Seleção mantida')
+    end
+    A.selectAction=nil;A.movePreview=nil
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -474,7 +490,23 @@ function love.mousepressed(x,y,buttonNumber)
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
-                if A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
+                if A.tool=='select' then
+                    local ix=clampPixel(px,A.doc.width)
+                    local iy=clampPixel(py,A.doc.height)
+                    local rect=A.selection
+                    if rect and ix>=rect.x and ix<rect.x+rect.w and
+                        iy>=rect.y and iy<rect.y+rect.h then
+                        A.selectAction='move'
+                        A.moveOriginX=ix;A.moveOriginY=iy
+                        A.movePreview={x=rect.x,y=rect.y,w=rect.w,h=rect.h}
+                        status('Arraste a seleção para mover os pixels da camada')
+                    else
+                        A.selectAction='create'
+                        A.selectOriginX=ix;A.selectOriginY=iy
+                        A.selection={x=ix,y=iy,w=1,h=1}
+                        status('Área selecionada · arraste novamente dentro dela para mover')
+                    end
+                elseif A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
                     A.layerSession:beginEdit()
                     A.layerSession:pixel(math.floor(px),math.floor(py),A.color)
                     A.layerSession:finishEdit()
@@ -498,10 +530,31 @@ function love.mousepressed(x,y,buttonNumber)
 end
 function love.mousereleased(x,y,b)
     if b==3 then A.panning=false end
-    if b==1 then guard(finishStroke)() end
+    if b==1 then
+        guard(finishSelection)()
+        guard(finishStroke)()
+    end
 end
 function love.mousemoved(x,y,dx,dy)
     if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
+    if A.screen=='editor' and A.tool=='select' and A.selectAction then
+        local px,py=canvasPoint(x,y)
+        local ix=clampPixel(px,A.doc.width)
+        local iy=clampPixel(py,A.doc.height)
+        if A.selectAction=='create' then
+            A.selection={x=math.min(A.selectOriginX,ix),
+                y=math.min(A.selectOriginY,iy),
+                w=math.abs(ix-A.selectOriginX)+1,
+                h=math.abs(iy-A.selectOriginY)+1}
+        elseif A.selectAction=='move' then
+            local rect=A.selection
+            local dx=ix-A.moveOriginX
+            local dy=iy-A.moveOriginY
+            A.movePreview={x=math.max(0,math.min(A.doc.width-rect.w,rect.x+dx)),
+                y=math.max(0,math.min(A.doc.height-rect.h,rect.y+dy)),
+                w=rect.w,h=rect.h}
+        end
+    end
     if A.drawing and A.screen=='editor' and (A.tool=='brush' or A.tool=='erase') and not A.modal then
         guard(function()
             local px,py=canvasPoint(x,y)
@@ -516,7 +569,10 @@ function love.mousemoved(x,y,dx,dy)
     end
 end
 function love.focus(focused)
-    if not focused then guard(finishStroke)() end
+    if not focused then
+        guard(finishSelection)()
+        guard(finishStroke)()
+    end
 end
 function love.wheelmoved(x,y)
     if A.screen=='editor' and not A.modal then
@@ -544,7 +600,10 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
-    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
+    if A.screen=='editor' and (key=='escape' or
+        (key=='d' and love.keyboard.isDown('lctrl','rctrl'))) and A.selection then
+        guard(finishSelection)();A.selection=nil;status('Seleção desmarcada')
+    elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
         if love.keyboard.isDown('lshift','rshift') then guard(redoDoc)() else guard(undoDoc)() end
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='y' then guard(redoDoc)()
     elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='s'then guard(saveDoc)()
