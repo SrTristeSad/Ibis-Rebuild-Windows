@@ -366,7 +366,7 @@ local function drawEditor(w,h)
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
             button((layer.visible and '● ' or '○ ')..i..' '..layer.name:sub(1,17),
-                panel+20,y,228,27,function()if A.doc.active_layer~=i then ls:select(i);A.dirty=true end end,A.doc.active_layer==i)
+                panel+20,y,228,27,function()if A.doc.active_layer~=i then finishStroke();ls:select(i);A.dirty=true end end,A.doc.active_layer==i)
             y=y+30
         end
         local active=A.doc.layers[A.doc.active_layer]
@@ -511,7 +511,7 @@ function love.wheelmoved(x,y)
             local count=#A.doc.layers
             local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
             if y~=0 and index~=A.doc.active_layer then
-                A.layerSession:select(index);A.dirty=true
+                finishStroke();A.layerSession:select(index);A.dirty=true
             end
             return
         end
