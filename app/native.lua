@@ -12,6 +12,7 @@ int32_t rb_pack_samples(const RBSample*,uint64_t,int32_t*,uint64_t,float*,uint64
 int32_t rb_clear(uint8_t*,uint64_t,uint32_t,uint32_t,uint32_t);
 int32_t rb_set_pixel(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t);
 int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t*);
+int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float);
 ]]
 local N={available=false,errors={}}
 -- Only load our own compiled C++ DLL. No Lua rasterizer fallback.
@@ -81,6 +82,13 @@ function N.clear(buffer,rgba)
 end
 function N.pixel(buffer,x,y,rgba)
     ready();assert(N.lib.rb_set_pixel(buffer.bytes,buffer.size,buffer.width,buffer.height,x,y,rgba)==0,'Pixel fora da tela')
+end
+-- Stage 2 desktop-only brush primitive; not claimed to match Android rasterization.
+function N.basicStroke(buffer,x0,y0,x1,y1,diameter,rgba,opacity)
+    ready()
+    local result=N.lib.rb_draw_basic_stroke(buffer.bytes,buffer.size,buffer.width,
+        buffer.height,x0,y0,x1,y1,diameter,rgba,opacity)
+    assert(result==0,'Traço inválido ou buffer RGBA insuficiente: '..tonumber(result))
 end
 function N.readPixel(buffer,x,y)
     ready();local out=ffi.new('uint32_t[1]')
