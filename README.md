@@ -10,6 +10,8 @@ Na etapa 2, o motor ganhou um **pincel redondo básico de traço contínuo**, co
 
 A etapa 3 introduz camadas raster persistidas no formato independente [RBD2](docs/RBD2_LAYERS.md). A camada ativa recebe os traços C++, e uma pré-visualização em modo normal compõe camadas visíveis na ordem selecionada. Não há máscaras, grupos nem regras de blend recuperadas do Android.
 
+A etapa 4 traz uma [borracha circular C++ e histórico de desfazer/refazer limitado](docs/ERASER_UNDO_STAGE4.md) por traço, com atalhos Ctrl+Z, Ctrl+Y e Ctrl+Shift+Z. O histórico usa apenas memória local durante a edição (não é persistido no RBD2); operações estruturais invalidam os passos anteriores.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -22,7 +24,8 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Camadas raster independentes e modo normal RGBA | RBD2 com visibilidade, opacidade e ordenação; **não equivale às camadas Android** |
 | Motor original de pincéis, texturas e estabilização | Pendente |
 | Grupos, máscaras, clipping e composição avançada Android | Pendente |
-| Borracha equivalente, seleção, preenchimento e transformações | Pendente |
+| Borracha circular independente e desfazer/refazer por pincelada | Implementados e testados; **não equivalentes ao Android** |
+| Borracha Android equivalente, seleção, preenchimento e transformações | Pendente |
 | Filtros, formas, texto, importação IPV e paridade Android | Pendente |
 
 ## Compilar no Windows
