@@ -197,6 +197,30 @@ function love.update(dt)
             end)
             if not ok then A.testReport.ok=false;A.testReport.error=tostring(err)end
         end
+        if A.testFrames==2 and A.options.selfTest and A.testReport.ok then
+            local ok,err=pcall(function()
+                assert(A.screen=='editor' and A.sideTab=='layers',
+                    'Teste GUI de camadas requer editor real')
+                local panel=love.graphics.getWidth()-268
+                local before=#A.doc.layers
+                love.draw()
+                love.mousepressed(panel+45,448,1)
+                assert(#A.doc.layers==before+1 and A.doc.active_layer==before+1,
+                    'Botão Nova camada não atualizou a sessão')
+                love.draw()
+                love.mousepressed(panel+165,448,1)
+                assert(#A.doc.layers==before,'Botão Excluir não atualizou a sessão')
+                saveDoc()
+                local reopened=A.store:openProject(A.doc.id)
+                assert(reopened.layer_count==before,'Controles GUI não persistiram RBD2')
+                A.testReport.ui={layer_add_button=true,layer_delete_button=true,
+                    persisted_from_real_editor=true}
+            end)
+            if not ok then
+                A.testReport.ok=false
+                A.testReport.error='layer-controls: '..tostring(err)
+            end
+        end
         if A.testFrames==3 and A.options.capture then
             love.graphics.captureScreenshot(function(image)
                 local ok,err=pcall(externalWrite,A.options.capture,image:encode('png'):getString())
@@ -286,7 +310,7 @@ local function drawEditor(w,h)
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
             button((layer.visible and '● ' or '○ ')..i..' '..layer.name:sub(1,17),
-                panel+20,y,228,27,function()ls:select(i)end,A.doc.active_layer==i)
+                panel+20,y,228,27,function()if A.doc.active_layer~=i then ls:select(i);A.dirty=true end end,A.doc.active_layer==i)
             y=y+30
         end
         local active=A.doc.layers[A.doc.active_layer]
