@@ -86,6 +86,11 @@ def run_tests(runtime_path, output):
                            +json.dumps(shape_root)+"))")
             shapes=json.loads(native_state.execute(shape_program))
             assert shapes.get('passed') and shapes.get('rectangle') and shapes.get('ellipse')
+            colors_root=(output / ('colors-lines-' + str(time.time_ns()))).as_posix()
+            colors_program=("return require('json').encode(require('tests.test_colors_lines').run("
+                            +json.dumps(colors_root)+"))")
+            color_lines=json.loads(native_state.execute(colors_program))
+            assert color_lines.get('passed') and color_lines.get('line_cpp') and color_lines.get('hex_rgba')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -93,6 +98,7 @@ def run_tests(runtime_path, output):
         report['native_selection'] = selection
         report['native_fill'] = fill
         report['native_shapes'] = shapes
+        report['native_colors_lines'] = color_lines
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,

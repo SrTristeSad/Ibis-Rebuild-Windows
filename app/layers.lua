@@ -229,6 +229,16 @@ function Layers:fill(x,y,rgba,tolerance)
     self:finishEdit()
     return changed
 end
+-- A committed straight line uses the existing real C++ brush rasterizer.
+-- Keeping the operation in one edit preserves session undo and RBD2 semantics.
+function Layers:straightLine(x0,y0,x1,y1,diameter,rgba)
+    assert(not self.pending,'Finalize a pincelada antes da linha')
+    assert(type(diameter)=='number' and diameter%1==0 and
+        diameter>=1 and diameter<=128,'Espessura inválida')
+    self:beginEdit()
+    self:stroke(x0+0.5,y0+0.5,x1+0.5,y1+0.5,diameter,rgba,1)
+    return self:finishEdit()
+end
 function Layers:drawShape(x0,y0,x1,y1,shape,filled,thickness,rgba)
     assert(not self.pending,'Finalize a pincelada antes de desenhar a forma')
     assert((shape==0 or shape==1) and type(filled)=='boolean' and

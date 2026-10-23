@@ -3,7 +3,8 @@ local Store=require('store')
 local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local Colors=require('colors')
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -97,7 +98,8 @@ local function exportPNG()
 end
 local function modal(kind)
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
-    A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or {''}}
+    A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
+        kind=='color' and {Colors.format(A.color)} or {''}}
     love.keyboard.setTextInput(true)
 end
 local function submitModal()
@@ -112,6 +114,11 @@ local function submitModal()
         A.modal=nil;openDoc(doc)
     elseif m.kind=='rename' then
         A.doc.name=m.values[1];saveDoc();A.modal=nil
+    elseif m.kind=='color' then
+        local value,err=Colors.parseHex(m.values[1])
+        assert(value,err)
+        A.color=value;A.modal=nil
+        status('Cor personalizada aplicada: '..Colors.format(value))
     end
     love.keyboard.setTextInput(A.modal~=nil)
 end
@@ -165,10 +172,29 @@ local function finishShape()
     local rect=A.shapePreview
     A.shapePreview=nil
     if not rect or A.screen~='editor' then return end
-    local changed=A.layerSession:drawShape(rect.x0,rect.y0,rect.x1,rect.y1,
-        A.shapeKind,A.shapeFilled,A.shapeWidth,A.color)
+    local changed
+    if A.shapeKind==2 then
+        changed=A.layerSession:straightLine(rect.x0,rect.y0,rect.x1,rect.y1,
+            A.shapeWidth,A.color)
+    else
+        changed=A.layerSession:drawShape(rect.x0,rect.y0,rect.x1,rect.y1,
+            A.shapeKind,A.shapeFilled,A.shapeWidth,A.color)
+    end
     if changed then A.dirty=true;rebuildImage() end
     status(changed and 'Forma raster criada · Ctrl+Z desfaz' or 'Forma não alterou pixels')
+end
+local function pickColor(px,py)
+    if px<0 or py<0 or px>=A.doc.width or py>=A.doc.height then return false end
+    local buffer=A.pickerSource=='active' and A.layerSession:activeBuffer()
+        or A.buffer
+    A.color=Native.readPixel(buffer,math.floor(px),math.floor(py))
+    status('Conta-gotas ('..(A.pickerSource=='active' and 'camada' or 'composição')..
+        '): '..Colors.format(A.color))
+    return true
+end
+local function openColorModal() modal('color') end
+local function editShapeColorButton(panel,y)
+    button('Cor RGBA: '..Colors.format(A.color),panel+20,y,228,30,openColorModal)
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -301,7 +327,7 @@ function love.update(dt)
                 -- Exercise the real eraser toolbar and undo/redo buttons.
                 local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
                 assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
-                love.draw();love.mousepressed(354,90,1)
+                love.draw();love.mousepressed(312,90,1)
                 assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
                 local ox,oy=canvasTransform()
                 local px=ox+(1.5-A.doc.width/2)*A.zoom
@@ -320,7 +346,7 @@ function love.update(dt)
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
                     'Fixture da seleção não foi restaurada')
-                love.draw();love.mousepressed(495,90,1)
+                love.draw();love.mousepressed(435,90,1)
                 assert(A.tool=='select','Botão de seleção não ativou')
                 love.draw();love.mousepressed(px,py,1)
                 love.mousereleased(px,py,1)
@@ -374,7 +400,7 @@ function love.update(dt)
                     'RBD2 não persistiu escala após reabertura')
                 -- Click real color palette, bucket toolbar, canvas, undo/redo.
                 love.draw()
-                love.mousepressed(425,90,1)
+                love.mousepressed(374,90,1)
                 assert(A.tool=='fill','Botão Balde não selecionou ferramenta')
                 love.draw()
                 love.mousepressed(panel+176,546,1)
@@ -406,7 +432,7 @@ function love.update(dt)
                 assert(filled.layers[2].pixels:sub(1,4)==string.char(52,124,233,255),
                     'Preenchimento não persistiu no RBD2')
                 -- Test the real shapes toolbar, outline width, color, drag and filled ellipse.
-                love.draw();love.mousepressed(576,90,1)
+                love.draw();love.mousepressed(501,90,1)
                 assert(A.tool=='shape','Botão Formas não selecionou ferramenta')
                 love.draw();love.mousepressed(panel+40,510,1)
                 assert(A.shapeWidth==1,'Espessura da forma não foi ajustada')
@@ -459,6 +485,77 @@ function love.update(dt)
                 assert(withShapes.layers[2].pixels:sub(offset,offset+3)==
                     string.char(32,186,132,255),
                     'RBD2 não guardou elipse após salvar')
+                -- Edit a custom RGBA color with actual dialog, keyboard and validation.
+                love.draw();love.mousepressed(panel+120,656,1)
+                assert(A.modal and A.modal.kind=='color',
+                    'Botão Cor RGBA não abriu modal')
+                for i=1,9 do love.keypressed('backspace') end
+                love.textinput('INVALID')
+                love.keypressed('return')
+                assert(A.modal and A.modal.kind=='color',
+                    'Cor inválida fechou o modal')
+                for i=1,7 do love.keypressed('backspace') end
+                love.textinput('#5A24C0BB')
+                love.keypressed('return')
+                assert(not A.modal and A.color==0x5a24c0bb,
+                    'Modal não aplicou RGBA de 8 dígitos')
+                love.draw();love.mousepressed(panel+120,656,1)
+                for i=1,9 do love.keypressed('backspace') end
+                love.textinput('#E14922')
+                love.keypressed('return')
+                assert(not A.modal and A.color==0xe14922ff,
+                    'Cor hexadecimal de 6 dígitos não atribuiu alfa FF')
+                -- Draw a straight line through real Shapes button + preview.
+                love.draw();love.mousepressed(panel+55,607,1)
+                assert(A.tool=='shape' and A.shapeKind==2,
+                    'Botão Linha reta não selecionou o tipo')
+                local lx0,ly0=point(1,6)
+                local lx1,ly1=point(3,6)
+                local oldLine=Native.readPixel(A.layerSession:activeBuffer(),1,6)
+                love.draw();love.mousepressed(lx0,ly0,1)
+                love.mousemoved(lx1,ly1,lx1-lx0,ly1-ly0)
+                assert(A.shapePreview and A.shapePreview.x1==3 and
+                    A.shapePreview.y1==6,'Prévia de linha não seguiu o arraste')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==oldLine,
+                    'Prévia da linha alterou o raster antes de soltar')
+                love.mousereleased(lx1,ly1,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==0xe14922ff
+                    and Native.readPixel(A.layerSession:activeBuffer(),3,6)==0xe14922ff,
+                    'Linha C++ não desenhou ambas as extremidades')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==oldLine,
+                    'Undo da linha falhou')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,6)==0xe14922ff,
+                    'Redo da linha falhou')
+                saveDoc()
+                local lineSaved=A.store:openProject(A.doc.id)
+                local lineOffset=(6*A.doc.width+3)*4+1
+                assert(lineSaved.layers[2].pixels:sub(lineOffset,lineOffset+3)==
+                    string.char(225,73,34,255),'Linha não persistiu no RBD2')
+                -- Explicit two-layer sample fixture: sampling must not draw.
+                Native.pixel(A.layerSession.buffers[1],1,5,0x246a90cc)
+                Native.pixel(A.layerSession:activeBuffer(),1,5,0)
+                A.layerSession:recompose();rebuildImage()
+                A.dirty=true;saveDoc()
+                love.draw();love.mousepressed(571,90,1)
+                assert(A.tool=='picker','Conta-gotas não ativado')
+                local pickX,pickY=point(1,5)
+                local historyBefore=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(pickX,pickY,1)
+                love.mousereleased(pickX,pickY,1)
+                assert(A.color==0x246a90cc,
+                    'Conta-gotas visível não capturou camada inferior')
+                love.draw();love.mousepressed(panel+185,436,1)
+                assert(A.pickerSource=='active','Modo camada ativa não selecionado')
+                love.draw();love.mousepressed(pickX,pickY,1)
+                love.mousereleased(pickX,pickY,1)
+                assert(A.color==0,'Conta-gotas ativo não capturou alfa zero')
+                assert(A.layerSession:historyStats().undo==historyBefore,
+                    'Capturar cor alterou histórico de desenho')
+                assert(Native.readPixel(A.layerSession.buffers[1],1,5)==0x246a90cc
+                    and Native.readPixel(A.layerSession:activeBuffer(),1,5)==0,
+                    'Capturar cor modificou uma camada')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -467,6 +564,10 @@ function love.update(dt)
                     bucket_rbd2_roundtrip=true,shape_toolbar=true,
                     shape_drag_preview=true,rectangle_outline=true,ellipse_fill=true,
                     shapes_undo_redo=true,shapes_rbd2_roundtrip=true,
+                    hex_rgba_modal=true,hex_validation=true,
+                    straight_line_drag=true,straight_line_undo_redo=true,
+                    line_rbd2_roundtrip=true,eyedropper_visible=true,
+                    eyedropper_active=true,eyedropper_no_paint=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -519,15 +620,16 @@ local function drawGallery(w,h)
 end
 local function drawEditor(w,h)
     local panel=w-268
-    button('← Galeria',20,78,91,34,toGallery)
-    button('Inspec.',117,78,70,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel',193,78,48,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel',247,78,61,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Borracha',314,78,77,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Balde',397,78,62,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
-    button('Seleção',465,78,73,34,function()finishStroke();A.tool='select'end,A.tool=='select')
-    button('Formas',544,78,71,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
-    button('Ajustar',621,78,65,34,fit)
+    button('← Galeria',20,78,92,34,toGallery)
+    button('Ver',116,78,53,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel',173,78,45,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel',222,78,57,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Apagar',283,78,61,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Balde',348,78,53,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
+    button('Seleção',405,78,61,34,function()finishStroke();A.tool='select'end,A.tool=='select')
+    button('Formas',470,78,62,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
+    button('Gotas',536,78,79,34,function()finishStroke();A.tool='picker'end,A.tool=='picker')
+    button('Ajustar',619,78,67,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -554,9 +656,12 @@ local function drawEditor(w,h)
         if A.shapeKind==0 then
             love.graphics.rectangle(A.shapeFilled and 'fill' or 'line',
                 left,top,width,height)
-        else
+        elseif A.shapeKind==1 then
             love.graphics.ellipse(A.shapeFilled and 'fill' or 'line',
                 left+width/2,top+height/2,width/2,height/2,48)
+        else
+            love.graphics.line(p.x0+.5-dw/2,p.y0+.5-dh/2,
+                p.x1+.5-dw/2,p.y1+.5-dh/2)
         end
     end
     if A.selection then
@@ -578,7 +683,18 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
-    if A.tool=='shape' then
+    if A.tool=='picker' then
+        text('CONTA-GOTAS · RGBA',panel+20,378,'small','muted')
+        button('Visível',panel+20,419,108,35,function()
+            A.pickerSource='composite' end,A.pickerSource=='composite')
+        button('Camada ativa',panel+140,419,108,35,function()
+            A.pickerSource='active' end,A.pickerSource=='active')
+        text('Clique em qualquer pixel no canvas.',panel+20,477,'small','muted')
+        text('A cor é compartilhada com as ferramentas.',panel+20,506,'small','muted')
+        editShapeColorButton(panel,557)
+        text('Pixels transparentes também podem',panel+20,615,'small','muted')
+        text('ser capturados sem alterar o desenho.',panel+20,639,'small','muted')
+    elseif A.tool=='shape' then
         text('FORMAS · RASTER C++',panel+20,377,'small','muted')
         button('Retângulo',panel+20,410,108,32,
             function()A.shapeKind=0 end,A.shapeKind==0)
@@ -611,6 +727,9 @@ local function drawEditor(w,h)
             A.buttons[#A.buttons+1]={x=x,y=549,w=33,h=31,
                 fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
         end
+        button('Linha reta',panel+20,594,108,30,
+            function()A.shapeKind=2 end,A.shapeKind==2)
+        editShapeColorButton(panel,639)
     elseif A.tool=='select' then
         text('TRANSFORMAR SELEÇÃO',panel+20,377,'small','muted')
         local rect=A.selection
@@ -722,6 +841,7 @@ local function drawEditor(w,h)
             text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
                 panel+20,646,'small','muted')
         end
+        editShapeColorButton(panel,669)
         text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
             or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
@@ -731,15 +851,19 @@ local function drawEditor(w,h)
         text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
             or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
     elseif A.tool=='shape' then
-        text('Arraste para criar um retângulo ou uma elipse',22,h-94,'small','accent')
+        text('Arraste para desenhar uma forma ou uma linha reta',22,h-94,'small','accent')
+    elseif A.tool=='picker' then
+        text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
 end
 local function drawModal(w,h)
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
     local x,y=w/2-220,h/2-210;box(x,y,440,420,'panel')
-    local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or 'Renomear projeto'
+    local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or
+        m.kind=='color' and 'Editar cor RGBA' or 'Renomear projeto'
     text(title,x+24,y+24,'title')
-    local names=m.kind=='new' and {'Nome','Largura','Altura'} or {'Nome'}
+    local names=m.kind=='new' and {'Nome','Largura','Altura'} or
+        m.kind=='color' and {'Hexadecimal (#RRGGBB ou #RRGGBBAA)'} or {'Nome'}
     for i,label in ipairs(names) do
         local fy=y+86+(i-1)*72;text(label,x+24,fy,'small','muted')
         box(x+24,fy+20,392,38,'card');if m.focus==i then c('accent');love.graphics.rectangle('line',x+24,fy+20,392,38,5,5)end
@@ -747,6 +871,9 @@ local function drawModal(w,h)
         A.buttons[#A.buttons+1]={x=x+24,y=fy+20,w=392,h=38,fn=function()m.focus=i end}
     end
     if m.kind=='new' then text('Fundo transparente · limite inicial 2048 × 2048',x+24,y+314,'small','muted')end
+    if m.kind=='color' then
+        text('6 dígitos: alfa FF. 8 dígitos: alfa personalizado.',x+24,y+314,'small','muted')
+    end
     button('Cancelar',x+24,y+357,150,38,function()A.modal=nil;love.keyboard.setTextInput(false)end)
     button('Criar / confirmar',x+190,y+357,226,38,submitModal,true)
 end
@@ -767,7 +894,9 @@ function love.mousepressed(x,y,buttonNumber)
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
-                if A.tool=='shape' and px>=0 and py>=0 and
+                if A.tool=='picker' then
+                    pickColor(px,py)
+                elseif A.tool=='shape' and px>=0 and py>=0 and
                     px<A.doc.width and py<A.doc.height then
                     local ix=clampPixel(px,A.doc.width)
                     local iy=clampPixel(py,A.doc.height)

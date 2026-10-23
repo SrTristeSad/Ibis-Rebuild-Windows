@@ -18,6 +18,8 @@ A etapa 7 acrescenta um [balde de preenchimento contíguo C++](docs/BUCKET_FILL_
 
 A etapa 8 introduz [formas geométricas raster em C++](docs/SHAPES_STAGE8.md): retângulo e elipse, com contorno ajustável, preenchimento, arraste, desfazer/refazer e persistência RBD2. Não são objetos vetoriais nem os algoritmos Android.
 
+A etapa 9 adiciona [conta-gotas de pixels visíveis ou da camada ativa, cores hexadecimais RGBA e linhas retas](docs/COLORS_LINES_STAGE9.md). O conta-gotas não escreve pixels, enquanto cada linha usa o pincel C++ já testado e pode ser desfeita e salva em RBD2. Essas ferramentas são independentes, sem alegação de equivalência com o Android.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -35,6 +37,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Transformação da seleção: 90° e escala por vizinho próximo | Implementação independente da etapa 6, reversível em RBD2 |
 | Balde: preenchimento contíguo RGBA por tolerância | Implementação C++ da etapa 7 com desfazer/refazer e salvamento RBD2 |
 | Formas: retângulo e elipse, cheias ou com contorno | Implementação raster independente da etapa 8, com arraste e histórico |
+| Conta-gotas, cores RGBA personalizadas e linha reta | Etapa 9: leitura do raster nativo, cor hexadecimal estrita, traço C++ reversível |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
