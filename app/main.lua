@@ -4,6 +4,11 @@ local FS=require('fs')
 local JSON=require('json')
 local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,drawing=false}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
+local swatches={
+    {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
+    {name='Vermelho',rgba=0xe53b44ff},{name='Verde',rgba=0x20ba84ff},
+    {name='Azul',rgba=0x347ce9ff},{name='Branco',rgba=0xffffffff}
+}
 local function c(key,alpha) local v=palette[key];love.graphics.setColor(v[1],v[2],v[3],alpha or 1) end
 local function text(value,x,y,font,key) c(key or 'text');love.graphics.setFont(A.fonts[font or 'body']);love.graphics.print(value,x,y) end
 local function box(x,y,w,h,key) c(key);love.graphics.rectangle('fill',x,y,w,h,8,8) end
@@ -255,8 +260,23 @@ local function drawEditor(w,h)
     button('−',panel+20,609,46,32,function()A.brushDiameter=math.max(1,A.brushDiameter-2)end)
     text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,616,'small')
     button('+',panel+182,609,46,32,function()A.brushDiameter=math.min(256,A.brushDiameter+2)end)
-    text('Pincéis Android e estabilização:',panel+20,h-163,'small','muted')
-    text('rasterização ainda desconhecida.',panel+20,h-143,'small','muted')
+    if h>=750 then
+        text('COR DE DESENHO',panel+20,654,'small','muted')
+        for i,swatch in ipairs(swatches) do
+            local x=panel+20+(i-1)*36
+            local color=swatch.rgba
+            love.graphics.setColor(math.floor(color/16777216)%256/255,
+                math.floor(color/65536)%256/255,math.floor(color/256)%256/255,1)
+            love.graphics.rectangle('fill',x,677,29,27,4,4)
+            if A.color==color then
+                c('accent');love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',x-2,675,33,31,4,4)
+            end
+            A.buttons[#A.buttons+1]={x=x,y=675,w=33,h=31,
+                fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
+        end
+        text('Algoritmo Android não recuperado.',panel+20,720,'small','muted')
+    end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
 end
 local function drawModal(w,h)
