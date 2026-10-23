@@ -392,3 +392,19 @@ rb_i32 rb_transform_rect_rgba(rb_u8* dst, rb_u64 capacity,
         !disjoint(dstRange, tempRange)) return -1;
     if (sx == tx && sy == ty && sw == tw && sh == th &&
         quarter_turns == 0) return 0;
+    /* Volatile byte access prevents freestanding MSVC from emitting memcpy
+       or memset imports: our DLL intentionally links without the CRT. */
+    const volatile rb_u8* input = dst;
+    volatile rb_u8* output = dst;
+    volatile rb_u8* copied = scratch;
+    for (rb_u32 y = 0; y < sh; ++y) {
+        const rb_u64 inBase = (static_cast<rb_u64>(sy)+y)*width+sx;
+        const rb_u64 outBase = static_cast<rb_u64>(y)*sw;
+        for (rb_u32 byte = 0; byte < sw*4u; ++byte)
+            copied[outBase*4u+byte] = input[inBase*4u+byte];
+    }
+    for (rb_u32 y = 0; y < sh; ++y) {
+        const rb_u64 start = (static_cast<rb_u64>(sy)+y)*width+sx;
+        for (rb_u32 byte = 0; byte < sw*4u; ++byte)
+            output[start*4u+byte] = 0;
+    }
