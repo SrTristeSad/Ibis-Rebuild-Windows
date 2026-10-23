@@ -242,7 +242,27 @@ function love.update(dt)
                 saveDoc()
                 local reopened=A.store:openProject(A.doc.id)
                 assert(reopened.layer_count==before,'Controles GUI não persistiram RBD2')
+                -- Exercise the real eraser toolbar and undo/redo buttons.
+                local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
+                assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
+                love.draw();love.mousepressed(590,90,1)
+                assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
+                local ox,oy=canvasTransform()
+                local px=ox+(1.5-A.doc.width/2)*A.zoom
+                local py=oy+(1.5-A.doc.height/2)*A.zoom
+                love.draw();love.mousepressed(px,py,1)
+                love.mousereleased(px,py,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
+                    'Borracha pela GUI não apagou')
+                love.draw();love.mousepressed(panel+160,298,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
+                    'Botão desfazer não restaurou a pincelada')
+                love.draw();love.mousepressed(panel+215,298,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
+                    'Botão refazer não aplicou a borracha')
+                saveDoc()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
+                    eraser_toolbar=true,undo_button=true,redo_button=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
