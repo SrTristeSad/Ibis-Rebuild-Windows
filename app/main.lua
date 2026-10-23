@@ -705,12 +705,18 @@ function love.draw()
 end
 function love.mousepressed(x,y,buttonNumber)
     if buttonNumber==1 then
-        for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then b.fn();return end end
+        for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and x<love.graphics.getWidth()-280 and y>125 and y<love.graphics.getHeight()-78 then
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
-                if A.tool=='select' then
+                if A.tool=='shape' and px>=0 and py>=0 and
+                    px<A.doc.width and py<A.doc.height then
+                    local ix=clampPixel(px,A.doc.width)
+                    local iy=clampPixel(py,A.doc.height)
+                    A.shapePreview={x0=ix,y0=iy,x1=ix,y1=iy}
+                    status('Arraste para delimitar a forma e solte para desenhar')
+                elseif A.tool=='select' then
                     local ix=clampPixel(px,A.doc.width)
                     local iy=clampPixel(py,A.doc.height)
                     local rect=A.selection
@@ -761,12 +767,18 @@ end
 function love.mousereleased(x,y,b)
     if b==3 then A.panning=false end
     if b==1 then
+        guard(finishShape)()
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.mousemoved(x,y,dx,dy)
     if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
+    if A.shapePreview and A.screen=='editor' and A.tool=='shape' then
+        local px,py=canvasPoint(x,y)
+        A.shapePreview.x1=clampPixel(px,A.doc.width)
+        A.shapePreview.y1=clampPixel(py,A.doc.height)
+    end
     if A.screen=='editor' and A.tool=='select' and A.selectAction then
         local px,py=canvasPoint(x,y)
         local ix=clampPixel(px,A.doc.width)
@@ -800,6 +812,7 @@ function love.mousemoved(x,y,dx,dy)
 end
 function love.focus(focused)
     if not focused then
+        A.shapePreview=nil
         guard(finishSelection)()
         guard(finishStroke)()
     end
@@ -830,7 +843,9 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
-    if A.screen=='editor' and (key=='escape' or
+    if A.screen=='editor' and key=='escape' and A.shapePreview then
+        A.shapePreview=nil;status('Forma cancelada')
+    elseif A.screen=='editor' and (key=='escape' or
         (key=='d' and love.keyboard.isDown('lctrl','rctrl'))) and A.selection then
         guard(finishSelection)();A.selection=nil;status('Seleção desmarcada')
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
