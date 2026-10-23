@@ -76,10 +76,16 @@ def run_tests(runtime_path, output):
                             +json.dumps(select_root)+"))")
             selection=json.loads(native_state.execute(select_program))
             assert selection.get('passed') and selection.get('move_native') and selection.get('reopen')
+            fill_root=(output / ('bucket-fill-' + str(time.time_ns()))).as_posix()
+            fill_program=("return require('json').encode(require('tests.test_fill').run("
+                          +json.dumps(fill_root)+"))")
+            fill=json.loads(native_state.execute(fill_program))
+            assert fill.get('passed') and fill.get('undo_redo') and fill.get('rbd2_roundtrip')
         assert native_state.close_succeeded
         report['native_layers'] = layers
         report['native_edit_history'] = editing
         report['native_selection'] = selection
+        report['native_fill'] = fill
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,

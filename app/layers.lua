@@ -219,6 +219,16 @@ function Layers:transformSelection(x,y,w,h,toX,toY,toW,toH,turns)
     self:recompose()
     return self:finishEdit()
 end
+function Layers:fill(x,y,rgba,tolerance)
+    assert(not self.pending,'Finalize a pincelada antes do balde')
+    assert(type(tolerance)=='number' and tolerance%1==0 and
+        tolerance>=0 and tolerance<=255,'Tolerância RGBA inválida')
+    self:beginEdit()
+    local changed=Native.bucketFill(self:activeBuffer(),x,y,rgba,tolerance)
+    if changed>0 then self:recompose() end
+    self:finishEdit()
+    return changed
+end
 function Layers:pixel(x,y,rgba)
     Native.pixel(self:activeBuffer(),x,y,rgba)
     self:recompose()

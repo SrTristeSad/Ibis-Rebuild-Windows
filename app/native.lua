@@ -16,6 +16,7 @@ int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,flo
 int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float);
 int32_t rb_move_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint8_t*,uint64_t);
 int32_t rb_transform_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint8_t*,uint64_t);
+int32_t rb_flood_fill_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t*,uint64_t,uint8_t*,uint64_t,uint32_t*);
 int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
 ]]
 local N={available=false,errors={}}
@@ -125,6 +126,20 @@ function N.transformRect(buffer,x,y,w,h,toX,toY,toW,toH,turns)
     assert(N.lib.rb_transform_rect_rgba(buffer.bytes,buffer.size,
         buffer.width,buffer.height,x,y,w,h,toX,toY,toW,toH,turns,
         scratch,size)==0,'Falha na transformação retangular C++')
+end
+-- Native 4-connected bucket fill using disjoint, bounded caller-owned memory.
+-- Tolerance is the maximum absolute difference per channel, RGBA included.
+function N.bucketFill(buffer,x,y,rgba,tolerance)
+    ready()
+    local n=buffer.width*buffer.height
+    local pending=ffi.new('uint32_t[?]',n)
+    local marked=ffi.new('uint8_t[?]',n)
+    local changed=ffi.new('uint32_t[1]')
+    local result=N.lib.rb_flood_fill_rgba(buffer.bytes,buffer.size,
+        buffer.width,buffer.height,x,y,rgba,tolerance,
+        pending,n,marked,n,changed)
+    assert(result==0,'Falha C++ no preenchimento contíguo: '..tonumber(result))
+    return tonumber(changed[0])
 end
 -- Normal source-over composition, explicitly independent of Android blending.
 function N.composite(destination,source,opacity)
