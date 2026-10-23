@@ -523,10 +523,10 @@ function love.update(dt)
                     and Native.readPixel(A.layerSession:activeBuffer(),3,6)==0xe14922ff,
                     'Linha C++ não desenhou ambas as extremidades')
                 undoDoc()
-                assert(Native.readPixel(A.layerSession:activeBuffer(),1,7)==oldLine,
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==oldLine,
                     'Undo da linha falhou')
                 redoDoc()
-                assert(Native.readPixel(A.layerSession:activeBuffer(),5,7)==0xe14922ff,
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,6)==0xe14922ff,
                     'Redo da linha falhou')
                 saveDoc()
                 local lineSaved=A.store:openProject(A.doc.id)
