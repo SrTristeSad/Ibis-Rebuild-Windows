@@ -38,8 +38,39 @@ function T.run(root)
     local original=Native.bytes(bad)
     local valid=pcall(Native.moveRect,bad,0,0,3,1,0,0)
     check(not valid and Native.bytes(bad)==original,'invalid move wrote RGBA')
+    check(recovered:transformSelection(1,0,2,1,1,0,1,2,1),
+        'Clockwise quarter-turn should commit one raster edit')
+    check(Native.readPixel(recovered:activeBuffer(),1,0)==red,
+        'Rotated top-left pixel incorrect')
+    check(Native.readPixel(recovered:activeBuffer(),1,1)==0x800000ff,
+        'Rotated lower pixel incorrect')
+    check(Native.readPixel(recovered:activeBuffer(),2,0)==0,
+        'Rotation failed to clear old selected pixel')
+    check(Native.readPixel(recovered.composite,2,1)==0x00ff00ff,
+        'Rotation affected independent lower layer')
+    check(recovered:undo(),'Rotation could not be undone')
+    check(Native.readPixel(recovered:activeBuffer(),2,0)==0x800000ff,
+        'Undo did not restore rectangle orientation')
+    check(recovered:redo(),'Rotation could not be redone')
+    check(recovered:transformSelection(1,0,1,2,1,0,2,2,0),
+        'Nearest-neighbor scaling should change layer')
+    check(Native.readPixel(recovered:activeBuffer(),1,1)==0x800000ff and
+        Native.readPixel(recovered:activeBuffer(),2,1)==0x800000ff,
+        'Nearest-neighbor scaling failed to duplicate bottom pixel')
+    local beforeInvalid=Native.bytes(recovered:activeBuffer())
+    check(not pcall(recovered.transformSelection,recovered,
+        1,0,2,2,5,0,2,2,0),
+        'Out-of-bounds destination transform accepted')
+    check(Native.bytes(recovered:activeBuffer())==beforeInvalid,
+        'Invalid transform wrote to original layer')
+    recovered:save()
+    local scaled=Layers.open(Store.open(root),Store.open(root):openProject(doc.id))
+    check(Native.readPixel(scaled.composite,2,1)==0x800000ff,
+        'Scaled layer was not preserved through RBD2 save/reopen')
+    check(Native.readPixel(scaled.buffers[1],2,1)==0x00ff00ff,
+        'Scale modified underlying layer pixels')
     return {suite='rectangle-selection-rbd2',passed=true,assertions=checks,
-        move_native=true,undo_redo=true,reopen=true,source_isolated=true,
+        move_native=true,rotation_native=true,scale_native=true,undo_redo=true,reopen=true,source_isolated=true,
         scope='Independent rectangle cut-move; no Android selection equivalence'}
 end
 return T
