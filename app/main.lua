@@ -304,7 +304,7 @@ function love.update(dt)
                     'Refazer movimento não restaurou destino')
                 saveDoc()
                 local persisted=A.store:openProject(A.doc.id)
-                assert(persisted.layers[2].pixels:sub(53,56)==string.char(229,59,68,255),
+                assert(persisted.layers[2].pixels:sub(49,52)==string.char(229,59,68,255),
                     'RBD2 não preservou pixels movidos pela seleção GUI')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
