@@ -548,15 +548,16 @@ local function drawGallery(w,h)
 end
 local function drawEditor(w,h)
     local panel=w-268
-    button('← Galeria',20,78,91,34,toGallery)
-    button('Inspec.',117,78,70,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel',193,78,48,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel',247,78,61,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Borracha',314,78,77,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Balde',397,78,62,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
-    button('Seleção',465,78,73,34,function()finishStroke();A.tool='select'end,A.tool=='select')
-    button('Formas',544,78,71,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
-    button('Ajustar',621,78,65,34,fit)
+    button('← Galeria',20,78,92,34,toGallery)
+    button('Ver',116,78,53,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel',173,78,45,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel',222,78,57,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Apagar',283,78,61,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Balde',348,78,53,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
+    button('Seleção',405,78,61,34,function()finishStroke();A.tool='select'end,A.tool=='select')
+    button('Formas',470,78,62,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
+    button('Gotas',536,78,79,34,function()finishStroke();A.tool='picker'end,A.tool=='picker')
+    button('Ajustar',619,78,67,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -583,9 +584,12 @@ local function drawEditor(w,h)
         if A.shapeKind==0 then
             love.graphics.rectangle(A.shapeFilled and 'fill' or 'line',
                 left,top,width,height)
-        else
+        elseif A.shapeKind==1 then
             love.graphics.ellipse(A.shapeFilled and 'fill' or 'line',
                 left+width/2,top+height/2,width/2,height/2,48)
+        else
+            love.graphics.line(p.x0+.5-dw/2,p.y0+.5-dh/2,
+                p.x1+.5-dw/2,p.y1+.5-dh/2)
         end
     end
     if A.selection then
@@ -607,7 +611,18 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
-    if A.tool=='shape' then
+    if A.tool=='picker' then
+        text('CONTA-GOTAS · RGBA',panel+20,378,'small','muted')
+        button('Visível',panel+20,419,108,35,function()
+            A.pickerSource='composite' end,A.pickerSource=='composite')
+        button('Camada ativa',panel+140,419,108,35,function()
+            A.pickerSource='active' end,A.pickerSource=='active')
+        text('Clique em qualquer pixel no canvas.',panel+20,477,'small','muted')
+        text('A cor é compartilhada com as ferramentas.',panel+20,506,'small','muted')
+        editShapeColorButton(panel,557)
+        text('Pixels transparentes também podem',panel+20,615,'small','muted')
+        text('ser capturados sem alterar o desenho.',panel+20,639,'small','muted')
+    elseif A.tool=='shape' then
         text('FORMAS · RASTER C++',panel+20,377,'small','muted')
         button('Retângulo',panel+20,410,108,32,
             function()A.shapeKind=0 end,A.shapeKind==0)
@@ -640,6 +655,9 @@ local function drawEditor(w,h)
             A.buttons[#A.buttons+1]={x=x,y=549,w=33,h=31,
                 fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
         end
+        button('Linha reta',panel+20,594,108,30,
+            function()A.shapeKind=2 end,A.shapeKind==2)
+        editShapeColorButton(panel,639)
     elseif A.tool=='select' then
         text('TRANSFORMAR SELEÇÃO',panel+20,377,'small','muted')
         local rect=A.selection
@@ -751,6 +769,7 @@ local function drawEditor(w,h)
             text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
                 panel+20,646,'small','muted')
         end
+        editShapeColorButton(panel,669)
         text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
             or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
@@ -760,7 +779,9 @@ local function drawEditor(w,h)
         text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
             or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
     elseif A.tool=='shape' then
-        text('Arraste para criar um retângulo ou uma elipse',22,h-94,'small','accent')
+        text('Arraste para desenhar uma forma ou uma linha reta',22,h-94,'small','accent')
+    elseif A.tool=='picker' then
+        text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
 end
 local function drawModal(w,h)
