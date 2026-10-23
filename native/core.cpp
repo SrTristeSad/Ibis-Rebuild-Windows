@@ -408,3 +408,24 @@ rb_i32 rb_transform_rect_rgba(rb_u8* dst, rb_u64 capacity,
         for (rb_u32 byte = 0; byte < sw*4u; ++byte)
             output[start*4u+byte] = 0;
     }
+    for (rb_u32 y = 0; y < th; ++y) {
+        for (rb_u32 x = 0; x < tw; ++x) {
+            rb_u32 ox = 0, oy = 0;
+            if (quarter_turns == 0) {
+                ox = x*sw/tw; oy = y*sh/th;
+            } else if (quarter_turns == 1) {
+                ox = y*sw/th; oy = sh-1u-x*sh/tw;
+            } else if (quarter_turns == 2) {
+                ox = sw-1u-x*sw/tw; oy = sh-1u-y*sh/th;
+            } else {
+                ox = sw-1u-y*sw/th; oy = x*sh/tw;
+            }
+            const rb_u8* src = scratch+(static_cast<rb_u64>(oy)*sw+ox)*4u;
+            const float sa = static_cast<float>(src[3])/255.0f;
+            if (sa<=0.0f) continue;
+            rb_u8* p = dst+((static_cast<rb_u64>(ty)+y)*width+
+                static_cast<rb_u32>(tx)+x)*4u;
+            const float da = static_cast<float>(p[3])/255.0f;
+            const float rest = da*(1.0f-sa);
+            const float oa = sa+rest;
+            const float inv = 1.0f/oa;
