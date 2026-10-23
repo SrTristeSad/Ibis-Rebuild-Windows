@@ -479,3 +479,33 @@ rb_i32 rb_flood_fill_rgba(rb_u8* dst, rb_u64 capacity,
     queue[0]=seed;
     visited[seed]=1;
     rb_u32 changedCount=0;
+    while (head<tail) {
+        const rb_u32 at=queue[head++];
+        rb_u8* target=dst+static_cast<rb_u64>(at)*4u;
+        for (rb_u32 k=0;k<4;++k)
+            target[k]=static_cast<rb_u8>(replacement[k]);
+        ++changedCount;
+        const rb_u32 xx=at%width, yy=at/width;
+        for (rb_u32 side=0;side<4;++side) {
+            if (side==0 && xx==0) continue;
+            if (side==1 && xx+1==width) continue;
+            if (side==2 && yy==0) continue;
+            if (side==3 && yy+1==height) continue;
+            const rb_u32 neighbor=(side==0?at-1u:
+                side==1?at+1u:side==2?at-width:at+width);
+            if (visited[neighbor]) continue;
+            const rb_u8* nearPixel=dst+static_cast<rb_u64>(neighbor)*4u;
+            bool similar=true;
+            for (rb_u32 k=0;k<4;++k) {
+                const rb_u32 a=nearPixel[k],b=seedColor[k];
+                const rb_u32 delta=a>b?a-b:b-a;
+                if (delta>tolerance) { similar=false;break; }
+            }
+            if (!similar) continue;
+            visited[neighbor]=1;
+            queue[tail++]=neighbor;
+        }
+    }
+    *changed=changedCount;
+    return 0;
+}
