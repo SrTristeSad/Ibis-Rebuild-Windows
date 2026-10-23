@@ -60,8 +60,10 @@ def run_ui(output, runtime_path=None, lua_only=False, timeout=30, route='both'):
                   'painting': ('basic independent C++ stroke tested; Android equivalence unverified'
                       if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('basic_desktop_stroke')
                           for r in results) else 'not_verified'),
-                  'layers': 'not_implemented; a single RGBA plane is not a layer system',
-                  'save_reopen': ('native integration self-test saved/reopened RBD1 and checked PNG pixels; GUI buttons untested'
+                  'layers': ('RBD2 multiple editable raster layers roundtrip verified; normal blend only'
+                      if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('layered_roundtrip')
+                          for r in results) else 'not_verified'),
+                  'save_reopen': ('native integration saved/reopened editable RBD2 and checked PNG pixels'
                       if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('png_pixels')
                           for r in results) else 'not_verified')}}
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

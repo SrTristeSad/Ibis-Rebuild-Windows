@@ -3,9 +3,11 @@ local JSON=require('json')
 local FS=require('fs')
 local Store={}; Store.__index=Store
 local MAGIC='RBD1\r\n\26\n'
+local MAGIC2='RBD2\r\n\26\n'
 local HEADER_LIMIT=65536
 local MAX_AXIS=2048
-local MAX_PROJECT_BYTES=12+HEADER_LIMIT+MAX_AXIS*MAX_AXIS*4
+local MAX_LAYERS=8
+local MAX_PROJECT_BYTES=12+HEADER_LIMIT+MAX_AXIS*MAX_AXIS*4*MAX_LAYERS
 local serial=0
 local function integer(n,lo,hi)
     return type(n)=='number' and JSON.finite(n) and n%1==0 and n>=lo and n<=hi
@@ -98,26 +100,68 @@ function Store:createFolder(name,parent)
     return id
 end
 function Store:_path(id) return 'projects/'..validId(id,'p')..'.rbd' end
-local function validateHeader(h,id)
+local function validateHeader(h,id,layered)
     object(h)
-    assert(h.version==1 and h.pixel_format=='RGBA8' and h.layer_count==1,'store: unsupported document schema')
-    assert(h.id==id,'store: document identifier mismatch'); validId(h.id,'p'); textName(h.name)
-    local expected=dimensions(h.width,h.height)
-    assert(type(h.folder)=='string','store: invalid document folder'); if h.folder~='' then validId(h.folder,'f') end
+    assert(h.version==(layered and 2 or 1) and h.pixel_format=='RGBA8',
+        'store: unsupported document schema')
+    assert(h.id==id,'store: document identifier mismatch')
+    validId(h.id,'p'); textName(h.name)
+    local perPlane=dimensions(h.width,h.height)
+    assert(type(h.folder)=='string','store: invalid document folder')
+    if h.folder~='' then validId(h.folder,'f') end
     assert(integer(h.revision,1,2147483647),'store: invalid revision')
     assert(integer(h.saved_at,0,9007199254740991),'store: invalid saved timestamp')
-    return expected
+    if not layered then
+        assert(h.layer_count==1,'store: invalid RBD1 layer count')
+        return perPlane,1
+    end
+    assert(integer(h.layer_count,1,MAX_LAYERS) and type(h.layers)=='table',
+        'store: invalid RBD2 layers')
+    array(h.layers)
+    assert(#h.layers==h.layer_count,'store: RBD2 layer metadata count mismatch')
+    assert(integer(h.active_layer,1,h.layer_count),'store: invalid active layer')
+    local ids={}
+    for _,layer in ipairs(h.layers) do
+        object(layer)
+        validId(layer.id,'l');textName(layer.name)
+        assert(not ids[layer.id],'store: duplicate layer id')
+        ids[layer.id]=true
+        assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+        assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+            layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+    end
+    return perPlane,h.layer_count
 end
 function Store:_readProject(id,withPixels)
     local path=self:_path(id)
     local prefix=self.fs:readRange(path,0,12,MAX_PROJECT_BYTES)
-    assert(prefix:sub(1,8)==MAGIC,'store: unsupported document magic')
-    local length=from32(prefix:sub(9,12)); assert(length>=2 and length<=HEADER_LIMIT,'store: invalid header length')
+    local magic=prefix:sub(1,8)
+    assert(magic==MAGIC or magic==MAGIC2,'store: unsupported document magic')
+    local layered=magic==MAGIC2
+    local length=from32(prefix:sub(9,12))
+    assert(length>=2 and length<=HEADER_LIMIT,'store: invalid header length')
     local header=JSON.decode(self.fs:readRange(path,12,length,MAX_PROJECT_BYTES),{maxBytes=HEADER_LIMIT})
-    local expected=validateHeader(header,id)
-    assert(self.fs:size(path)==12+length+expected,'store: incorrect pixel payload size')
-    local doc={id=header.id,name=header.name,width=header.width,height=header.height,folder=header.folder,revision=header.revision,saved_at=header.saved_at}
-    if withPixels then doc.pixels=self.fs:readRange(path,12+length,expected,MAX_PROJECT_BYTES) end
+    local perPlane,count=validateHeader(header,id,layered)
+    assert(self.fs:size(path)==12+length+perPlane*count,
+        'store: incorrect pixel payload size')
+    local doc={id=header.id,name=header.name,width=header.width,height=header.height,
+        folder=header.folder,revision=header.revision,saved_at=header.saved_at,
+        layer_count=count,format=layered and 2 or 1}
+    if layered then
+        doc.layers=JSON.array()
+        doc.active_layer=header.active_layer
+        for i,layer in ipairs(header.layers) do
+            local item={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            if withPixels then
+                item.pixels=self.fs:readRange(path,12+length+(i-1)*perPlane,perPlane,
+                    MAX_PROJECT_BYTES)
+            end
+            doc.layers[i]=item
+        end
+    elseif withPixels then
+        doc.pixels=self.fs:readRange(path,12+length,perPlane,MAX_PROJECT_BYTES)
+    end
     return doc
 end
 function Store:createProject(name,width,height,folder,rgbaBytes)
@@ -126,21 +170,67 @@ function Store:createProject(name,width,height,folder,rgbaBytes)
     local doc={id=self:_id('p'),name=name,width=width,height=height,folder=folder,pixels=rgbaBytes,revision=0}
     self:saveProject(doc); return doc
 end
+-- RBD1 stays byte-for-byte compatible with old one-plane projects.
+-- Layered edits are stored in RBD2, an explicitly independent format.
 function Store:saveProject(doc)
     object(doc); local path=self:_path(doc.id); textName(doc.name)
-    local expected=dimensions(doc.width,doc.height); assert(type(doc.folder)=='string','store: invalid document folder'); self:_folder(doc.folder)
-    assert(type(doc.pixels)=='string' and #doc.pixels==expected,'store: RGBA byte count mismatch')
+    local perPlane=dimensions(doc.width,doc.height)
+    assert(type(doc.folder)=='string','store: invalid document folder')
+    self:_folder(doc.folder)
     assert(integer(doc.revision,0,2147483646),'store: invalid revision')
+    local layered=doc.layers~=nil
+    local payload,headerLayers,count
+    if layered then
+        array(doc.layers)
+        count=#doc.layers
+        assert(count>=1 and count<=MAX_LAYERS,'store: layer count exceeds desktop limit')
+        assert(integer(doc.active_layer,1,count),'store: invalid active layer')
+        local seen={}
+        payload={}
+        headerLayers=JSON.array()
+        for i,layer in ipairs(doc.layers) do
+            object(layer);validId(layer.id,'l');textName(layer.name)
+            assert(not seen[layer.id],'store: duplicate layer ids')
+            seen[layer.id]=true
+            assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+            assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+                layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+            assert(type(layer.pixels)=='string' and #layer.pixels==perPlane,
+                'store: invalid RGBA layer payload')
+            headerLayers[i]={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            payload[i]=layer.pixels
+        end
+    else
+        count=1
+        assert(type(doc.pixels)=='string' and #doc.pixels==perPlane,
+            'store: RGBA byte count mismatch')
+        payload={doc.pixels}
+    end
     if self.fs:exists(path) then
         local old=self:_readProject(doc.id,false)
         assert(old.revision==doc.revision,'store: stale project revision; reopen before saving')
-    else assert(doc.revision==0,'store: missing project with nonzero revision') end
-    local header={version=1,pixel_format='RGBA8',layer_count=1,id=doc.id,name=doc.name,width=doc.width,height=doc.height,folder=doc.folder,revision=doc.revision+1,saved_at=os.time()}
+    else
+        assert(doc.revision==0,'store: missing project with nonzero revision')
+    end
+    local header={version=layered and 2 or 1,pixel_format='RGBA8',layer_count=count,
+        id=doc.id,name=doc.name,width=doc.width,height=doc.height,folder=doc.folder,
+        revision=doc.revision+1,saved_at=os.time()}
+    if layered then
+        header.layers=headerLayers
+        header.active_layer=doc.active_layer
+    end
     local encoded=JSON.encode(header,{maxBytes=HEADER_LIMIT})
-    self.fs:writeAtomic(path,MAGIC..le32(#encoded)..encoded..doc.pixels)
-    doc.revision=header.revision; doc.saved_at=header.saved_at
+    self.fs:writeAtomic(path,(layered and MAGIC2 or MAGIC)..le32(#encoded)..
+        encoded..table.concat(payload))
+    doc.revision=header.revision
+    doc.saved_at=header.saved_at
+    doc.format=layered and 2 or 1
+    doc.layer_count=count
     return doc
 end
+-- IDs are generated by Store's existing process/timestamp/serial mechanism.
+function Store:newLayerId() return self:_id('l') end
 function Store:openProject(id)
     return self:_readProject(id,true)
 end
@@ -183,5 +273,7 @@ function Store:getBrushes()
     assert(data.version==1,'store: unsupported brush library version'); return validateBrushes(data.items)
 end
 Store.MAX_AXIS=MAX_AXIS
+Store.MAX_LAYERS=MAX_LAYERS
 Store.MAGIC=MAGIC
+Store.MAGIC2=MAGIC2
 return Store

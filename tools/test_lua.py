@@ -61,7 +61,13 @@ def run_tests(runtime_path, output):
                       "return require('json').encode({status='passed',abi=1,"
                       "pixel_roundtrip=true,sample_packing=true,ffi_path=n.path})")
             native_ffi = json.loads(native_state.execute(bridge))
+            layer_root = (output / ('layer-storage-' + str(time.time_ns()))).as_posix()
+            layer_program = ("return require('json').encode(require('tests.test_layers').run("
+                             + json.dumps(layer_root) + "))")
+            layers = json.loads(native_state.execute(layer_program))
+            assert layers.get('passed') and layers.get('roundtrip') and layers.get('composite_native')
         assert native_state.close_succeeded
+        report['native_layers'] = layers
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,

@@ -218,3 +218,38 @@ rb_i32 rb_draw_basic_stroke(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+
+/* Independent desktop normal-mode, straight-alpha source-over compositor.
+   Each layer is opaque to the algorithm except its RGBA bytes and opacity.
+   The caller is responsible for visibility, ordering and group semantics. */
+rb_i32 rb_compose_normal(rb_u8* dst, rb_u64 dst_capacity,
+    const rb_u8* src, rb_u64 src_capacity,
+    rb_u32 width, rb_u32 height, float opacity) {
+    if (!plane(dst, dst_capacity, width, height) ||
+        !plane(src, src_capacity, width, height) ||
+        !(opacity >= 0.0f && opacity <= 1.0f)) return -1;
+    const rb_u64 bytes = static_cast<rb_u64>(width) * height * 4u;
+    Range d,s;
+    if (!range(dst, bytes, 1, d) || !range(src, bytes, 1, s) ||
+        !disjoint(d,s)) return -1;
+    if (opacity == 0.0f) return 0;
+    for (rb_u64 i = 0; i < bytes; i += 4) {
+        const float sa = (static_cast<float>(src[i+3]) / 255.0f) * opacity;
+        if (sa == 0.0f) continue;
+        const float da = static_cast<float>(dst[i+3]) / 255.0f;
+        const float remaining = da * (1.0f - sa);
+        const float oa = sa + remaining;
+        if (oa == 0.0f) continue;
+        const float inv = 1.0f / oa;
+        for (rb_u32 k = 0; k < 3; ++k) {
+            float c = (static_cast<float>(src[i+k]) * sa +
+                       static_cast<float>(dst[i+k]) * remaining) * inv;
+            if (c > 255.0f) c = 255.0f;
+            if (c < 0.0f) c = 0.0f;
+            dst[i+k] = static_cast<rb_u8>(c + 0.5f);
+        }
+        dst[i+3] = static_cast<rb_u8>(oa * 255.0f + 0.5f);
+    }
+    return 0;
+}

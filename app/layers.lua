@@ -1,0 +1,114 @@
+-- Independent desktop layer manager: RGBA8 rasters, normal blend only.
+-- Lua owns ordering and metadata; only C++ writes/composes raster pixels.
+-- Does not claim to reproduce ibisPaint layer folders, masks or blending.
+local Native=require('native')
+local Store=require('store')
+local Layers={}
+Layers.__index=Layers
+local function assertIndex(self,index)
+    assert(type(index)=='number' and index%1==0 and
+        index>=1 and index<=#self.doc.layers,'Camada inválida')
+end
+function Layers.open(store,doc)
+    assert(Native.available,'Motor C++ obrigatório para camadas')
+    if not doc.layers then
+        -- Promote RBD1 in memory. A disk migration occurs ONLY on save.
+        doc.layers={{id=store:newLayerId(),name='Raster 1',pixels=doc.pixels,
+            opacity=1,visible=true}}
+        doc.active_layer=1
+        doc.pixels=nil
+    end
+    local self=setmetatable({store=store,doc=doc,buffers={},
+        composite=Native.buffer(doc.width,doc.height)},Layers)
+    for i,layer in ipairs(doc.layers) do
+        self.buffers[i]=Native.buffer(doc.width,doc.height,layer.pixels)
+    end
+    self:recompose()
+    return self
+end
+function Layers:activeBuffer()
+    assertIndex(self,self.doc.active_layer)
+    return self.buffers[self.doc.active_layer]
+end
+function Layers:recompose()
+    Native.clear(self.composite,0x00000000)
+    for i,layer in ipairs(self.doc.layers) do
+        if layer.visible and layer.opacity>0 then
+            Native.composite(self.composite,self.buffers[i],layer.opacity)
+        end
+    end
+    return self.composite
+end
+function Layers:add(name)
+    local layers=self.doc.layers
+    assert(#layers<Store.MAX_LAYERS,'Limite inicial de camadas atingido')
+    local index=self.doc.active_layer+1
+    local new={id=self.store:newLayerId(),name=name or 'Nova camada',
+        visible=true,opacity=1,pixels=string.rep('\0',self.doc.width*self.doc.height*4)}
+    table.insert(layers,index,new)
+    table.insert(self.buffers,index,Native.buffer(self.doc.width,self.doc.height))
+    self.doc.active_layer=index
+    self.doc.layer_count=#layers
+    self:recompose()
+    return index
+end
+function Layers:select(index)
+    assertIndex(self,index)
+    self.doc.active_layer=index
+    return index
+end
+function Layers:remove(index)
+    assertIndex(self,index)
+    assert(#self.doc.layers>1,'Não é possível remover a última camada')
+    table.remove(self.doc.layers,index)
+    table.remove(self.buffers,index)
+    if self.doc.active_layer>index then self.doc.active_layer=self.doc.active_layer-1
+    elseif self.doc.active_layer>=#self.doc.layers then
+        self.doc.active_layer=#self.doc.layers
+    end
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+end
+function Layers:setVisible(index,visible)
+    assertIndex(self,index)
+    assert(type(visible)=='boolean','Visibilidade inválida')
+    self.doc.layers[index].visible=visible
+    self:recompose()
+end
+function Layers:setOpacity(index,opacity)
+    assertIndex(self,index)
+    assert(type(opacity)=='number' and opacity==opacity and
+        opacity>=0 and opacity<=1,'Opacidade inválida')
+    self.doc.layers[index].opacity=opacity
+    self:recompose()
+end
+function Layers:move(index,to)
+    assertIndex(self,index);assertIndex(self,to)
+    if index==to then return end
+    local layer=table.remove(self.doc.layers,index)
+    local buffer=table.remove(self.buffers,index)
+    table.insert(self.doc.layers,to,layer)
+    table.insert(self.buffers,to,buffer)
+    local active=self.doc.active_layer
+    if active==index then active=to
+    elseif index<active and to>=active then active=active-1
+    elseif index>active and to<=active then active=active+1 end
+    self.doc.active_layer=active
+    self:recompose()
+end
+function Layers:stroke(x0,y0,x1,y1,diameter,color,opacity)
+    Native.basicStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,opacity or 1)
+    self:recompose()
+end
+function Layers:pixel(x,y,rgba)
+    Native.pixel(self:activeBuffer(),x,y,rgba)
+    self:recompose()
+end
+function Layers:save()
+    for i,layer in ipairs(self.doc.layers) do
+        layer.pixels=Native.bytes(self.buffers[i])
+    end
+    self.store:saveProject(self.doc)
+    return self.doc
+end
+return Layers

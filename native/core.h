@@ -69,4 +69,15 @@ RB_API rb_i32 rb_draw_basic_stroke(rb_u8* dst, rb_u64 capacity,
     rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
     float diameter, rb_u32 rgba, float opacity);
 
+
+/* Desktop-only RGBA8 "source over" on two distinct caller-owned planes.
+   Applied to each layer from bottom to top. Normal blend mode only;
+   clipping, group isolation and Android's compositor remain unknown.
+   0 success, -1 validation failure; no writes on invalid inputs.
+   Alpha is straight, pixels are RGBA, opacity must be finite [0,1].
+   Source and destination ranges must not overlap. ABI v1 is extended. */
+RB_API rb_i32 rb_compose_normal(rb_u8* dst, rb_u64 dst_capacity,
+    const rb_u8* src, rb_u64 src_capacity,
+    rb_u32 width, rb_u32 height, float opacity);
+
 #endif

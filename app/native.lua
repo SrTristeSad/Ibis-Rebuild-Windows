@@ -13,6 +13,7 @@ int32_t rb_clear(uint8_t*,uint64_t,uint32_t,uint32_t,uint32_t);
 int32_t rb_set_pixel(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t);
 int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t*);
 int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float);
+int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
 ]]
 local N={available=false,errors={}}
 -- Only load our own compiled C++ DLL. No Lua rasterizer fallback.
@@ -89,6 +90,16 @@ function N.basicStroke(buffer,x0,y0,x1,y1,diameter,rgba,opacity)
     local result=N.lib.rb_draw_basic_stroke(buffer.bytes,buffer.size,buffer.width,
         buffer.height,x0,y0,x1,y1,diameter,rgba,opacity)
     assert(result==0,'Traço inválido ou buffer RGBA insuficiente: '..tonumber(result))
+end
+-- Normal source-over composition, explicitly independent of Android blending.
+function N.composite(destination,source,opacity)
+    ready()
+    assert(destination~=source and destination.bytes~=source.bytes,'Camadas devem ter buffers independentes')
+    assert(destination.width==source.width and destination.height==source.height,
+        'Camadas com dimensões diferentes')
+    assert(N.lib.rb_compose_normal(destination.bytes,destination.size,source.bytes,
+        source.size,destination.width,destination.height,opacity)==0,
+        'Erro ao compor plano RGBA C++')
 end
 function N.readPixel(buffer,x,y)
     ready();local out=ffi.new('uint32_t[1]')
