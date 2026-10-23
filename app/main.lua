@@ -3,7 +3,7 @@ local Store=require('store')
 local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -415,12 +415,13 @@ local function drawGallery(w,h)
 end
 local function drawEditor(w,h)
     local panel=w-268
-    button('← Galeria',20,78,106,34,toGallery)
-    button('Inspecionar',132,78,94,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel',232,78,80,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel',318,78,91,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Borracha',415,78,87,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Seleção',508,78,99,34,function()finishStroke();A.tool='select'end,A.tool=='select')
+    button('← Galeria',20,78,91,34,toGallery)
+    button('Inspec.',117,78,78,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel',201,78,60,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel',267,78,72,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Borracha',345,78,88,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Balde',439,78,70,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
+    button('Seleção',515,78,92,34,function()finishStroke();A.tool='select'end,A.tool=='select')
     button('Ajustar',613,78,65,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
@@ -609,6 +610,16 @@ function love.mousepressed(x,y,buttonNumber)
                         A.selectOriginX=ix;A.selectOriginY=iy
                         A.selection={x=ix,y=iy,w=1,h=1}
                         status('Área selecionada · arraste novamente dentro dela para mover')
+                    end
+                elseif A.tool=='fill' and px>=0 and py>=0 and
+                    px<A.doc.width and py<A.doc.height then
+                    local changed=A.layerSession:fill(math.floor(px),math.floor(py),
+                        A.color,A.fillTolerance)
+                    if changed>0 then
+                        A.dirty=true;rebuildImage()
+                        status(('Balde C++ · %d pixels preenchidos · Ctrl+Z desfaz'):format(changed))
+                    else
+                        status('Balde: nenhum pixel alterado')
                     end
                 elseif A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
                     A.layerSession:beginEdit()
