@@ -521,7 +521,40 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
-    if A.tool=='select' then
+    if A.tool=='shape' then
+        text('FORMAS · RASTER C++',panel+20,377,'small','muted')
+        button('Retângulo',panel+20,410,108,32,
+            function()A.shapeKind=0 end,A.shapeKind==0)
+        button('Elipse',panel+140,410,108,32,
+            function()A.shapeKind=1 end,A.shapeKind==1)
+        button('Contorno',panel+20,452,108,32,
+            function()A.shapeFilled=false end,not A.shapeFilled)
+        button('Preenchida',panel+140,452,108,32,
+            function()A.shapeFilled=true end,A.shapeFilled)
+        button('−',panel+20,495,42,30,function()
+            A.shapeWidth=math.max(1,A.shapeWidth-1)end,
+            false,A.shapeWidth==1 or A.shapeFilled)
+        text(('Espessura %dpx'):format(A.shapeWidth),panel+70,503,'small','muted')
+        button('+',panel+206,495,42,30,function()
+            A.shapeWidth=math.min(128,A.shapeWidth+1)end,
+            false,A.shapeWidth==128 or A.shapeFilled)
+        text('COR',panel+20,535,'small','muted')
+        for i,swatch in ipairs(swatches) do
+            local x=panel+20+(i-1)*36
+            local rgba=swatch.rgba
+            love.graphics.setColor(math.floor(rgba/16777216)%256/255,
+                math.floor(rgba/65536)%256/255,
+                math.floor(rgba/256)%256/255,1)
+            love.graphics.rectangle('fill',x,551,29,27,4,4)
+            if A.color==rgba then
+                c('accent')
+                love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',x-2,549,33,31,4,4)
+            end
+            A.buttons[#A.buttons+1]={x=x,y=549,w=33,h=31,
+                fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
+        end
+    elseif A.tool=='select' then
         text('TRANSFORMAR SELEÇÃO',panel+20,377,'small','muted')
         local rect=A.selection
         text(rect and ('Região: '..rect.w..' × '..rect.h..' px')
@@ -640,6 +673,8 @@ local function drawEditor(w,h)
     if A.tool=='select' then
         text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
             or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
+    elseif A.tool=='shape' then
+        text('Arraste para criar um retângulo ou uma elipse',22,h-94,'small','accent')
     end
 end
 local function drawModal(w,h)
