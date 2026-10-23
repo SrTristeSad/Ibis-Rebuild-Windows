@@ -310,3 +310,5 @@ rb_i32 rb_erase_basic_stroke(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+/* Rectangle translation implementation follows. */
