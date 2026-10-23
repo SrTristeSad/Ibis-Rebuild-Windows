@@ -8,17 +8,20 @@ O [workflow Windows x64](.github/workflows/windows-x64.yml) compila com MSVC, ca
 
 Na etapa 2, o motor ganhou um **pincel redondo básico de traço contínuo**, com composição RGBA source-over em C++ e desenho por arraste no editor. Esse algoritmo é **uma ferramenta própria funcional, não uma implementação equivalente ao pincel Android**. Há testes de continuidade, alfa, clipping e argumentos inválidos. Consulte [contrato do pincel básico](docs/BASIC_BRUSH.md).
 
+A etapa 3 introduz camadas raster persistidas no formato independente [RBD2](docs/RBD2_LAYERS.md). A camada ativa recebe os traços C++, e uma pré-visualização em modo normal compõe camadas visíveis na ordem selecionada. Não há máscaras, grupos nem regras de blend recuperadas do Android.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
 |---|---|
 | LuaJIT/LÖVE, inicialização e encerramento | Aprovados em ambiente Windows CI |
 | Núcleo C++ x64, FFI, buffers RGBA e amostras | Compilação e testes reais aprovados |
-| Galeria, pastas, tela RGBA editável e salvamento RBD1 | Implementação própria com testes de persistência |
+| Galeria, pastas, tela RGBA editável, RBD1 legado e RBD2 | Implementação própria com testes de persistência e migração |
 | Zoom, rotação, pan, exportação PNG | Fluxos iniciais, testados em modo integrado |
 | Pincel redondo básico do desktop | Implementado e testado, **não equivalente ao Android** |
+| Camadas raster independentes e modo normal RGBA | RBD2 com visibilidade, opacidade e ordenação; **não equivale às camadas Android** |
 | Motor original de pincéis, texturas e estabilização | Pendente |
-| Camadas, grupos, máscaras, clipping, composição avançada | Pendente |
+| Grupos, máscaras, clipping e composição avançada Android | Pendente |
 | Borracha equivalente, seleção, preenchimento e transformações | Pendente |
 | Filtros, formas, texto, importação IPV e paridade Android | Pendente |
 
