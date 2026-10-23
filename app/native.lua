@@ -14,17 +14,56 @@ int32_t rb_set_pixel(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_
 int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t*);
 ]]
 local N={available=false,errors={}}
+-- Only load our own compiled C++ DLL. No Lua rasterizer fallback.
 function N.load(base)
-    for _,file in ipairs({base..'/rebuild_core.dll',base..'/build/rebuild_core.dll'}) do
+    N.available=false;N.lib=nil;N.path=nil;N.errors={}
+    assert(type(base)=='string' and #base>0,'Invalid native base directory')
+    local candidates,seen={},{}
+    local function add(path)
+        if path and not seen[path] then
+            seen[path]=true;candidates[#candidates+1]=path
+        end
+    end
+    local function parent(path)
+        return path:gsub('\\','/'):match('^(.*)/[^/]+$')
+    end
+    add(base..'/rebuild_core.dll')
+    add(base..'/build/rebuild_core.dll')
+    if love and love.filesystem then
+        if type(love.filesystem.getExecutablePath)=='function' then
+            local ok,exe=pcall(love.filesystem.getExecutablePath)
+            if ok and type(exe)=='string' then
+                local dir=parent(exe)
+                if dir then add(dir..'/rebuild_core.dll') end
+            end
+        end
+        if type(love.filesystem.getSource)=='function' then
+            local ok,src=pcall(love.filesystem.getSource)
+            if ok and type(src)=='string' then
+                local dir=src:gsub('\\','/')
+                if dir:lower():match('%.love$') then dir=parent(dir) end
+                if dir then
+                    add(dir..'/rebuild_core.dll')
+                    add(dir..'/build/rebuild_core.dll')
+                    add(dir..'/../build/rebuild_core.dll')
+                end
+            end
+        end
+    end
+    for _,file in ipairs(candidates) do
         local ok,lib=pcall(ffi.load,file)
         if ok then
             local valid,err=pcall(function()
-                assert(lib.rb_version()==1,'ABI C++ incompatível')
-                assert(lib.rb_sample_size()==ffi.sizeof('RBSample'),'Layout FFI incompatível')
+                assert(lib.rb_version()==1,'Native ABI version mismatch')
+                assert(lib.rb_sample_size()==ffi.sizeof('RBSample'),'Native ABI size mismatch')
+                assert(ffi.sizeof('RBSample')==56 and ffi.offsetof('RBSample','time')==40
+                    and ffi.offsetof('RBSample','is_stylus')==48,'Native ABI field offsets mismatch')
             end)
             if valid then N.lib=lib;N.available=true;N.path=file;return true end
-            N.errors[#N.errors+1]=tostring(err)
-        else N.errors[#N.errors+1]=tostring(lib) end
+            N.errors[#N.errors+1]=file..': '..tostring(err)
+        else
+            N.errors[#N.errors+1]=file..': '..tostring(lib)
+        end
     end
     return false
 end

@@ -1,3 +1,13 @@
+# Estado atualizado — validação CI Windows x64 (23/10/2026)
+
+Este documento preserva abaixo o diagnóstico **histórico** do checkout anterior em um Windows com bloqueios de paths e compilador. Não confundir com o resultado de um novo runner independente.
+
+**Resultados posteriores comprovados no GitHub Actions:** o commit 3f54a6e1 (run [40013747842](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/40013747842)) compilou a DLL x64 usando MSVC, carregou a biblioteca pelo Python/ctypes e pela ponte LuaJIT/FFI, aprovou a suíte nativa e a suíte LuaJIT/persistência, e concluiu os dois modos de entrada LÖVE com exit 0, relatório interno válido, captura PNG e roundtrip RGBA/salvamento/exportação. Mesa llvmpipe foi usado apenas no runner sem GPU e removido do ZIP de teste; não se apresenta esse teste como validação do Windows pessoal do usuário.
+
+**Permanecem pendentes:** teste da interface no PC original, paridade com ibisPaint Android, desenho livre por pincel recuperado, camadas, máscaras, seleções, filtros, texto, suporte aos formatos proprietários e qualquer promessa de equivalência geral. Não houve execução do Android original para confronto dinâmico.
+
+---
+
 # Estado verificado — 23/10/2026
 
 ## Testes aprovados

@@ -48,6 +48,21 @@ def run_tests(runtime_path, output):
         storage = json.loads(state.execute(program))
         assert storage.get('passed') and storage.get('assertions') == 52
     assert state.close_succeeded
+    native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
+    if (ROOT / 'build/rebuild_core.dll').is_file():
+        with LuaState(runtime_path) as native_state:
+            bridge = ("package.path=" + json.dumps(paths) + "..';'..package.path; "
+                      "local n=require('native'); assert(n.load(" + json.dumps(ROOT.as_posix()) + "), table.concat(n.errors, '; ')); "
+                      "local b=n.buffer(3,2); n.clear(b,0); n.pixel(b,2,1,0x123456FF); "
+                      "assert(n.readPixel(b,2,1)==0x123456FF); "
+                      "assert(n.pressure(0.5,true,0,1)==0.5); "
+                      "local p=n.pack({{id=4,info=7,x=2,y=1,pressure=0.5,time=9,stylus=false}}); "
+                      "assert(#p.ints==2 and #p.floats==7 and #p.times==1); "
+                      "return require('json').encode({status='passed',abi=1,"
+                      "pixel_roundtrip=true,sample_packing=true,ffi_path=n.path})")
+            native_ffi = json.loads(native_state.execute(bridge))
+        assert native_state.close_succeeded
+    report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
                   prototypes={name: {'result': getattr(result, '__name__', 'void') if result else 'void',
