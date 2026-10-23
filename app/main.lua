@@ -422,6 +422,28 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
+    if A.tool=='select' then
+        text('TRANSFORMAR SELEÇÃO',panel+20,377,'small','muted')
+        local rect=A.selection
+        text(rect and ('Região: '..rect.w..' × '..rect.h..' px')
+            or 'Arraste na tela para selecionar',panel+20,416,'small')
+        button('↶ 90°',panel+20,451,108,37,function()
+            applySelectionTransform(3,1)
+        end,false,not rect or rect.h>A.doc.width or rect.w>A.doc.height)
+        button('90° ↷',panel+140,451,108,37,function()
+            applySelectionTransform(1,1)
+        end,false,not rect or rect.h>A.doc.width or rect.w>A.doc.height)
+        button('− 50%',panel+20,500,108,37,function()
+            applySelectionTransform(0,.5)
+        end,false,not rect)
+        button('+ 200%',panel+140,500,108,37,function()
+            applySelectionTransform(0,2)
+        end,false,not rect or rect.w*2>A.doc.width or rect.h*2>A.doc.height)
+        text('Cada transformação pode ser desfeita.',panel+20,564,'small','muted')
+        text('Rotação: 90° · escala: vizinho próximo',panel+20,592,'small','muted')
+        text('Ctrl+D remove o contorno',panel+20,630,'small','muted')
+        text('Somente a camada ativa é alterada.',panel+20,666,'small','muted')
+    else
     button('Camadas',panel+20,366,107,32,function()A.sideTab='layers'end,A.sideTab=='layers')
     button('Pincel',panel+139,366,109,32,function()A.sideTab='brush'end,A.sideTab=='brush')
     if A.sideTab=='layers' then
@@ -501,6 +523,7 @@ local function drawEditor(w,h)
                 panel+20,646,'small','muted')
         end
         text('Rasterização Android desconhecida',panel+20,705,'small','muted')
+    end
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
     if A.tool=='select' then
