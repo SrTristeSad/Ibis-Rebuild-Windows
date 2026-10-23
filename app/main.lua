@@ -1,8 +1,9 @@
 local Native=require('native')
 local Store=require('store')
+local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,drawing=false}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -44,12 +45,18 @@ local function fit()
 end
 local function openDoc(doc)
     assert(Native.available,'O editor requer o motor C++ compilado. A galeria continua disponível.')
-    A.doc=doc;A.buffer=Native.buffer(doc.width,doc.height,doc.pixels);A.screen='editor';A.dirty=false
-    rebuildImage();fit();status('Projeto editável aberto. Ferramentas de pintura ainda em investigação.')
+    A.layerSession=Layers.open(A.store,doc)
+    A.doc=A.layerSession.doc
+    A.buffer=A.layerSession.composite
+    A.screen='editor';A.dirty=false
+    rebuildImage();fit()
+    status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
 local function saveDoc()
     if not A.doc then return end
-    A.doc.pixels=Native.bytes(A.buffer);A.store:saveProject(A.doc);A.dirty=false;status('Projeto salvo · revisão '..tostring(A.doc.revision))
+    A.layerSession:save()
+    A.dirty=false
+    status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
     if A.doc and A.dirty then saveDoc() end
@@ -106,12 +113,24 @@ local function nativeSelfTest()
     assert(Native.readPixel(stroke,4,2)==0xaabbccff,'Traço básico contínuo C++ falhou')
     assert(Native.readPixel(stroke,4,3)==0,'Traço básico atingiu pixel fora do segmento')
     local doc=A.store:createProject('Fixture nativa',9,7,'',Native.bytes(buf));openDoc(doc);saveDoc()
-    local reopened=A.store:openProject(doc.id);assert(reopened.pixels==Native.bytes(buf))
+    local reopened=A.store:openProject(doc.id)
+    assert(reopened.format==2 and reopened.layers[1].pixels==Native.bytes(buf),
+        'Migração RBD1/RBD2 falhou')
+    A.layerSession:add('Teste acima')
+    A.layerSession:pixel(1,1,0xe53b44ff)
+    assert(Native.readPixel(A.buffer,1,1)==0xe53b44ff,'Composição RBD2 nativa falhou')
+    A.layerSession:setVisible(2,false)
+    assert(Native.readPixel(A.buffer,1,1)==0,'Ocultação de camada falhou')
+    A.layerSession:setVisible(2,true)
+    saveDoc()
+    local layered=A.store:openProject(doc.id)
+    assert(layered.layer_count==2 and layered.layers[2].pixels:sub(29,32)==string.char(229,59,68,255),
+        'Camada RBD2 não reabriu sem perda de pixel')
     local png=exportPNG();local pngData=A.store.fs:read('exports/'..png)
     local image=love.image.newImageData(love.filesystem.newFileData(pngData,'oracle.png'))
     local r,g,b,a=image:getPixel(8,6);assert(math.abs(r-18/255)<1/255 and math.abs(g-52/255)<1/255 and math.abs(b-86/255)<1/255 and a==1)
     image:release()
-    return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,android_runtime_compared=false}
+    return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,layered_roundtrip=true,android_runtime_compared=false}
 end
 function love.load(args)
     A.fonts={small=love.graphics.newFont(12),body=love.graphics.newFont(14),title=love.graphics.newFont(25),large=love.graphics.newFont(40)}
@@ -247,35 +266,82 @@ local function drawEditor(w,h)
     button('Salvar · Ctrl+S',panel+20,186,228,38,saveDoc,A.dirty)
     button('Exportar PNG',panel+20,234,228,38,exportPNG)
     button('Renomear',panel+20,282,228,34,function()modal('rename');A.modal.values[1]=A.doc.name end)
-    text('CAMADAS · ETAPA 1',panel+20,346,'small','muted')
-    box(panel+20,372,228,53,'card');text('Raster 1',panel+34,383,'body');text('Dados editáveis preservados',panel+34,405,'small','muted')
-    text('ENTRADA',panel+20,460,'small','muted')
-    text('Mouse · pressão 1 · ângulos 0',panel+20,487,'small')
-    if A.lastPacket then
-        local f=A.lastPacket.floats
-        text(('x %.1f  y %.1f'):format(f[1],f[2]),panel+20,513,'small','muted')
-        text(('p %.3f · buffers 2 / 7 / 1'):format(f[5]),panel+20,537,'small','muted')
-    end
-    text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,584,'small','muted')
-    button('−',panel+20,609,46,32,function()A.brushDiameter=math.max(1,A.brushDiameter-2)end)
-    text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,616,'small')
-    button('+',panel+182,609,46,32,function()A.brushDiameter=math.min(256,A.brushDiameter+2)end)
-    if h>=750 then
-        text('COR DE DESENHO',panel+20,654,'small','muted')
+    text('PAINEL',panel+20,343,'small','muted')
+    button('Camadas',panel+20,366,107,32,function()A.sideTab='layers'end,A.sideTab=='layers')
+    button('Pincel',panel+139,366,109,32,function()A.sideTab='brush'end,A.sideTab=='brush')
+    if A.sideTab=='layers' then
+        local ls=A.layerSession
+        local count=#A.doc.layers
+        text(('RASTERS %d / %d · NORMAL'):format(count,Store.MAX_LAYERS),panel+20,407,'small','muted')
+        button('+ Camada',panel+20,431,109,34,function()
+            ls:add();A.dirty=true;rebuildImage();status('Camada raster adicionada')
+        end,false,count>=Store.MAX_LAYERS)
+        button('Excluir',panel+139,431,109,34,function()
+            ls:remove(A.doc.active_layer);A.dirty=true;rebuildImage()
+            status('Camada removida')
+        end,false,count<=1)
+        local start=math.max(1,math.min(A.doc.active_layer-2,count-5))
+        local stop=math.min(count,start+5)
+        local y=475
+        for i=stop,start,-1 do
+            local layer=A.doc.layers[i]
+            button((layer.visible and '● ' or '○ ')..i..' '..layer.name:sub(1,17),
+                panel+20,y,228,27,function()ls:select(i)end,A.doc.active_layer==i)
+            y=y+30
+        end
+        local active=A.doc.layers[A.doc.active_layer]
+        if h>=750 then
+            button(active.visible and 'Ocultar' or 'Mostrar',panel+20,669,109,30,function()
+                ls:setVisible(A.doc.active_layer,not active.visible)
+                A.dirty=true;rebuildImage()
+            end,active.visible)
+            button('Acima',panel+139,669,54,30,function()
+                local i=A.doc.active_layer
+                ls:move(i,math.min(count,i+1));A.dirty=true;rebuildImage()
+            end,false,A.doc.active_layer==count)
+            button('Abaixo',panel+196,669,52,30,function()
+                local i=A.doc.active_layer
+                ls:move(i,math.max(1,i-1));A.dirty=true;rebuildImage()
+            end,false,A.doc.active_layer==1)
+            button('−',panel+20,706,42,29,function()
+                ls:setOpacity(A.doc.active_layer,math.max(0,active.opacity-.1))
+                A.dirty=true;rebuildImage()
+            end)
+            text(('Opacidade %.0f%%'):format(active.opacity*100),panel+68,714,'small')
+            button('+',panel+206,706,42,29,function()
+                ls:setOpacity(A.doc.active_layer,math.min(1,active.opacity+.1))
+                A.dirty=true;rebuildImage()
+            end)
+        end
+    else
+        text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,429,'small','muted')
+        button('−',panel+20,456,46,32,function()
+            A.brushDiameter=math.max(1,A.brushDiameter-2)end)
+        text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
+        button('+',panel+182,456,46,32,function()
+            A.brushDiameter=math.min(256,A.brushDiameter+2)end)
+        text('COR',panel+20,511,'small','muted')
         for i,swatch in ipairs(swatches) do
             local x=panel+20+(i-1)*36
             local color=swatch.rgba
             love.graphics.setColor(math.floor(color/16777216)%256/255,
                 math.floor(color/65536)%256/255,math.floor(color/256)%256/255,1)
-            love.graphics.rectangle('fill',x,677,29,27,4,4)
+            love.graphics.rectangle('fill',x,535,29,27,4,4)
             if A.color==color then
                 c('accent');love.graphics.setLineWidth(2)
-                love.graphics.rectangle('line',x-2,675,33,31,4,4)
+                love.graphics.rectangle('line',x-2,533,33,31,4,4)
             end
-            A.buttons[#A.buttons+1]={x=x,y=675,w=33,h=31,
+            A.buttons[#A.buttons+1]={x=x,y=533,w=33,h=31,
                 fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
         end
-        text('Algoritmo Android não recuperado.',panel+20,720,'small','muted')
+        text('ENTRADA',panel+20,589,'small','muted')
+        text('Mouse · pressão 1 · ângulos 0',panel+20,616,'small','muted')
+        if A.lastPacket then
+            local f=A.lastPacket.floats
+            text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
+                panel+20,646,'small','muted')
+        end
+        text('Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
 end
@@ -313,10 +379,11 @@ function love.mousepressed(x,y,buttonNumber)
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
                 if A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
-                    Native.pixel(A.buffer,math.floor(px),math.floor(py),A.color);A.dirty=true;rebuildImage()
+                    A.layerSession:pixel(math.floor(px),math.floor(py),A.color)
+                    A.dirty=true;rebuildImage()
                     status('Pixel diagnóstico gravado pelo C++. Isto não é uma implementação de pincel.')
                 elseif A.tool=='brush' then
-                    Native.basicStroke(A.buffer,px,py,px,py,A.brushDiameter,A.color,1)
+                    A.layerSession:stroke(px,py,px,py,A.brushDiameter,A.color,1)
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.dirty=true;rebuildImage()
                     status('Pincel básico próprio em C++ · sem equivalência comprovada com Android')
@@ -334,7 +401,7 @@ function love.mousemoved(x,y,dx,dy)
     if A.drawing and A.screen=='editor' and A.tool=='brush' and not A.modal then
         guard(function()
             local px,py=canvasPoint(x,y)
-            Native.basicStroke(A.buffer,A.lastStrokeX,A.lastStrokeY,px,py,
+            A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,
                 A.brushDiameter,A.color,1)
             A.lastStrokeX=px;A.lastStrokeY=py
             A.dirty=true;rebuildImage()
