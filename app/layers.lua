@@ -229,6 +229,16 @@ function Layers:fill(x,y,rgba,tolerance)
     self:finishEdit()
     return changed
 end
+function Layers:drawShape(x0,y0,x1,y1,shape,filled,thickness,rgba)
+    assert(not self.pending,'Finalize a pincelada antes de desenhar a forma')
+    assert((shape==0 or shape==1) and type(filled)=='boolean' and
+        type(thickness)=='number' and thickness%1==0 and
+        thickness>=1 and thickness<=128,'Parâmetros da forma inválidos')
+    self:beginEdit()
+    Native.basicShape(self:activeBuffer(),x0,y0,x1,y1,shape,filled,thickness,rgba)
+    self:recompose()
+    return self:finishEdit()
+end
 function Layers:pixel(x,y,rgba)
     Native.pixel(self:activeBuffer(),x,y,rgba)
     self:recompose()
