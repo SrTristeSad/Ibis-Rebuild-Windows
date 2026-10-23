@@ -196,9 +196,6 @@ local function openColorModal() modal('color') end
 local function editShapeColorButton(panel,y)
     button('Cor RGBA: '..Colors.format(A.color),panel+20,y,228,30,openColorModal)
 end
-local function sampleToolsColorButtons(panel,y)
-    editShapeColorButton(panel,y)
-end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -787,9 +784,11 @@ end
 local function drawModal(w,h)
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
     local x,y=w/2-220,h/2-210;box(x,y,440,420,'panel')
-    local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or 'Renomear projeto'
+    local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or
+        m.kind=='color' and 'Editar cor RGBA' or 'Renomear projeto'
     text(title,x+24,y+24,'title')
-    local names=m.kind=='new' and {'Nome','Largura','Altura'} or {'Nome'}
+    local names=m.kind=='new' and {'Nome','Largura','Altura'} or
+        m.kind=='color' and {'Hexadecimal (#RRGGBB ou #RRGGBBAA)'} or {'Nome'}
     for i,label in ipairs(names) do
         local fy=y+86+(i-1)*72;text(label,x+24,fy,'small','muted')
         box(x+24,fy+20,392,38,'card');if m.focus==i then c('accent');love.graphics.rectangle('line',x+24,fy+20,392,38,5,5)end
@@ -797,6 +796,9 @@ local function drawModal(w,h)
         A.buttons[#A.buttons+1]={x=x+24,y=fy+20,w=392,h=38,fn=function()m.focus=i end}
     end
     if m.kind=='new' then text('Fundo transparente · limite inicial 2048 × 2048',x+24,y+314,'small','muted')end
+    if m.kind=='color' then
+        text('6 dígitos: alfa FF. 8 dígitos: alfa personalizado.',x+24,y+314,'small','muted')
+    end
     button('Cancelar',x+24,y+357,150,38,function()A.modal=nil;love.keyboard.setTextInput(false)end)
     button('Criar / confirmar',x+190,y+357,226,38,submitModal,true)
 end
@@ -817,7 +819,9 @@ function love.mousepressed(x,y,buttonNumber)
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
-                if A.tool=='shape' and px>=0 and py>=0 and
+                if A.tool=='picker' then
+                    pickColor(px,py)
+                elseif A.tool=='shape' and px>=0 and py>=0 and
                     px<A.doc.width and py<A.doc.height then
                     local ix=clampPixel(px,A.doc.width)
                     local iy=clampPixel(py,A.doc.height)
