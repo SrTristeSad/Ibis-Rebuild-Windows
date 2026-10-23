@@ -6,6 +6,7 @@ import sys
 import time
 from build import ROOT, BUILD, runtime
 from process_runner import run_process
+from windows_preflight import check as inspect_windows_paths
 
 def run_ui(output, runtime_path=None, lua_only=False, timeout=30, route='both'):
     output = pathlib.Path(output)
@@ -32,11 +33,22 @@ def run_ui(output, runtime_path=None, lua_only=False, timeout=30, route='both'):
             application = json.loads(app_report.read_text(encoding='utf-8')) if app_report.exists() else None
         except (OSError, ValueError) as error:
             application = {'ok': False, 'error': str(error)}
+        stdout = (folder / 'stdout.log').read_text(encoding='utf-8', errors='replace')[-3000:]
+        stderr = (folder / 'stderr.log').read_text(encoding='utf-8', errors='replace')[-3000:]
+        startup_failure = None
+        if not application:
+            if 'Failed to initialize filesystem' in (stderr + stdout):
+                startup_failure = 'love-boot-filesystem-before-main-lua'
+            elif not process['ok']:
+                startup_failure = 'process-terminated-before-application-report'
         results.append({'route': name, 'process': process, 'application': application,
+                        'startup_failure': startup_failure,
+                        'stdout_tail': stdout, 'stderr_tail': stderr,
                         'screenshot_bytes': capture.stat().st_size if capture.exists() else 0,
                         'ok': bool(process['ok'] and application and application.get('ok')
                                    and capture.exists() and (lua_only or application.get('native_loaded')))})
     report = {'ok': bool(results) and all(r['ok'] for r in results),
+              'host_path_preflight': inspect_windows_paths(ROOT, rt),
               'suite': 'official-runtime-ui', 'python_graphics_embedding': False,
               'native_required': not lua_only, 'android_runtime_compared': False,
               'routes': results,
