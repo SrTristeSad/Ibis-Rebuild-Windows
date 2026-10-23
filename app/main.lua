@@ -288,7 +288,7 @@ function love.update(dt)
                 -- Exercise the real eraser toolbar and undo/redo buttons.
                 local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
                 assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
-                love.draw();love.mousepressed(455,90,1)
+                love.draw();love.mousepressed(389,90,1)
                 assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
                 local ox,oy=canvasTransform()
                 local px=ox+(1.5-A.doc.width/2)*A.zoom
@@ -359,11 +359,45 @@ function love.update(dt)
                 assert(transformed.layers[2].pixels:sub(offset,offset+3)==
                     string.char(32,186,132,255),
                     'RBD2 não persistiu escala após reabertura')
+                -- Click real color palette, bucket toolbar, canvas, undo/redo.
+                love.draw()
+                love.mousepressed(panel+176,546,1)
+                assert(A.color==0x347ce9ff,'Paleta de cores não selecionou azul')
+                love.draw()
+                love.mousepressed(472,90,1)
+                assert(A.tool=='fill','Botão Balde não selecionou ferramenta')
+                assert(A.fillTolerance==0,'Balde não iniciou com tolerância exata')
+                love.draw()
+                love.mousepressed(panel+215,472,1)
+                assert(A.fillTolerance==8,'Controle + tolerância não respondeu')
+                love.draw()
+                love.mousepressed(panel+44,472,1)
+                assert(A.fillTolerance==0,'Controle − tolerância não respondeu')
+                local bx=ox+(0.5-A.doc.width/2)*A.zoom
+                local by=oy+(0.5-A.doc.height/2)*A.zoom
+                love.draw()
+                love.mousepressed(bx,by,1)
+                love.mousereleased(bx,by,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),0,0)==0x347ce9ff,
+                    'Balde GUI não preencheu região transparente')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,1)==source,
+                    'Balde atravessou cor de outra região')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),0,0)==0,
+                    'Undo não removeu preenchimento')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),0,0)==0x347ce9ff,
+                    'Redo não restaurou preenchimento')
+                saveDoc()
+                local filled=A.store:openProject(A.doc.id)
+                assert(filled.layers[2].pixels:sub(1,4)==string.char(52,124,233,255),
+                    'Preenchimento não persistiu no RBD2')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
                     rotation_button=true,nearest_scale_button=true,transform_undo_redo=true,
-                    persisted_from_real_editor=true}
+                    bucket_toolbar=true,bucket_tolerance_buttons=true,bucket_undo_redo=true,
+                    bucket_rbd2_roundtrip=true,persisted_from_real_editor=true}
             end)
             if not ok then
                 A.testReport.ok=false
