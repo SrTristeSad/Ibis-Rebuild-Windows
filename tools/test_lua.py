@@ -66,8 +66,14 @@ def run_tests(runtime_path, output):
                              + json.dumps(layer_root) + "))")
             layers = json.loads(native_state.execute(layer_program))
             assert layers.get('passed') and layers.get('roundtrip') and layers.get('composite_native')
+            editing_root = (output / ('edit-history-' + str(time.time_ns()))).as_posix()
+            editing_program = ("return require('json').encode(require('tests.test_edit_history').run("
+                               + json.dumps(editing_root) + "))")
+            editing = json.loads(native_state.execute(editing_program))
+            assert editing.get('passed') and editing.get('history_bounded')
         assert native_state.close_succeeded
         report['native_layers'] = layers
+        report['native_edit_history'] = editing
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
