@@ -279,9 +279,36 @@ function love.update(dt)
                 love.draw();love.mousepressed(panel+215,298,1)
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
                     'Botão refazer não aplicou a borracha')
+                -- Use the real selector and drag events against the same canvas.
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
+                    'Fixture da seleção não foi restaurada')
+                love.draw();love.mousepressed(548,90,1)
+                assert(A.tool=='select','Botão de seleção não ativou')
+                love.draw();love.mousepressed(px,py,1)
+                love.mousereleased(px,py,1)
+                assert(A.selection and A.selection.x==1 and A.selection.y==1 and
+                    A.selection.w==1 and A.selection.h==1,'Seleção por clique falhou')
+                love.draw();love.mousepressed(px,py,1)
+                love.mousemoved(px+2*A.zoom,py,2*A.zoom,0)
+                love.mousereleased(px+2*A.zoom,py,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
+                    'Mover seleção não limpou origem')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,1)==source,
+                    'Mover seleção não chegou ao destino')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
+                    'Desfazer movimento não restaurou origem')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,1)==source,
+                    'Refazer movimento não restaurou destino')
                 saveDoc()
+                local persisted=A.store:openProject(A.doc.id)
+                assert(persisted.layers[2].pixels:sub(53,56)==string.char(229,59,68,255),
+                    'RBD2 não preservou pixels movidos pela seleção GUI')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
+                    rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
