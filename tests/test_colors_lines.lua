@@ -60,7 +60,10 @@ function T.run(root)
     check(reopened.format==2 and reopened.layer_count==2,'RBD2 structure lost')
     local again=Layers.open(Store.open(root),reopened)
     check(Native.readPixel(again.composite,3,6)==red,'Line lost on reopen')
-    check(Native.readPixel(again.composite,1,2)==0xff44cc80,'Upper color lost')
+    check(Native.readPixel(again.composite,1,2)==composited,
+        'Composited color changed after RBD2 roundtrip')
+    check(Native.readPixel(again:activeBuffer(),1,2)==0xff44cc80,
+        'Upper unblended RGBA was not preserved')
     check(Native.readPixel(again.buffers[1],1,2)==0x1256abff,'Lower color lost')
     check(not again:canUndo(),'Session history must not be persisted')
     return {suite='colors-eyedropper-straight-lines',passed=true,
