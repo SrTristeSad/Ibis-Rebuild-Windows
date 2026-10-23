@@ -1,0 +1,92 @@
+name: Windows x64 verification
+
+on:
+  push:
+    branches:
+      - main
+      - 'fix/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-and-interface:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Checkout independently implemented sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Prepare MSVC x64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Prepare Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch verified LÖVE 11.5 x64 runtime for CI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'love-11.5-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $expected = 'BA6E56BE2685E53C817749C4A5007F51137136FE5A3AB64920508BABC2E74369'
+          $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash
+          if ($actual -ne $expected) {
+            throw "LÖVE 11.5 artifact checksum mismatch. Got $actual"
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath $env:RUNNER_TEMP -Force
+          $rt = Join-Path $env:RUNNER_TEMP 'love-11.5-win64'
+          if (!(Test-Path (Join-Path $rt 'love.exe'))) { throw 'Missing love.exe in verified archive' }
+          "LOVE_RUNTIME=$rt" >> $env:GITHUB_ENV
+
+      - name: Diagnose Windows startup paths
+        shell: pwsh
+        run: python tools/windows_preflight.py --runtime "$env:LOVE_RUNTIME" --output build/preflight.json
+
+      - name: Build independent C++ DLL and offline LÖVE executable
+        shell: pwsh
+        run: |
+          $compiler = (Get-Command cl.exe -ErrorAction Stop).Source
+          python tools/build.py all --compiler "$compiler" --runtime "$env:LOVE_RUNTIME"
+
+      - name: Test LuaJIT and storage contracts
+        shell: pwsh
+        run: python tools/test.py --suite lua --runtime "$env:LOVE_RUNTIME"
+
+      - name: Test compiled C++ ABI and raster primitives
+        shell: pwsh
+        run: python tools/test.py --suite native
+
+      - name: Test both official LÖVE startup routes
+        shell: pwsh
+        run: python tools/test.py --suite ui --runtime "$env:LOVE_RUNTIME"
+
+      - name: Retain diagnostic reports (never publish unverified app)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-diagnostics
+          path: |
+            build/preflight.json
+            build/latest-test.json
+            build/toolchain-report.json
+            build/commands/**/process.json
+            build/commands/**/stdout.log
+            build/commands/**/stderr.log
+            build/validation-*/**/process.json
+            build/validation-*/**/stdout.log
+            build/validation-*/**/stderr.log
+            build/validation-*/**/report.json
+          if-no-files-found: warn
+          retention-days: 7
