@@ -14,6 +14,7 @@ int32_t rb_set_pixel(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_
 int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t*);
 int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float);
 int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float);
+int32_t rb_move_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint8_t*,uint64_t);
 int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
 ]]
 local N={available=false,errors={}}
