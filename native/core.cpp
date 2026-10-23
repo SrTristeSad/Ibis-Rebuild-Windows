@@ -509,3 +509,71 @@ rb_i32 rb_flood_fill_rgba(rb_u8* dst, rb_u64 capacity,
     *changed=changedCount;
     return 0;
 }
+
+
+/* Desktop-only rectangle/ellipse primitive; unlike ibisPaint's brush engine.
+   Numeric ranges are validated before any pixel writes. */
+rb_i32 rb_draw_shape_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_i32 x0, rb_i32 y0,
+    rb_i32 x1, rb_i32 y1, rb_u32 shape, rb_u32 filled,
+    rb_u32 stroke_width, rb_u32 rgba) {
+    if (!plane(dst,capacity,width,height) || shape>1u ||
+        filled>1u || stroke_width<1u || stroke_width>128u ||
+        x0 < -16384 || x0 > 16384 || y0 < -16384 || y0 > 16384 ||
+        x1 < -16384 || x1 > 16384 || y1 < -16384 || y1 > 16384) return -1;
+    const rb_i32 left = x0 < x1 ? x0 : x1;
+    const rb_i32 right = x0 > x1 ? x0 : x1;
+    const rb_i32 top = y0 < y1 ? y0 : y1;
+    const rb_i32 bottom = y0 > y1 ? y0 : y1;
+    if (right<0 || bottom<0 || left>=static_cast<rb_i32>(width) ||
+        top>=static_cast<rb_i32>(height) || (rgba&255u)==0u) return 0;
+    const rb_i32 clipL = left<0?0:left;
+    const rb_i32 clipT = top<0?0:top;
+    const rb_i32 clipR = right>=static_cast<rb_i32>(width)?
+        static_cast<rb_i32>(width)-1:right;
+    const rb_i32 clipB = bottom>=static_cast<rb_i32>(height)?
+        static_cast<rb_i32>(height)-1:bottom;
+    const float cx=(static_cast<float>(left)+static_cast<float>(right)+1.0f)*0.5f;
+    const float cy=(static_cast<float>(top)+static_cast<float>(bottom)+1.0f)*0.5f;
+    const float rx=static_cast<float>(right-left+1)*0.5f;
+    const float ry=static_cast<float>(bottom-top+1)*0.5f;
+    const float innerRx=rx-static_cast<float>(stroke_width);
+    const float innerRy=ry-static_cast<float>(stroke_width);
+    const float sourceAlpha=static_cast<float>(rgba&255u)/255.0f;
+    const float oneMinusSource=1.0f-sourceAlpha;
+    for (rb_i32 y=clipT;y<=clipB;++y) {
+        for (rb_i32 x=clipL;x<=clipR;++x) {
+            bool cover=false;
+            if (shape==0u) {
+                cover=filled!=0u || x-left<static_cast<rb_i32>(stroke_width) ||
+                    right-x<static_cast<rb_i32>(stroke_width) ||
+                    y-top<static_cast<rb_i32>(stroke_width) ||
+                    bottom-y<static_cast<rb_i32>(stroke_width);
+            } else {
+                const float dx=static_cast<float>(x)+0.5f-cx;
+                const float dy=static_cast<float>(y)+0.5f-cy;
+                const float outer=dx*dx/(rx*rx)+dy*dy/(ry*ry);
+                if (outer<=1.0f) {
+                    cover=filled!=0u || innerRx<=0.0f || innerRy<=0.0f ||
+                        dx*dx/(innerRx*innerRx)+dy*dy/(innerRy*innerRy)>=1.0f;
+                }
+            }
+            if (!cover) continue;
+            rb_u8* pixel=dst+(static_cast<rb_u64>(y)*width+x)*4u;
+            const float dstAlpha=static_cast<float>(pixel[3])/255.0f;
+            const float remainder=dstAlpha*oneMinusSource;
+            const float outAlpha=sourceAlpha+remainder;
+            const float inv=1.0f/outAlpha;
+            for (rb_u32 channel=0;channel<3u;++channel) {
+                const float src=static_cast<float>((rgba>>(24u-channel*8u))&255u);
+                float component=(src*sourceAlpha+
+                    static_cast<float>(pixel[channel])*remainder)*inv;
+                if (component>255.0f) component=255.0f;
+                if (component<0.0f) component=0.0f;
+                pixel[channel]=static_cast<rb_u8>(component+0.5f);
+            }
+            pixel[3]=static_cast<rb_u8>(outAlpha*255.0f+0.5f);
+        }
+    }
+    return 0;
+}

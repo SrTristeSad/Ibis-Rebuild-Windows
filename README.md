@@ -16,6 +16,8 @@ Na etapa 6, a [seleção também pode ser rotacionada em 90° e redimensionada e
 
 A etapa 7 acrescenta um [balde de preenchimento contíguo C++](docs/BUCKET_FILL_STAGE7.md), limitado à camada ativa, com tolerância de cor RGBA e um passo de histórico por preenchimento. Não equivale ao preenchimento original Android.
 
+A etapa 8 introduz [formas geométricas raster em C++](docs/SHAPES_STAGE8.md): retângulo e elipse, com contorno ajustável, preenchimento, arraste, desfazer/refazer e persistência RBD2. Não são objetos vetoriais nem os algoritmos Android.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -32,8 +34,9 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Seleção retangular de pixels com movimento e desfazer/refazer | Implementada na etapa 5; não equivale ao Android |
 | Transformação da seleção: 90° e escala por vizinho próximo | Implementação independente da etapa 6, reversível em RBD2 |
 | Balde: preenchimento contíguo RGBA por tolerância | Implementação C++ da etapa 7 com desfazer/refazer e salvamento RBD2 |
+| Formas: retângulo e elipse, cheias ou com contorno | Implementação raster independente da etapa 8, com arraste e histórico |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
-| Filtros, formas, texto, importação IPV e paridade Android | Pendente |
+| Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
 ## Compilar no Windows
 

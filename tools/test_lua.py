@@ -81,11 +81,18 @@ def run_tests(runtime_path, output):
                           +json.dumps(fill_root)+"))")
             fill=json.loads(native_state.execute(fill_program))
             assert fill.get('passed') and fill.get('undo_redo') and fill.get('rbd2_roundtrip')
+            shape_root=(output / ('native-shapes-' + str(time.time_ns()))).as_posix()
+            shape_program=("return require('json').encode(require('tests.test_shapes').run("
+                           +json.dumps(shape_root)+"))")
+            shapes=json.loads(native_state.execute(shape_program))
+            assert shapes.get('passed') and shapes.get('rectangle') and shapes.get('ellipse')
+
         assert native_state.close_succeeded
         report['native_layers'] = layers
         report['native_edit_history'] = editing
         report['native_selection'] = selection
         report['native_fill'] = fill
+        report['native_shapes'] = shapes
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,

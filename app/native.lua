@@ -17,6 +17,7 @@ int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,fl
 int32_t rb_move_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint8_t*,uint64_t);
 int32_t rb_transform_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint8_t*,uint64_t);
 int32_t rb_flood_fill_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t*,uint64_t,uint8_t*,uint64_t,uint32_t*);
+int32_t rb_draw_shape_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint32_t);
 int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
 ]]
 local N={available=false,errors={}}
@@ -140,6 +141,14 @@ function N.bucketFill(buffer,x,y,rgba,tolerance)
         pending,n,marked,n,changed)
     assert(result==0,'Falha C++ no preenchimento contíguo: '..tonumber(result))
     return tonumber(changed[0])
+end
+-- Independent RGBA rectangle / ellipse: one source-over blend per covered pixel.
+function N.basicShape(buffer,x0,y0,x1,y1,shape,filled,thickness,rgba)
+    ready()
+    assert(N.lib.rb_draw_shape_rgba(buffer.bytes,buffer.size,
+        buffer.width,buffer.height,x0,y0,x1,y1,shape,
+        filled and 1 or 0,thickness,rgba)==0,
+        'Forma retangular/elíptica inválida')
 end
 -- Normal source-over composition, explicitly independent of Android blending.
 function N.composite(destination,source,opacity)

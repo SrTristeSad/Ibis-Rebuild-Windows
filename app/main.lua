@@ -3,7 +3,7 @@ local Store=require('store')
 local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -49,7 +49,7 @@ local function openDoc(doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
     A.screen='editor';A.dirty=false
-    A.selection=nil;A.selectAction=nil;A.movePreview=nil
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
@@ -58,6 +58,7 @@ local function finishStroke()
     A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
 local function undoDoc()
+    A.shapePreview=nil
     finishStroke()
     if A.layerSession and A.layerSession:undo() then
         A.selection=nil;A.selectAction=nil;A.movePreview=nil
@@ -65,6 +66,7 @@ local function undoDoc()
     end
 end
 local function redoDoc()
+    A.shapePreview=nil
     finishStroke()
     if A.layerSession and A.layerSession:redo() then
         A.selection=nil;A.selectAction=nil;A.movePreview=nil
@@ -72,6 +74,7 @@ local function redoDoc()
     end
 end
 local function saveDoc()
+    A.shapePreview=nil
     finishStroke()
     if not A.doc then return end
     A.layerSession:save()
@@ -79,6 +82,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
+    A.shapePreview=nil
     finishStroke()
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
@@ -156,6 +160,15 @@ local function applySelectionTransform(turns,scale)
     A.movePreview=nil
     status(changed and ('Seleção transformada ('..w..' × '..h..
         ') · Ctrl+Z desfaz') or 'Seleção mantida')
+end
+local function finishShape()
+    local rect=A.shapePreview
+    A.shapePreview=nil
+    if not rect or A.screen~='editor' then return end
+    local changed=A.layerSession:drawShape(rect.x0,rect.y0,rect.x1,rect.y1,
+        A.shapeKind,A.shapeFilled,A.shapeWidth,A.color)
+    if changed then A.dirty=true;rebuildImage() end
+    status(changed and 'Forma raster criada · Ctrl+Z desfaz' or 'Forma não alterou pixels')
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -288,7 +301,7 @@ function love.update(dt)
                 -- Exercise the real eraser toolbar and undo/redo buttons.
                 local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
                 assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
-                love.draw();love.mousepressed(389,90,1)
+                love.draw();love.mousepressed(354,90,1)
                 assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
                 local ox,oy=canvasTransform()
                 local px=ox+(1.5-A.doc.width/2)*A.zoom
@@ -307,7 +320,7 @@ function love.update(dt)
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
                     'Fixture da seleção não foi restaurada')
-                love.draw();love.mousepressed(548,90,1)
+                love.draw();love.mousepressed(495,90,1)
                 assert(A.tool=='select','Botão de seleção não ativou')
                 love.draw();love.mousepressed(px,py,1)
                 love.mousereleased(px,py,1)
@@ -361,7 +374,7 @@ function love.update(dt)
                     'RBD2 não persistiu escala após reabertura')
                 -- Click real color palette, bucket toolbar, canvas, undo/redo.
                 love.draw()
-                love.mousepressed(472,90,1)
+                love.mousepressed(425,90,1)
                 assert(A.tool=='fill','Botão Balde não selecionou ferramenta')
                 love.draw()
                 love.mousepressed(panel+176,546,1)
@@ -392,12 +405,69 @@ function love.update(dt)
                 local filled=A.store:openProject(A.doc.id)
                 assert(filled.layers[2].pixels:sub(1,4)==string.char(52,124,233,255),
                     'Preenchimento não persistiu no RBD2')
+                -- Test the real shapes toolbar, outline width, color, drag and filled ellipse.
+                love.draw();love.mousepressed(576,90,1)
+                assert(A.tool=='shape','Botão Formas não selecionou ferramenta')
+                love.draw();love.mousepressed(panel+40,510,1)
+                assert(A.shapeWidth==1,'Espessura da forma não foi ajustada')
+                love.draw();love.mousepressed(panel+99,560,1)
+                assert(A.color==0xe53b44ff,'Paleta de formas não selecionou vermelho')
+                local point=function(ix,iy)
+                    return ox+(ix+.5-A.doc.width/2)*A.zoom,
+                        oy+(iy+.5-A.doc.height/2)*A.zoom
+                end
+                local x0,y0=point(5,1)
+                local x1,y1=point(7,3)
+                local previous=Native.readPixel(A.layerSession:activeBuffer(),5,1)
+                local previousInterior=Native.readPixel(A.layerSession:activeBuffer(),6,2)
+                love.draw();love.mousepressed(x0,y0,1)
+                love.mousemoved(x1,y1,x1-x0,y1-y0)
+                assert(A.shapePreview and A.shapePreview.x1==7 and
+                    A.shapePreview.y1==3,'Pré-visualização da forma não acompanha arraste')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==previous,
+                    'Arraste alterou raster antes de soltar o mouse')
+                love.mousereleased(x1,y1,1)
+                assert(not A.shapePreview,'Pré-visualização não foi finalizada')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0xe53b44ff,
+                    'Retângulo não desenhou borda')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),6,2)==previousInterior,
+                    'Contorno desenhou no centro')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==previous,
+                    'Desfazer forma não restaurou pixel original')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0xe53b44ff,
+                    'Refazer forma não restaurou borda')
+                love.draw();love.mousepressed(panel+186,425,1)
+                love.draw();love.mousepressed(panel+186,467,1)
+                assert(A.shapeKind==1 and A.shapeFilled,'Elipse preenchida não selecionada')
+                love.draw();love.mousepressed(panel+138,561,1)
+                assert(A.color==0x20ba84ff,'Paleta de formas não selecionou verde')
+                local ex0,ey0=point(4,4)
+                local ex1,ey1=point(8,6)
+                local outerPrevious=Native.readPixel(A.layerSession:activeBuffer(),4,4)
+                love.draw();love.mousepressed(ex0,ey0,1)
+                love.mousemoved(ex1,ey1,ex1-ex0,ey1-ey0)
+                love.mousereleased(ex1,ey1,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),6,5)==0x20ba84ff,
+                    'Elipse preenchida não desenhou o centro')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==outerPrevious,
+                    'Elipse desenhou fora da região geométrica')
+                saveDoc()
+                local withShapes=A.store:openProject(A.doc.id)
+                local offset=(5*A.doc.width+6)*4+1
+                assert(withShapes.layers[2].pixels:sub(offset,offset+3)==
+                    string.char(32,186,132,255),
+                    'RBD2 não guardou elipse após salvar')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
                     rotation_button=true,nearest_scale_button=true,transform_undo_redo=true,
                     bucket_toolbar=true,bucket_tolerance_buttons=true,bucket_undo_redo=true,
-                    bucket_rbd2_roundtrip=true,persisted_from_real_editor=true}
+                    bucket_rbd2_roundtrip=true,shape_toolbar=true,
+                    shape_drag_preview=true,rectangle_outline=true,ellipse_fill=true,
+                    shapes_undo_redo=true,shapes_rbd2_roundtrip=true,
+                    persisted_from_real_editor=true}
             end)
             if not ok then
                 A.testReport.ok=false
@@ -450,13 +520,14 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     button('← Galeria',20,78,91,34,toGallery)
-    button('Inspec.',117,78,78,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel',201,78,60,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel',267,78,72,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Borracha',345,78,88,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Balde',439,78,70,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
-    button('Seleção',515,78,92,34,function()finishStroke();A.tool='select'end,A.tool=='select')
-    button('Ajustar',613,78,65,34,fit)
+    button('Inspec.',117,78,70,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel',193,78,48,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel',247,78,61,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Borracha',314,78,77,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Balde',397,78,62,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
+    button('Seleção',465,78,73,34,function()finishStroke();A.tool='select'end,A.tool=='select')
+    button('Formas',544,78,71,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
+    button('Ajustar',621,78,65,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -468,6 +539,26 @@ local function drawEditor(w,h)
         love.graphics.rectangle('fill',x-dw/2,y-dh/2,math.min(checker,dw-x),math.min(checker,dh-y))
     end end
     love.graphics.setColor(1,1,1);love.graphics.draw(A.image,-dw/2,-dh/2)
+    if A.shapePreview then
+        local p=A.shapePreview
+        local left=math.min(p.x0,p.x1)-dw/2
+        local top=math.min(p.y0,p.y1)-dh/2
+        local width=math.abs(p.x1-p.x0)+1
+        local height=math.abs(p.y1-p.y0)+1
+        local value=A.color
+        local red=math.floor(value/16777216)%256/255
+        local green=math.floor(value/65536)%256/255
+        local blue=math.floor(value/256)%256/255
+        love.graphics.setColor(red,green,blue,A.shapeFilled and .65 or .95)
+        love.graphics.setLineWidth(math.max(1/A.zoom,A.shapeWidth))
+        if A.shapeKind==0 then
+            love.graphics.rectangle(A.shapeFilled and 'fill' or 'line',
+                left,top,width,height)
+        else
+            love.graphics.ellipse(A.shapeFilled and 'fill' or 'line',
+                left+width/2,top+height/2,width/2,height/2,48)
+        end
+    end
     if A.selection then
         local selected=A.movePreview or A.selection
         love.graphics.setLineWidth(math.max(1/A.zoom,.02))
@@ -487,7 +578,40 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
-    if A.tool=='select' then
+    if A.tool=='shape' then
+        text('FORMAS · RASTER C++',panel+20,377,'small','muted')
+        button('Retângulo',panel+20,410,108,32,
+            function()A.shapeKind=0 end,A.shapeKind==0)
+        button('Elipse',panel+140,410,108,32,
+            function()A.shapeKind=1 end,A.shapeKind==1)
+        button('Contorno',panel+20,452,108,32,
+            function()A.shapeFilled=false end,not A.shapeFilled)
+        button('Preenchida',panel+140,452,108,32,
+            function()A.shapeFilled=true end,A.shapeFilled)
+        button('−',panel+20,495,42,30,function()
+            A.shapeWidth=math.max(1,A.shapeWidth-1)end,
+            false,A.shapeWidth==1 or A.shapeFilled)
+        text(('Espessura %dpx'):format(A.shapeWidth),panel+70,503,'small','muted')
+        button('+',panel+206,495,42,30,function()
+            A.shapeWidth=math.min(128,A.shapeWidth+1)end,
+            false,A.shapeWidth==128 or A.shapeFilled)
+        text('COR',panel+20,535,'small','muted')
+        for i,swatch in ipairs(swatches) do
+            local x=panel+20+(i-1)*36
+            local rgba=swatch.rgba
+            love.graphics.setColor(math.floor(rgba/16777216)%256/255,
+                math.floor(rgba/65536)%256/255,
+                math.floor(rgba/256)%256/255,1)
+            love.graphics.rectangle('fill',x,551,29,27,4,4)
+            if A.color==rgba then
+                c('accent')
+                love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',x-2,549,33,31,4,4)
+            end
+            A.buttons[#A.buttons+1]={x=x,y=549,w=33,h=31,
+                fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
+        end
+    elseif A.tool=='select' then
         text('TRANSFORMAR SELEÇÃO',panel+20,377,'small','muted')
         local rect=A.selection
         text(rect and ('Região: '..rect.w..' × '..rect.h..' px')
@@ -606,6 +730,8 @@ local function drawEditor(w,h)
     if A.tool=='select' then
         text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
             or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
+    elseif A.tool=='shape' then
+        text('Arraste para criar um retângulo ou uma elipse',22,h-94,'small','accent')
     end
 end
 local function drawModal(w,h)
@@ -636,12 +762,18 @@ function love.draw()
 end
 function love.mousepressed(x,y,buttonNumber)
     if buttonNumber==1 then
-        for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then b.fn();return end end
+        for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and x<love.graphics.getWidth()-280 and y>125 and y<love.graphics.getHeight()-78 then
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
-                if A.tool=='select' then
+                if A.tool=='shape' and px>=0 and py>=0 and
+                    px<A.doc.width and py<A.doc.height then
+                    local ix=clampPixel(px,A.doc.width)
+                    local iy=clampPixel(py,A.doc.height)
+                    A.shapePreview={x0=ix,y0=iy,x1=ix,y1=iy}
+                    status('Arraste para delimitar a forma e solte para desenhar')
+                elseif A.tool=='select' then
                     local ix=clampPixel(px,A.doc.width)
                     local iy=clampPixel(py,A.doc.height)
                     local rect=A.selection
@@ -692,12 +824,18 @@ end
 function love.mousereleased(x,y,b)
     if b==3 then A.panning=false end
     if b==1 then
+        guard(finishShape)()
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.mousemoved(x,y,dx,dy)
     if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
+    if A.shapePreview and A.screen=='editor' and A.tool=='shape' then
+        local px,py=canvasPoint(x,y)
+        A.shapePreview.x1=clampPixel(px,A.doc.width)
+        A.shapePreview.y1=clampPixel(py,A.doc.height)
+    end
     if A.screen=='editor' and A.tool=='select' and A.selectAction then
         local px,py=canvasPoint(x,y)
         local ix=clampPixel(px,A.doc.width)
@@ -731,6 +869,7 @@ function love.mousemoved(x,y,dx,dy)
 end
 function love.focus(focused)
     if not focused then
+        A.shapePreview=nil
         guard(finishSelection)()
         guard(finishStroke)()
     end
@@ -761,7 +900,9 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
-    if A.screen=='editor' and (key=='escape' or
+    if A.screen=='editor' and key=='escape' and A.shapePreview then
+        A.shapePreview=nil;status('Forma cancelada')
+    elseif A.screen=='editor' and (key=='escape' or
         (key=='d' and love.keyboard.isDown('lctrl','rctrl'))) and A.selection then
         guard(finishSelection)();A.selection=nil;status('Seleção desmarcada')
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
