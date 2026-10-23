@@ -49,6 +49,7 @@ local function openDoc(doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
     A.screen='editor';A.dirty=false
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
@@ -317,12 +318,13 @@ local function drawGallery(w,h)
 end
 local function drawEditor(w,h)
     local panel=w-268
-    button('← Galeria',20,78,112,34,toGallery)
-    button('Inspecionar',144,78,100,34,function()A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel diagnóstico',254,78,143,34,function()A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel básico',407,78,130,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Borracha',545,78,100,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Ajustar',654,78,76,34,fit)
+    button('← Galeria',20,78,106,34,toGallery)
+    button('Inspecionar',132,78,94,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel',232,78,80,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel',318,78,91,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Borracha',415,78,87,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Seleção',508,78,99,34,function()finishStroke();A.tool='select'end,A.tool=='select')
+    button('Ajustar',613,78,65,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -334,6 +336,14 @@ local function drawEditor(w,h)
         love.graphics.rectangle('fill',x-dw/2,y-dh/2,math.min(checker,dw-x),math.min(checker,dh-y))
     end end
     love.graphics.setColor(1,1,1);love.graphics.draw(A.image,-dw/2,-dh/2)
+    if A.selection then
+        local selected=A.movePreview or A.selection
+        love.graphics.setLineWidth(math.max(1/A.zoom,.02))
+        love.graphics.setColor(0,0,0,.9)
+        love.graphics.rectangle('line',selected.x-dw/2-.5,selected.y-dh/2-.5,selected.w+1,selected.h+1)
+        c('accent')
+        love.graphics.rectangle('line',selected.x-dw/2,selected.y-dh/2,selected.w,selected.h)
+    end
     c('accent');love.graphics.setLineWidth(1/A.zoom);love.graphics.rectangle('line',-dw/2,-dh/2,dw,dh)
     love.graphics.pop();love.graphics.setScissor()
     box(panel,64,268,h-112,'panel')
@@ -426,6 +436,10 @@ local function drawEditor(w,h)
         text('Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
+    if A.tool=='select' then
+        text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
+            or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
+    end
 end
 local function drawModal(w,h)
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
