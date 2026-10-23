@@ -77,6 +77,8 @@ class KernelTests(unittest.TestCase):
             'rb_get_pixel': (I32, [C.POINTER(U8), U64, U32, U32, I32, I32, C.POINTER(U32)]),
             'rb_draw_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, U32, F32]),
+            'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
+                U32, U32, F32]),
         }
         for name, (result, args) in signatures.items():
             method = getattr(cls.lib, name)
@@ -306,6 +308,43 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(self.lib.rb_draw_basic_stroke(
             pixels, 64, 4, 4, 1.5, 1.5, 1.5, 1.5, 1, 0xff000000, 1), 0)
         self.assertEqual(bytes(pixels), bytes([0x38] * 64))
+
+    def test_normal_layer_composition_opaque_replaces_base(self):
+        background = (U8 * 8)(*bytes.fromhex('203040ff00000000'))
+        foreground = (U8 * 8)(*bytes.fromhex('a0b0c0ff33445500'))
+        self.assertEqual(self.lib.rb_compose_normal(background, 8, foreground, 8, 2, 1, 1), 0)
+        self.assertEqual(bytes(background), bytes.fromhex('a0b0c0ff00000000'))
+
+    def test_normal_layer_composition_half_opacity(self):
+        background = (U8 * 4)(0, 0, 255, 255)
+        foreground = (U8 * 4)(255, 0, 0, 255)
+        self.assertEqual(self.lib.rb_compose_normal(background, 4, foreground, 4, 1, 1, .5), 0)
+        self.assertIn(background[0], (127, 128))
+        self.assertEqual(background[1], 0)
+        self.assertIn(background[2], (127, 128))
+        self.assertEqual(background[3], 255)
+
+    def test_normal_layer_composition_transparent_color_and_zero_opacity(self):
+        background = (U8 * 8)(*bytes.fromhex('01020380060708ff'))
+        untouched = bytes(background)
+        invisible = (U8 * 8)(*bytes.fromhex('ffffffffffffffff'))
+        self.assertEqual(self.lib.rb_compose_normal(background, 8, invisible, 8, 2, 1, 0), 0)
+        self.assertEqual(bytes(background), untouched)
+        transparent = (U8 * 8)(*bytes.fromhex('aabbcc00ffffff00'))
+        self.assertEqual(self.lib.rb_compose_normal(background, 8, transparent, 8, 2, 1, 1), 0)
+        self.assertEqual(bytes(background), untouched)
+
+    def test_normal_layer_composition_invalid_is_atomic(self):
+        background = (U8 * 16)(*([0x38] * 16))
+        other = (U8 * 16)(*([0x55] * 16))
+        for opacity in [-.01, 1.01, math.nan, math.inf, -math.inf]:
+            self.assertEqual(self.lib.rb_compose_normal(background, 16, other, 16,
+                2, 2, opacity), -1)
+            self.assertEqual(bytes(background), bytes([0x38] * 16))
+        self.assertEqual(self.lib.rb_compose_normal(background, 15, other, 16, 2, 2, 1), -1)
+        self.assertEqual(self.lib.rb_compose_normal(background, 16, other, 15, 2, 2, 1), -1)
+        self.assertEqual(self.lib.rb_compose_normal(background, 16, background, 16, 2, 2, 1), -1)
+        self.assertEqual(bytes(background), bytes([0x38] * 16))
 
 
 if __name__ == '__main__':
