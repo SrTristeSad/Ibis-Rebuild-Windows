@@ -60,12 +60,14 @@ end
 local function undoDoc()
     finishStroke()
     if A.layerSession and A.layerSession:undo() then
+        A.selection=nil;A.selectAction=nil;A.movePreview=nil
         A.dirty=true;rebuildImage();status('Desfeito · apenas histórico desta sessão')
     end
 end
 local function redoDoc()
     finishStroke()
     if A.layerSession and A.layerSession:redo() then
+        A.selection=nil;A.selectAction=nil;A.movePreview=nil
         A.dirty=true;rebuildImage();status('Refeito · apenas histórico desta sessão')
     end
 end
