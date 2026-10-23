@@ -509,18 +509,18 @@ function love.update(dt)
                 love.draw();love.mousepressed(panel+55,607,1)
                 assert(A.tool=='shape' and A.shapeKind==2,
                     'Botão Linha reta não selecionou o tipo')
-                local lx0,ly0=point(1,7)
-                local lx1,ly1=point(5,7)
-                local oldLine=Native.readPixel(A.layerSession:activeBuffer(),1,7)
+                local lx0,ly0=point(1,6)
+                local lx1,ly1=point(3,6)
+                local oldLine=Native.readPixel(A.layerSession:activeBuffer(),1,6)
                 love.draw();love.mousepressed(lx0,ly0,1)
                 love.mousemoved(lx1,ly1,lx1-lx0,ly1-ly0)
-                assert(A.shapePreview and A.shapePreview.x1==5 and
-                    A.shapePreview.y1==7,'Prévia de linha não seguiu o arraste')
-                assert(Native.readPixel(A.layerSession:activeBuffer(),1,7)==oldLine,
+                assert(A.shapePreview and A.shapePreview.x1==3 and
+                    A.shapePreview.y1==6,'Prévia de linha não seguiu o arraste')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==oldLine,
                     'Prévia da linha alterou o raster antes de soltar')
                 love.mousereleased(lx1,ly1,1)
-                assert(Native.readPixel(A.layerSession:activeBuffer(),1,7)==0xe14922ff
-                    and Native.readPixel(A.layerSession:activeBuffer(),5,7)==0xe14922ff,
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==0xe14922ff
+                    and Native.readPixel(A.layerSession:activeBuffer(),3,6)==0xe14922ff,
                     'Linha C++ não desenhou ambas as extremidades')
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,7)==oldLine,
@@ -530,17 +530,17 @@ function love.update(dt)
                     'Redo da linha falhou')
                 saveDoc()
                 local lineSaved=A.store:openProject(A.doc.id)
-                local lineOffset=(7*A.doc.width+5)*4+1
+                local lineOffset=(6*A.doc.width+3)*4+1
                 assert(lineSaved.layers[2].pixels:sub(lineOffset,lineOffset+3)==
                     string.char(225,73,34,255),'Linha não persistiu no RBD2')
                 -- Explicit two-layer sample fixture: sampling must not draw.
-                Native.pixel(A.layerSession.buffers[1],1,8,0x246a90cc)
-                Native.pixel(A.layerSession:activeBuffer(),1,8,0)
+                Native.pixel(A.layerSession.buffers[1],1,5,0x246a90cc)
+                Native.pixel(A.layerSession:activeBuffer(),1,5,0)
                 A.layerSession:recompose();rebuildImage()
                 A.dirty=true;saveDoc()
                 love.draw();love.mousepressed(571,90,1)
                 assert(A.tool=='picker','Conta-gotas não ativado')
-                local pickX,pickY=point(1,8)
+                local pickX,pickY=point(1,5)
                 local historyBefore=A.layerSession:historyStats().undo
                 love.draw();love.mousepressed(pickX,pickY,1)
                 love.mousereleased(pickX,pickY,1)
@@ -553,8 +553,8 @@ function love.update(dt)
                 assert(A.color==0,'Conta-gotas ativo não capturou alfa zero')
                 assert(A.layerSession:historyStats().undo==historyBefore,
                     'Capturar cor alterou histórico de desenho')
-                assert(Native.readPixel(A.layerSession.buffers[1],1,8)==0x246a90cc
-                    and Native.readPixel(A.layerSession:activeBuffer(),1,8)==0,
+                assert(Native.readPixel(A.layerSession.buffers[1],1,5)==0x246a90cc
+                    and Native.readPixel(A.layerSession:activeBuffer(),1,5)==0,
                     'Capturar cor modificou uma camada')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
