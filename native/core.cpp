@@ -441,3 +441,41 @@ rb_i32 rb_transform_rect_rgba(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+
+/* Independent four-connected bucket fill. Caller provides work buffers.
+   No heap, CRT, callbacks or file I/O. Matches the original seed RGBA
+   against a fixed per-channel absolute tolerance before each replacement. */
+rb_i32 rb_flood_fill_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_i32 x, rb_i32 y, rb_u32 rgba,
+    rb_u32 tolerance, rb_u32* queue, rb_u64 queue_capacity,
+    rb_u8* visited, rb_u64 visited_capacity, rb_u32* changed) {
+    if (!plane(dst,capacity,width,height) ||
+        !coordinate(width,height,x,y) || tolerance > 255u ||
+        !queue || !visited || !changed) return -1;
+    const rb_u64 pixels=static_cast<rb_u64>(width)*height;
+    if (queue_capacity < pixels || visited_capacity < pixels) return -1;
+    Range planeRange, queueRange, maskRange, countRange;
+    if (!range(dst,pixels*4u,1,planeRange) ||
+        !range(queue,pixels*sizeof(rb_u32),4,queueRange) ||
+        !range(visited,pixels,1,maskRange) ||
+        !range(changed,sizeof(rb_u32),4,countRange) ||
+        !disjoint(planeRange,queueRange) ||
+        !disjoint(planeRange,maskRange) ||
+        !disjoint(planeRange,countRange) ||
+        !disjoint(queueRange,maskRange) ||
+        !disjoint(queueRange,countRange) ||
+        !disjoint(maskRange,countRange)) return -1;
+    const rb_u32 seed=static_cast<rb_u32>(y)*width+static_cast<rb_u32>(x);
+    rb_u8 seedColor[4];
+    for (rb_u32 k=0;k<4;++k) seedColor[k]=dst[static_cast<rb_u64>(seed)*4u+k];
+    const rb_u32 replacement[4]={rgba>>24,(rgba>>16)&255u,(rgba>>8)&255u,rgba&255u};
+    if (tolerance==0 && seedColor[0]==replacement[0] &&
+        seedColor[1]==replacement[1] && seedColor[2]==replacement[2] &&
+        seedColor[3]==replacement[3]) { *changed=0; return 0; }
+    volatile rb_u8* cleared=visited;
+    for (rb_u64 k=0;k<pixels;++k) cleared[k]=0;
+    rb_u64 head=0,tail=1;
+    queue[0]=seed;
+    visited[seed]=1;
+    rb_u32 changedCount=0;
