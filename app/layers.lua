@@ -5,6 +5,9 @@ local Native=require('native')
 local Store=require('store')
 local Layers={}
 Layers.__index=Layers
+-- Session-only snapshots; upper bounds avoid unbounded raster memory growth.
+Layers.MAX_HISTORY_BYTES=48*1024*1024
+Layers.MAX_HISTORY_ENTRIES=24
 local function assertIndex(self,index)
     assert(type(index)=='number' and index%1==0 and
         index>=1 and index<=#self.doc.layers,'Camada inválida')
@@ -19,7 +22,8 @@ function Layers.open(store,doc)
         doc.pixels=nil
     end
     local self=setmetatable({store=store,doc=doc,buffers={},
-        composite=Native.buffer(doc.width,doc.height)},Layers)
+        composite=Native.buffer(doc.width,doc.height),
+        undoStack={},redoStack={},historyBytes=0,pending=nil},Layers)
     for i,layer in ipairs(doc.layers) do
         self.buffers[i]=Native.buffer(doc.width,doc.height,layer.pixels)
     end
@@ -39,9 +43,79 @@ function Layers:recompose()
     end
     return self.composite
 end
+function Layers:clearHistory()
+    self.undoStack={}
+    self.redoStack={}
+    self.historyBytes=0
+    self.pending=nil
+end
+function Layers:beginEdit()
+    assert(not self.pending,'Uma edição já está aberta')
+    local layer=self.doc.layers[self.doc.active_layer]
+    self.pending={id=layer.id,before=Native.bytes(self:activeBuffer())}
+end
+function Layers:finishEdit()
+    local pending=self.pending
+    if not pending then return false end
+    self.pending=nil
+    local after=Native.bytes(self:activeBuffer())
+    assert(self.doc.layers[self.doc.active_layer].id==pending.id,
+        'Camada alterada durante pincelada')
+    if pending.before==after then return false end
+    for _,entry in ipairs(self.redoStack) do self.historyBytes=self.historyBytes-entry.size end
+    self.redoStack={}
+    local entry={id=pending.id,before=pending.before,after=after,
+        size=#pending.before+#after}
+    -- A 2048x2048 RGBA8 image fits a single 32-MiB history entry.
+    -- Larger than the budget cannot happen at the current 2048 axis cap.
+    while (#self.undoStack>=Layers.MAX_HISTORY_ENTRIES or
+        self.historyBytes+entry.size>Layers.MAX_HISTORY_BYTES) and
+        #self.undoStack>0 do
+        local evicted=table.remove(self.undoStack,1)
+        self.historyBytes=self.historyBytes-evicted.size
+    end
+    if entry.size<=Layers.MAX_HISTORY_BYTES then
+        self.undoStack[#self.undoStack+1]=entry
+        self.historyBytes=self.historyBytes+entry.size
+        return true
+    end
+    return false
+end
+function Layers:canUndo() return #self.undoStack>0 end
+function Layers:canRedo() return #self.redoStack>0 end
+function Layers:historyStats()
+    return {undo=#self.undoStack,redo=#self.redoStack,bytes=self.historyBytes}
+end
+function Layers:_restore(entry,which)
+    local index=nil
+    for i,layer in ipairs(self.doc.layers) do
+        if layer.id==entry.id then index=i;break end
+    end
+    assert(index,'Camada original não existe')
+    self.buffers[index]=Native.buffer(self.doc.width,self.doc.height,entry[which])
+    self.doc.active_layer=index
+    self:recompose()
+end
+function Layers:undo()
+    assert(not self.pending,'Finalize a pincelada antes de desfazer')
+    local entry=table.remove(self.undoStack)
+    if not entry then return false end
+    self:_restore(entry,'before')
+    self.redoStack[#self.redoStack+1]=entry
+    return true
+end
+function Layers:redo()
+    assert(not self.pending,'Finalize a pincelada antes de refazer')
+    local entry=table.remove(self.redoStack)
+    if not entry then return false end
+    self:_restore(entry,'after')
+    self.undoStack[#self.undoStack+1]=entry
+    return true
+end
 function Layers:add(name)
     local layers=self.doc.layers
     assert(#layers<Store.MAX_LAYERS,'Limite inicial de camadas atingido')
+    self:clearHistory()
     local index=self.doc.active_layer+1
     local new={id=self.store:newLayerId(),name=name or 'Nova camada',
         visible=true,opacity=1,pixels=string.rep('\0',self.doc.width*self.doc.height*4)}
@@ -60,6 +134,7 @@ end
 function Layers:remove(index)
     assertIndex(self,index)
     assert(#self.doc.layers>1,'Não é possível remover a última camada')
+    self:clearHistory()
     table.remove(self.doc.layers,index)
     table.remove(self.buffers,index)
     if self.doc.active_layer>index then self.doc.active_layer=self.doc.active_layer-1
@@ -72,6 +147,7 @@ end
 function Layers:setVisible(index,visible)
     assertIndex(self,index)
     assert(type(visible)=='boolean','Visibilidade inválida')
+    if self.doc.layers[index].visible~=visible then self:clearHistory() end
     self.doc.layers[index].visible=visible
     self:recompose()
 end
@@ -79,12 +155,14 @@ function Layers:setOpacity(index,opacity)
     assertIndex(self,index)
     assert(type(opacity)=='number' and opacity==opacity and
         opacity>=0 and opacity<=1,'Opacidade inválida')
+    if self.doc.layers[index].opacity~=opacity then self:clearHistory() end
     self.doc.layers[index].opacity=opacity
     self:recompose()
 end
 function Layers:move(index,to)
     assertIndex(self,index);assertIndex(self,to)
     if index==to then return end
+    self:clearHistory()
     local layer=table.remove(self.doc.layers,index)
     local buffer=table.remove(self.buffers,index)
     table.insert(self.doc.layers,to,layer)
@@ -98,6 +176,10 @@ function Layers:move(index,to)
 end
 function Layers:stroke(x0,y0,x1,y1,diameter,color,opacity)
     Native.basicStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,opacity or 1)
+    self:recompose()
+end
+function Layers:erase(x0,y0,x1,y1,diameter,opacity)
+    Native.basicErase(self:activeBuffer(),x0,y0,x1,y1,diameter,opacity or 1)
     self:recompose()
 end
 function Layers:pixel(x,y,rgba)
