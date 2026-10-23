@@ -8,6 +8,7 @@ def run(args,**kw):
     logs=BUILD/'commands'/str(time.time_ns())
     result=run_process(args,logs,120,**kw)
     if not result['ok']:
+        print((logs/'stderr.log').read_text(errors='replace')[-3000:],file=sys.stderr)
         raise RuntimeError('Command failed or timed out; logs: '+str(logs))
     return result
 def candidates(explicit):

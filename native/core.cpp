@@ -310,3 +310,60 @@ rb_i32 rb_erase_basic_stroke(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+/* Rectangle translation implementation follows. */
+
+rb_i32 rb_move_rect_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_i32 sx, rb_i32 sy,
+    rb_u32 rw, rb_u32 rh, rb_i32 tx, rb_i32 ty,
+    rb_u8* scratch, rb_u64 scratch_capacity) {
+    if (!plane(dst, capacity, width, height) || sx < 0 || sy < 0 ||
+        rw == 0 || rh == 0 || rw > width || rh > height ||
+        static_cast<rb_u32>(sx) > width - rw ||
+        static_cast<rb_u32>(sy) > height - rh) return -1;
+    const rb_u64 count = static_cast<rb_u64>(rw) * rh * 4u;
+    if (!scratch || scratch_capacity < count) return -1;
+    Range d,s;
+    if (!range(dst, static_cast<rb_u64>(width)*height*4u, 1, d) ||
+        !range(scratch, count, 1, s) || !disjoint(d,s)) return -1;
+    if (sx == tx && sy == ty) return 0;
+    // Volatile byte access prevents MSVC /O2 from synthesizing CRT memcpy.
+    volatile rb_u8* snapshot=scratch;
+    const volatile rb_u8* original=dst;
+    volatile rb_u8* output=dst;
+    for (rb_u32 y=0;y<rh;++y) {
+        const rb_u64 source=(static_cast<rb_u64>(sy)+y)*width+sx;
+        const rb_u64 dest=static_cast<rb_u64>(y)*rw;
+        for (rb_u32 b=0;b<rw*4u;++b)
+            snapshot[dest*4u+b]=original[source*4u+b];
+    }
+    for (rb_u32 y=0;y<rh;++y) {
+        const rb_u64 source=(static_cast<rb_u64>(sy)+y)*width+sx;
+        for (rb_u32 b=0;b<rw*4u;++b) output[source*4u+b]=0;
+    }
+    for (rb_u32 y=0;y<rh;++y) {
+        const rb_i64 cy=static_cast<rb_i64>(ty)+y;
+        if (cy<0 || cy>=height) continue;
+        for (rb_u32 x=0;x<rw;++x) {
+            const rb_i64 cx=static_cast<rb_i64>(tx)+x;
+            if (cx<0 || cx>=width) continue;
+            const rb_u8* src=scratch+(static_cast<rb_u64>(y)*rw+x)*4u;
+            rb_u8* p=dst+(static_cast<rb_u64>(cy)*width+
+                static_cast<rb_u64>(cx))*4u;
+            const float sa=static_cast<float>(src[3])/255.0f;
+            if (sa<=0.0f) continue;
+            const float da=static_cast<float>(p[3])/255.0f;
+            const float rest=da*(1.0f-sa);
+            const float oa=sa+rest;
+            const float inv=1.0f/oa;
+            for (rb_u32 ch=0;ch<3;++ch) {
+                float color=(src[ch]*sa+p[ch]*rest)*inv;
+                if (color>255.0f) color=255.0f;
+                if (color<0.0f) color=0.0f;
+                p[ch]=static_cast<rb_u8>(color+0.5f);
+            }
+            p[3]=static_cast<rb_u8>(oa*255.0f+0.5f);
+        }
+    }
+    return 0;
+}

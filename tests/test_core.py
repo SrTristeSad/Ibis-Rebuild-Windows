@@ -79,6 +79,8 @@ class KernelTests(unittest.TestCase):
                 F32, F32, F32, F32, F32, U32, F32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
+            'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
+                I32, I32, U32, U32, I32, I32, C.POINTER(U8), U64]),
             'rb_erase_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, F32]),
         }
@@ -391,6 +393,61 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(bytes(upper),bytes(4))
         self.assertEqual(self.lib.rb_compose_normal(lower,4,upper,4,1,1,1),0)
         self.assertEqual(bytes(lower),bytes.fromhex('ff0000ff'))
+
+
+    def test_move_rect_overlapping_and_source_is_cleared(self):
+        pixels=(U8*24)()
+        original=[0x11,0x22,0x33,0x44]
+        for i,n in enumerate(original):
+            self.assertEqual(self.lib.rb_set_pixel(pixels,24,6,1,i,0,
+                (n<<24)|0x000000ff),0)
+        tmp=(U8*12)()
+        self.assertEqual(self.lib.rb_move_rect_rgba(pixels,24,6,1,
+            0,0,3,1,1,0,tmp,12),0)
+        self.assertEqual(bytes(pixels),bytes.fromhex(
+            '00000000 110000ff 220000ff 330000ff 00000000 00000000'))
+        self.assertEqual(bytes(tmp),bytes.fromhex(
+            '110000ff 220000ff 330000ff'))
+
+    def test_move_rect_clips_and_preserves_unselected_pixels(self):
+        pixels=(U8*16)(*bytes.fromhex(
+            '010203ff 040506ff 070809ff 0a0b0cff'))
+        tmp=(U8*8)()
+        self.assertEqual(self.lib.rb_move_rect_rgba(pixels,16,4,1,
+            0,0,2,1,3,0,tmp,8),0)
+        self.assertEqual(bytes(pixels),bytes.fromhex(
+            '00000000 00000000 070809ff 010203ff'))
+
+    def test_move_rect_invalid_is_atomic(self):
+        pixels=(U8*16)(*bytes.fromhex('112233ff 445566ff 778899ff aabbccff'))
+        tmp=(U8*16)(*([0x5a]*16))
+        original=bytes(pixels)
+        for sx,sy,w,h,tx,ty,cap in [
+            (-1,0,1,1,0,0,16),(0,-1,1,1,0,0,16),
+            (1,0,4,1,0,0,16),(0,0,0,1,1,0,16),
+            (0,0,2,1,1,0,7),(0,0,3,1,1,0,16)]:
+            self.assertEqual(self.lib.rb_move_rect_rgba(pixels,16,2,2,
+                sx,sy,w,h,tx,ty,tmp,cap),-1)
+            self.assertEqual(bytes(pixels),original)
+            self.assertEqual(bytes(tmp),bytes([0x5a]*16))
+        self.assertEqual(self.lib.rb_move_rect_rgba(pixels,16,2,2,
+            0,0,2,2,1,0,pixels,16),-1)
+        self.assertEqual(bytes(pixels),original)
+        self.assertEqual(self.lib.rb_move_rect_rgba(pixels,16,2,2,
+            0,0,1,1,0,0,tmp,16),0)
+        self.assertEqual(bytes(pixels),original)
+
+    def test_move_rect_alpha_composes_over_destination(self):
+        pixels=(U8*12)(*bytes.fromhex(
+            'ff000080 0000ffff 00000000'))
+        tmp=(U8*4)()
+        self.assertEqual(self.lib.rb_move_rect_rgba(pixels,12,3,1,
+            0,0,1,1,1,0,tmp,4),0)
+        self.assertEqual(bytes(pixels[0:4]),bytes(4))
+        self.assertIn(pixels[4],(127,128))
+        self.assertEqual(pixels[5],0)
+        self.assertIn(pixels[6],(127,128))
+        self.assertEqual(pixels[7],255)
 
 
 if __name__ == '__main__':

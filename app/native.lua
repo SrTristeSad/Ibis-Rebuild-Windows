@@ -14,6 +14,7 @@ int32_t rb_set_pixel(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_
 int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t*);
 int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float);
 int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float);
+int32_t rb_move_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint8_t*,uint64_t);
 int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
 ]]
 local N={available=false,errors={}}
@@ -98,6 +99,17 @@ function N.basicErase(buffer,x0,y0,x1,y1,diameter,opacity)
     local result=N.lib.rb_erase_basic_stroke(buffer.bytes,buffer.size,buffer.width,
         buffer.height,x0,y0,x1,y1,diameter,opacity)
     assert(result==0,'Borracha inválida ou buffer RGBA insuficiente: '..tonumber(result))
+end
+-- C++ snapshots the selected pixels into separate FFI memory before moving.
+function N.moveRect(buffer,x,y,w,h,toX,toY)
+    ready()
+    assert(w>=1 and h>=1 and w%1==0 and h%1==0 and
+        w<=buffer.width and h<=buffer.height,'Seleção inválida')
+    local n=w*h*4
+    local scratch=ffi.new('uint8_t[?]',n)
+    assert(N.lib.rb_move_rect_rgba(buffer.bytes,buffer.size,buffer.width,
+        buffer.height,x,y,w,h,toX,toY,scratch,n)==0,
+        'Falha no movimento retangular C++')
 end
 -- Normal source-over composition, explicitly independent of Android blending.
 function N.composite(destination,source,opacity)

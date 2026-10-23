@@ -184,6 +184,20 @@ function Layers:erase(x0,y0,x1,y1,diameter,opacity)
     Native.basicErase(self:activeBuffer(),x0,y0,x1,y1,diameter,opacity or 1)
     self:recompose()
 end
+-- One rectangle translation = one reversible raster operation on active layer.
+function Layers:moveSelection(x,y,w,h,toX,toY)
+    assert(not self.pending,'Finalize o traço antes de mover uma seleção')
+    assert(x>=0 and y>=0 and w>=1 and h>=1 and
+        x+w<=self.doc.width and y+h<=self.doc.height,
+        'Seleção fora da tela')
+    assert(toX>=0 and toY>=0 and toX+w<=self.doc.width and
+        toY+h<=self.doc.height,'Destino da seleção fora da tela')
+    if x==toX and y==toY then return false end
+    self:beginEdit()
+    Native.moveRect(self:activeBuffer(),x,y,w,h,toX,toY)
+    self:recompose()
+    return self:finishEdit()
+end
 function Layers:pixel(x,y,rgba)
     Native.pixel(self:activeBuffer(),x,y,rgba)
     self:recompose()

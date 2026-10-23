@@ -49,6 +49,7 @@ local function openDoc(doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
     A.screen='editor';A.dirty=false
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
@@ -59,12 +60,14 @@ end
 local function undoDoc()
     finishStroke()
     if A.layerSession and A.layerSession:undo() then
+        A.selection=nil;A.selectAction=nil;A.movePreview=nil
         A.dirty=true;rebuildImage();status('Desfeito · apenas histórico desta sessão')
     end
 end
 local function redoDoc()
     finishStroke()
     if A.layerSession and A.layerSession:redo() then
+        A.selection=nil;A.selectAction=nil;A.movePreview=nil
         A.dirty=true;rebuildImage();status('Refeito · apenas histórico desta sessão')
     end
 end
@@ -115,6 +118,22 @@ local function canvasPoint(mx,my)
     local cx,cy=canvasTransform();local dx,dy=(mx-cx)/A.zoom,(my-cy)/A.zoom
     local ca,sa=math.cos(-A.rotation),math.sin(-A.rotation)
     return dx*ca-dy*sa+A.doc.width/2,dx*sa+dy*ca+A.doc.height/2
+end
+local function clampPixel(value,size)
+    return math.max(0,math.min(size-1,math.floor(value)))
+end
+local function finishSelection()
+    if not A.selectAction then return end
+    if A.selectAction=='move' and A.selection and A.movePreview then
+        local old=A.selection
+        local dst=A.movePreview
+        local changed=A.layerSession:moveSelection(
+            old.x,old.y,old.w,old.h,dst.x,dst.y)
+        if changed then A.dirty=true;rebuildImage() end
+        A.selection={x=dst.x,y=dst.y,w=old.w,h=old.h}
+        status(changed and 'Seleção movida · Ctrl+Z desfaz' or 'Seleção mantida')
+    end
+    A.selectAction=nil;A.movePreview=nil
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -247,7 +266,7 @@ function love.update(dt)
                 -- Exercise the real eraser toolbar and undo/redo buttons.
                 local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
                 assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
-                love.draw();love.mousepressed(590,90,1)
+                love.draw();love.mousepressed(455,90,1)
                 assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
                 local ox,oy=canvasTransform()
                 local px=ox+(1.5-A.doc.width/2)*A.zoom
@@ -262,9 +281,36 @@ function love.update(dt)
                 love.draw();love.mousepressed(panel+215,298,1)
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
                     'Botão refazer não aplicou a borracha')
+                -- Use the real selector and drag events against the same canvas.
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
+                    'Fixture da seleção não foi restaurada')
+                love.draw();love.mousepressed(548,90,1)
+                assert(A.tool=='select','Botão de seleção não ativou')
+                love.draw();love.mousepressed(px,py,1)
+                love.mousereleased(px,py,1)
+                assert(A.selection and A.selection.x==1 and A.selection.y==1 and
+                    A.selection.w==1 and A.selection.h==1,'Seleção por clique falhou')
+                love.draw();love.mousepressed(px,py,1)
+                love.mousemoved(px+2*A.zoom,py,2*A.zoom,0)
+                love.mousereleased(px+2*A.zoom,py,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
+                    'Mover seleção não limpou origem')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,1)==source,
+                    'Mover seleção não chegou ao destino')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
+                    'Desfazer movimento não restaurou origem')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,1)==source,
+                    'Refazer movimento não restaurou destino')
                 saveDoc()
+                local persisted=A.store:openProject(A.doc.id)
+                assert(persisted.layers[2].pixels:sub(49,52)==string.char(229,59,68,255),
+                    'RBD2 não preservou pixels movidos pela seleção GUI')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
+                    rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -317,12 +363,13 @@ local function drawGallery(w,h)
 end
 local function drawEditor(w,h)
     local panel=w-268
-    button('← Galeria',20,78,112,34,toGallery)
-    button('Inspecionar',144,78,100,34,function()A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel diagnóstico',254,78,143,34,function()A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel básico',407,78,130,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Borracha',545,78,100,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Ajustar',654,78,76,34,fit)
+    button('← Galeria',20,78,106,34,toGallery)
+    button('Inspecionar',132,78,94,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel',232,78,80,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel',318,78,91,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Borracha',415,78,87,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Seleção',508,78,99,34,function()finishStroke();A.tool='select'end,A.tool=='select')
+    button('Ajustar',613,78,65,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -334,6 +381,14 @@ local function drawEditor(w,h)
         love.graphics.rectangle('fill',x-dw/2,y-dh/2,math.min(checker,dw-x),math.min(checker,dh-y))
     end end
     love.graphics.setColor(1,1,1);love.graphics.draw(A.image,-dw/2,-dh/2)
+    if A.selection then
+        local selected=A.movePreview or A.selection
+        love.graphics.setLineWidth(math.max(1/A.zoom,.02))
+        love.graphics.setColor(0,0,0,.9)
+        love.graphics.rectangle('line',selected.x-dw/2-.5,selected.y-dh/2-.5,selected.w+1,selected.h+1)
+        c('accent')
+        love.graphics.rectangle('line',selected.x-dw/2,selected.y-dh/2,selected.w,selected.h)
+    end
     c('accent');love.graphics.setLineWidth(1/A.zoom);love.graphics.rectangle('line',-dw/2,-dh/2,dw,dh)
     love.graphics.pop();love.graphics.setScissor()
     box(panel,64,268,h-112,'panel')
@@ -426,6 +481,10 @@ local function drawEditor(w,h)
         text('Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
+    if A.tool=='select' then
+        text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
+            or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
+    end
 end
 local function drawModal(w,h)
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
@@ -460,7 +519,23 @@ function love.mousepressed(x,y,buttonNumber)
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
-                if A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
+                if A.tool=='select' then
+                    local ix=clampPixel(px,A.doc.width)
+                    local iy=clampPixel(py,A.doc.height)
+                    local rect=A.selection
+                    if rect and ix>=rect.x and ix<rect.x+rect.w and
+                        iy>=rect.y and iy<rect.y+rect.h then
+                        A.selectAction='move'
+                        A.moveOriginX=ix;A.moveOriginY=iy
+                        A.movePreview={x=rect.x,y=rect.y,w=rect.w,h=rect.h}
+                        status('Arraste a seleção para mover os pixels da camada')
+                    else
+                        A.selectAction='create'
+                        A.selectOriginX=ix;A.selectOriginY=iy
+                        A.selection={x=ix,y=iy,w=1,h=1}
+                        status('Área selecionada · arraste novamente dentro dela para mover')
+                    end
+                elseif A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
                     A.layerSession:beginEdit()
                     A.layerSession:pixel(math.floor(px),math.floor(py),A.color)
                     A.layerSession:finishEdit()
@@ -484,10 +559,31 @@ function love.mousepressed(x,y,buttonNumber)
 end
 function love.mousereleased(x,y,b)
     if b==3 then A.panning=false end
-    if b==1 then guard(finishStroke)() end
+    if b==1 then
+        guard(finishSelection)()
+        guard(finishStroke)()
+    end
 end
 function love.mousemoved(x,y,dx,dy)
     if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
+    if A.screen=='editor' and A.tool=='select' and A.selectAction then
+        local px,py=canvasPoint(x,y)
+        local ix=clampPixel(px,A.doc.width)
+        local iy=clampPixel(py,A.doc.height)
+        if A.selectAction=='create' then
+            A.selection={x=math.min(A.selectOriginX,ix),
+                y=math.min(A.selectOriginY,iy),
+                w=math.abs(ix-A.selectOriginX)+1,
+                h=math.abs(iy-A.selectOriginY)+1}
+        elseif A.selectAction=='move' then
+            local rect=A.selection
+            local dx=ix-A.moveOriginX
+            local dy=iy-A.moveOriginY
+            A.movePreview={x=math.max(0,math.min(A.doc.width-rect.w,rect.x+dx)),
+                y=math.max(0,math.min(A.doc.height-rect.h,rect.y+dy)),
+                w=rect.w,h=rect.h}
+        end
+    end
     if A.drawing and A.screen=='editor' and (A.tool=='brush' or A.tool=='erase') and not A.modal then
         guard(function()
             local px,py=canvasPoint(x,y)
@@ -502,7 +598,10 @@ function love.mousemoved(x,y,dx,dy)
     end
 end
 function love.focus(focused)
-    if not focused then guard(finishStroke)() end
+    if not focused then
+        guard(finishSelection)()
+        guard(finishStroke)()
+    end
 end
 function love.wheelmoved(x,y)
     if A.screen=='editor' and not A.modal then
@@ -530,7 +629,10 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
-    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
+    if A.screen=='editor' and (key=='escape' or
+        (key=='d' and love.keyboard.isDown('lctrl','rctrl'))) and A.selection then
+        guard(finishSelection)();A.selection=nil;status('Seleção desmarcada')
+    elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
         if love.keyboard.isDown('lshift','rshift') then guard(redoDoc)() else guard(undoDoc)() end
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='y' then guard(redoDoc)()
     elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='s'then guard(saveDoc)()
