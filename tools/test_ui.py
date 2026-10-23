@@ -63,7 +63,7 @@ def run_ui(output, runtime_path=None, lua_only=False, timeout=30, route='both'):
                   'layers': ('RBD2 multiple editable raster layers roundtrip verified; normal blend only'
                       if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('layered_roundtrip')
                           for r in results) else 'not_verified'),
-                  'save_reopen': ('native integration self-test saved/reopened RBD1 and checked PNG pixels; GUI buttons untested'
+                  'save_reopen': ('native integration saved/reopened editable RBD2 and checked PNG pixels'
                       if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('png_pixels')
                           for r in results) else 'not_verified')}}
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
