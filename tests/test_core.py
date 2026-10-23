@@ -81,6 +81,8 @@ class KernelTests(unittest.TestCase):
                 U32, U32, F32]),
             'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
                 I32, I32, U32, U32, I32, I32, C.POINTER(U8), U64]),
+            'rb_transform_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
+                I32, I32, U32, U32, I32, I32, U32, U32, U32, C.POINTER(U8), U64]),
             'rb_erase_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, F32]),
         }
@@ -448,6 +450,70 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(pixels[5],0)
         self.assertIn(pixels[6],(127,128))
         self.assertEqual(pixels[7],255)
+
+
+    def test_transform_quarter_clockwise_unequal_dimensions(self):
+        plane=(U8*(4*4*4))()
+        for x,color in [(0,0xff0000ff),(1,0x00ff00ff),(2,0x0000ffff)]:
+            self.assertEqual(self.lib.rb_set_pixel(plane,len(plane),4,4,x,0,color),0)
+        temp=(U8*12)()
+        self.assertEqual(self.lib.rb_transform_rect_rgba(plane,len(plane),4,4,
+            0,0,3,1,0,0,1,3,1,temp,12),0)
+        for y,expected in enumerate((0xff0000ff,0x00ff00ff,0x0000ffff)):
+            self.assertEqual(bytes(plane[(y*4)*4:(y*4+1)*4]),
+                expected.to_bytes(4,'big'))
+        self.assertEqual(bytes(plane[4:12]),bytes(8))
+        self.assertEqual(bytes(temp),bytes.fromhex('ff0000ff 00ff00ff 0000ffff'))
+
+    def test_transform_counterclockwise_and_halfturn(self):
+        for rotation,expected in [(3,[3,2,1]),(2,[3,2,1])]:
+            plane=(U8*48)()
+            for x,red in enumerate([1,2,3]):
+                self.lib.rb_set_pixel(plane,48,3,4,x,0,(red<<24)|0xff)
+            temp=(U8*12)()
+            if rotation==3:
+                args=(0,0,3,1,1,0,1,3,3)
+            else:
+                args=(0,0,3,1,0,0,3,1,2)
+            self.assertEqual(self.lib.rb_transform_rect_rgba(plane,48,3,4,
+                *args,temp,12),0)
+            for i,red in enumerate(expected):
+                at=((i*3+1)*4 if rotation==3 else i*4)
+                self.assertEqual(plane[at],red)
+
+    def test_transform_nearest_neighbor_scaling_and_destination_overlap(self):
+        plane=(U8*16)(*bytes.fromhex(
+            '110000ff 220000ff 990000ff 880000ff'))
+        temp=(U8*8)()
+        self.assertEqual(self.lib.rb_transform_rect_rgba(plane,16,4,1,
+            0,0,2,1,0,0,4,1,0,temp,8),0)
+        self.assertEqual(bytes(plane),bytes.fromhex(
+            '110000ff 110000ff 220000ff 220000ff'))
+
+    def test_transform_invalid_input_no_buffer_writes(self):
+        original=bytes.fromhex('112233ff 445566ff 778899ff aabbccff')
+        for dims in [
+            (0,0,0,1,0,0,1,1,0),
+            (-1,0,1,1,0,0,1,1,0),
+            (0,0,1,1,1,0,2,2,0),
+            (0,0,1,1,0,0,1,1,4),
+            (1,1,2,2,0,0,1,1,1),
+            (0,0,1,1,0,0,0,1,0)]:
+            plane=(U8*16).from_buffer_copy(original)
+            temp=(U8*16)(*([0x5a]*16))
+            self.assertEqual(self.lib.rb_transform_rect_rgba(plane,16,2,2,
+                *dims,temp,16),-1)
+            self.assertEqual(bytes(plane),original)
+            self.assertEqual(bytes(temp),bytes([0x5a]*16))
+        plane=(U8*16).from_buffer_copy(original)
+        temp=(U8*16)(*([0x5a]*16))
+        self.assertEqual(self.lib.rb_transform_rect_rgba(plane,16,2,2,
+            0,0,2,2,0,0,2,2,1,temp,15),-1)
+        self.assertEqual(bytes(plane),original)
+        self.assertEqual(bytes(temp),bytes([0x5a]*16))
+        self.assertEqual(self.lib.rb_transform_rect_rgba(plane,16,2,2,
+            0,0,1,1,0,0,1,1,1,plane,16),-1)
+        self.assertEqual(bytes(plane),original)
 
 
 if __name__ == '__main__':
