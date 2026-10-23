@@ -312,3 +312,18 @@ rb_i32 rb_erase_basic_stroke(rb_u8* dst, rb_u64 capacity,
 }
 
 /* Rectangle translation implementation follows. */
+
+rb_i32 rb_move_rect_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_i32 sx, rb_i32 sy,
+    rb_u32 rw, rb_u32 rh, rb_i32 tx, rb_i32 ty,
+    rb_u8* scratch, rb_u64 scratch_capacity) {
+    if (!plane(dst, capacity, width, height) || sx < 0 || sy < 0 ||
+        rw == 0 || rh == 0 || rw > width || rh > height ||
+        static_cast<rb_u32>(sx) > width - rw ||
+        static_cast<rb_u32>(sy) > height - rh) return -1;
+    const rb_u64 count = static_cast<rb_u64>(rw) * rh * 4u;
+    if (!scratch || scratch_capacity < count) return -1;
+    Range d,s;
+    if (!range(dst, static_cast<rb_u64>(width)*height*4u, 1, d) ||
+        !range(scratch, count, 1, s) || !disjoint(d,s)) return -1;
+    if (sx == tx && sy == ty) return 0;
