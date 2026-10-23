@@ -80,4 +80,13 @@ RB_API rb_i32 rb_compose_normal(rb_u8* dst, rb_u64 dst_capacity,
     const rb_u8* src, rb_u64 src_capacity,
     rb_u32 width, rb_u32 height, float opacity);
 
+
+/* Desktop hard-round eraser: destination-out alpha, NOT Android equivalence.
+   Same segment geometry/coordinate contract as rb_draw_basic_stroke.
+   opacity [0,1] decreases alpha once per covered pixel; zero-alpha pixels
+   are canonicalized to transparent black. Invalid calls modify no bytes. */
+RB_API rb_i32 rb_erase_basic_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, float opacity);
+
 #endif
