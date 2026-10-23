@@ -13,6 +13,7 @@ typedef long long rb_i64;
 # define RB_EXPORT __declspec(dllexport)
 #else
 # define RB_EXPORT __attribute__((visibility("default")))
+/* Rectangle selection work in progress. */
 #endif
 #ifdef __cplusplus
 # define RB_EXTERN extern "C"
