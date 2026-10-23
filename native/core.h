@@ -106,4 +106,16 @@ RB_API rb_i32 rb_transform_rect_rgba(rb_u8* dst, rb_u64 capacity,
     rb_i32 tx, rb_i32 ty, rb_u32 tw, rb_u32 th,
     rb_u32 quarter_turns, rb_u8* scratch, rb_u64 scratch_capacity);
 
+
+/* Independent contiguous RGBA8 bucket fill using 4-neighbor connectivity.
+   tolerance 0..255: each RGBA channel must differ from seed by <= tolerance.
+   Writes replacement RGBA exactly, including alpha. No blending.
+   queue has >= width*height 32-bit entries; visited has >= width*height bytes,
+   is initialized by C++, and must be disjoint from queue, plane and changed.
+   Validations fail atomically before writing. changed receives pixel count. */
+RB_API rb_i32 rb_flood_fill_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_i32 x, rb_i32 y, rb_u32 rgba,
+    rb_u32 tolerance, rb_u32* queue, rb_u64 queue_capacity,
+    rb_u8* visited, rb_u64 visited_capacity, rb_u32* changed);
+
 #endif
