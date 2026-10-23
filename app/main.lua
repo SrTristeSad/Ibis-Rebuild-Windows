@@ -330,9 +330,39 @@ function love.update(dt)
                 local persisted=A.store:openProject(A.doc.id)
                 assert(persisted.layers[2].pixels:sub(49,52)==string.char(229,59,68,255),
                     'RBD2 não preservou pixels movidos pela seleção GUI')
+                A.layerSession:pixel(4,1,0x20ba84ff)
+                rebuildImage()
+                A.selection={x=3,y=1,w=2,h=1}
+                love.draw()
+                love.mousepressed(panel+185,470,1)
+                assert(A.selection and A.selection.w==1 and A.selection.h==2,
+                    'Botão 90° não trocou dimensões da seleção')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,2)==0x20ba84ff,
+                    'Rotação pela interface não reposicionou pixels')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,1)==0,
+                    'Rotação não limpou origem')
+                love.draw()
+                love.mousepressed(panel+185,519,1)
+                assert(A.selection.w==2 and A.selection.h==4,
+                    'Botão 200% não redimensionou seleção')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==0x20ba84ff,
+                    'Escala por vizinho próximo incorreta')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==0,
+                    'Desfazer escala falhou')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,4)==0x20ba84ff,
+                    'Refazer escala falhou')
+                saveDoc()
+                local transformed=A.store:openProject(A.doc.id)
+                local offset=(4*A.doc.width+4)*4+1
+                assert(transformed.layers[2].pixels:sub(offset,offset+3)==
+                    string.char(32,186,132,255),
+                    'RBD2 não persistiu escala após reabertura')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
+                    rotation_button=true,nearest_scale_button=true,transform_undo_redo=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
