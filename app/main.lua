@@ -135,6 +135,28 @@ local function finishSelection()
     end
     A.selectAction=nil;A.movePreview=nil
 end
+local function applySelectionTransform(turns,scale)
+    finishSelection()
+    assert(A.screen=='editor' and A.tool=='select' and A.selection,
+        'Selecione uma região retangular primeiro')
+    local rect=A.selection
+    local w,h=rect.w,rect.h
+    if turns%2==1 then w,h=h,w end
+    local factor=scale or 1
+    w=math.max(1,math.floor(w*factor+0.5))
+    h=math.max(1,math.floor(h*factor+0.5))
+    assert(w<=A.doc.width and h<=A.doc.height,
+        'O tamanho transformado ultrapassa as dimensões do canvas')
+    local x=math.min(rect.x,A.doc.width-w)
+    local y=math.min(rect.y,A.doc.height-h)
+    local changed=A.layerSession:transformSelection(
+        rect.x,rect.y,rect.w,rect.h,x,y,w,h,turns)
+    if changed then A.dirty=true;rebuildImage() end
+    A.selection={x=x,y=y,w=w,h=h}
+    A.movePreview=nil
+    status(changed and ('Seleção transformada ('..w..' × '..h..
+        ') · Ctrl+Z desfaz') or 'Seleção mantida')
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
