@@ -36,8 +36,12 @@ function T.run(root)
     check(Native.readPixel(scene:activeBuffer(),1,2)==0,
         'Active-only eyedropper must see transparency')
     scene:pixel(1,2,0xff44cc80)
-    check(Native.readPixel(scene.composite,1,2)==0xff44cc80,
-        'Composited eyedropper should see upper color')
+    local composited=Native.readPixel(scene.composite,1,2)
+    check(composited~=0xff44cc80 and composited~=0x1256abff and
+        composited%256==255,
+        'Composited eyedropper must read actual source-over color')
+    check(Native.readPixel(scene:activeBuffer(),1,2)==0xff44cc80,
+        'Active-only eyedropper must see unblended RGBA')
     check(Native.readPixel(scene.buffers[1],1,2)==0x1256abff,
         'Top-layer color modified underlying pixel')
     local red=assert(Colors.parseHex('#EE4411'))
