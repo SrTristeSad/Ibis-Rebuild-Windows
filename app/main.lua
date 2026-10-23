@@ -327,7 +327,7 @@ function love.update(dt)
                 -- Exercise the real eraser toolbar and undo/redo buttons.
                 local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
                 assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
-                love.draw();love.mousepressed(354,90,1)
+                love.draw();love.mousepressed(312,90,1)
                 assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
                 local ox,oy=canvasTransform()
                 local px=ox+(1.5-A.doc.width/2)*A.zoom
@@ -346,7 +346,7 @@ function love.update(dt)
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
                     'Fixture da seleção não foi restaurada')
-                love.draw();love.mousepressed(495,90,1)
+                love.draw();love.mousepressed(435,90,1)
                 assert(A.tool=='select','Botão de seleção não ativou')
                 love.draw();love.mousepressed(px,py,1)
                 love.mousereleased(px,py,1)
@@ -400,7 +400,7 @@ function love.update(dt)
                     'RBD2 não persistiu escala após reabertura')
                 -- Click real color palette, bucket toolbar, canvas, undo/redo.
                 love.draw()
-                love.mousepressed(425,90,1)
+                love.mousepressed(374,90,1)
                 assert(A.tool=='fill','Botão Balde não selecionou ferramenta')
                 love.draw()
                 love.mousepressed(panel+176,546,1)
@@ -432,7 +432,7 @@ function love.update(dt)
                 assert(filled.layers[2].pixels:sub(1,4)==string.char(52,124,233,255),
                     'Preenchimento não persistiu no RBD2')
                 -- Test the real shapes toolbar, outline width, color, drag and filled ellipse.
-                love.draw();love.mousepressed(576,90,1)
+                love.draw();love.mousepressed(501,90,1)
                 assert(A.tool=='shape','Botão Formas não selecionou ferramenta')
                 love.draw();love.mousepressed(panel+40,510,1)
                 assert(A.shapeWidth==1,'Espessura da forma não foi ajustada')
@@ -485,6 +485,77 @@ function love.update(dt)
                 assert(withShapes.layers[2].pixels:sub(offset,offset+3)==
                     string.char(32,186,132,255),
                     'RBD2 não guardou elipse após salvar')
+                -- Edit a custom RGBA color with actual dialog, keyboard and validation.
+                love.draw();love.mousepressed(panel+120,656,1)
+                assert(A.modal and A.modal.kind=='color',
+                    'Botão Cor RGBA não abriu modal')
+                for i=1,9 do love.keypressed('backspace') end
+                love.textinput('INVALID')
+                love.keypressed('return')
+                assert(A.modal and A.modal.kind=='color',
+                    'Cor inválida fechou o modal')
+                for i=1,7 do love.keypressed('backspace') end
+                love.textinput('#5A24C0BB')
+                love.keypressed('return')
+                assert(not A.modal and A.color==0x5a24c0bb,
+                    'Modal não aplicou RGBA de 8 dígitos')
+                love.draw();love.mousepressed(panel+120,656,1)
+                for i=1,9 do love.keypressed('backspace') end
+                love.textinput('#E14922')
+                love.keypressed('return')
+                assert(not A.modal and A.color==0xe14922ff,
+                    'Cor hexadecimal de 6 dígitos não atribuiu alfa FF')
+                -- Draw a straight line through real Shapes button + preview.
+                love.draw();love.mousepressed(panel+55,607,1)
+                assert(A.tool=='shape' and A.shapeKind==2,
+                    'Botão Linha reta não selecionou o tipo')
+                local lx0,ly0=point(1,7)
+                local lx1,ly1=point(5,7)
+                local oldLine=Native.readPixel(A.layerSession:activeBuffer(),1,7)
+                love.draw();love.mousepressed(lx0,ly0,1)
+                love.mousemoved(lx1,ly1,lx1-lx0,ly1-ly0)
+                assert(A.shapePreview and A.shapePreview.x1==5 and
+                    A.shapePreview.y1==7,'Prévia de linha não seguiu o arraste')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,7)==oldLine,
+                    'Prévia da linha alterou o raster antes de soltar')
+                love.mousereleased(lx1,ly1,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,7)==0xe14922ff
+                    and Native.readPixel(A.layerSession:activeBuffer(),5,7)==0xe14922ff,
+                    'Linha C++ não desenhou ambas as extremidades')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,7)==oldLine,
+                    'Undo da linha falhou')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,7)==0xe14922ff,
+                    'Redo da linha falhou')
+                saveDoc()
+                local lineSaved=A.store:openProject(A.doc.id)
+                local lineOffset=(7*A.doc.width+5)*4+1
+                assert(lineSaved.layers[2].pixels:sub(lineOffset,lineOffset+3)==
+                    string.char(225,73,34,255),'Linha não persistiu no RBD2')
+                -- Explicit two-layer sample fixture: sampling must not draw.
+                Native.pixel(A.layerSession.buffers[1],1,8,0x246a90cc)
+                Native.pixel(A.layerSession:activeBuffer(),1,8,0)
+                A.layerSession:recompose();rebuildImage()
+                A.dirty=true;saveDoc()
+                love.draw();love.mousepressed(571,90,1)
+                assert(A.tool=='picker','Conta-gotas não ativado')
+                local pickX,pickY=point(1,8)
+                local historyBefore=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(pickX,pickY,1)
+                love.mousereleased(pickX,pickY,1)
+                assert(A.color==0x246a90cc,
+                    'Conta-gotas visível não capturou camada inferior')
+                love.draw();love.mousepressed(panel+185,436,1)
+                assert(A.pickerSource=='active','Modo camada ativa não selecionado')
+                love.draw();love.mousepressed(pickX,pickY,1)
+                love.mousereleased(pickX,pickY,1)
+                assert(A.color==0,'Conta-gotas ativo não capturou alfa zero')
+                assert(A.layerSession:historyStats().undo==historyBefore,
+                    'Capturar cor alterou histórico de desenho')
+                assert(Native.readPixel(A.layerSession.buffers[1],1,8)==0x246a90cc
+                    and Native.readPixel(A.layerSession:activeBuffer(),1,8)==0,
+                    'Capturar cor modificou uma camada')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -493,6 +564,10 @@ function love.update(dt)
                     bucket_rbd2_roundtrip=true,shape_toolbar=true,
                     shape_drag_preview=true,rectangle_outline=true,ellipse_fill=true,
                     shapes_undo_redo=true,shapes_rbd2_roundtrip=true,
+                    hex_rgba_modal=true,hex_validation=true,
+                    straight_line_drag=true,straight_line_undo_redo=true,
+                    line_rbd2_roundtrip=true,eyedropper_visible=true,
+                    eyedropper_active=true,eyedropper_no_paint=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
