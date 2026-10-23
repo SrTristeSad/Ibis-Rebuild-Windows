@@ -3,7 +3,7 @@ local Store=require('store')
 local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -49,7 +49,7 @@ local function openDoc(doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
     A.screen='editor';A.dirty=false
-    A.selection=nil;A.selectAction=nil;A.movePreview=nil
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
@@ -58,6 +58,7 @@ local function finishStroke()
     A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
 local function undoDoc()
+    A.shapePreview=nil
     finishStroke()
     if A.layerSession and A.layerSession:undo() then
         A.selection=nil;A.selectAction=nil;A.movePreview=nil
@@ -65,6 +66,7 @@ local function undoDoc()
     end
 end
 local function redoDoc()
+    A.shapePreview=nil
     finishStroke()
     if A.layerSession and A.layerSession:redo() then
         A.selection=nil;A.selectAction=nil;A.movePreview=nil
@@ -72,6 +74,7 @@ local function redoDoc()
     end
 end
 local function saveDoc()
+    A.shapePreview=nil
     finishStroke()
     if not A.doc then return end
     A.layerSession:save()
@@ -79,6 +82,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
+    A.shapePreview=nil
     finishStroke()
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
@@ -156,6 +160,15 @@ local function applySelectionTransform(turns,scale)
     A.movePreview=nil
     status(changed and ('Seleção transformada ('..w..' × '..h..
         ') · Ctrl+Z desfaz') or 'Seleção mantida')
+end
+local function finishShape()
+    local rect=A.shapePreview
+    A.shapePreview=nil
+    if not rect or A.screen~='editor' then return end
+    local changed=A.layerSession:drawShape(rect.x0,rect.y0,rect.x1,rect.y1,
+        A.shapeKind,A.shapeFilled,A.shapeWidth,A.color)
+    if changed then A.dirty=true;rebuildImage() end
+    status(changed and 'Forma raster criada · Ctrl+Z desfaz' or 'Forma não alterou pixels')
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -450,13 +463,14 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     button('← Galeria',20,78,91,34,toGallery)
-    button('Inspec.',117,78,78,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel',201,78,60,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel',267,78,72,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Borracha',345,78,88,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Balde',439,78,70,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
-    button('Seleção',515,78,92,34,function()finishStroke();A.tool='select'end,A.tool=='select')
-    button('Ajustar',613,78,65,34,fit)
+    button('Inspec.',117,78,70,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel',193,78,48,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel',247,78,61,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Borracha',314,78,77,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Balde',397,78,62,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
+    button('Seleção',465,78,73,34,function()finishStroke();A.tool='select'end,A.tool=='select')
+    button('Formas',544,78,71,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
+    button('Ajustar',621,78,65,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -468,6 +482,26 @@ local function drawEditor(w,h)
         love.graphics.rectangle('fill',x-dw/2,y-dh/2,math.min(checker,dw-x),math.min(checker,dh-y))
     end end
     love.graphics.setColor(1,1,1);love.graphics.draw(A.image,-dw/2,-dh/2)
+    if A.shapePreview then
+        local p=A.shapePreview
+        local left=math.min(p.x0,p.x1)-dw/2
+        local top=math.min(p.y0,p.y1)-dh/2
+        local width=math.abs(p.x1-p.x0)+1
+        local height=math.abs(p.y1-p.y0)+1
+        local value=A.color
+        local red=math.floor(value/16777216)%256/255
+        local green=math.floor(value/65536)%256/255
+        local blue=math.floor(value/256)%256/255
+        love.graphics.setColor(red,green,blue,A.shapeFilled and .65 or .95)
+        love.graphics.setLineWidth(math.max(1/A.zoom,A.shapeWidth))
+        if A.shapeKind==0 then
+            love.graphics.rectangle(A.shapeFilled and 'fill' or 'line',
+                left,top,width,height)
+        else
+            love.graphics.ellipse(A.shapeFilled and 'fill' or 'line',
+                left+width/2,top+height/2,width/2,height/2,48)
+        end
+    end
     if A.selection then
         local selected=A.movePreview or A.selection
         love.graphics.setLineWidth(math.max(1/A.zoom,.02))
