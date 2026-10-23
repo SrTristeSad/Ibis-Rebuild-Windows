@@ -13,6 +13,7 @@ int32_t rb_clear(uint8_t*,uint64_t,uint32_t,uint32_t,uint32_t);
 int32_t rb_set_pixel(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t);
 int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t*);
 int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float);
+int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float);
 int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
 ]]
 local N={available=false,errors={}}
@@ -90,6 +91,13 @@ function N.basicStroke(buffer,x0,y0,x1,y1,diameter,rgba,opacity)
     local result=N.lib.rb_draw_basic_stroke(buffer.bytes,buffer.size,buffer.width,
         buffer.height,x0,y0,x1,y1,diameter,rgba,opacity)
     assert(result==0,'Traço inválido ou buffer RGBA insuficiente: '..tonumber(result))
+end
+-- Desktop-only C++ destination-out hard round eraser.
+function N.basicErase(buffer,x0,y0,x1,y1,diameter,opacity)
+    ready()
+    local result=N.lib.rb_erase_basic_stroke(buffer.bytes,buffer.size,buffer.width,
+        buffer.height,x0,y0,x1,y1,diameter,opacity)
+    assert(result==0,'Borracha inválida ou buffer RGBA insuficiente: '..tonumber(result))
 end
 -- Normal source-over composition, explicitly independent of Android blending.
 function N.composite(destination,source,opacity)

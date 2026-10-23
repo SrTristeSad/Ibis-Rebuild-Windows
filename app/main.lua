@@ -52,13 +52,31 @@ local function openDoc(doc)
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
+local function finishStroke()
+    if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
+    A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil
+end
+local function undoDoc()
+    finishStroke()
+    if A.layerSession and A.layerSession:undo() then
+        A.dirty=true;rebuildImage();status('Desfeito · apenas histórico desta sessão')
+    end
+end
+local function redoDoc()
+    finishStroke()
+    if A.layerSession and A.layerSession:redo() then
+        A.dirty=true;rebuildImage();status('Refeito · apenas histórico desta sessão')
+    end
+end
 local function saveDoc()
+    finishStroke()
     if not A.doc then return end
     A.layerSession:save()
     A.dirty=false
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
+    finishStroke()
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
 end
@@ -130,7 +148,20 @@ local function nativeSelfTest()
     local image=love.image.newImageData(love.filesystem.newFileData(pngData,'oracle.png'))
     local r,g,b,a=image:getPixel(8,6);assert(math.abs(r-18/255)<1/255 and math.abs(g-52/255)<1/255 and math.abs(b-86/255)<1/255 and a==1)
     image:release()
-    return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,layered_roundtrip=true,android_runtime_compared=false}
+    -- C++ erases only selected layer, then undo/redo restores its exact RGBA bytes.
+    A.layerSession:beginEdit()
+    A.layerSession:erase(1.5,1.5,1.5,1.5,1,1)
+    assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
+        'Borracha não removeu alfa da camada ativa')
+    assert(Native.readPixel(A.buffer,1,1)==0,'Pré-visualização não refletiu a borracha')
+    assert(A.layerSession:finishEdit(),'Traço de borracha deveria gerar passo de histórico')
+    assert(A.layerSession:undo(),'Não foi possível desfazer borracha')
+    assert(Native.readPixel(A.buffer,1,1)==0xe53b44ff,'Undo não restaurou pixel exato')
+    assert(A.layerSession:redo(),'Não foi possível refazer borracha')
+    assert(Native.readPixel(A.buffer,1,1)==0,'Redo não restaurou transparência')
+    assert(A.layerSession:undo(),'Fixture não conseguiu restaurar o pixel-alvo da GUI')
+    assert(Native.readPixel(A.buffer,1,1)==0xe53b44ff,'Fixture GUI sem pixel restaurado')
+    return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,basic_desktop_eraser=true,session_undo_redo=true,layered_roundtrip=true,android_runtime_compared=false}
 end
 function love.load(args)
     A.fonts={small=love.graphics.newFont(12),body=love.graphics.newFont(14),title=love.graphics.newFont(25),large=love.graphics.newFont(40)}
@@ -213,7 +244,27 @@ function love.update(dt)
                 saveDoc()
                 local reopened=A.store:openProject(A.doc.id)
                 assert(reopened.layer_count==before,'Controles GUI não persistiram RBD2')
+                -- Exercise the real eraser toolbar and undo/redo buttons.
+                local source=Native.readPixel(A.layerSession:activeBuffer(),1,1)
+                assert(source==0xe53b44ff,'Fixture UI sem pixel-alvo')
+                love.draw();love.mousepressed(590,90,1)
+                assert(A.tool=='erase','Botão Borracha não selecionou ferramenta')
+                local ox,oy=canvasTransform()
+                local px=ox+(1.5-A.doc.width/2)*A.zoom
+                local py=oy+(1.5-A.doc.height/2)*A.zoom
+                love.draw();love.mousepressed(px,py,1)
+                love.mousereleased(px,py,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
+                    'Borracha pela GUI não apagou')
+                love.draw();love.mousepressed(panel+160,298,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==source,
+                    'Botão desfazer não restaurou a pincelada')
+                love.draw();love.mousepressed(panel+215,298,1)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
+                    'Botão refazer não aplicou a borracha')
+                saveDoc()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
+                    eraser_toolbar=true,undo_button=true,redo_button=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -269,8 +320,9 @@ local function drawEditor(w,h)
     button('← Galeria',20,78,112,34,toGallery)
     button('Inspecionar',144,78,100,34,function()A.tool='inspect'end,A.tool=='inspect')
     button('Pixel diagnóstico',254,78,143,34,function()A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel básico',407,78,138,34,function()A.tool='brush'end,A.tool=='brush')
-    button('Ajustar',555,78,76,34,fit)
+    button('Pincel básico',407,78,130,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
+    button('Borracha',545,78,100,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
+    button('Ajustar',654,78,76,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -289,7 +341,9 @@ local function drawEditor(w,h)
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
     button('Salvar · Ctrl+S',panel+20,186,228,38,saveDoc,A.dirty)
     button('Exportar PNG',panel+20,234,228,38,exportPNG)
-    button('Renomear',panel+20,282,228,34,function()modal('rename');A.modal.values[1]=A.doc.name end)
+    button('Renomear',panel+20,282,107,34,function()modal('rename');A.modal.values[1]=A.doc.name end)
+    button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
+    button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
     button('Camadas',panel+20,366,107,32,function()A.sideTab='layers'end,A.sideTab=='layers')
     button('Pincel',panel+139,366,109,32,function()A.sideTab='brush'end,A.sideTab=='brush')
@@ -312,7 +366,7 @@ local function drawEditor(w,h)
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
             button((layer.visible and '● ' or '○ ')..i..' '..layer.name:sub(1,17),
-                panel+20,y,228,27,function()if A.doc.active_layer~=i then ls:select(i);A.dirty=true end end,A.doc.active_layer==i)
+                panel+20,y,228,27,function()if A.doc.active_layer~=i then finishStroke();ls:select(i);A.dirty=true end end,A.doc.active_layer==i)
             y=y+30
         end
         local active=A.doc.layers[A.doc.active_layer]
@@ -392,7 +446,7 @@ end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
     box(0,0,w,64,'panel');text('DESKTOP REBUILD',24,17,'title')
-    text('ibisPaint Android 14.1.2 · etapa 1',285,24,'body','muted')
+    text('ibisPaint Android 14.1.2 · reconstrução progressiva',285,24,'body','muted')
     text(Native.available and 'Lua ↔ C++ · offline' or 'Lua · C++ indisponível',w-222,24,'small',Native.available and 'accent' or 'warn')
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     box(0,h-48,w,48,'panel');text(A.message or '',20,h-33,'small','muted')
@@ -407,14 +461,22 @@ function love.mousepressed(x,y,buttonNumber)
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
                 if A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
+                    A.layerSession:beginEdit()
                     A.layerSession:pixel(math.floor(px),math.floor(py),A.color)
+                    A.layerSession:finishEdit()
                     A.dirty=true;rebuildImage()
-                    status('Pixel diagnóstico gravado pelo C++. Isto não é uma implementação de pincel.')
-                elseif A.tool=='brush' then
-                    A.layerSession:stroke(px,py,px,py,A.brushDiameter,A.color,1)
+                    status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
+                elseif A.tool=='brush' or A.tool=='erase' then
+                    A.layerSession:beginEdit()
+                    if A.tool=='erase' then
+                        A.layerSession:erase(px,py,px,py,A.brushDiameter,1)
+                    else
+                        A.layerSession:stroke(px,py,px,py,A.brushDiameter,A.color,1)
+                    end
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.dirty=true;rebuildImage()
-                    status('Pincel básico próprio em C++ · sem equivalência comprovada com Android')
+                    status(A.tool=='erase' and 'Borracha C++ · apaga a camada ativa'
+                        or 'Pincel C++ · histórico por pincelada · Ctrl+Z')
                 end
             end)()
         end
@@ -422,22 +484,25 @@ function love.mousepressed(x,y,buttonNumber)
 end
 function love.mousereleased(x,y,b)
     if b==3 then A.panning=false end
-    if b==1 then A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil end
+    if b==1 then guard(finishStroke)() end
 end
 function love.mousemoved(x,y,dx,dy)
     if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
-    if A.drawing and A.screen=='editor' and A.tool=='brush' and not A.modal then
+    if A.drawing and A.screen=='editor' and (A.tool=='brush' or A.tool=='erase') and not A.modal then
         guard(function()
             local px,py=canvasPoint(x,y)
-            A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,
-                A.brushDiameter,A.color,1)
+            if A.tool=='erase' then
+                A.layerSession:erase(A.lastStrokeX,A.lastStrokeY,px,py,A.brushDiameter,1)
+            else
+                A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,A.brushDiameter,A.color,1)
+            end
             A.lastStrokeX=px;A.lastStrokeY=py
             A.dirty=true;rebuildImage()
         end)()
     end
 end
 function love.focus(focused)
-    if not focused then A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil end
+    if not focused then guard(finishStroke)() end
 end
 function love.wheelmoved(x,y)
     if A.screen=='editor' and not A.modal then
@@ -446,7 +511,7 @@ function love.wheelmoved(x,y)
             local count=#A.doc.layers
             local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
             if y~=0 and index~=A.doc.active_layer then
-                A.layerSession:select(index);A.dirty=true
+                finishStroke();A.layerSession:select(index);A.dirty=true
             end
             return
         end
@@ -465,7 +530,10 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
-    if (love.keyboard.isDown('lctrl','rctrl')) and key=='s'then guard(saveDoc)()
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
+        if love.keyboard.isDown('lshift','rshift') then guard(redoDoc)() else guard(undoDoc)() end
+    elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='y' then guard(redoDoc)()
+    elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='s'then guard(saveDoc)()
     elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='n' then modal('new')
     elseif key=='escape' and A.screen=='editor' then guard(toGallery)()
     elseif key=='f' and A.screen=='editor'then fit()

@@ -79,6 +79,8 @@ class KernelTests(unittest.TestCase):
                 F32, F32, F32, F32, F32, U32, F32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
+            'rb_erase_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
+                F32, F32, F32, F32, F32, F32]),
         }
         for name, (result, args) in signatures.items():
             method = getattr(cls.lib, name)
@@ -345,6 +347,50 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(self.lib.rb_compose_normal(background, 16, other, 15, 2, 2, 1), -1)
         self.assertEqual(self.lib.rb_compose_normal(background, 16, background, 16, 2, 2, 1), -1)
         self.assertEqual(bytes(background), bytes([0x38] * 16))
+
+
+    def test_eraser_stroke_makes_hole_without_painting(self):
+        pixels = (U8 * (7*3*4))()
+        self.lib.rb_clear(pixels, len(pixels), 7, 3, 0x112233ff)
+        self.assertEqual(self.lib.rb_erase_basic_stroke(pixels, len(pixels),
+            7, 3, 1.5, 1.5, 5.5, 1.5, 1.0, 1.0), 0)
+        for y in range(3):
+            for x in range(7):
+                at=(y*7+x)*4
+                expected = b'\0\0\0\0' if y == 1 and 1 <= x <= 5 else bytes.fromhex('112233ff')
+                self.assertEqual(bytes(pixels[at:at+4]), expected)
+
+    def test_eraser_respects_partial_alpha(self):
+        pixels=(U8*8)(*bytes.fromhex('aabbcc807f0000ff'))
+        self.assertEqual(self.lib.rb_erase_basic_stroke(pixels,8,
+            2,1,.5,.5,.5,.5,1.0,.5),0)
+        self.assertEqual(bytes(pixels),bytes.fromhex('aabbcc407f0000ff'))
+        self.assertEqual(self.lib.rb_erase_basic_stroke(pixels,8,
+            2,1,.5,.5,.5,.5,1.0,0),0)
+        self.assertEqual(bytes(pixels),bytes.fromhex('aabbcc407f0000ff'))
+
+    def test_eraser_validates_all_args_before_writing(self):
+        original=bytes([0x4e]*32)
+        pixels=(U8*32).from_buffer_copy(original)
+        for diameter,opacity,x0 in [(0,1,1),(257,1,1),
+            (math.nan,1,1),(1,math.nan,1),(1,math.inf,1),
+            (1,-.01,1),(1,1.01,1),(1,1,math.nan),
+            (1,1,math.inf),(1,1,16385)]:
+            self.assertEqual(self.lib.rb_erase_basic_stroke(pixels,32,4,2,
+                x0,.5,2.5,.5,diameter,opacity),-1)
+            self.assertEqual(bytes(pixels),original)
+        self.assertEqual(self.lib.rb_erase_basic_stroke(pixels,31,4,2,
+            .5,.5,2.5,.5,1.0,1),-1)
+        self.assertEqual(bytes(pixels),original)
+
+    def test_eraser_and_underlying_layer_source_over(self):
+        lower=(U8*4)(255,0,0,255)
+        upper=(U8*4)(0,0,255,255)
+        self.assertEqual(self.lib.rb_erase_basic_stroke(upper,4,
+            1,1,.5,.5,.5,.5,1,1),0)
+        self.assertEqual(bytes(upper),bytes(4))
+        self.assertEqual(self.lib.rb_compose_normal(lower,4,upper,4,1,1,1),0)
+        self.assertEqual(bytes(lower),bytes.fromhex('ff0000ff'))
 
 
 if __name__ == '__main__':

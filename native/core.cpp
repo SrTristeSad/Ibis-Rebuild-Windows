@@ -253,3 +253,60 @@ rb_i32 rb_compose_normal(rb_u8* dst, rb_u64 dst_capacity,
     }
     return 0;
 }
+
+
+/* Desktop-only round eraser. This is destination-out rather than an Android
+   recovered eraser. Coverage is a hard-edged continuous capsule; each pixel
+   is affected at most once per invocation. No heap, callbacks or I/O. */
+rb_i32 rb_erase_basic_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, float opacity) {
+    if (!plane(dst, capacity, width, height) ||
+        !(diameter >= 1.0f && diameter <= 256.0f) ||
+        !(opacity >= 0.0f && opacity <= 1.0f) ||
+        !(x0 >= -16384.0f && x0 <= 16384.0f) ||
+        !(y0 >= -16384.0f && y0 <= 16384.0f) ||
+        !(x1 >= -16384.0f && x1 <= 16384.0f) ||
+        !(y1 >= -16384.0f && y1 <= 16384.0f)) return -1;
+    if (opacity == 0.0f) return 0;
+    const float radius = diameter * 0.5f;
+    const float radiusSquared = radius * radius;
+    const float dx = x1 - x0, dy = y1 - y0;
+    const float lenSquared = dx * dx + dy * dy;
+    const float minX = (x0 < x1 ? x0 : x1) - radius - 1.0f;
+    const float minY = (y0 < y1 ? y0 : y1) - radius - 1.0f;
+    const float maxX = (x0 > x1 ? x0 : x1) + radius + 1.0f;
+    const float maxY = (y0 > y1 ? y0 : y1) + radius + 1.0f;
+    if (maxX < 0.0f || maxY < 0.0f ||
+        minX > static_cast<float>(width) || minY > static_cast<float>(height))
+        return 0;
+    rb_i32 left = static_cast<rb_i32>(minX);
+    rb_i32 right = static_cast<rb_i32>(maxX);
+    rb_i32 top = static_cast<rb_i32>(minY);
+    rb_i32 bottom = static_cast<rb_i32>(maxY);
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    if (right >= static_cast<rb_i32>(width)) right = static_cast<rb_i32>(width)-1;
+    if (bottom >= static_cast<rb_i32>(height)) bottom = static_cast<rb_i32>(height)-1;
+    const float retention = 1.0f-opacity;
+    for (rb_i32 y=top; y<=bottom; ++y) {
+        for (rb_i32 x=left; x<=right; ++x) {
+            const float px=static_cast<float>(x)+0.5f;
+            const float py=static_cast<float>(y)+0.5f;
+            float t=0.0f;
+            if (lenSquared>0.0f) {
+                t=((px-x0)*dx+(py-y0)*dy)/lenSquared;
+                if (t<0.0f) t=0.0f;
+                if (t>1.0f) t=1.0f;
+            }
+            const float ax=px-(x0+t*dx), ay=py-(y0+t*dy);
+            if (ax*ax+ay*ay>radiusSquared) continue;
+            rb_u8* pixel=dst+(static_cast<rb_u64>(y)*width+x)*4u;
+            const rb_u32 alpha=static_cast<rb_u32>(
+                static_cast<float>(pixel[3])*retention+0.5f);
+            pixel[3]=static_cast<rb_u8>(alpha);
+            if (alpha==0) pixel[0]=pixel[1]=pixel[2]=0;
+        }
+    }
+    return 0;
+}
