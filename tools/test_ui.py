@@ -55,7 +55,7 @@ def run_ui(output, runtime_path=None, lua_only=False, timeout=30, route='both'):
               'feature_status': {
                   'initialization': 'passed' if results and all(r['ok'] for r in results) else 'failed_or_blocked',
                   'canvas_creation': 'not_verified_in_this_run',
-                  'painting': 'not_implemented; diagnostic pixel is not a brush',
+                  'painting': 'basic continuous C++ desktop stroke implemented; Android brush equivalence unverified',
                   'layers': 'not_implemented; a single RGBA plane is not a layer system',
                   'save_reopen': 'headless persistence tested separately; GUI path requires successful startup'}}
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
