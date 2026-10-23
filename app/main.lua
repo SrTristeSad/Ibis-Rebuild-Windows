@@ -3,7 +3,8 @@ local Store=require('store')
 local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local Colors=require('colors')
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -97,7 +98,8 @@ local function exportPNG()
 end
 local function modal(kind)
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
-    A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or {''}}
+    A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
+        kind=='color' and {Colors.format(A.color)} or {''}}
     love.keyboard.setTextInput(true)
 end
 local function submitModal()
@@ -112,6 +114,11 @@ local function submitModal()
         A.modal=nil;openDoc(doc)
     elseif m.kind=='rename' then
         A.doc.name=m.values[1];saveDoc();A.modal=nil
+    elseif m.kind=='color' then
+        local value,err=Colors.parseHex(m.values[1])
+        assert(value,err)
+        A.color=value;A.modal=nil
+        status('Cor personalizada aplicada: '..Colors.format(value))
     end
     love.keyboard.setTextInput(A.modal~=nil)
 end
@@ -165,10 +172,32 @@ local function finishShape()
     local rect=A.shapePreview
     A.shapePreview=nil
     if not rect or A.screen~='editor' then return end
-    local changed=A.layerSession:drawShape(rect.x0,rect.y0,rect.x1,rect.y1,
-        A.shapeKind,A.shapeFilled,A.shapeWidth,A.color)
+    local changed
+    if A.shapeKind==2 then
+        changed=A.layerSession:straightLine(rect.x0,rect.y0,rect.x1,rect.y1,
+            A.shapeWidth,A.color)
+    else
+        changed=A.layerSession:drawShape(rect.x0,rect.y0,rect.x1,rect.y1,
+            A.shapeKind,A.shapeFilled,A.shapeWidth,A.color)
+    end
     if changed then A.dirty=true;rebuildImage() end
     status(changed and 'Forma raster criada · Ctrl+Z desfaz' or 'Forma não alterou pixels')
+end
+local function pickColor(px,py)
+    if px<0 or py<0 or px>=A.doc.width or py>=A.doc.height then return false end
+    local buffer=A.pickerSource=='active' and A.layerSession:activeBuffer()
+        or A.buffer
+    A.color=Native.readPixel(buffer,math.floor(px),math.floor(py))
+    status('Conta-gotas ('..(A.pickerSource=='active' and 'camada' or 'composição')..
+        '): '..Colors.format(A.color))
+    return true
+end
+local function openColorModal() modal('color') end
+local function editShapeColorButton(panel,y)
+    button('Cor RGBA: '..Colors.format(A.color),panel+20,y,228,30,openColorModal)
+end
+local function sampleToolsColorButtons(panel,y)
+    editShapeColorButton(panel,y)
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
