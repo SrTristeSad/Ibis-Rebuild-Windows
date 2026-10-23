@@ -25,7 +25,8 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Motor original de pincéis, texturas e estabilização | Pendente |
 | Grupos, máscaras, clipping e composição avançada Android | Pendente |
 | Borracha circular independente e desfazer/refazer por pincelada | Implementados e testados; **não equivalentes ao Android** |
-| Borracha Android equivalente, seleção, preenchimento e transformações | Pendente |
+| Seleção retangular de pixels com movimento e desfazer/refazer | Implementada na etapa 5; não equivale ao Android |
+| Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Filtros, formas, texto, importação IPV e paridade Android | Pendente |
 
 ## Compilar no Windows
