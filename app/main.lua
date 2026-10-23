@@ -526,12 +526,23 @@ local function drawEditor(w,h)
             end)
         end
     else
-        text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,429,'small','muted')
-        button('−',panel+20,456,46,32,function()
-            A.brushDiameter=math.max(1,A.brushDiameter-2)end)
-        text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
-        button('+',panel+182,456,46,32,function()
-            A.brushDiameter=math.min(256,A.brushDiameter+2)end)
+        if A.tool=='fill' then
+            text('BALDE CONTÍGUO · 4 VIZINHOS',panel+20,429,'small','muted')
+            button('−',panel+20,456,46,32,function()
+                A.fillTolerance=math.max(0,A.fillTolerance-8)end,
+                false,A.fillTolerance==0)
+            text(('Tol. %d / 255'):format(A.fillTolerance),panel+77,464,'small')
+            button('+',panel+182,456,46,32,function()
+                A.fillTolerance=math.min(255,A.fillTolerance+8)end,
+                false,A.fillTolerance==255)
+        else
+            text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,429,'small','muted')
+            button('−',panel+20,456,46,32,function()
+                A.brushDiameter=math.max(1,A.brushDiameter-2)end)
+            text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
+            button('+',panel+182,456,46,32,function()
+                A.brushDiameter=math.min(256,A.brushDiameter+2)end)
+        end
         text('COR',panel+20,511,'small','muted')
         for i,swatch in ipairs(swatches) do
             local x=panel+20+(i-1)*36
@@ -553,7 +564,8 @@ local function drawEditor(w,h)
             text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
                 panel+20,646,'small','muted')
         end
-        text('Rasterização Android desconhecida',panel+20,705,'small','muted')
+        text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
+            or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
