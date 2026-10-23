@@ -118,4 +118,17 @@ RB_API rb_i32 rb_flood_fill_rgba(rb_u8* dst, rb_u64 capacity,
     rb_u32 tolerance, rb_u32* queue, rb_u64 queue_capacity,
     rb_u8* visited, rb_u64 visited_capacity, rb_u32* changed);
 
+
+/* Independent RGBA8 rectangle/ellipse rasterizer.
+   shape 0=rectangle, 1=ellipse; filled 0=inner outline, 1=solid.
+   x0,y0,x1,y1 are inclusive integer pixel coordinates (drag corners),
+   may be reversed, and may lie outside canvas within [-16384,16384].
+   width in [1,128] is inward-facing outline thickness. Colors blend as
+   straight-alpha source-over, with each target pixel covered once.
+   0 success, -1 invalid arguments, no writes on invalid input. */
+RB_API rb_i32 rb_draw_shape_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_i32 x0, rb_i32 y0,
+    rb_i32 x1, rb_i32 y1, rb_u32 shape, rb_u32 filled,
+    rb_u32 stroke_width, rb_u32 rgba);
+
 #endif
