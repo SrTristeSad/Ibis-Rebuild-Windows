@@ -83,6 +83,9 @@ class KernelTests(unittest.TestCase):
                 I32, I32, U32, U32, I32, I32, C.POINTER(U8), U64]),
             'rb_transform_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
                 I32, I32, U32, U32, I32, I32, U32, U32, U32, C.POINTER(U8), U64]),
+            'rb_flood_fill_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
+                I32, I32, U32, U32, C.POINTER(U32), U64,
+                C.POINTER(U8), U64, C.POINTER(U32)]),
             'rb_erase_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, F32]),
         }
@@ -514,6 +517,72 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(self.lib.rb_transform_rect_rgba(plane,16,2,2,
             0,0,1,1,0,0,1,1,1,plane,16),-1)
         self.assertEqual(bytes(plane),original)
+
+
+    def flood(self, rgba, width, height, x, y, color, tolerance=0):
+        n=width*height
+        queue=(U32*n)()
+        visited=(U8*n)()
+        changed=U32(999)
+        result=self.lib.rb_flood_fill_rgba(rgba,len(rgba),width,height,x,y,
+            color,tolerance,queue,n,visited,n,C.byref(changed))
+        return result,changed.value
+
+    def test_bucket_fill_contiguous_respects_diagonal_and_boundaries(self):
+        # R=10 is the region; R=255 separates it from an isolated region.
+        original=bytes.fromhex(
+            '0a0000ff 0a0000ff ff0000ff 0a0000ff'
+            '0a0000ff ff0000ff 0a0000ff 0a0000ff'
+            'ff0000ff 0a0000ff ff0000ff 0a0000ff')
+        plane=(U8*len(original)).from_buffer_copy(original)
+        result,changed=self.flood(plane,4,3,0,0,0x00ff00ff)
+        self.assertEqual((result,changed),(0,3))
+        for at in (0,1,4):
+            self.assertEqual(bytes(plane[at*4:at*4+4]),bytes.fromhex('00ff00ff'))
+        self.assertEqual(bytes(plane[9*4:9*4+4]),bytes.fromhex('0a0000ff'))
+        self.assertEqual(bytes(plane[3*4:3*4+4]),bytes.fromhex('0a0000ff'))
+
+    def test_bucket_fill_rgba_alpha_and_tolerance(self):
+        plane=(U8*12)(*bytes.fromhex('10101000 15151504 18181800'))
+        result,changed=self.flood(plane,3,1,0,0,0xffaa00ff,5)
+        self.assertEqual((result,changed),(0,2))
+        self.assertEqual(bytes(plane),bytes.fromhex(
+            'ffaa00ff ffaa00ff 18181800'))
+        result,changed=self.flood(plane,3,1,2,0,0x001122ff,8)
+        self.assertEqual((result,changed),(0,1))
+        self.assertEqual(bytes(plane[8:12]),bytes.fromhex('001122ff'))
+
+    def test_bucket_fill_noop_same_color_and_noop_count(self):
+        plane=(U8*8)(*bytes.fromhex('abcdefee abcdefee'))
+        self.assertEqual(self.flood(plane,2,1,0,0,0xabcdefee),(0,0))
+        self.assertEqual(bytes(plane),bytes.fromhex('abcdefee abcdefee'))
+
+    def test_bucket_fill_invalid_atomicity_and_disjoint_workspaces(self):
+        plane=(U8*16)(*bytes.fromhex(
+            '102030ff 304050ff 506070ff 708090ff'))
+        backup=bytes(plane)
+        queue=(U32*4)(*([777]*4))
+        visited=(U8*4)(*([55]*4))
+        changed=U32(777)
+        for x,y,tol,qcap,vcap in [
+            (-1,0,0,4,4),(0,2,0,4,4),(0,0,256,4,4),
+            (0,0,0,3,4),(0,0,0,4,3)]:
+            self.assertEqual(self.lib.rb_flood_fill_rgba(plane,16,2,2,x,y,
+                0xffcc22ff,tol,queue,qcap,visited,vcap,C.byref(changed)),-1)
+            self.assertEqual(bytes(plane),backup)
+            self.assertEqual(list(queue),[777]*4)
+            self.assertEqual(bytes(visited),bytes([55]*4))
+            self.assertEqual(changed.value,777)
+        self.assertEqual(self.lib.rb_flood_fill_rgba(plane,16,2,2,0,0,
+            0x00ff00ff,0,C.cast(plane,C.POINTER(U32)),4,visited,4,
+            C.byref(changed)),-1)
+        self.assertEqual(bytes(plane),backup)
+
+    def test_bucket_fill_large_checkerboard_is_bounded(self):
+        n=64*64
+        plane=(U8*(n*4))()
+        self.assertEqual(self.flood(plane,64,64,0,0,0xffffffff),(0,n))
+        self.assertEqual(bytes(plane),bytes.fromhex('ffffffff')*n)
 
 
 if __name__ == '__main__':
