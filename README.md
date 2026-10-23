@@ -14,6 +14,8 @@ A etapa 4 traz uma [borracha circular C++ e histórico de desfazer/refazer limit
 
 Na etapa 6, a [seleção também pode ser rotacionada em 90° e redimensionada em 50%/200%](docs/SELECTION_TRANSFORM_STAGE6.md), preservando histórico reversível e salvamento RBD2. Não há paridade das transformações Android.
 
+A etapa 7 acrescenta um [balde de preenchimento contíguo C++](docs/BUCKET_FILL_STAGE7.md), limitado à camada ativa, com tolerância de cor RGBA e um passo de histórico por preenchimento. Não equivale ao preenchimento original Android.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -29,6 +31,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Borracha circular independente e desfazer/refazer por pincelada | Implementados e testados; **não equivalentes ao Android** |
 | Seleção retangular de pixels com movimento e desfazer/refazer | Implementada na etapa 5; não equivale ao Android |
 | Transformação da seleção: 90° e escala por vizinho próximo | Implementação independente da etapa 6, reversível em RBD2 |
+| Balde: preenchimento contíguo RGBA por tolerância | Implementação C++ da etapa 7 com desfazer/refazer e salvamento RBD2 |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Filtros, formas, texto, importação IPV e paridade Android | Pendente |
 
