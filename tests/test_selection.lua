@@ -34,3 +34,12 @@ function T.run(root)
     local recovered=Layers.open(Store.open(root),reopened)
     check(Native.readPixel(recovered.composite,1,0)==red,'selection not saved')
     check(Native.readPixel(recovered.composite,0,0)==0,'old selection unexpectedly restored')
+    local bad=Native.buffer(2,2,string.rep(string.char(18,32,55,255),4))
+    local original=Native.bytes(bad)
+    local valid=pcall(Native.moveRect,bad,0,0,3,1,0,0)
+    check(not valid and Native.bytes(bad)==original,'invalid move wrote RGBA')
+    return {suite='rectangle-selection-rbd2',passed=true,assertions=checks,
+        move_native=true,undo_redo=true,reopen=true,source_isolated=true,
+        scope='Independent rectangle cut-move; no Android selection equivalence'}
+end
+return T
