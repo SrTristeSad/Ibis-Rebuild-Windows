@@ -58,4 +58,15 @@ RB_API rb_i32 rb_set_pixel(rb_u8* dst, rb_u64 capacity, rb_u32 width,
 RB_API rb_i32 rb_get_pixel(const rb_u8* src, rb_u64 capacity, rb_u32 width,
     rb_u32 height, rb_i32 x, rb_i32 y, rb_u32* rgba);
 
+
+/* Desktop-only, explicitly non-equivalent basic continuous round brush.
+   Renders one hard-edged capsule segment to the caller-owned RGBA8 plane
+   using straight-alpha source-over. Coordinates denote pixel centers
+   at (i+0.5, j+0.5). Diameter 1..256, opacity 0..1, bounded finite
+   coordinates are required. One segment covers each pixel at most once.
+   This is not the recovered ibisPaint brush algorithm. */
+RB_API rb_i32 rb_draw_basic_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, rb_u32 rgba, float opacity);
+
 #endif

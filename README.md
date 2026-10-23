@@ -1,76 +1,51 @@
 # Ibis Rebuild Windows
 
-Reconstrução funcional independente do ibisPaint **Android 14.1.2** para **Windows x64**, com interface/fluxo em **Lua** e núcleo gráfico em **C++**. Sem WebView. O projeto está em uma etapa inicial; não é um editor Android completo portado nem possui equivalência funcional demonstrada.
+Reconstrução **independente e progressiva** dos fluxos do ibisPaint Android 14.1.2 para **Windows x64**, usando LuaJIT/LÖVE 11.5 na interface e C++ no processamento. **Sem WebView, sem Inkora e sem redistribuição de código ou binários Android.** Não existe paridade completa com o aplicativo de referência.
 
-Este projeto é separado do Inkora e não incorpora seu código. A árvore publicada contém somente fonte independente, testes, scripts e documentação revisada. Não contém APKs, DEX, bibliotecas do ibisPaint, backups, dados de usuário, credenciais ou código descompilado.
+## Estado executável comprovado
 
-## Estado real
+O [workflow Windows x64](.github/workflows/windows-x64.yml) compila com MSVC, carrega a DLL C++ real, executa os testes Python/ctypes e LuaJIT/FFI, testa persistência e exercita o editor em dois processos LÖVE: executável fundido e pasta de fontes. O [CI aprovado da etapa 1](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/40013747842) concluiu ambas as rotas com código zero, relatórios e capturas.
 
-| Item | Estado verificado |
+Na etapa 2, o motor ganhou um **pincel redondo básico de traço contínuo**, com composição RGBA source-over em C++ e desenho por arraste no editor. Esse algoritmo é **uma ferramenta própria funcional, não uma implementação equivalente ao pincel Android**. Há testes de continuidade, alfa, clipping e argumentos inválidos. Consulte [contrato do pincel básico](docs/BASIC_BRUSH.md).
+
+A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
+
+| Recurso | Estado |
 |---|---|
-| LuaJIT sem gráficos | 100 ciclos de VM criados, usados e encerrados com sucesso; ponteiros e assinaturas auditados |
-| JSON, pastas e persistência própria | 52 verificações executadas e aprovadas em Windows/LuaJIT |
-| Núcleo C++ | Fonte e 21 casos de teste existentes; DLL ainda não compilada no ambiente observado; **zero testes nativos executados** |
-| Interface pelo runtime oficial | Duas rotas tentadas; ambas exit 1 antes de carregar o app, ao inicializar o filesystem do LÖVE |
-| Teste Python gráfico antigo | Apresentava access violation em `lua_close`; foi retirado da execução ativa, não considerado aprovado |
-| Pintura por pincéis e sistema de camadas | **Não implementados**; edição diagnóstica de um pixel não equivale a pincel; um plano RGBA não equivale a layers |
-| Equivalência com Android | Não demonstrada; não houve comparação dinâmica com o original |
+| LuaJIT/LÖVE, inicialização e encerramento | Aprovados em ambiente Windows CI |
+| Núcleo C++ x64, FFI, buffers RGBA e amostras | Compilação e testes reais aprovados |
+| Galeria, pastas, tela RGBA editável e salvamento RBD1 | Implementação própria com testes de persistência |
+| Zoom, rotação, pan, exportação PNG | Fluxos iniciais, testados em modo integrado |
+| Pincel redondo básico do desktop | Implementado e testado, **não equivalente ao Android** |
+| Motor original de pincéis, texturas e estabilização | Pendente |
+| Camadas, grupos, máscaras, clipping, composição avançada | Pendente |
+| Borracha equivalente, seleção, preenchimento e transformações | Pendente |
+| Filtros, formas, texto, importação IPV e paridade Android | Pendente |
 
-O executável de desenvolvimento usa o nome `dist/Android1412Rebuild.exe`. Um empacotamento Lua foi produzido localmente, mas **não inicializou com sucesso no teste oficial** e não contém o núcleo compilado. Binários e resultados gerados não são publicados nesta árvore. Consulte [STATUS](docs/STATUS.md) e [auditoria Lua](docs/LUA_API_AUDIT.md).
+## Compilar no Windows
 
-## Estrutura
-
-- `app/`: interface, comandos, galeria, transporte FFI e persistência Lua.
-- `native/`: ABI C e implementação C++ independente.
-- `tests/`: contratos C++ e persistência Lua.
-- `tools/`: compilação/empacotamento e testes separados com limites de duração.
-- `CMakeLists.txt`, `build.ps1`, `test.ps1`, `run.ps1`: desenvolvimento Windows.
-- `docs/`: arquitetura, contratos, evidências derivadas, falhas e estado de validação.
-
-## Compilar
-
-Requisitos externos: Windows x64, Python 3, compilador C++ x64 utilizável e runtime oficial LÖVE 11.5 x64. Nada é baixado ou instalado pelo script.
+Requisitos: Windows x64, Python 3.12, Visual Studio 2022 Build Tools/Developer PowerShell para MSVC x64 e runtime **LÖVE 11.5 x64** previamente instalado.
 
 ```powershell
-.\build.ps1 -Compiler 'CAMINHO_DO_COMPILADOR' -Runtime 'C:\Program Files\LOVE'
+python tools/windows_preflight.py --runtime "C:\Program Files\LOVE" --compiler ((Get-Command cl.exe).Source)
+python tools/build.py all --compiler ((Get-Command cl.exe).Source) --runtime "C:\Program Files\LOVE"
+python tools/test.py --suite all --runtime "C:\Program Files\LOVE"
 ```
 
-O script compila `native/core.cpp`, tenta carregar a DLL real para verificar a ABI e só então permite o empacotamento normal. Como alternativa, em um Developer PowerShell configurado:
+Ao concluir, execute **dist/Android1412Rebuild.exe**. O aplicativo é offline e armazena dados próprios em **dist/user-data**. Pode também rodar em modo desenvolvimento com o LÖVE oficial e a DLL compilada. Faltando DLL, os testes completos falham; a interface não substitui silenciosamente o núcleo por Lua.
 
-```powershell
-cmake -S . -B build/cmake -A x64
-cmake --build build/cmake --config Release
-ctest --test-dir build/cmake -C Release --output-on-failure
-```
+Se o Clang ou LÖVE falharem antes de iniciar (por exemplo, ACCESS_DENIED no GetLongPathNameW ou erro no filesystem), consulte o [diagnóstico Win32](docs/WINDOWS_BOOTSTRAP.md). O resultado de CI não comprova automaticamente permissões corretas na estação local.
 
-O caminho CMake é fornecido, mas não foi validado neste ambiente. Um compilador instalado pode falhar antes de compilar se a conta não conseguir consultar seus diretórios ancestrais; não altere permissões automaticamente. O diagnóstico está em [STATUS](docs/STATUS.md).
+## Organização do projeto
 
-## Testar
+- [app/](app): interface LÖVE, controles, ponte LuaJIT FFI, galeria e armazenamento.
+- [native/](native): núcleo C++ e contrato ABI.
+- [tests/](tests): testes do ABI C++ e persistência Lua.
+- [tools/](tools): build offline, testes em processos separados e diagnósticos.
+- [docs/](docs): documentação, limites de equivalência, pesquisa derivada e segurança.
 
-```powershell
-.\test.ps1 -Suite lua
-.\test.ps1 -Suite native
-.\test.ps1 -Suite ui
-.\test.ps1 -Suite all
-```
+## Escopo e segurança
 
-As suítes rodam em processos separados, com timeout, stdout, stderr e código de saída registrados em `build/`. A ausência de DLL é falha, não sucesso ou backend substituto. A interface usa exclusivamente o runtime oficial, nunca `love.dll`/SDL/contexto gráfico inicializados pelo Python. [Procedimento completo](docs/TESTING.md).
+O formato RBD1 é **próprio**, versionado e editável; **não é o formato IPV**. Não há comparação dinâmica completa com o aplicativo Android. Presença de símbolos nativos ou de uma operação com nome semelhante não comprova equivalência de comportamento. A implementação só declara os contratos efetivamente testados e documentados.
 
-## Escopo implementado e pendente
-
-Existem módulos de galeria/pastas locais, projeto próprio RBD1 de um plano RGBA, revisões, preferências, biblioteca de parâmetros, buffer de pixels e contratos pontuais de entrada. O teste de persistência passou; criação/edição/exportação pela interface continuam dependentes da DLL e de uma inicialização funcional do runtime.
-
-Pincéis, camadas/grupos/máscaras, composição equivalente, estabilização, seleção, transformação, filtros e texto permanecem em investigação. Comportamentos desconhecidos não são apresentados como aproximações equivalentes. O formato RBD1 não é IPV. [Matriz e limites](docs/RESEARCH.md).
-
-Esta publicação não define licença de redistribuição do aplicativo original. Dependências externas mantêm suas próprias licenças; seus binários e fontes não estão incorporados aqui. [Dependências](docs/DEPENDENCIES.md).
-
-
-## Validação Windows x64 e download de teste
-
-A árvore pública independente não contém APKs, backup de celular, DLLs Android nem código do Inkora.
-
-O workflow [Windows x64](.github/workflows/windows-x64.yml) compila o núcleo em MSVC, testa LuaJIT real, persistência, ponte LuaJIT/FFI, ABI C++ e as duas rotas LÖVE (executável fundido e pasta de fontes). No CI hospedado, o OpenGL 1.1 não permite abrir LÖVE; Mesa llvmpipe é aplicado **somente à máquina efêmera de testes**. A [execução 40013508664](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/40013508664) aprovou as três suítes em 23/10/2026. Isso valida apenas a etapa inicial; não comprova equivalência com ibisPaint Android.
-
-O CI disponibiliza um ZIP portátil de teste **somente após todas as suítes passarem**. O ZIP não contém as DLLs Mesa usadas no runner, e não é uma release oficial ou um editor completo.
-
-Para erros de compilador e inicialização na máquina local, consulte [Diagnóstico Windows](docs/WINDOWS_BOOTSTRAP.md) e [Segurança de publicação](docs/SECURITY.md). O sucesso no CI não prova que a máquina pessoal do usuário, que pode ter restrições diferentes de ACL e caminhos, tenha executado o mesmo binário com sucesso.
+O histórico principal foi reiniciado a partir de uma árvore revisada de fontes independentes. Isso não garante eliminação de objetos Git/LFS antigos no servidor. Consulte [segurança da publicação](docs/SECURITY.md) antes de abrir novos PRs. Não incluir APKs, dados pessoais, extrações de engenharia reversa, recursos proprietários ou arquivos do Inkora. Atribuições e licenças de dependências continuam próprias de seus projetos.

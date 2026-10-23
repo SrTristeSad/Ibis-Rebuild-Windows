@@ -54,10 +54,16 @@ def run_ui(output, runtime_path=None, lua_only=False, timeout=30, route='both'):
               'routes': results,
               'feature_status': {
                   'initialization': 'passed' if results and all(r['ok'] for r in results) else 'failed_or_blocked',
-                  'canvas_creation': 'not_verified_in_this_run',
-                  'painting': 'not_implemented; diagnostic pixel is not a brush',
+                  'canvas_creation': ('native self-test created/loaded a RGBA document'
+                      if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('buffer_roundtrip')
+                          for r in results) else 'not_verified'),
+                  'painting': ('basic independent C++ stroke tested; Android equivalence unverified'
+                      if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('basic_desktop_stroke')
+                          for r in results) else 'not_verified'),
                   'layers': 'not_implemented; a single RGBA plane is not a layer system',
-                  'save_reopen': 'headless persistence tested separately; GUI path requires successful startup'}}
+                  'save_reopen': ('native integration self-test saved/reopened RBD1 and checked PNG pixels; GUI buttons untested'
+                      if results and all(r['ok'] and (r['application'] or {}).get('native', {}).get('png_pixels')
+                          for r in results) else 'not_verified')}}
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     return report
 

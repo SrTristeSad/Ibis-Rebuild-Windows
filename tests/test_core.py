@@ -75,6 +75,8 @@ class KernelTests(unittest.TestCase):
             'rb_clear': (I32, [C.POINTER(U8), U64, U32, U32, U32]),
             'rb_set_pixel': (I32, [C.POINTER(U8), U64, U32, U32, I32, I32, U32]),
             'rb_get_pixel': (I32, [C.POINTER(U8), U64, U32, U32, I32, I32, C.POINTER(U32)]),
+            'rb_draw_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
+                F32, F32, F32, F32, F32, U32, F32]),
         }
         for name, (result, args) in signatures.items():
             method = getattr(cls.lib, name)
@@ -254,6 +256,56 @@ class KernelTests(unittest.TestCase):
             self.assertEqual(out.value, 0x12345678)
             self.assertEqual(bytes(pixels), bytes([0x38] * 24))
         self.assertEqual(self.lib.rb_get_pixel(pixels, 24, 3, 2, 0, 0, None), -1)
+
+
+    def test_basic_stroke_continuous_line_is_not_discrete_pixels(self):
+        pixels = (U8 * (7 * 7 * 4))()
+        self.assertEqual(self.lib.rb_clear(pixels, len(pixels), 7, 7, 0), 0)
+        result = self.lib.rb_draw_basic_stroke(pixels, len(pixels), 7, 7,
+            1.5, 3.5, 5.5, 3.5, 1.0, 0xe12a04ff, 1.0)
+        self.assertEqual(result, 0)
+        for y in range(7):
+            for x in range(7):
+                at = (y * 7 + x) * 4
+                expected = bytes.fromhex('e12a04ff') if y == 3 and 1 <= x <= 5 else bytes(4)
+                self.assertEqual(bytes(pixels[at:at+4]), expected)
+
+    def test_basic_stroke_alpha_blends_once_with_opaque_destination(self):
+        pixels = (U8 * 64)()
+        self.assertEqual(self.lib.rb_clear(pixels, 64, 4, 4, 0x0000ffff), 0)
+        self.assertEqual(self.lib.rb_draw_basic_stroke(
+            pixels, 64, 4, 4, 1.5, 1.5, 1.5, 1.5, 1.0, 0xff0000ff, .5), 0)
+        r, g, b, a = bytes(pixels[(1*4+1)*4:(1*4+2)*4])
+        self.assertIn(r, (127, 128))
+        self.assertEqual(g, 0)
+        self.assertIn(b, (127, 128))
+        self.assertEqual(a, 255)
+        self.assertEqual(bytes(pixels[:4]), bytes.fromhex('0000ffff'))
+
+    def test_basic_stroke_clips_segment_to_document(self):
+        pixels = (U8 * 32)()
+        self.assertEqual(self.lib.rb_clear(pixels, 32, 4, 2, 0), 0)
+        self.assertEqual(self.lib.rb_draw_basic_stroke(
+            pixels, 32, 4, 2, -3.5, .5, 1.5, .5, 1.0, 0xabcdefe0, 1), 0)
+        for x in range(4):
+            self.assertEqual(bytes(pixels[x*4:x*4+4]),
+                bytes.fromhex('abcdefe0') if x <= 1 else bytes(4))
+
+    def test_basic_stroke_invalid_inputs_leave_plane_intact(self):
+        pixels = (U8 * 64)(*([0x38] * 64))
+        for diameter, opacity, x0 in [
+            (0, 1, 1), (257, 1, 1), (math.nan, 1, 1),
+            (1, math.inf, 1), (1, -.1, 1), (1, 1, math.nan),
+            (1, 1, math.inf), (1, 1, 20000)]:
+            self.assertEqual(self.lib.rb_draw_basic_stroke(
+                pixels, 64, 4, 4, x0, 1, 2, 1, diameter, 0xff0000ff, opacity), -1)
+            self.assertEqual(bytes(pixels), bytes([0x38] * 64))
+        self.assertEqual(self.lib.rb_draw_basic_stroke(
+            pixels, 63, 4, 4, 1, 1, 2, 2, 1, 0xff0000ff, 1), -1)
+        self.assertEqual(bytes(pixels), bytes([0x38] * 64))
+        self.assertEqual(self.lib.rb_draw_basic_stroke(
+            pixels, 64, 4, 4, 1.5, 1.5, 1.5, 1.5, 1, 0xff000000, 1), 0)
+        self.assertEqual(bytes(pixels), bytes([0x38] * 64))
 
 
 if __name__ == '__main__':

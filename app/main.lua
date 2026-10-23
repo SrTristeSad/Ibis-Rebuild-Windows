@@ -2,8 +2,13 @@ local Native=require('native')
 local Store=require('store')
 local FS=require('fs')
 local JSON=require('json')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,drawing=false}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
+local swatches={
+    {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
+    {name='Vermelho',rgba=0xe53b44ff},{name='Verde',rgba=0x20ba84ff},
+    {name='Azul',rgba=0x347ce9ff},{name='Branco',rgba=0xffffffff}
+}
 local function c(key,alpha) local v=palette[key];love.graphics.setColor(v[1],v[2],v[3],alpha or 1) end
 local function text(value,x,y,font,key) c(key or 'text');love.graphics.setFont(A.fonts[font or 'body']);love.graphics.print(value,x,y) end
 local function box(x,y,w,h,key) c(key);love.graphics.rectangle('fill',x,y,w,h,8,8) end
@@ -96,13 +101,17 @@ local function nativeSelfTest()
     assert(#packed.ints==2 and #packed.floats==7 and #packed.times==1 and packed.floats[6]==0 and packed.floats[7]==0)
     local buf=Native.buffer(9,7);Native.clear(buf,0);Native.pixel(buf,8,6,0x123456ff)
     assert(Native.readPixel(buf,8,6)==0x123456ff)
+    local stroke=Native.buffer(9,7);Native.clear(stroke,0)
+    Native.basicStroke(stroke,1.5,2.5,6.5,2.5,1,0xaabbccff,1)
+    assert(Native.readPixel(stroke,4,2)==0xaabbccff,'Traço básico contínuo C++ falhou')
+    assert(Native.readPixel(stroke,4,3)==0,'Traço básico atingiu pixel fora do segmento')
     local doc=A.store:createProject('Fixture nativa',9,7,'',Native.bytes(buf));openDoc(doc);saveDoc()
     local reopened=A.store:openProject(doc.id);assert(reopened.pixels==Native.bytes(buf))
     local png=exportPNG();local pngData=A.store.fs:read('exports/'..png)
     local image=love.image.newImageData(love.filesystem.newFileData(pngData,'oracle.png'))
     local r,g,b,a=image:getPixel(8,6);assert(math.abs(r-18/255)<1/255 and math.abs(g-52/255)<1/255 and math.abs(b-86/255)<1/255 and a==1)
     image:release()
-    return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,android_runtime_compared=false}
+    return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,android_runtime_compared=false}
 end
 function love.load(args)
     A.fonts={small=love.graphics.newFont(12),body=love.graphics.newFont(14),title=love.graphics.newFont(25),large=love.graphics.newFont(40)}
@@ -215,9 +224,10 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     button('← Galeria',20,78,112,34,toGallery)
-    button('Inspecionar',144,78,111,34,function()A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel diagnóstico',265,78,150,34,function()A.tool='pixel'end,A.tool=='pixel')
-    button('Ajustar',425,78,85,34,fit)
+    button('Inspecionar',144,78,100,34,function()A.tool='inspect'end,A.tool=='inspect')
+    button('Pixel diagnóstico',254,78,143,34,function()A.tool='pixel'end,A.tool=='pixel')
+    button('Pincel básico',407,78,138,34,function()A.tool='brush'end,A.tool=='brush')
+    button('Ajustar',555,78,76,34,fit)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -246,8 +256,27 @@ local function drawEditor(w,h)
         text(('x %.1f  y %.1f'):format(f[1],f[2]),panel+20,513,'small','muted')
         text(('p %.3f · buffers 2 / 7 / 1'):format(f[5]),panel+20,537,'small','muted')
     end
-    text('Pincéis, mistura e estabilização:',panel+20,h-163,'small','muted')
-    text('comportamentos ainda em investigação.',panel+20,h-143,'small','muted')
+    text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,584,'small','muted')
+    button('−',panel+20,609,46,32,function()A.brushDiameter=math.max(1,A.brushDiameter-2)end)
+    text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,616,'small')
+    button('+',panel+182,609,46,32,function()A.brushDiameter=math.min(256,A.brushDiameter+2)end)
+    if h>=750 then
+        text('COR DE DESENHO',panel+20,654,'small','muted')
+        for i,swatch in ipairs(swatches) do
+            local x=panel+20+(i-1)*36
+            local color=swatch.rgba
+            love.graphics.setColor(math.floor(color/16777216)%256/255,
+                math.floor(color/65536)%256/255,math.floor(color/256)%256/255,1)
+            love.graphics.rectangle('fill',x,677,29,27,4,4)
+            if A.color==color then
+                c('accent');love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',x-2,675,33,31,4,4)
+            end
+            A.buttons[#A.buttons+1]={x=x,y=675,w=33,h=31,
+                fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
+        end
+        text('Algoritmo Android não recuperado.',panel+20,720,'small','muted')
+    end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
 end
 local function drawModal(w,h)
@@ -286,13 +315,35 @@ function love.mousepressed(x,y,buttonNumber)
                 if A.tool=='pixel' and px>=0 and py>=0 and px<A.doc.width and py<A.doc.height then
                     Native.pixel(A.buffer,math.floor(px),math.floor(py),A.color);A.dirty=true;rebuildImage()
                     status('Pixel diagnóstico gravado pelo C++. Isto não é uma implementação de pincel.')
+                elseif A.tool=='brush' then
+                    Native.basicStroke(A.buffer,px,py,px,py,A.brushDiameter,A.color,1)
+                    A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
+                    A.dirty=true;rebuildImage()
+                    status('Pincel básico próprio em C++ · sem equivalência comprovada com Android')
                 end
             end)()
         end
     elseif buttonNumber==3 and A.screen=='editor' then A.panning=true end
 end
-function love.mousereleased(x,y,b)if b==3 then A.panning=false end end
-function love.mousemoved(x,y,dx,dy)if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end end
+function love.mousereleased(x,y,b)
+    if b==3 then A.panning=false end
+    if b==1 then A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil end
+end
+function love.mousemoved(x,y,dx,dy)
+    if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
+    if A.drawing and A.screen=='editor' and A.tool=='brush' and not A.modal then
+        guard(function()
+            local px,py=canvasPoint(x,y)
+            Native.basicStroke(A.buffer,A.lastStrokeX,A.lastStrokeY,px,py,
+                A.brushDiameter,A.color,1)
+            A.lastStrokeX=px;A.lastStrokeY=py
+            A.dirty=true;rebuildImage()
+        end)()
+    end
+end
+function love.focus(focused)
+    if not focused then A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil end
+end
 function love.wheelmoved(x,y)
     if A.screen=='editor' and not A.modal then
         if love.keyboard.isDown('lshift','rshift')then A.rotation=A.rotation+y*math.pi/36
