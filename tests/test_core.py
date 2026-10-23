@@ -1,0 +1,260 @@
+"""Execute the real C++ ABI through ctypes; no Python fallback is substituted.
+
+Run: python -m unittest discover -s tests -p test_core.py -v
+RB_CORE_DLL can point to a built Windows DLL (or a host .so for contract checks).
+Reference pressure arithmetic is an independent IEEE-float contract oracle,
+not execution of the original Android application.
+"""
+import ctypes as C
+import math
+import os
+from pathlib import Path
+import random
+import struct
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+U8, U32, I32, U64, I64, F32 = C.c_uint8, C.c_uint32, C.c_int32, C.c_uint64, C.c_int64, C.c_float
+
+
+class Sample(C.Structure):
+    _fields_ = [
+        ('pointer_id', I32), ('pointer_info', I32),
+        ('x', F32), ('y', F32), ('previous_x', F32), ('previous_y', F32),
+        ('pressure', F32), ('altitude', F32), ('azimuth', F32),
+        ('time', I64), ('is_stylus', U32),
+    ]
+
+
+def float32(value):
+    try:
+        return struct.unpack('<f', struct.pack('<f', value))[0]
+    except OverflowError:
+        return math.copysign(math.inf, value)
+
+
+def float_bits(value):
+    return struct.unpack('<I', struct.pack('<f', value))[0]
+
+
+def reference_pressure(raw, enabled, low, high):
+    if not enabled:
+        return 1.0
+    raw, low, high = map(float32, (raw, low, high))
+    numerator = float32(raw - low)
+    denominator = float32(high - low)
+    if denominator == 0.0:
+        if numerator == 0.0 or math.isnan(numerator):
+            normalized = math.nan
+        else:
+            normalized = math.copysign(math.inf,
+                math.copysign(1.0, numerator) * math.copysign(1.0, denominator))
+    else:
+        normalized = float32(numerator / denominator)
+    if math.isnan(normalized):
+        return math.nan
+    if normalized <= 0.0:
+        return 0.0  # Math.max(+0, -0) is +0.
+    return min(normalized, 1.0)
+
+
+class KernelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = Path(os.environ.get('RB_CORE_DLL', ROOT / 'build' / 'rebuild_core.dll'))
+        if not path.exists():
+            raise RuntimeError(f'Build the C++ kernel first; missing {path}. No fallback was run.')
+        cls.lib = C.CDLL(str(path.resolve()))
+        signatures = {
+            'rb_version': (U32, []),
+            'rb_sample_size': (U32, []),
+            'rb_normalize_pressure': (F32, [F32, I32, F32, F32]),
+            'rb_thickness_update': (I32, [C.POINTER(F32), F32]),
+            'rb_pack_samples': (I32, [C.POINTER(Sample), U64, C.POINTER(I32), U64,
+                C.POINTER(F32), U64, C.POINTER(I64), U64]),
+            'rb_clear': (I32, [C.POINTER(U8), U64, U32, U32, U32]),
+            'rb_set_pixel': (I32, [C.POINTER(U8), U64, U32, U32, I32, I32, U32]),
+            'rb_get_pixel': (I32, [C.POINTER(U8), U64, U32, U32, I32, I32, C.POINTER(U32)]),
+        }
+        for name, (result, args) in signatures.items():
+            method = getattr(cls.lib, name)
+            method.restype, method.argtypes = result, args
+
+    def assertFloatSame(self, actual, expected):
+        if math.isnan(expected):
+            self.assertTrue(math.isnan(actual))
+        else:
+            self.assertEqual(float_bits(actual), float_bits(expected))
+
+    def test_abi_layout(self):
+        self.assertEqual(self.lib.rb_version(), 1)
+        self.assertEqual(C.sizeof(Sample), 56)
+        self.assertEqual(self.lib.rb_sample_size(), C.sizeof(Sample))
+        self.assertEqual(Sample.time.offset, 40)
+        self.assertEqual(Sample.is_stylus.offset, 48)
+        self.assertEqual(Sample.pressure.offset, 24)
+
+    def test_pressure_finite_range(self):
+        for raw, low, high in [(0.5, 0, 1), (2, 0, 1), (-2, 0, 1),
+                (4, 2, 6), (2, 6, 2), (5, 6, 2), (8, 6, 2)]:
+            with self.subTest(raw=raw, low=low, high=high):
+                self.assertFloatSame(self.lib.rb_normalize_pressure(raw, 1, low, high),
+                    reference_pressure(raw, True, low, high))
+
+    def test_disabled_pressure_always_one(self):
+        for raw in [math.nan, math.inf, -math.inf, -0.0, 0, 0.5, 10]:
+            self.assertFloatSame(self.lib.rb_normalize_pressure(raw, 0, math.nan, math.nan), 1)
+
+    def test_pressure_nan_in_each_input(self):
+        for args in [(math.nan, 1, 0, 1), (0.5, 1, math.nan, 1), (0.5, 1, 0, math.nan)]:
+            self.assertTrue(math.isnan(self.lib.rb_normalize_pressure(*args)))
+
+    def test_pressure_zero_denominator_is_not_replaced_by_default(self):
+        for raw, low, high in [(0, 0, 0), (1, 0, 0), (-1, 0, 0),
+                (2, 2, 2), (-1, 0.0, -0.0), (1, 0.0, -0.0)]:
+            with self.subTest(raw=raw, low=low, high=high):
+                self.assertFloatSame(self.lib.rb_normalize_pressure(raw, 1, low, high),
+                    reference_pressure(raw, True, low, high))
+
+    def test_pressure_infinities_and_signed_zero(self):
+        for raw, low, high in [(math.inf, 0, 1), (-math.inf, 0, 1),
+                (1, 0, math.inf), (math.inf, 0, math.inf),
+                (1, -math.inf, math.inf), (-0.0, 0, 1), (0, -0.0, 1)]:
+            self.assertFloatSame(self.lib.rb_normalize_pressure(raw, -1, low, high),
+                reference_pressure(raw, True, low, high))
+
+    def test_pressure_float_rounding_random_contract(self):
+        rng = random.Random(1412)
+        for _ in range(1000):
+            raw, low, high = [struct.unpack('<f', rng.getrandbits(32).to_bytes(4, 'little'))[0]
+                for _ in range(3)]
+            self.assertFloatSame(self.lib.rb_normalize_pressure(raw, 1, low, high),
+                reference_pressure(raw, True, low, high))
+
+    def test_thickness_accepts_negative_and_exact_boundaries(self):
+        state = F32(0.125)
+        for value in [-2.0, -1.75, -0.0, 0.0, 0.125, 2.0]:
+            self.assertEqual(self.lib.rb_thickness_update(C.byref(state), value), 1)
+            self.assertFloatSame(state.value, value)
+
+    def test_thickness_rejection_preserves_state(self):
+        state = F32(-0.25)
+        for value in [math.nan, math.inf, -math.inf, 2.000001, -2.000001, 100]:
+            self.assertEqual(self.lib.rb_thickness_update(C.byref(state), value), 0)
+            self.assertFloatSame(state.value, -0.25)
+        self.assertEqual(self.lib.rb_thickness_update(None, 0), -1)
+
+    def sample_buffers(self):
+        samples = (Sample * 2)(
+            Sample(17, -4, 12, 13, 10, 11, 0.25, 0.75, 1.25, 2**45 + 17, 1),
+            Sample(-2, 0x7fffffff, 20, 21, 18, 19, 1, 999, -999, -123456789, 0))
+        return samples, (I32 * 4)(*([99] * 4)), (F32 * 14)(*([99] * 14)), (I64 * 2)(99, 99)
+
+    def test_pack_exact_layout_and_nonstylus_zero_angles(self):
+        samples, ints, floats, times = self.sample_buffers()
+        self.assertEqual(self.lib.rb_pack_samples(samples, 2, ints, 4, floats, 14, times, 2), 0)
+        self.assertEqual(list(ints), [17, -4, -2, 0x7fffffff])
+        self.assertEqual(list(floats), [12, 13, 10, 11, .25, .75, 1.25,
+            20, 21, 18, 19, 1, 0, 0])
+        self.assertEqual(list(times), [2**45 + 17, -123456789])
+        self.assertEqual(float_bits(floats[12]), 0)
+        self.assertEqual(float_bits(floats[13]), 0)
+
+    def test_pack_pressure_and_angles_are_not_implicitly_normalized(self):
+        samples, ints, floats, times = self.sample_buffers()
+        samples[0].pressure = math.nan
+        samples[0].altitude = -100.25
+        self.assertEqual(self.lib.rb_pack_samples(samples, 1, ints, 4, floats, 14, times, 2), 0)
+        self.assertTrue(math.isnan(floats[4]))
+        self.assertEqual(floats[5], -100.25)
+        self.assertEqual(ints[2], 99)
+        self.assertEqual(times[1], 99)
+
+    def test_pack_short_capacity_failure_is_atomic(self):
+        for icap, fcap, tcap in [(3, 14, 2), (4, 13, 2), (4, 14, 1)]:
+            samples, ints, floats, times = self.sample_buffers()
+            self.assertEqual(self.lib.rb_pack_samples(samples, 2, ints, icap, floats, fcap, times, tcap), -1)
+            self.assertEqual(list(ints), [99] * 4)
+            self.assertEqual(list(floats), [99] * 14)
+            self.assertEqual(list(times), [99] * 2)
+
+    def test_pack_empty_null_and_overflow(self):
+        self.assertEqual(self.lib.rb_pack_samples(None, 0, None, 0, None, 0, None, 0), 0)
+        self.assertEqual(self.lib.rb_pack_samples(None, 1, None, 2, None, 7, None, 1), -1)
+        self.assertEqual(self.lib.rb_pack_samples(None, 2**64 - 1, None, 2**64 - 1,
+            None, 2**64 - 1, None, 2**64 - 1), -1)
+
+    def test_pack_overlapping_output_failure_is_atomic(self):
+        samples, ints, floats, times = self.sample_buffers()
+        storage = (U8 * 96)(*([0x53] * 96))
+        ints = C.cast(storage, C.POINTER(I32))
+        floats = C.cast(storage, C.POINTER(F32))
+        self.assertEqual(self.lib.rb_pack_samples(samples, 2, ints, 4, floats, 14, times, 2), -1)
+        self.assertEqual(bytes(storage), bytes([0x53] * 96))
+        self.assertEqual(list(times), [99, 99])
+
+    def test_pack_unaligned_pointer_failure_is_atomic(self):
+        samples, ints, floats, times = self.sample_buffers()
+        raw = (U8 * 32)(*([0x46] * 32))
+        bad = C.cast(C.byref(raw, 1), C.POINTER(I32))
+        self.assertEqual(self.lib.rb_pack_samples(samples, 2, bad, 4, floats, 14, times, 2), -1)
+        self.assertEqual(bytes(raw), bytes([0x46] * 32))
+
+    def test_pack_input_output_overlap_preserves_samples(self):
+        samples, ints, floats, times = self.sample_buffers()
+        before = bytes(samples)
+        aliased_ints = C.cast(samples, C.POINTER(I32))
+        self.assertEqual(self.lib.rb_pack_samples(samples, 2, aliased_ints, 4,
+            floats, 14, times, 2), -1)
+        self.assertEqual(bytes(samples), before)
+        self.assertEqual(list(floats), [99] * 14)
+        self.assertEqual(list(times), [99, 99])
+
+    def test_clear_rgba_order_capacity_and_guard_bytes(self):
+        raw = (U8 * 32)(*([0xA7] * 32))
+        ptr = C.cast(C.byref(raw, 4), C.POINTER(U8))
+        self.assertEqual(self.lib.rb_clear(ptr, 24, 3, 2, 0x12345678), 0)
+        self.assertEqual(bytes(raw[:4]), bytes([0xA7] * 4))
+        self.assertEqual(bytes(raw[4:28]), bytes.fromhex('12345678') * 6)
+        self.assertEqual(bytes(raw[28:]), bytes([0xA7] * 4))
+
+    def test_clear_transparent_and_opaque(self):
+        pixels = (U8 * 8)()
+        for color in [0, 0xffffffff, 0x000000ff, 0xff000000]:
+            self.assertEqual(self.lib.rb_clear(pixels, 8, 2, 1, color), 0)
+            self.assertEqual(bytes(pixels), color.to_bytes(4, 'big') * 2)
+
+    def test_plane_invalid_arguments_do_not_write(self):
+        for width, height, capacity in [(0, 1, 16), (1, 0, 16), (8193, 1, 16),
+                (1, 8193, 16), (2**32 - 1, 2**32 - 1, 2**64 - 1), (2, 2, 15)]:
+            pixels = (U8 * 16)(*([0x41] * 16))
+            self.assertEqual(self.lib.rb_clear(pixels, capacity, width, height, 0), -1)
+            self.assertEqual(bytes(pixels), bytes([0x41] * 16))
+        self.assertEqual(self.lib.rb_clear(None, 4, 1, 1, 0), -1)
+
+    def test_pixel_coordinates_and_roundtrip(self):
+        w, h = 7, 3
+        pixels = (U8 * (w * h * 4))()
+        self.lib.rb_clear(pixels, len(pixels), w, h, 0)
+        for y in range(h):
+            for x in range(w):
+                color = (x << 24) | (y << 16) | ((x + y) << 8) | 0x7f
+                self.assertEqual(self.lib.rb_set_pixel(pixels, len(pixels), w, h, x, y, color), 0)
+                out = U32(0)
+                self.assertEqual(self.lib.rb_get_pixel(pixels, len(pixels), w, h, x, y, C.byref(out)), 0)
+                self.assertEqual(out.value, color)
+                self.assertEqual(bytes(pixels[(y*w+x)*4:(y*w+x+1)*4]), color.to_bytes(4, 'big'))
+
+    def test_pixel_bounds_fail_without_modification(self):
+        pixels = (U8 * 24)(*([0x38] * 24))
+        for x, y in [(-1, 0), (0, -1), (3, 0), (0, 2), (2**31-1, 2**31-1)]:
+            out = U32(0x12345678)
+            self.assertEqual(self.lib.rb_set_pixel(pixels, 24, 3, 2, x, y, 0), -1)
+            self.assertEqual(self.lib.rb_get_pixel(pixels, 24, 3, 2, x, y, C.byref(out)), -1)
+            self.assertEqual(out.value, 0x12345678)
+            self.assertEqual(bytes(pixels), bytes([0x38] * 24))
+        self.assertEqual(self.lib.rb_get_pixel(pixels, 24, 3, 2, 0, 0, None), -1)
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

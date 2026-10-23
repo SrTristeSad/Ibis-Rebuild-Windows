@@ -1,0 +1,16 @@
+{
+  "kind": "reviewed-derived-metadata-only",
+  "target": {"package": "jp.ne.ibis.ibispaintx.app", "version": "14.1.2", "version_code": 1401020064},
+  "artifact_fingerprints": {
+    "base_apk_sha256": "6fabbfe51e752d2157b11dc19fb338e46af6e81cfcf3555e5ed9befd40e257b8",
+    "painting_engine_sha256": "13189f99f583954b4c889a43f2e8dce0819458abc91d926374445b4095dc8ce4"
+  },
+  "contracts": [
+    {"id": "input-arrays", "evidence_id": "ev_b3bed49560ffdc6b7c9b3b6a81db7497bc5604adaf1889da13a2c5400de7ab82", "certainty": "derived-static-high", "runtime_compared": false},
+    {"id": "pressure-normalization", "evidence_id": "ev_06b4bfdbb952d395480f72be2779433f56f87ae2e56b596e6b689e920996dce4", "certainty": "derived-static-high", "runtime_compared": false},
+    {"id": "thickness-to-pressure", "symbol": "BrushParameterSubChunk::setThicknessToPressure(float)", "elf_virtual_address": "0x2432940", "certainty": "bounded-static-derived", "runtime_compared": false},
+    {"id": "new-canvas-route", "evidence_id": "ev_bfcdf2f6429f7c8174c81cfbd49001c55f9b0ae978560ec31fc12ea2e7c811f9", "certainty": "derived-static-high-at-interface", "runtime_compared": false}
+  ],
+  "excluded_payloads": ["source decompilation", "bytecode", "machine-code bytes", "APK and native libraries", "raw tool records", "environment details", "user data", "credentials"],
+  "note": "Identifiers and fingerprints only. Original records remain local and are not redistributed."
+}

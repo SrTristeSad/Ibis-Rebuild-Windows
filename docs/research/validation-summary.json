@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-23",
+  "scope": "Reviewed factual summary; raw logs and machine details excluded",
+  "headless_lua": {"exit_code": 0, "state_lifecycle_cycles": 100, "storage_assertions": 52, "passed": true, "graphics_loaded": false},
+  "publication_boundary": {"tests": 8, "exit_code": 0, "passed": true},
+  "native_cpp": {"exit_code": 5, "declared_tests": 21, "executed_tests": 0, "passed": false, "reason": "Setup failed: own native DLL was not compiled"},
+  "compiler": {"probe_exit_code": 1, "build_success": false, "observed_error": "Permission denied before compiling"},
+  "official_ui": {
+    "passed": false,
+    "packaged_exit_code": 1,
+    "official_runtime_exit_code": 1,
+    "timed_out": false,
+    "observed_error": "Failed to initialize filesystem: no error",
+    "application_loaded": false
+  },
+  "legacy_embedded_ui": {
+    "observed_failure": "OSError: access violation during lua_close, including address 0x60",
+    "retired_from_active_execution": true,
+    "old_pre_shutdown_success_reports_not_accepted": true,
+    "native_destructor_cause_proven": false
+  },
+  "android_runtime_compared": false,
+  "functional_equivalence_demonstrated": false,
+  "generated_binaries_included": false
+}
