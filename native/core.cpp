@@ -343,3 +343,12 @@ rb_i32 rb_move_rect_rgba(rb_u8* dst, rb_u64 capacity,
         for (rb_u32 x=0;x<rw;++x) {
             const rb_i64 cx=static_cast<rb_i64>(tx)+x;
             if (cx<0 || cx>=width) continue;
+            const rb_u8* src=scratch+(static_cast<rb_u64>(y)*rw+x)*4u;
+            rb_u8* p=dst+(static_cast<rb_u64>(cy)*width+
+                static_cast<rb_u64>(cx))*4u;
+            const float sa=static_cast<float>(src[3])/255.0f;
+            if (sa<=0.0f) continue;
+            const float da=static_cast<float>(p[3])/255.0f;
+            const float rest=da*(1.0f-sa);
+            const float oa=sa+rest;
+            const float inv=1.0f/oa;
