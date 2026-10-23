@@ -352,3 +352,14 @@ rb_i32 rb_move_rect_rgba(rb_u8* dst, rb_u64 capacity,
             const float rest=da*(1.0f-sa);
             const float oa=sa+rest;
             const float inv=1.0f/oa;
+            for (rb_u32 ch=0;ch<3;++ch) {
+                float color=(src[ch]*sa+p[ch]*rest)*inv;
+                if (color>255.0f) color=255.0f;
+                if (color<0.0f) color=0.0f;
+                p[ch]=static_cast<rb_u8>(color+0.5f);
+            }
+            p[3]=static_cast<rb_u8>(oa*255.0f+0.5f);
+        }
+    }
+    return 0;
+}
