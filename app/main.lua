@@ -159,6 +159,8 @@ local function nativeSelfTest()
     assert(Native.readPixel(A.buffer,1,1)==0xe53b44ff,'Undo não restaurou pixel exato')
     assert(A.layerSession:redo(),'Não foi possível refazer borracha')
     assert(Native.readPixel(A.buffer,1,1)==0,'Redo não restaurou transparência')
+    assert(A.layerSession:undo(),'Fixture não conseguiu restaurar o pixel-alvo da GUI')
+    assert(Native.readPixel(A.buffer,1,1)==0xe53b44ff,'Fixture GUI sem pixel restaurado')
     return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,basic_desktop_eraser=true,session_undo_redo=true,layered_roundtrip=true,android_runtime_compared=false}
 end
 function love.load(args)
