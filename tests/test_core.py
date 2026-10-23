@@ -79,6 +79,8 @@ class KernelTests(unittest.TestCase):
                 F32, F32, F32, F32, F32, U32, F32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
+            'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
+                I32, I32, U32, U32, I32, I32, C.POINTER(U8), U64]),
             'rb_erase_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, F32]),
         }
