@@ -124,7 +124,7 @@ local function nativeSelfTest()
     A.layerSession:setVisible(2,true)
     saveDoc()
     local layered=A.store:openProject(doc.id)
-    assert(layered.layer_count==2 and layered.layers[2].pixels:sub(29,32)==string.char(229,59,68,255),
+    assert(layered.layer_count==2 and layered.layers[2].pixels:sub(41,44)==string.char(229,59,68,255),
         'Camada RBD2 não reabriu sem perda de pixel')
     local png=exportPNG();local pngData=A.store.fs:read('exports/'..png)
     local image=love.image.newImageData(love.filesystem.newFileData(pngData,'oracle.png'))
