@@ -86,6 +86,8 @@ class KernelTests(unittest.TestCase):
             'rb_flood_fill_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
                 I32, I32, U32, U32, C.POINTER(U32), U64,
                 C.POINTER(U8), U64, C.POINTER(U32)]),
+            'rb_draw_shape_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
+                I32, I32, I32, I32, U32, U32, U32, U32]),
             'rb_erase_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, F32]),
         }
@@ -583,6 +585,61 @@ class KernelTests(unittest.TestCase):
         plane=(U8*(n*4))()
         self.assertEqual(self.flood(plane,64,64,0,0,0xffffffff),(0,n))
         self.assertEqual(bytes(plane),bytes.fromhex('ffffffff')*n)
+
+
+    def test_shapes_rectangle_outline_and_filled(self):
+        pixels=(U8*(5*5*4))()
+        shape=self.lib.rb_draw_shape_rgba
+        self.assertEqual(shape(pixels,len(pixels),5,5,4,4,0,0,0,0,1,0xff0000ff),0)
+        for y in range(5):
+            for x in range(5):
+                rgba=bytes(pixels[(y*5+x)*4:(y*5+x+1)*4])
+                expected=bytes.fromhex('ff0000ff') if (x in (0,4) or y in (0,4)) else bytes(4)
+                self.assertEqual(rgba,expected)
+        self.assertEqual(shape(pixels,len(pixels),5,5,1,1,3,3,0,1,1,0x00ff00ff),0)
+        self.assertEqual(bytes(pixels[(2*5+2)*4:(2*5+3)*4]),bytes.fromhex('00ff00ff'))
+        self.assertEqual(bytes(pixels[0:4]),bytes.fromhex('ff0000ff'))
+
+    def test_shapes_ellipse_coverage_and_outline(self):
+        size=9*9*4
+        filled=(U8*size)()
+        outline=(U8*size)()
+        draw=self.lib.rb_draw_shape_rgba
+        self.assertEqual(draw(filled,size,9,9,2,2,6,6,1,1,1,0x112233ff),0)
+        self.assertEqual(draw(outline,size,9,9,2,2,6,6,1,0,1,0x112233ff),0)
+        at=lambda x,y:(y*9+x)*4
+        self.assertEqual(bytes(filled[at(4,4):at(4,4)+4]),bytes.fromhex('112233ff'))
+        self.assertEqual(bytes(outline[at(4,4):at(4,4)+4]),bytes(4))
+        self.assertEqual(bytes(outline[at(4,2):at(4,2)+4]),bytes.fromhex('112233ff'))
+        self.assertEqual(bytes(filled[at(2,2):at(2,2)+4]),bytes(4))
+        self.assertEqual(bytes(outline[at(2,2):at(2,2)+4]),bytes(4))
+
+    def test_shapes_clipping_and_single_pixel(self):
+        rgba=(U8*16)()
+        draw=self.lib.rb_draw_shape_rgba
+        self.assertEqual(draw(rgba,16,2,2,-3,-3,0,0,0,1,1,0x334455ff),0)
+        self.assertEqual(bytes(rgba[0:4]),bytes.fromhex('334455ff'))
+        self.assertEqual(bytes(rgba[4:]),bytes(12))
+        self.assertEqual(draw(rgba,16,2,2,1,1,1,1,1,1,3,0xaabbccff),0)
+        self.assertEqual(bytes(rgba[12:16]),bytes.fromhex('aabbccff'))
+
+    def test_shapes_alpha_blending_and_invalid_atomicity(self):
+        draw=self.lib.rb_draw_shape_rgba
+        rgba=(U8*4)(0,0,255,255)
+        self.assertEqual(draw(rgba,4,1,1,0,0,0,0,0,1,1,0xff000080),0)
+        self.assertIn(rgba[0],(127,128))
+        self.assertEqual(rgba[1],0)
+        self.assertIn(rgba[2],(127,128))
+        self.assertEqual(rgba[3],255)
+        original=bytes(rgba)
+        for shape,filled,thickness,x in [
+            (2,0,1,0),(0,2,1,0),(0,0,0,0),(0,0,129,0),(0,0,1,16385)]:
+            self.assertEqual(draw(rgba,4,1,1,x,0,0,0,shape,filled,thickness,0xffffffff),-1)
+            self.assertEqual(bytes(rgba),original)
+        self.assertEqual(draw(rgba,3,1,1,0,0,0,0,0,1,1,0xffffffff),-1)
+        self.assertEqual(bytes(rgba),original)
+        self.assertEqual(draw(rgba,4,1,1,0,0,0,0,0,1,1,0x11223300),0)
+        self.assertEqual(bytes(rgba),original)
 
 
 if __name__ == '__main__':
