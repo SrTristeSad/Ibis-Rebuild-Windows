@@ -38,7 +38,7 @@ A etapa 17 adiciona [miniaturas RGBA reais no painel de camadas, cache de visual
 
 A etapa 18 acrescenta [renomear camadas por F2/Nome e visibilidade direta na lista](docs/LAYER_PROPERTIES_STAGE18.md), com validação UTF-8 idêntica ao RBD2 e manutenção de pixels, miniaturas e histórico ao mudar apenas o nome.
 
-A etapa 19 acrescenta [duplicação independente de camadas pelo botão Duplicar ou Ctrl+J](docs/LAYER_DUPLICATE_STAGE19.md), com cópia completa do buffer RGBA nativo, novo ID, miniatura própria, opacidade e visibilidade preservadas e persistência RBD2. A duplicação é estrutural e limpa o histórico raster atual, como adicionar/remover camadas.
+A etapa 19 acrescenta [duplicação independente de camadas pelo botão Duplicar ou Ctrl+J](docs/LAYER_DUPLICATE_STAGE19.md), com cópia completa do buffer RGBA nativo, novo ID, miniatura própria, opacidade e visibilidade preservadas e persistência RBD2. Na etapa 20, essa operação passou a integrar o mesmo histórico de desfazer/refazer das pinceladas.
 
 A etapa 20 implementa [histórico misto de pintura e alterações estruturais de camadas](docs/MIXED_HISTORY_STAGE20.md): adicionar, duplicar, excluir e reordenar agora podem ser desfeitos/refeitos na mesma linha do tempo das pinceladas, respeitando o orçamento de memória da sessão e sem alterar o RBD2.
 
