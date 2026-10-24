@@ -671,6 +671,86 @@ function love.update(dt)
                     love.draw();love.mousepressed(panel+40,720,1)
                 end
                 assert(A.stabilization==0,'Stabilization decrement buttons failed')
+                -- Exercise actual LÖVE touch callbacks with simulated pressure.
+                A.layerSession:add('Pressão de toque GUI')
+                A.dirty=true;rebuildImage()
+                love.draw();love.mousepressed(252,90,1)
+                assert(A.tool=='brush' and A.brushStyle=='hard',
+                    'Touch test requires the hard C++ brush')
+                for i=1,3 do
+                    love.draw();love.mousepressed(panel+40,472,1)
+                end
+                assert(A.brushDiameter==2,'Touch test could not select thin brush')
+                love.draw();love.mousepressed(panel+226,637,1)
+                assert(math.abs(A.brushOpacity-1)<.001,
+                    'Touch test requires 100% base opacity')
+                local lowX,lowY=point(1,1)
+                local highX,highY=point(7,5)
+                local oldCount=A.layerSession:historyStats().undo
+                love.draw();love.touchpressed('contact-light',lowX,lowY,0,0,.2)
+                assert(A.touchId=='contact-light' and A.drawing,
+                    'Touch press did not own brush stroke')
+                local lowBeforeSynthetic=Native.readPixel(
+                    A.layerSession:activeBuffer(),1,1)
+                love.mousepressed(lowX,lowY,1,true)
+                love.mousemoved(highX,highY,highX-lowX,highY-lowY,true)
+                love.mousereleased(lowX,lowY,1,true)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==
+                    lowBeforeSynthetic,'Synthetic touch mouse event painted twice')
+                love.touchpressed('contact-second',highX,highY,0,0,1)
+                love.touchreleased('contact-second',highX,highY,0,0,1)
+                assert(A.touchId=='contact-light' and
+                    Native.readPixel(A.layerSession:activeBuffer(),7,5)==0,
+                    'A second touch interrupted the active stroke')
+                love.touchreleased('contact-light',lowX,lowY,0,0,.2)
+                local lowAlpha=Native.readPixel(
+                    A.layerSession:activeBuffer(),1,1)%256
+                assert(lowAlpha>0 and lowAlpha<255 and A.touchId==nil,
+                    'Low touch pressure did not produce partial alpha')
+                assert(A.layerSession:historyStats().undo==oldCount+1,
+                    'Synthetic mouse events created duplicate undo entries')
+                love.draw();love.touchpressed('contact-strong',highX,highY,0,0,1)
+                love.touchreleased('contact-strong',highX,highY,0,0,1)
+                local highAlpha=Native.readPixel(
+                    A.layerSession:activeBuffer(),7,5)%256
+                assert(highAlpha>lowAlpha and highAlpha==255,
+                    'Full pressure should produce stronger C++ paint')
+                -- Moving pressure: release must reach exact endpoint with
+                -- one undo/redo transaction and preserve pixels in RBD2.
+                A.layerSession:add('Traço pressão variável GUI')
+                A.dirty=true;rebuildImage()
+                local sx,sy=point(1,3)
+                local mx,my=point(3,3)
+                local ex,ey=point(5,3)
+                local beforeTouch=A.layerSession:historyStats().undo
+                love.draw();love.touchpressed('contact-move',sx,sy,0,0,.2)
+                love.touchmoved('contact-move',mx,my,mx-sx,my-sy,.6)
+                assert(A.lastPressure==.6,
+                    'Pressure from touchmoved was not used')
+                love.touchreleased('contact-move',ex,ey,ex-mx,ey-my,1)
+                local lastPixel=Native.readPixel(A.layerSession:activeBuffer(),5,3)
+                assert(lastPixel%256>0 and not A.drawing and A.touchId==nil,
+                    'Pressure stroke failed to complete at release')
+                assert(A.layerSession:historyStats().undo==beforeTouch+1,
+                    'Moving touch must create one undo entry')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,3)==0,
+                    'Touch undo did not remove final pixel')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,3)==lastPixel,
+                    'Touch redo did not restore pressure stroke')
+                saveDoc()
+                local touchSaved=A.store:openProject(A.doc.id)
+                local lastOffset=(3*A.doc.width+5)*4+1
+                assert(touchSaved.layers[6].pixels:byte(lastOffset+3)==
+                    lastPixel%256,'Touch stroke not persisted in RBD2')
+                -- Touch must also operate existing toolbar/canvas without
+                -- duplicated mouse emulation.
+                love.draw()
+                love.touchpressed('touch-toolbar',192,90,0,0,1)
+                love.mousepressed(192,90,1,true)
+                love.touchreleased('touch-toolbar',192,90,0,0,1)
+                assert(A.tool=='pixel','Touch could not select existing toolbar')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -689,7 +769,10 @@ function love.update(dt)
                     stabilization_buttons=true,filtered_mouse_drag=true,
                     stabilized_exact_endpoint=true,stabilized_undo_redo=true,
                     stabilized_rbd2_roundtrip=true,
-                    persisted_from_real_editor=true}
+                    touch_pressure_low_high=true,touch_synthetic_suppression=true,
+                    touch_single_owner=true,touch_pressure_move=true,
+                    touch_undo_redo=true,touch_rbd2_roundtrip=true,
+                    touch_toolbar=true,persisted_from_real_editor=true}
             end)
             if not ok then
                 A.testReport.ok=false
