@@ -26,6 +26,16 @@ class Sample(C.Structure):
     ]
 
 
+
+class InkEvent(C.Structure):
+    _fields_=[
+        ('kind',I32),('pointer_id',U32),('x',F32),('y',F32),
+        ('pressure',F32),('tilt_x',I32),('tilt_y',I32),
+        ('flags',U32),('mask',U32),('client_width',U32),
+        ('client_height',U32),
+    ]
+
+
 def float32(value):
     try:
         return struct.unpack('<f', struct.pack('<f', value))[0]
@@ -92,6 +102,14 @@ class KernelTests(unittest.TestCase):
                 I32, I32, I32, I32, U32, U32, U32, U32]),
             'rb_erase_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, F32]),
+
+            'rb_ink_attach': (I32, []),
+            'rb_ink_detach': (I32, []),
+            'rb_ink_is_attached': (I32, []),
+            'rb_ink_mouse_guard': (I32, []),
+            'rb_ink_poll': (I32, [C.POINTER(InkEvent), U32]),
+            'rb_ink_dropped': (U32, []),
+            'rb_ink_pressure': (F32, [U32,U32]),
         }
         for name, (result, args) in signatures.items():
             method = getattr(cls.lib, name)
@@ -708,6 +726,32 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(soft(plane,15,2,2,0.,0.,0.,0.,
             4.,0xffffffff,1.,0.25),-1)
         self.assertEqual(bytes(plane),snapshot)
+
+
+    def test_windows_ink_abi_and_pressure(self):
+        self.assertEqual(C.sizeof(InkEvent),44)
+        pressure=self.lib.rb_ink_pressure
+        self.assertEqual(pressure(0,0),1.0)  # no PEN_MASK_PRESSURE
+        self.assertEqual(pressure(0,1),0.0)
+        self.assertEqual(pressure(512,1),0.5)
+        self.assertEqual(pressure(1024,1),1.0)
+        self.assertEqual(pressure(4096,1),1.0)
+        self.assertEqual(pressure(512,4),1.0)
+        self.assertEqual(self.lib.rb_ink_poll(None,1),-1)
+        self.assertEqual(self.lib.rb_ink_poll(None,513),-1)
+        self.assertEqual(self.lib.rb_ink_poll(None,0),0)
+        self.assertEqual(self.lib.rb_ink_poll((InkEvent*1)(),1),0)
+
+    def test_windows_ink_safe_attach_detach_without_pen_hardware(self):
+        # Only the calling thread's own active Win32 window may be subclassed.
+        self.assertIn(self.lib.rb_ink_attach(),(-1,1))
+        attached=self.lib.rb_ink_is_attached()
+        self.assertIn(attached,(0,1))
+        self.assertEqual(self.lib.rb_ink_mouse_guard(),0)
+        self.assertEqual(self.lib.rb_ink_dropped(),0)
+        self.assertEqual(self.lib.rb_ink_detach(),0)
+        self.assertEqual(self.lib.rb_ink_is_attached(),0)
+        self.assertEqual(self.lib.rb_ink_detach(),0)
 
 
 if __name__ == '__main__':

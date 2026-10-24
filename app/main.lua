@@ -6,7 +6,9 @@ local JSON=require('json')
 local Colors=require('colors')
 local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,touchId=nil,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local Ink=require('windows_ink')
+local dispatchInkEvent
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -286,6 +288,7 @@ function love.load(args)
     A.options=options;local base=love.filesystem.getSourceBaseDirectory()
     package.path=base..'/?.lua;'..base..'/?/init.lua;'..package.path
     Native.load(base)
+    A.inkAttached=Ink.init(Native)
     A.root=options.data or (base..'/user-data');A.store=Store.open(A.root)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
     refreshGallery();status(Native.available and 'Motor C++ v1 carregado' or 'Galeria disponível · motor C++ ainda não compilado')
@@ -314,6 +317,9 @@ function love.errorhandler(message)
     return function()return 2 end
 end
 function love.update(dt)
+    if A.inkAttached and dispatchInkEvent then
+        for _,event in ipairs(Ink.poll()) do dispatchInkEvent(event) end
+    end
     if A.testReport then
         A.testFrames=A.testFrames+1
         if A.testFrames==2 and not A.options.selfTest and A.testReport.ok then
@@ -342,6 +348,8 @@ function love.update(dt)
             local ok,err=pcall(function()
                 assert(A.screen=='editor' and A.sideTab=='layers',
                     'Teste GUI de camadas requer editor real')
+                assert(A.inkAttached and Ink.lib.rb_ink_is_attached()==1,
+                    'A ponte Windows Ink não se anexou à janela LÖVE real')
                 local panel=love.graphics.getWidth()-268
                 local before=#A.doc.layers
                 love.draw()
@@ -751,6 +759,57 @@ function love.update(dt)
                 love.mousepressed(192,90,1,true)
                 love.touchreleased('touch-toolbar',192,90,0,0,1)
                 assert(A.tool=='pixel','Touch could not select existing toolbar')
+                -- Simulated WM_POINTER pen packets through the actual GUI
+                -- dispatcher. This verifies routing, not physical pen drivers.
+                A.layerSession:add('Windows Ink teste')
+                A.dirty=true;rebuildImage()
+                love.draw();love.mousepressed(252,90,1)
+                assert(A.tool=='brush','Pen test failed to choose brush')
+                local ax,ay=point(2,1)
+                local bx,by=point(5,1)
+                local penHistory=A.layerSession:historyStats().undo
+                dispatchInkEvent({kind=1,id=87,x=ax,y=ay,pressure=.4,
+                    tiltX=12,tiltY=-9,flags=0,mask=13})
+                assert(A.inkPenId==87 and A.drawing and A.inkTiltX==12,
+                    'Native pen DOWN was not captured')
+                love.mousepressed(ax,ay,1,false)
+                love.touchpressed('duplicate-pen-touch',ax,ay,0,0,1)
+                assert(A.touchId==nil,'Pen stroke accepted synthetic touch')
+                dispatchInkEvent({kind=2,id=88,x=bx,y=by,pressure=1,
+                    tiltX=0,tiltY=0,flags=0,mask=1})
+                assert(A.inkPenId==87,'Foreign pointer modified active pen')
+                dispatchInkEvent({kind=2,id=87,x=bx,y=by,pressure=.4,
+                    tiltX=10,tiltY=-5,flags=0,mask=13})
+                dispatchInkEvent({kind=3,id=87,x=bx,y=by,pressure=.4,
+                    tiltX=10,tiltY=-5,flags=0,mask=13})
+                assert(A.inkPenId==nil and not A.drawing,
+                    'Native pen UP failed to end brush')
+                local inkPixel=Native.readPixel(A.layerSession:activeBuffer(),5,1)
+                assert(inkPixel%256>0 and inkPixel%256<255,
+                    'Native pen pressure not passed into C++ brush')
+                assert(A.layerSession:historyStats().undo==penHistory+1,
+                    'Native pen stroke must have one undo step')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0,
+                    'Undo did not remove Windows Ink stroke')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==inkPixel,
+                    'Redo did not restore Windows Ink stroke')
+                saveDoc()
+                local penSaved=A.store:openProject(A.doc.id)
+                local penAt=(1*A.doc.width+5)*4+1
+                assert(penSaved.layers[7].pixels:byte(penAt+3)==inkPixel%256,
+                    'Pen-drawn RGBA not persisted in RBD2')
+                dispatchInkEvent({kind=1,id=89,x=bx,y=by,pressure=1,
+                    tiltX=0,tiltY=0,flags=4,mask=1})
+                assert(A.inkPreviousTool=='brush' and A.tool=='erase',
+                    'Inverted pen was not switched to eraser')
+                dispatchInkEvent({kind=3,id=89,x=bx,y=by,pressure=1,
+                    tiltX=0,tiltY=0,flags=4,mask=1})
+                assert(A.tool=='brush' and A.inkPenId==nil,
+                    'Inverted pen did not restore previous tool')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0,
+                    'Inverted pen eraser failed to erase')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -772,7 +831,11 @@ function love.update(dt)
                     touch_pressure_low_high=true,touch_synthetic_suppression=true,
                     touch_single_owner=true,touch_pressure_move=true,
                     touch_undo_redo=true,touch_rbd2_roundtrip=true,
-                    touch_toolbar=true,persisted_from_real_editor=true}
+                    touch_toolbar=true,winink_pointer_dispatch=true,
+                    winink_mouse_touch_guard=true,winink_pressure_undo_rbd2=true,
+                    winink_eraser_inversion=true,
+                    winink_real_hwnd_attached=true,
+                    persisted_from_real_editor=true}
             end)
             if not ok then
                 A.testReport.ok=false
@@ -881,6 +944,9 @@ local function drawEditor(w,h)
     box(panel,64,268,h-112,'panel')
     text('PROJETO',panel+20,88,'small','muted');text(A.doc.name:sub(1,28),panel+20,115,'title')
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
+    text(A.inkAttached and ('Windows Ink · '..(A.inkPenId and 'caneta ativa'
+        or 'aguardando caneta')) or 'Caneta Win32: modo alternativo',
+        panel+20,171,'small','muted')
     button('Salvar · Ctrl+S',panel+20,186,228,38,saveDoc,A.dirty)
     button('Exportar PNG',panel+20,234,228,38,exportPNG)
     button('Renomear',panel+20,282,107,34,function()modal('rename');A.modal.values[1]=A.doc.name end)
@@ -1253,36 +1319,72 @@ local function pointerMoved(x,y,dx,dy,pressure)
     end
 end
 function love.mousepressed(x,y,buttonNumber,istouch)
-    if istouch or A.touchId~=nil then return end
+    if istouch or A.touchId~=nil or A.inkPenId~=nil or Ink.mouseGuard() then return end
     pointerPressed(x,y,buttonNumber,1)
 end
 function love.mousereleased(x,y,b,istouch)
-    if istouch or A.touchId~=nil then return end
+    if istouch or A.touchId~=nil or A.inkPenId~=nil or Ink.mouseGuard() then return end
     pointerReleased(x,y,b,1)
 end
 function love.mousemoved(x,y,dx,dy,istouch)
-    if istouch or A.touchId~=nil then return end
+    if istouch or A.touchId~=nil or A.inkPenId~=nil or Ink.mouseGuard() then return end
     pointerMoved(x,y,dx,dy,1)
 end
 -- LÖVE 11.5 touch callbacks report pressure but do not distinguish a
 -- pen from a finger. Own exactly one contact until its release.
 function love.touchpressed(id,x,y,dx,dy,pressure)
-    if A.touchId~=nil or A.drawing then return end
+    if A.touchId~=nil or A.drawing or A.inkPenId~=nil or Ink.mouseGuard() then return end
     A.touchId=id
     pointerPressed(x,y,1,Pressure.normalize(pressure))
 end
 function love.touchmoved(id,x,y,dx,dy,pressure)
-    if A.touchId~=id then return end
+    if A.touchId~=id or Ink.mouseGuard() then return end
     pointerMoved(x,y,dx,dy,Pressure.normalize(pressure))
 end
 function love.touchreleased(id,x,y,dx,dy,pressure)
-    if A.touchId~=id then return end
+    if A.touchId~=id or Ink.mouseGuard() then return end
     pointerReleased(x,y,1,Pressure.normalize(pressure))
     A.touchId=nil
 end
+-- Win32 pen events are delivered from the native queue on the LÖVE
+-- main thread, not from a LuaJIT callback invoked inside WndProc.
+dispatchInkEvent=function(e)
+    if e.kind==1 then
+        if A.inkPenId~=nil or A.touchId~=nil or A.drawing then return end
+        A.inkPenId=e.id
+        A.inkTiltX=e.tiltX or 0;A.inkTiltY=e.tiltY or 0
+        A.inkPreviousTool=nil
+        if e.flags and (e.flags%8>=2) and A.screen=='editor' then
+            -- PEN_FLAG_INVERTED (2) or ERASER (4): erase temporarily.
+            A.inkPreviousTool=A.tool
+            A.tool='erase'
+        end
+        pointerPressed(e.x,e.y,1,Pressure.normalize(e.pressure))
+        status('Windows Ink: caneta '..math.floor(e.pressure*100+.5)..
+            '% · inclinação '..A.inkTiltX..'°/'..A.inkTiltY..'°')
+    elseif e.id==A.inkPenId then
+        if e.kind==2 then
+            pointerMoved(e.x,e.y,0,0,Pressure.normalize(e.pressure))
+            A.inkTiltX=e.tiltX or 0;A.inkTiltY=e.tiltY or 0
+        elseif e.kind==3 or e.kind==4 then
+            if e.kind==4 then
+                guard(finishStroke)()
+                A.shapePreview=nil
+                guard(finishSelection)()
+            else
+                pointerReleased(e.x,e.y,1,Pressure.normalize(e.pressure))
+            end
+            A.inkPenId=nil
+            if A.inkPreviousTool then
+                A.tool=A.inkPreviousTool;A.inkPreviousTool=nil
+            end
+        end
+    end
+end
 function love.focus(focused)
     if not focused then
-        A.shapePreview=nil;A.touchId=nil
+        A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
+        if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
@@ -1329,6 +1431,7 @@ function love.keypressed(key)
 end
 function love.resize()if A.doc then fit()end end
 function love.quit()
+    Ink.close()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end
         pcall(function()A.store:setPreferences(A.preferences);A.store:saveBrushes(A.brushes)end)

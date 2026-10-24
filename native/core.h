@@ -142,4 +142,28 @@ RB_API rb_i32 rb_draw_feather_stroke(rb_u8* dst, rb_u64 capacity,
     rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
     float diameter, rb_u32 rgba, float opacity, float hardness);
 
+
+/* Optional Windows Ink WM_POINTER pen bridge (Win32 own-window only).
+   1 DOWN, 2 MOVE, 3 UP, 4 CANCEL. Position is in physical HWND client
+   coordinates; width/height are client rect dimensions for LÖVE scaling.
+   Pressure is 0..1 when PEN_MASK_PRESSURE exists; otherwise 1.
+   Tilt remains metadata only. No shared pointer to Windows-owned memory.
+   Caller must attach/detach on the window-owning UI thread.
+   A real digitizer cannot be simulated by these APIs in CI. */
+typedef struct RBInkEvent {
+    rb_i32 kind;
+    rb_u32 pointer_id;
+    float x, y, pressure;
+    rb_i32 tilt_x, tilt_y;
+    rb_u32 flags, mask;
+    rb_u32 client_width, client_height;
+} RBInkEvent;
+RB_API rb_i32 rb_ink_attach(void);
+RB_API rb_i32 rb_ink_detach(void);
+RB_API rb_i32 rb_ink_is_attached(void);
+RB_API rb_i32 rb_ink_mouse_guard(void);
+RB_API rb_i32 rb_ink_poll(RBInkEvent* output, rb_u32 capacity);
+RB_API rb_u32 rb_ink_dropped(void);
+RB_API float rb_ink_pressure(rb_u32 raw, rb_u32 pen_mask);
+
 #endif

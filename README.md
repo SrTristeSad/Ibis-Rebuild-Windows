@@ -26,6 +26,8 @@ A etapa 11 acrescenta [estabilização de traços pelo mouse com níveis de 0 a 
 
 A etapa 12 recebe [eventos de toque do LÖVE com pressão variável](docs/TOUCH_PRESSURE_STAGE12.md): ajusta espessura e opacidade de pincéis/borracha, ignora o mouse sintetizado pelo toque e mantém histórico RBD2. Não existe suporte comprovado a drivers Windows Ink/Wintab nem identificação segura de canetas físicas.
 
+A etapa 13 integra uma [ponte Windows Ink opcional na DLL C++](docs/WINDOWS_INK_STAGE13.md), conectando mensagens `WM_POINTER` de canetas ao editor sem WebView, com pressão 0–1024, inclinação informativa, borracha por ponta invertida e alternativa de mouse/toque. **O CI não atesta compatibilidade com canetas ou drivers físicos**.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -47,6 +49,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Pincel suave e opacidade por traço | Etapa 10: borda gradual C++, estilo rígido/suave e opacidade 10–100% |
 | Estabilização de traço pelo mouse | Etapa 11: níveis 0–5, filtro de movimento e preservação exata do ponto final |
 | Eventos de toque/pressão do LÖVE | Etapa 12: largura/alfa variáveis, contato único, sem duplicação do mouse simulado; drivers físicos não verificados |
+| Ponte Windows Ink nativa opcional | Etapa 13: WM_POINTER e pressão de caneta com DLL C++, sem garantia de compatibilidade com hardware não testado |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
