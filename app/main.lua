@@ -2452,6 +2452,24 @@ local function drawToolHelp(w,h)
     button('Fechar ajuda',x+width-174,y+height-49,150,33,
         function()A.toolHelp=false end)
 end
+local function drawContextMenu()
+    local m=A.contextMenu
+    box(m.x,m.y,m.w,m.h,'panel')
+    c('accent')
+    love.graphics.rectangle('fill',m.x,m.y,3,m.h,2,2)
+    c('line')
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle('line',m.x+.5,m.y+.5,m.w-1,m.h-1,6,6)
+    text(m.title,m.x+12,m.y+10,'small','text')
+    for i,entry in ipairs(m.entries) do
+        local y=m.y+Menus.HEADER+(i-1)*Menus.ROW
+        button(entry.label,m.x+6,y,m.w-12,Menus.ROW-1,function()
+            local chosen=A.contextMenu
+            A.contextMenu=nil
+            performMenuAction(chosen,entry.key)
+        end,i==m.cursor,not entry.enabled)
+    end
+end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
     box(0,0,w,64,'panel')
@@ -2468,6 +2486,9 @@ function love.draw()
     elseif A.toolHelp and A.screen=='editor' then
         A.buttons={}
         drawToolHelp(w,h)
+    elseif A.contextMenu and A.screen=='editor' then
+        A.buttons={}
+        drawContextMenu()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
@@ -2482,6 +2503,38 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             end
         end
         return
+    end
+    if A.contextMenu then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        A.contextMenu=nil
+        return -- Outside click dismisses; never leaks to the canvas.
+    end
+    if A.screen=='editor' and not A.modal and buttonNumber==2 then
+        local toolId=Menus.toolAt(toolSlots,x,y)
+        if toolId then
+            openContextMenu('tool',toolId,x,y)
+            return
+        end
+        if not A.focusMode and A.sideTab=='layers' and A.tool~='shape'
+            and A.tool~='select' and A.tool~='picker' then
+            local count=#A.doc.layers
+            local rows=Thumbnails.rows(love.graphics.getHeight())
+            local start,stop=Thumbnails.window(count,
+                A.doc.active_layer,rows,A.layerScroll)
+            local index=Menus.layerAt(x,y,
+                love.graphics.getWidth()-268,start,stop)
+            if index then
+                openContextMenu('layer',index,x,y)
+                return
+            end
+        end
     end
     -- Middle/right mouse or Space+left pan the view without opening any
     -- painting, shape, selection or undo transaction.
@@ -2698,14 +2751,14 @@ function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false
+        A.toolHelp=false;A.contextMenu=nil
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.wheelmoved(x,y)
-    if A.toolHelp then return end
+    if A.toolHelp or A.contextMenu then return end
     if A.screen=='editor' and not A.modal then
         local mx=love.mouse.getPosition()
         if not A.focusMode and mx>=love.graphics.getWidth()-268 and
@@ -2749,6 +2802,28 @@ function love.keypressed(key)
         elseif EditorTools.fromKey(key) then
             if selectTool(EditorTools.fromKey(key).id) then
                 A.toolHelp=false
+            end
+        end
+        return
+    end
+    if A.screen=='editor' and A.contextMenu then
+        local menu=A.contextMenu
+        if key=='escape' then
+            A.contextMenu=nil
+        elseif key=='up' or key=='down' then
+            local step=key=='up' and -1 or 1
+            for offset=1,#menu.entries do
+                local index=(menu.cursor-1+step*offset)%#menu.entries+1
+                if menu.entries[index].enabled then
+                    menu.cursor=index
+                    break
+                end
+            end
+        elseif key=='return' or key=='kpenter' then
+            local entry=menu.entries[menu.cursor]
+            if entry and entry.enabled then
+                A.contextMenu=nil
+                guard(function()performMenuAction(menu,entry.key)end)()
             end
         end
         return
