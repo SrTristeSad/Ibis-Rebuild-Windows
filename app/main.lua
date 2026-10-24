@@ -1598,8 +1598,11 @@ function love.update(dt)
                 local zero=string.rep(string.char(0),#preClear)
                 assert(Native.bytes(A.layerSession:activeBuffer())==zero,
                     'Limpar não deixou pixels transparentes')
-                assert(A.layerSession:historyStats().undo==clearCount+1,
-                    'Limpar deve registrar um passo de histórico')
+                assert(A.layerSession:historyStats().undo>=1 and
+                    A.layerSession:historyStats().undo<=
+                        math.min(clearCount+1,A.layerSession.MAX_HISTORY_ENTRIES) and
+                    A.layerSession.undoStack[#A.layerSession.undoStack].after==zero,
+                    'Limpar deve registrar um passo de histórico mesmo no limite')
                 assert(Native.bytes(A.layerSession.buffers[1])==lowerBeforeClear,
                     'Limpar modificou outra camada')
                 undoDoc()
