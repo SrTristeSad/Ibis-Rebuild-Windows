@@ -1176,6 +1176,64 @@ function love.update(dt)
                 assert(selectedBytes==Native.bytes(A.layerSession:activeBuffer())
                     and historySelected==A.layerSession:historyStats().undo,
                     'Selecionar linha alterou pixels ou histórico')
+                -- Stage 18: rename the current layer by keyboard and
+                -- toggle a DIFFERENT layer's visibility directly in its row.
+                local selectedId=A.doc.layers[7].id
+                local beforeName=A.doc.layers[7].name
+                local renamePixelBytes=Native.bytes(A.layerSession.buffers[7])
+                local historyBeforeRename=A.layerSession:historyStats().undo
+                local previewBeforeRename=layerThumb(7)
+                love.keypressed('f2')
+                assert(A.modal and A.modal.kind=='renameLayer' and
+                    A.modal.layerId==selectedId and A.modal.values[1]==beforeName,
+                    'F2 não abriu renomeio na camada atual')
+                A.modal.values[1]='  '
+                love.keypressed('return')
+                assert(A.modal and A.doc.layers[7].name==beforeName,
+                    'Renomeio inválido não foi rejeitado')
+                A.modal.values[1]=''
+                love.textinput('Arte azul Étapa 18')
+                love.keypressed('return')
+                assert(not A.modal and A.doc.layers[7].name=='Arte azul Étapa 18',
+                    'Renomeio pela interface não salvou nome UTF-8')
+                assert(Native.bytes(A.layerSession.buffers[7])==renamePixelBytes
+                    and A.layerSession:historyStats().undo==historyBeforeRename,
+                    'Renomear camada mudou pixels ou histórico')
+                assert(layerThumb(7)==previewBeforeRename,
+                    'Renomeio recriou miniatura desnecessariamente')
+                local renameSaved=A.store:openProject(A.doc.id)
+                assert(renameSaved.layers[7].name=='Arte azul Étapa 18' and
+                    renameSaved.layers[7].id==selectedId,
+                    'Nome de camada não persistiu no RBD2')
+                love.draw();love.mousepressed(panel+120,411,1,false)
+                assert(A.modal and A.modal.kind=='renameLayer',
+                    'Botão Nome não abriu editor de camada')
+                love.keypressed('escape')
+                assert(not A.modal and A.doc.layers[7].name=='Arte azul Étapa 18',
+                    'Cancelar renomeio não preservou nome anterior')
+                local otherIndex=8
+                local otherVisible=A.doc.layers[otherIndex].visible
+                local selectedIndex=A.doc.active_layer
+                local otherId=A.doc.layers[otherIndex].id
+                local otherPixels=Native.bytes(A.layerSession.buffers[otherIndex])
+                local thumbBeforeVisibility=layerThumb(otherIndex)
+                love.draw();love.mousepressed(panel+228,492,1,false)
+                assert(A.doc.layers[otherIndex].visible~=otherVisible and
+                    A.doc.active_layer==selectedIndex,
+                    'Botão de visibilidade por linha trocou camada selecionada')
+                assert(Native.bytes(A.layerSession.buffers[otherIndex])==otherPixels,
+                    'Alternar visibilidade modificou pixels da camada')
+                assert(layerThumb(otherIndex)==thumbBeforeVisibility,
+                    'Alternar visibilidade recriou prévia sem alterar pixels')
+                love.draw();love.mousepressed(panel+228,492,1,false)
+                assert(A.doc.layers[otherIndex].visible==otherVisible,
+                    'Botão por linha não restaurou a visibilidade')
+                saveDoc()
+                local metadataSaved=A.store:openProject(A.doc.id)
+                assert(metadataSaved.layers[otherIndex].id==otherId and
+                    metadataSaved.layers[otherIndex].visible==otherVisible and
+                    metadataSaved.layers[7].name=='Arte azul Étapa 18',
+                    'Propriedades das camadas não persistiram')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1213,6 +1271,11 @@ function love.update(dt)
                     layer_rgba_thumbnails=true,layer_thumbnail_cache=true,
                     layer_thumbnail_refresh_undo=true,layer_panel_page_buttons=true,
                     layer_preview_click_selection=true,
+                    layer_f2_rename_modal=true,layer_rename_validation=true,
+                    layer_rename_utf8_rbd2=true,layer_rename_preview_preserved=true,
+                    layer_row_visibility_toggle=true,
+                    layer_visibility_preserves_selection=true,
+                    layer_properties_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
