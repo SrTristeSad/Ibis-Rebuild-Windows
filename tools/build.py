@@ -32,24 +32,26 @@ def compile_core(compiler=None):
     report={'attempts':attempts,'selected':str(selected) if selected else None,'downloaded':False}
     (BUILD/'toolchain-report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     if not selected:raise RuntimeError('No usable C++ compiler. See build/toolchain-report.json; set --compiler to an installed compiler.')
-    obj=BUILD/'core.obj'; dll=BUILD/'rebuild_core.dll'; src=ROOT/'native/core.cpp'
+    obj=BUILD/'core.obj'; ink_obj=BUILD/'win_ink.obj'; dll=BUILD/'rebuild_core.dll'; src=ROOT/'native/core.cpp'; ink_src=ROOT/'native/win_ink.cpp'
     if selected.stem.lower() in ('cl','clang-cl'):
         run([selected,'/nologo','/c','/O2','/GS-','/GR-','/Zl','/fp:precise','/std:c++17',src,'/Fo'+str(obj)])
+        run([selected,'/nologo','/c','/O2','/GS-','/GR-','/Zl','/fp:precise','/std:c++17',ink_src,'/Fo'+str(ink_obj)])
         link=selected.parent/'link.exe'
         if not link.exists():link=pathlib.Path(shutil.which('link') or str(selected.parent/'lld-link.exe'))
         if link.exists():command=[link]
         elif (selected.parent/'ld.lld.exe').exists():command=[selected.parent/'ld.lld.exe','-flavor','link']
         else:raise RuntimeError('COFF linker not found; use a configured developer environment.')
-        run(command+['/DLL','/NOENTRY','/NODEFAULTLIB','/MACHINE:X64','/OUT:'+str(dll),obj])
+        run(command+['/DLL','/NOENTRY','/NODEFAULTLIB','/MACHINE:X64','/OUT:'+str(dll),obj,ink_obj,'user32.lib','kernel32.lib'])
     else:
         run([selected,'--target=x86_64-pc-windows-msvc','-std=c++17','-O2','-ffreestanding','-fno-fast-math','-fno-builtin','-fno-exceptions','-fno-rtti','-fno-stack-protector','-c',src,'-o',obj])
+        run([selected,'--target=x86_64-pc-windows-msvc','-std=c++17','-O2','-ffreestanding','-fno-fast-math','-fno-builtin','-fno-exceptions','-fno-rtti','-fno-stack-protector','-c',ink_src,'-o',ink_obj])
         link=selected.parent/'lld-link.exe'
         if link.exists():command=[link]
         else:
             link=selected.parent/'ld.lld.exe'
             if not link.exists():raise RuntimeError('COFF linker not found beside Clang.')
             command=[link,'-flavor','link']
-        run(command+['/dll','/noentry','/nodefaultlib','/machine:x64','/out:'+str(dll),obj])
+        run(command+['/dll','/noentry','/nodefaultlib','/machine:x64','/out:'+str(dll),obj,ink_obj,'user32.lib','kernel32.lib'])
     # A loaded x64 DLL is required; a compiler success code alone is insufficient.
     import ctypes
     lib=ctypes.CDLL(str(dll));lib.rb_version.argtypes=[];lib.rb_version.restype=ctypes.c_uint32
