@@ -106,6 +106,11 @@ def run_tests(runtime_path, output):
                               +json.dumps(pressure_root)+"))")
             pressure_result=json.loads(native_state.execute(pressure_program))
             assert pressure_result.get('passed') and pressure_result.get('touch_width') and pressure_result.get('rbd2_roundtrip')
+            tilt_root=(output / ('tilt-brush-' + str(time.time_ns()))).as_posix()
+            tilt_program=("return require('json').encode(require('tests.test_tilt_brush').run("
+                          +json.dumps(tilt_root)+"))")
+            tilt_brush=json.loads(native_state.execute(tilt_program))
+            assert tilt_brush.get('passed') and tilt_brush.get('ellipse_orientation') and tilt_brush.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -117,6 +122,7 @@ def run_tests(runtime_path, output):
         report['native_feather_brush'] = feather
         report['mouse_stabilizer'] = stabilizer
         report['touch_pressure'] = pressure_result
+        report['native_tilt_brush'] = tilt_brush
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
