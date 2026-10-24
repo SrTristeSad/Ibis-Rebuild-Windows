@@ -228,6 +228,14 @@ local function modal(kind)
         kind=='color' and {Colors.format(A.color)} or {''}}
     love.keyboard.setTextInput(true)
 end
+local function openLayerRename()
+    if A.screen~='editor' or not A.doc then return end
+    finishStroke()
+    local layer=A.doc.layers[A.doc.active_layer]
+    modal('renameLayer')
+    A.modal.values[1]=layer.name
+    A.modal.layerId=layer.id
+end
 local function submitModal()
     local m=A.modal
     if m.kind=='folder' then
@@ -240,6 +248,21 @@ local function submitModal()
         A.modal=nil;openDoc(doc)
     elseif m.kind=='rename' then
         A.doc.name=m.values[1];saveDoc();A.modal=nil
+    elseif m.kind=='renameLayer' then
+        assert(A.screen=='editor' and A.layerSession and m.layerId,
+            'Não existe camada para renomear')
+        local index
+        for i,layer in ipairs(A.doc.layers) do
+            if layer.id==m.layerId then index=i;break end
+        end
+        assert(index,'A camada original não existe mais')
+        local changed=A.layerSession:rename(index,m.values[1])
+        if changed then
+            A.dirty=true
+            saveDoc()
+            status('Camada renomeada: '..m.values[1])
+        end
+        A.modal=nil
     elseif m.kind=='color' then
         local value,err=Colors.parseHex(m.values[1])
         assert(value,err)
@@ -1574,7 +1597,8 @@ local function drawModal(w,h)
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
     local x,y=w/2-220,h/2-210;box(x,y,440,420,'panel')
     local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or
-        m.kind=='color' and 'Editar cor RGBA' or 'Renomear projeto'
+        m.kind=='color' and 'Editar cor RGBA' or
+        m.kind=='renameLayer' and 'Renomear camada' or 'Renomear projeto'
     text(title,x+24,y+24,'title')
     local names=m.kind=='new' and {'Nome','Largura','Altura'} or
         m.kind=='color' and {'Hexadecimal (#RRGGBB ou #RRGGBBAA)'} or {'Nome'}
@@ -1587,6 +1611,9 @@ local function drawModal(w,h)
     if m.kind=='new' then text('Fundo transparente · limite inicial 2048 × 2048',x+24,y+314,'small','muted')end
     if m.kind=='color' then
         text('6 dígitos: alfa FF. 8 dígitos: alfa personalizado.',x+24,y+314,'small','muted')
+    elseif m.kind=='renameLayer' then
+        text('Nome UTF-8 · até 240 bytes · os pixels permanecem iguais.',
+            x+24,y+314,'small','muted')
     end
     button('Cancelar',x+24,y+357,150,38,function()A.modal=nil;love.keyboard.setTextInput(false)end)
     button('Criar / confirmar',x+190,y+357,226,38,submitModal,true)
@@ -1919,6 +1946,10 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and key=='f2' then
+        openLayerRename()
         return
     end
     if A.screen=='editor' and (key=='f1' or key=='h') then
