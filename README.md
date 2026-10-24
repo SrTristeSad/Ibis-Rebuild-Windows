@@ -50,6 +50,8 @@ A etapa 23 acrescenta [espelhamento horizontal e vertical da camada ativa](docs/
 
 A etapa 24 adiciona [Limpar camada (Shift+Delete)](docs/LAYER_CLEAR_STAGE24.md): apaga todos os bytes RGBA da camada ativa pelo motor C++ existente, sem excluir a camada, sem alterar outras camadas e sem ocupar histórico quando a camada já está transparente. Desfazer/refazer funciona com o histórico unificado, e o salvamento permanece em RBD2.
 
+A etapa 25 melhora o [acabamento visual do editor](docs/EDITOR_VISUAL_STAGE25.md): botões das oito ferramentas com ícones vetoriais próprios, paleta de alto contraste, miniaturas sobre fundo de transparência e realce da camada ativa, mantendo os mesmos alvos clicáveis, atalhos e o motor de edição. Não representa equivalência visual 1:1 comprovada com o Android.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
