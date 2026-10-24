@@ -628,6 +628,47 @@ function love.update(dt)
                     'RBD2 did not preserve soft brush opacity')
                 love.draw();love.mousepressed(panel+72,594,1)
                 assert(A.brushStyle=='hard','Hard brush toggle did not work')
+                -- Actual stabilization buttons, pointer events and exact release.
+                assert(A.stabilization==0,'Stabilizer should default to off')
+                for i=1,3 do
+                    love.draw();love.mousepressed(panel+226,720,1)
+                end
+                assert(A.stabilization==3,'Stabilization increment buttons failed')
+                A.layerSession:add('Traço filtrado GUI')
+                A.dirty=true;rebuildImage()
+                local startX,startY=point(1,5)
+                local moveX,moveY=point(3,5)
+                local endX,endY=point(8,5)
+                local undoCount=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(startX,startY,1)
+                assert(A.stabilizer and A.stabilizer.level==3,
+                    'Mouse press failed to create smoothing state')
+                love.mousemoved(moveX,moveY,moveX-startX,moveY-startY)
+                assert(A.lastStrokeX<3.5,
+                    'Stabilized move must follow behind the raw pointer')
+                love.mousereleased(endX,endY,1)
+                assert(A.stabilizer==nil and not A.drawing,
+                    'Release did not finish the stabilization session')
+                local endpoint=Native.readPixel(A.layerSession:activeBuffer(),8,5)
+                assert(endpoint%256>0,
+                    'Smoothed stroke failed to reach actual release pixel')
+                assert(A.layerSession:historyStats().undo==undoCount+1,
+                    'Filtered drag must be only one undo step')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),8,5)==0,
+                    'Stabilized stroke undo failed')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),8,5)==endpoint,
+                    'Stabilized stroke redo failed')
+                saveDoc()
+                local stabilized=A.store:openProject(A.doc.id)
+                local finalOffset=(5*A.doc.width+8)*4+1
+                assert(stabilized.layers[4].pixels:byte(finalOffset+3)==endpoint%256,
+                    'Stabilized endpoint failed RBD2 roundtrip')
+                for i=1,3 do
+                    love.draw();love.mousepressed(panel+40,720,1)
+                end
+                assert(A.stabilization==0,'Stabilization decrement buttons failed')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -643,6 +684,9 @@ function love.update(dt)
                     soft_brush_toggle=true,brush_opacity_control=true,
                     feather_drag_alpha=true,brush_undo_redo=true,
                     soft_brush_rbd2_roundtrip=true,
+                    stabilization_buttons=true,filtered_mouse_drag=true,
+                    stabilized_exact_endpoint=true,stabilized_undo_redo=true,
+                    stabilized_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
