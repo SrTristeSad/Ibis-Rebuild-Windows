@@ -987,7 +987,7 @@ local function drawEditor(w,h)
     button('Seleção',405,78,61,34,function()finishStroke();A.tool='select'end,A.tool=='select')
     button('Formas',470,78,62,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
     button('Gotas',536,78,79,34,function()finishStroke();A.tool='picker'end,A.tool=='picker')
-    button('Ajustar',619,78,67,34,fit)
+    button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -1032,6 +1032,17 @@ local function drawEditor(w,h)
     end
     c('accent');love.graphics.setLineWidth(1/A.zoom);love.graphics.rectangle('line',-dw/2,-dh/2,dw,dh)
     love.graphics.pop();love.graphics.setScissor()
+    -- View-only controls remain outside the raster and layer history.
+    local dockY=h-116
+    button('−',20,dockY,36,30,function()zoomCanvas(1/1.25)end,
+        false,A.zoom<=View.MIN_ZOOM)
+    button('+',60,dockY,36,30,function()zoomCanvas(1.25)end,
+        false,A.zoom>=View.MAX_ZOOM)
+    button('↶',102,dockY,36,30,function()rotateCanvas(-math.pi/12)end)
+    button('↷',142,dockY,36,30,function()rotateCanvas(math.pi/12)end)
+    button('0°',182,dockY,43,30,resetCanvasRotation)
+    button('Encaixar',230,dockY,83,30,fit)
+    text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
     box(panel,64,268,h-112,'panel')
     text('PROJETO',panel+20,88,'small','muted');text(A.doc.name:sub(1,28),panel+20,115,'title')
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
@@ -1254,7 +1265,8 @@ local function drawEditor(w,h)
         end
     end
     end
-    text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
+    text(('Zoom %.0f%% · ângulo %.0f° · Espaço + arrastar: mover · Ctrl +/−: zoom · Q/E: girar'):format(
+        A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
     if A.tool=='select' then
         text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
             or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
@@ -1297,6 +1309,18 @@ function love.draw()
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
+    -- Middle/right mouse or Space+left pan the view without opening any
+    -- painting, shape, selection or undo transaction.
+    if A.screen=='editor' and not A.modal and
+        (buttonNumber==2 or buttonNumber==3 or
+        (buttonNumber==1 and A.spaceHeld)) then
+        if x>=16 and x<love.graphics.getWidth()-268 and
+            y>=125 and y<love.graphics.getHeight()-78 then
+            finishStroke()
+            A.panning=true;A.panButton=buttonNumber
+            return
+        end
+    end
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and x<love.graphics.getWidth()-280 and y>125 and y<love.graphics.getHeight()-78 then
@@ -1369,10 +1393,13 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 end
             end)()
         end
-    elseif buttonNumber==3 and A.screen=='editor' then A.panning=true end
+    end
 end
 local function pointerReleased(x,y,b,pressure)
-    if b==3 then A.panning=false end
+    if A.panning and b==A.panButton then
+        A.panning=false;A.panButton=nil
+        return
+    end
     if b==1 then
         guard(finishShape)()
         guard(finishSelection)()
@@ -1389,7 +1416,10 @@ local function pointerReleased(x,y,b,pressure)
     end
 end
 local function pointerMoved(x,y,dx,dy,pressure)
-    if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
+    if A.panning then
+        View.pan(A,dx,dy)
+        return
+    end
     if A.shapePreview and A.screen=='editor' and A.tool=='shape' then
         local px,py=canvasPoint(x,y)
         A.shapePreview.x1=clampPixel(px,A.doc.width)
@@ -1490,6 +1520,7 @@ end
 function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
+        A.panning=false;A.panButton=nil;A.spaceHeld=false
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
