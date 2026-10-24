@@ -131,7 +131,10 @@ end
 local function selectTool(id)
     local item=EditorTools.fromId(id)
     assert(item,'Ferramenta inválida')
-    if A.screen~='editor' or A.inkPenId~=nil or A.touchId~=nil then
+    -- A tap on a toolbar button owns a touch/pen contact, but is not a
+    -- drawing stroke. Reject only mid-stroke device tool changes.
+    if A.screen~='editor' or
+        (A.drawing and (A.inkPenId~=nil or A.touchId~=nil)) then
         return false
     end
     finishStroke()
