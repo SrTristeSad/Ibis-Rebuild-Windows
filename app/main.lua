@@ -641,6 +641,129 @@ local function verifyFocusWorkspace()
         'Modo foco alterou pixels, camadas, histórico ou dirty flag')
     selectTool(originalTool);A.sideTab=originalTab
 end
+-- GUI regression: events travel through real LÖVE mouse/key handlers.
+-- Kept outside the large legacy test closure for LuaJIT's local limit.
+local function verifyContextMenus()
+    local w,h=love.graphics.getDimensions()
+    local panel=w-268
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldDiameter,oldOpacity=A.brushDiameter,A.brushOpacity
+    local initialPixels=Native.bytes(A.layerSession.composite)
+    local initialLayerCount=#A.doc.layers
+    local initialHistory=A.layerSession:historyStats().undo
+    local function choose(key)
+        local menu=assert(A.contextMenu,'Menu esperado')
+        local index
+        for i,item in ipairs(menu.entries) do
+            if item.key==key then index=i;break end
+        end
+        assert(index and menu.entries[index].enabled,
+            'Ação não disponível: '..key)
+        love.draw()
+        love.mousepressed(menu.x+24,
+            menu.y+Menus.HEADER+(index-1)*Menus.ROW+10,1,false)
+        assert(not A.contextMenu,'Menu não fechou após ação')
+    end
+    -- Right-click on a toolbar slot opens options WITHOUT painting.
+    selectTool('inspect')
+    A.sideTab='layers'
+    love.draw()
+    love.mousepressed(245,92,2,false)
+    assert(A.contextMenu and A.contextMenu.kind=='tool' and
+        A.contextMenu.target=='brush' and A.tool=='inspect',
+        'Botão direito no pincel não abriu o menu correspondente')
+    choose('sizeUp')
+    assert(A.tool=='brush' and A.brushDiameter==oldDiameter+2,
+        'Menu de pincel não aplicou tamanho no estado real')
+    A.brushDiameter=oldDiameter
+    love.draw()
+    love.mousepressed(245,92,2,false)
+    assert(A.contextMenu,'Menu deveria reabrir')
+    love.keypressed('escape')
+    assert(not A.contextMenu,'Esc não fechou o menu de ferramenta')
+    love.draw()
+    love.mousepressed(536,90,2,false)
+    assert(A.contextMenu and A.contextMenu.target=='picker',
+        'Conta-gotas precisa de menu específico')
+    choose('active')
+    assert(A.tool=='picker' and A.pickerSource=='active',
+        'Menu de conta-gotas não mudou fonte')
+    A.pickerSource='composite'
+    love.draw()
+    love.mousepressed(480,92,2,false)
+    assert(A.contextMenu and A.contextMenu.target=='shape',
+        'Formas precisa de menu específico')
+    choose('filled')
+    assert(A.tool=='shape' and A.shapeFilled,
+        'Forma preenchida via menu não funcionou')
+    A.shapeFilled=false
+    -- Outside click dismisses instead of reaching canvas or toolbar.
+    selectTool('brush')
+    love.draw();love.mousepressed(245,92,2,false)
+    assert(A.contextMenu,'Menu não abriu para teste externo')
+    love.draw();love.mousepressed(380,250,1,false)
+    assert(not A.contextMenu and not A.drawing,
+        'Clique externo não pode iniciar uma pincelada')
+    selectTool('inspect')
+    A.sideTab='layers'
+    love.draw()
+    love.mousepressed(370,245,2,false)
+    assert(A.panning and not A.contextMenu,
+        'Botão direito no canvas precisa continuar movendo a vista')
+    love.mousereleased(370,245,2,false)
+    assert(not A.panning,'Arraste direito não foi encerrado')
+    -- Context action on an actual layer row, not just isolated APIs.
+    love.draw()
+    local rows=Thumbnails.rows(h)
+    local start,stop=Thumbnails.window(#A.doc.layers,
+        A.doc.active_layer,rows,A.layerScroll)
+    local target=stop
+    love.mousepressed(panel+75,487,2,false)
+    assert(A.contextMenu and A.contextMenu.kind=='layer' and
+        A.contextMenu.target==target and A.doc.active_layer==target,
+        'Botão direito na linha não selecionou camada nem abriu menu')
+    local originalVisibility=A.doc.layers[target].visible
+    love.keypressed('down')
+    love.keypressed('down')
+    assert(A.contextMenu and
+        A.contextMenu.entries[A.contextMenu.cursor].key=='visibility',
+        'Setas não navegam o menu')
+    love.keypressed('return')
+    assert(not A.contextMenu and
+        A.doc.layers[target].visible~=originalVisibility,
+        'Enter não acionou visibilidade')
+    undoDoc()
+    assert(A.doc.layers[target].visible==originalVisibility,
+        'Desfazer não restaurou visibilidade alterada pelo menu')
+    local beforeDuplicate=#A.doc.layers
+    if beforeDuplicate<Store.MAX_LAYERS then
+        A.layerScroll=nil
+        love.draw()
+        local st,sp=Thumbnails.window(beforeDuplicate,
+            A.doc.active_layer,Thumbnails.rows(h),A.layerScroll)
+        love.mousepressed(panel+74,487,2,false)
+        assert(A.contextMenu and A.contextMenu.target==sp,
+            'Menu de linha precisa respeitar rolagem de camadas')
+        choose('duplicate')
+        assert(#A.doc.layers==beforeDuplicate+1,
+            'Duplicação pelo menu não criou camada')
+        undoDoc()
+        assert(#A.doc.layers==beforeDuplicate,
+            'Desfazer não restaurou estrutura após duplicação no menu')
+    end
+    assert(Native.bytes(A.layerSession.composite)==initialPixels and
+        #A.doc.layers==initialLayerCount,
+        'Menus restaurados não podem alterar pixels ou camada total')
+    -- Menu never produces a paint history entry; actual operations above
+    -- create undoable metadata/structural history already tested.
+    assert(A.layerSession:historyStats().undo<=
+        math.min(initialHistory+1,A.layerSession.MAX_HISTORY_ENTRIES),
+        'Menu contextual inseriu operações de desenho inesperadas')
+    assert(not A.contextMenu and not A.modal,
+        'Menu ou modal residual após verificações')
+    A.brushDiameter=oldDiameter;A.brushOpacity=oldOpacity
+    selectTool(oldTool);A.sideTab=oldTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -1881,6 +2004,7 @@ function love.update(dt)
                     'Atalho Limpar atingiu outra camada')
                 verifyVisualToolbar()
                 verifyFocusWorkspace()
+                verifyContextMenus()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1947,6 +2071,10 @@ function love.update(dt)
                     focus_button=true,focus_tab_toggle=true,
                     focus_expanded_canvas=true,focus_quick_brush_controls=true,
                     focus_panel_restoration=true,focus_no_raster_edits=true,
+                    context_tool_menu=true,context_layer_menu=true,
+                    context_menu_click_actions=true,context_menu_keyboard=true,
+                    context_menu_outside_dismiss=true,context_right_pan_preserved=true,
+                    context_menu_undo_redo=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
