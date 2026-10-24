@@ -41,7 +41,9 @@ function Tip.render(native,o)
     local size=math.min(640,math.max(24,math.ceil(o.diameter*2)+12))
     local buffer=native.buffer(size,size)
     native.clear(buffer,0)
-    local center=size/2
+    -- Native C++ samples at pixel centers (x+0.5,y+0.5). Align a 1px
+    -- dab to an actual pixel instead of leaving four pixels diagonally out.
+    local center=math.floor(size/2)+0.5
     -- Eraser is represented as a white opacity *mask*: destination-out
     -- erasure depends on unknown pixels below the pointer.
     if o.tilted then
