@@ -135,11 +135,6 @@ def run_tests(runtime_path, output):
                                +json.dumps(structural_root)+"))")
             structural=json.loads(native_state.execute(structural_program))
             assert structural.get('passed') and structural.get('chronological_undo_redo') and structural.get('rbd2_roundtrip')
-            structural_root=(output / ('mixed-history-' + str(time.time_ns()))).as_posix()
-            structural_program=("return require('json').encode(require('tests.test_structural_history').run("
-                                +json.dumps(structural_root)+"))")
-            structural=json.loads(native_state.execute(structural_program))
-            assert structural.get('passed') and structural.get('chronological_undo_redo') and structural.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -157,7 +152,6 @@ def run_tests(runtime_path, output):
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result
-        report['mixed_structural_history'] = structural
         report['mixed_structural_history'] = structural
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
