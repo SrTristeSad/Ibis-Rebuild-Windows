@@ -131,4 +131,15 @@ RB_API rb_i32 rb_draw_shape_rgba(rb_u8* dst, rb_u64 capacity,
     rb_i32 x1, rb_i32 y1, rb_u32 shape, rb_u32 filled,
     rb_u32 stroke_width, rb_u32 rgba);
 
+
+/* Independent feather-edge round capsule brush, additional desktop ABI.
+   hardness [0,1] controls fully opaque inner radius; the outer radius
+   fades through squared distance (no dependency on CRT sqrt). Other limits
+   match rb_draw_basic_stroke, opacity is independent from color alpha.
+   hardness=1 delegates to unchanged hard-edge stroke for exact compatibility.
+   Invalid inputs write no pixels. */
+RB_API rb_i32 rb_draw_feather_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, rb_u32 rgba, float opacity, float hardness);
+
 #endif

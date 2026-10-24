@@ -577,3 +577,82 @@ rb_i32 rb_draw_shape_rgba(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+
+/* Original desktop feather brush. Per-pixel coverage computed once per segment.
+   Does not try to reproduce pressure/texture/stabilization of ibisPaint. */
+rb_i32 rb_draw_feather_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, rb_u32 rgba, float opacity, float hardness) {
+    if (!plane(dst,capacity,width,height) ||
+        !(diameter>=1.0f && diameter<=256.0f) ||
+        !(opacity>=0.0f && opacity<=1.0f) ||
+        !(hardness>=0.0f && hardness<=1.0f) ||
+        !(x0>=-16384.0f && x0<=16384.0f) ||
+        !(y0>=-16384.0f && y0<=16384.0f) ||
+        !(x1>=-16384.0f && x1<=16384.0f) ||
+        !(y1>=-16384.0f && y1<=16384.0f)) return -1;
+    if (hardness==1.0f)
+        return rb_draw_basic_stroke(dst,capacity,width,height,
+            x0,y0,x1,y1,diameter,rgba,opacity);
+    const float baseAlpha=(static_cast<float>(rgba&255u)/255.0f)*opacity;
+    if (baseAlpha<=0.0f) return 0;
+    const float radius=diameter*0.5f;
+    const float outer2=radius*radius,inner=radius*hardness;
+    const float inner2=inner*inner;
+    const float dx=x1-x0,dy=y1-y0,len2=dx*dx+dy*dy;
+    const float minX=(x0<x1?x0:x1)-radius-1.0f;
+    const float maxX=(x0>x1?x0:x1)+radius+1.0f;
+    const float minY=(y0<y1?y0:y1)-radius-1.0f;
+    const float maxY=(y0>y1?y0:y1)+radius+1.0f;
+    if (maxX<0.0f || maxY<0.0f ||
+        minX>static_cast<float>(width) ||
+        minY>static_cast<float>(height)) return 0;
+    rb_i32 left=static_cast<rb_i32>(minX);
+    rb_i32 right=static_cast<rb_i32>(maxX);
+    rb_i32 top=static_cast<rb_i32>(minY);
+    rb_i32 bottom=static_cast<rb_i32>(maxY);
+    if (left<0) left=0;
+    if (top<0) top=0;
+    if (right>=static_cast<rb_i32>(width)) right=static_cast<rb_i32>(width)-1;
+    if (bottom>=static_cast<rb_i32>(height)) bottom=static_cast<rb_i32>(height)-1;
+    const float src[3]={
+        static_cast<float>((rgba>>24)&255u),
+        static_cast<float>((rgba>>16)&255u),
+        static_cast<float>((rgba>>8)&255u)};
+    for (rb_i32 y=top;y<=bottom;++y) {
+        for (rb_i32 x=left;x<=right;++x) {
+            const float cx=static_cast<float>(x)+0.5f;
+            const float cy=static_cast<float>(y)+0.5f;
+            float t=0.0f;
+            if (len2>0.0f) {
+                t=((cx-x0)*dx+(cy-y0)*dy)/len2;
+                if (t<0.0f) t=0.0f;
+                if (t>1.0f) t=1.0f;
+            }
+            const float px=cx-(x0+t*dx);
+            const float py=cy-(y0+t*dy);
+            const float dist2=px*px+py*py;
+            if (dist2>=outer2) continue;
+            const float coverage=dist2<=inner2?1.0f:
+                (outer2-dist2)/(outer2-inner2);
+            const float sa=baseAlpha*coverage;
+            if (sa<=0.0f) continue;
+            rb_u8* pixel=dst+(static_cast<rb_u64>(y)*width+x)*4u;
+            const float da=static_cast<float>(pixel[3])/255.0f;
+            const float remain=da*(1.0f-sa);
+            const float oa=sa+remain;
+            if (oa<=0.0f) continue;
+            const float inv=1.0f/oa;
+            for (rb_u32 channel=0;channel<3u;++channel) {
+                float result=(src[channel]*sa+
+                    static_cast<float>(pixel[channel])*remain)*inv;
+                if (result>255.0f) result=255.0f;
+                if (result<0.0f) result=0.0f;
+                pixel[channel]=static_cast<rb_u8>(result+0.5f);
+            }
+            pixel[3]=static_cast<rb_u8>(oa*255.0f+0.5f);
+        }
+    }
+    return 0;
+}

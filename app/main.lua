@@ -4,7 +4,7 @@ local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
 local Colors=require('colors')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -556,6 +556,50 @@ function love.update(dt)
                 assert(Native.readPixel(A.layerSession.buffers[1],1,5)==0x246a90cc
                     and Native.readPixel(A.layerSession:activeBuffer(),1,5)==0,
                     'Capturar cor modificou uma camada')
+                -- Real brush preset/opacity controls and continuous mouse drag.
+                A.layerSession:add('Pincel suave teste')
+                A.dirty=true;rebuildImage()
+                love.draw();love.mousepressed(252,90,1)
+                assert(A.tool=='brush' and A.sideTab=='brush',
+                    'Toolbar did not select brush panel')
+                love.draw();love.mousepressed(panel+183,593,1)
+                assert(A.brushStyle=='soft','Soft brush button did not activate')
+                love.draw();love.mousepressed(panel+40,637,1)
+                assert(math.abs(A.brushOpacity-.9)<.001,
+                    'Opacity minus button failed')
+                love.draw();love.mousepressed(panel+40,472,1)
+                love.draw();love.mousepressed(panel+40,472,1)
+                assert(A.brushDiameter==8,'Brush diameter controls failed')
+                love.draw();love.mousepressed(panel+99,545,1)
+                assert(A.color==0xe53b44ff,'Soft brush color swatch failed')
+                local sx,sy=point(3,3)
+                local tx,ty=point(4,3)
+                local historyBeforeBrush=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(sx,sy,1)
+                love.mousemoved(tx,ty,tx-sx,ty-sy)
+                love.mousereleased(tx,ty,1)
+                local brushCenter=Native.readPixel(A.layerSession:activeBuffer(),4,3)
+                local brushEdge=Native.readPixel(A.layerSession:activeBuffer(),7,3)
+                assert(brushCenter%256>brushEdge%256 and brushEdge%256>0
+                    and brushCenter%256<255,
+                    'Native soft brush did not produce graded semi-transparent alpha')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),8,3)==0,
+                    'Soft brush exceeded radius')
+                assert(A.layerSession:historyStats().undo==historyBeforeBrush+1,
+                    'One brush drag must create one undo entry')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,3)==0,
+                    'Soft brush undo did not clear painted pixels')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,3)==brushCenter,
+                    'Soft brush redo did not restore alpha')
+                saveDoc()
+                local painted=A.store:openProject(A.doc.id)
+                local brushIndex=(3*A.doc.width+4)*4+1
+                assert(painted.layers[3].pixels:byte(brushIndex+3)==brushCenter%256,
+                    'RBD2 did not preserve soft brush opacity')
+                love.draw();love.mousepressed(panel+72,594,1)
+                assert(A.brushStyle=='hard','Hard brush toggle did not work')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -568,6 +612,9 @@ function love.update(dt)
                     straight_line_drag=true,straight_line_undo_redo=true,
                     line_rbd2_roundtrip=true,eyedropper_visible=true,
                     eyedropper_active=true,eyedropper_no_paint=true,
+                    soft_brush_toggle=true,brush_opacity_control=true,
+                    feather_drag_alpha=true,brush_undo_redo=true,
+                    soft_brush_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -834,15 +881,42 @@ local function drawEditor(w,h)
             A.buttons[#A.buttons+1]={x=x,y=533,w=33,h=31,
                 fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
         end
-        text('ENTRADA',panel+20,589,'small','muted')
-        text('Mouse · pressão 1 · ângulos 0',panel+20,616,'small','muted')
-        if A.lastPacket then
-            local f=A.lastPacket.floats
-            text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
-                panel+20,646,'small','muted')
+        if A.tool=='brush' or A.tool=='erase' then
+            if A.tool=='brush' then
+                button('Rígido',panel+20,579,108,31,function()
+                    finishStroke();A.brushStyle='hard'
+                end,A.brushStyle=='hard')
+                button('Suave',panel+140,579,108,31,function()
+                    finishStroke();A.brushStyle='soft'
+                end,A.brushStyle=='soft')
+            else
+                text('BORRACHA REDONDA · ALFA',panel+20,586,'small','muted')
+            end
+            button('−',panel+20,622,42,30,function()
+                finishStroke()
+                A.brushOpacity=math.max(.1,
+                    math.floor(A.brushOpacity*10+0.5)/10-.1)
+            end,false,A.brushOpacity<=.101)
+            text(('Opacidade %.0f%%'):format(A.brushOpacity*100+0.01),
+                panel+69,630,'small','muted')
+            button('+',panel+206,622,42,30,function()
+                finishStroke()
+                A.brushOpacity=math.min(1,
+                    math.floor(A.brushOpacity*10+0.5)/10+.1)
+            end,false,A.brushOpacity>=.999)
+        else
+            text('ENTRADA',panel+20,589,'small','muted')
+            text('Mouse · pressão 1 · ângulos 0',panel+20,616,'small','muted')
+            if A.lastPacket then
+                local f=A.lastPacket.floats
+                text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
+                    panel+20,646,'small','muted')
+            end
         end
         editShapeColorButton(panel,669)
         text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
+            or A.tool=='brush' and 'Pincel C++ próprio · sem paridade Android'
+            or A.tool=='erase' and 'Borracha rígida · alfa editável'
             or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
     end
@@ -937,9 +1011,13 @@ function love.mousepressed(x,y,buttonNumber)
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
                     if A.tool=='erase' then
-                        A.layerSession:erase(px,py,px,py,A.brushDiameter,1)
+                        A.layerSession:erase(px,py,px,py,A.brushDiameter,A.brushOpacity)
+                    elseif A.brushStyle=='soft' then
+                        A.layerSession:softStroke(px,py,px,py,A.brushDiameter,
+                            A.color,A.brushOpacity,0.25)
                     else
-                        A.layerSession:stroke(px,py,px,py,A.brushDiameter,A.color,1)
+                        A.layerSession:stroke(px,py,px,py,A.brushDiameter,
+                            A.color,A.brushOpacity)
                     end
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.dirty=true;rebuildImage()
@@ -987,9 +1065,14 @@ function love.mousemoved(x,y,dx,dy)
         guard(function()
             local px,py=canvasPoint(x,y)
             if A.tool=='erase' then
-                A.layerSession:erase(A.lastStrokeX,A.lastStrokeY,px,py,A.brushDiameter,1)
+                A.layerSession:erase(A.lastStrokeX,A.lastStrokeY,px,py,
+                    A.brushDiameter,A.brushOpacity)
+            elseif A.brushStyle=='soft' then
+                A.layerSession:softStroke(A.lastStrokeX,A.lastStrokeY,px,py,
+                    A.brushDiameter,A.color,A.brushOpacity,0.25)
             else
-                A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,A.brushDiameter,A.color,1)
+                A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,
+                    A.brushDiameter,A.color,A.brushOpacity)
             end
             A.lastStrokeX=px;A.lastStrokeY=py
             A.dirty=true;rebuildImage()
