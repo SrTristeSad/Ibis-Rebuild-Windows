@@ -124,6 +124,15 @@ function Layers:_applyStructural(entry,undoing)
         assert(self.doc.layers[from] and self.doc.layers[from].id==entry.id,
             'Camada movimentada não coincide com o histórico')
         reorder(self,from,to,undoing and entry.activeBefore or entry.activeAfter)
+    elseif entry.kind=='property' then
+        local layer
+        for _,candidate in ipairs(self.doc.layers) do
+            if candidate.id==entry.id then layer=candidate;break end
+        end
+        assert(layer,'Camada das propriedades não existe no histórico')
+        assert(entry.field=='name' or entry.field=='visible' or
+            entry.field=='opacity','Propriedade de histórico inválida')
+        layer[entry.field]=undoing and entry.before or entry.after
     else
         error('Ação estrutural inválida')
     end
@@ -165,8 +174,9 @@ function Layers:undo()
     assert(not self.pending,'Finalize a pincelada antes de desfazer')
     local entry=self.undoStack[#self.undoStack]
     if not entry then return false end
-    local structural=entry.kind~='raster'
-    if structural then self:_applyStructural(entry,true)
+    local metadata=entry.kind=='property'
+    local structural=entry.kind~='raster' and not metadata
+    if structural or metadata then self:_applyStructural(entry,true)
     else self:_restore(entry,'before') end
     table.remove(self.undoStack)
     self.redoStack[#self.redoStack+1]=entry
@@ -176,8 +186,9 @@ function Layers:redo()
     assert(not self.pending,'Finalize a pincelada antes de refazer')
     local entry=self.redoStack[#self.redoStack]
     if not entry then return false end
-    local structural=entry.kind~='raster'
-    if structural then self:_applyStructural(entry,false)
+    local metadata=entry.kind=='property'
+    local structural=entry.kind~='raster' and not metadata
+    if structural or metadata then self:_applyStructural(entry,false)
     else self:_restore(entry,'after') end
     table.remove(self.redoStack)
     self.undoStack[#self.undoStack+1]=entry
@@ -264,30 +275,37 @@ function Layers:remove(index)
         activeBefore=before,activeAfter=self.doc.active_layer,
         size=#snapshot.pixels+128})
 end
--- Metadata-only operation: does not change RGBA pixels or invalidate
--- raster undo history. Store's RBD2 name validation stays authoritative.
+-- Metadata joins the same chronological undo/redo history as painting and
+-- structural edits. Only the old/new property value is stored, not pixels.
+-- The identity is stable across reordering and structural undo/redo.
+function Layers:_changeProperty(index,field,value)
+    local layer=self.doc.layers[index]
+    local previous=layer[field]
+    if previous==value then return false end
+    if self.pending then self:finishEdit() end
+    layer[field]=value
+    if field~='name' then self:recompose() end
+    self:_pushHistory({kind='property',id=layer.id,field=field,
+        before=previous,after=value,
+        size=128+(type(value)=='string' and #value or 0)+
+            (type(previous)=='string' and #previous or 0)})
+    return true
+end
 function Layers:rename(index,name)
     assertIndex(self,index)
     Store.validateName(name)
-    local layer=self.doc.layers[index]
-    if layer.name==name then return false end
-    layer.name=name
-    return true
+    return self:_changeProperty(index,'name',name)
 end
 function Layers:setVisible(index,visible)
     assertIndex(self,index)
     assert(type(visible)=='boolean','Visibilidade inválida')
-    if self.doc.layers[index].visible~=visible then self:clearHistory() end
-    self.doc.layers[index].visible=visible
-    self:recompose()
+    return self:_changeProperty(index,'visible',visible)
 end
 function Layers:setOpacity(index,opacity)
     assertIndex(self,index)
     assert(type(opacity)=='number' and opacity==opacity and
         opacity>=0 and opacity<=1,'Opacidade inválida')
-    if self.doc.layers[index].opacity~=opacity then self:clearHistory() end
-    self.doc.layers[index].opacity=opacity
-    self:recompose()
+    return self:_changeProperty(index,'opacity',opacity)
 end
 function Layers:move(index,to)
     assertIndex(self,index);assertIndex(self,to)
