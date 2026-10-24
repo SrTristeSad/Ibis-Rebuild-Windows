@@ -973,8 +973,10 @@ function love.update(dt)
                     'Inclinação horizontal não alargou ponta elíptica')
                 assert(Native.readPixel(A.layerSession:activeBuffer(),3,6)==0,
                     'Ponta inclinada desenhou fora do eixo estreito')
-                assert(A.layerSession:historyStats().undo==historyTilt+1,
-                    'Pincel inclinado não criou uma única operação')
+                assert(A.layerSession:historyStats().undo==
+                    math.min(Layers.MAX_HISTORY_ENTRIES,historyTilt+1) and
+                    A.layerSession.undoStack[#A.layerSession.undoStack].kind=='raster',
+                    'Pincel inclinado não criou uma operação de pintura válida')
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),7,3)==0,
                     'Inclinação: desfazer falhou')
