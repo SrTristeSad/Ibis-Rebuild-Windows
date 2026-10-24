@@ -556,6 +556,50 @@ function love.update(dt)
                 assert(Native.readPixel(A.layerSession.buffers[1],1,5)==0x246a90cc
                     and Native.readPixel(A.layerSession:activeBuffer(),1,5)==0,
                     'Capturar cor modificou uma camada')
+                -- Real brush preset/opacity controls and continuous mouse drag.
+                A.layerSession:add('Pincel suave teste')
+                A.dirty=true;rebuildImage()
+                love.draw();love.mousepressed(252,90,1)
+                assert(A.tool=='brush' and A.sideTab=='brush',
+                    'Toolbar did not select brush panel')
+                love.draw();love.mousepressed(panel+183,593,1)
+                assert(A.brushStyle=='soft','Soft brush button did not activate')
+                love.draw();love.mousepressed(panel+40,637,1)
+                assert(math.abs(A.brushOpacity-.9)<.001,
+                    'Opacity minus button failed')
+                love.draw();love.mousepressed(panel+40,472,1)
+                love.draw();love.mousepressed(panel+40,472,1)
+                assert(A.brushDiameter==8,'Brush diameter controls failed')
+                love.draw();love.mousepressed(panel+99,545,1)
+                assert(A.color==0xe53b44ff,'Soft brush color swatch failed')
+                local sx,sy=point(3,3)
+                local tx,ty=point(4,3)
+                local historyBeforeBrush=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(sx,sy,1)
+                love.mousemoved(tx,ty,tx-sx,ty-sy)
+                love.mousereleased(tx,ty,1)
+                local brushCenter=Native.readPixel(A.layerSession:activeBuffer(),4,3)
+                local brushEdge=Native.readPixel(A.layerSession:activeBuffer(),7,3)
+                assert(brushCenter%256>brushEdge%256 and brushEdge%256>0
+                    and brushCenter%256<255,
+                    'Native soft brush did not produce graded semi-transparent alpha')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),8,3)==0,
+                    'Soft brush exceeded radius')
+                assert(A.layerSession:historyStats().undo==historyBeforeBrush+1,
+                    'One brush drag must create one undo entry')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,3)==0,
+                    'Soft brush undo did not clear painted pixels')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),4,3)==brushCenter,
+                    'Soft brush redo did not restore alpha')
+                saveDoc()
+                local painted=A.store:openProject(A.doc.id)
+                local brushIndex=(3*A.doc.width+4)*4+1
+                assert(painted.layers[3].pixels:byte(brushIndex+3)==brushCenter%256,
+                    'RBD2 did not preserve soft brush opacity')
+                love.draw();love.mousepressed(panel+72,594,1)
+                assert(A.brushStyle=='hard','Hard brush toggle did not work')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -568,6 +612,9 @@ function love.update(dt)
                     straight_line_drag=true,straight_line_undo_redo=true,
                     line_rbd2_roundtrip=true,eyedropper_visible=true,
                     eyedropper_active=true,eyedropper_no_paint=true,
+                    soft_brush_toggle=true,brush_opacity_control=true,
+                    feather_drag_alpha=true,brush_undo_redo=true,
+                    soft_brush_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
