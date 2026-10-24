@@ -48,6 +48,8 @@ A etapa 22 traz [Mesclar abaixo (Ctrl+E)](docs/MERGE_DOWN_STAGE22.md): duas cama
 
 A etapa 23 acrescenta [espelhamento horizontal e vertical da camada ativa](docs/LAYER_FLIP_STAGE23.md), usando raster C++ nativo sem alterar outras camadas; ambos os eixos suportam desfazer/refazer cronológico e RBD2.
 
+A etapa 24 adiciona [Limpar camada (Shift+Delete)](docs/LAYER_CLEAR_STAGE24.md): apaga todos os bytes RGBA da camada ativa pelo motor C++ existente, sem excluir a camada, sem alterar outras camadas e sem ocupar histórico quando a camada já está transparente. Desfazer/refazer funciona com o histórico unificado, e o salvamento permanece em RBD2.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
