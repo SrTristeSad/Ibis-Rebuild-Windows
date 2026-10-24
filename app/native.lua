@@ -14,6 +14,7 @@ int32_t rb_set_pixel(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_
 int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t*);
 int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float);
 int32_t rb_draw_feather_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float,float);
+int32_t rb_draw_tilt_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float,float,float,float);
 int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float);
 int32_t rb_move_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint8_t*,uint64_t);
 int32_t rb_transform_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint8_t*,uint64_t);
@@ -103,6 +104,14 @@ function N.featherStroke(buffer,x0,y0,x1,y1,diameter,rgba,opacity,hardness)
     local result=N.lib.rb_draw_feather_stroke(buffer.bytes,buffer.size,
         buffer.width,buffer.height,x0,y0,x1,y1,diameter,rgba,opacity,hardness)
     assert(result==0,'Falha no pincel suave C++: '..tonumber(result))
+end
+-- Oriented anisotropic pen brush, calculated entirely in C++.
+function N.tiltStroke(buffer,x0,y0,x1,y1,diameter,rgba,opacity,hardness,tiltX,tiltY)
+    ready()
+    local result=N.lib.rb_draw_tilt_stroke(buffer.bytes,buffer.size,
+        buffer.width,buffer.height,x0,y0,x1,y1,diameter,rgba,
+        opacity,hardness,tiltX,tiltY)
+    assert(result==0,'Pincel inclinado C++ inválido: '..tonumber(result))
 end
 -- Desktop-only C++ destination-out hard round eraser.
 function N.basicErase(buffer,x0,y0,x1,y1,diameter,opacity)
