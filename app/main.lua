@@ -1245,6 +1245,95 @@ function love.update(dt)
                     metadataSaved.layers[otherIndex].visible==otherVisible and
                     metadataSaved.layers[7].name=='Arte azul Étapa 18',
                     'Propriedades das camadas não persistiram')
+                -- Stage 19: real panel duplicate, new C++ pixel allocation,
+                -- independent edits/undo, new ID, RBD2, and capacity guard.
+                love.draw();love.mousepressed(panel+211,448,1,false)
+                assert(#A.doc.layers==Store.MAX_LAYERS-1,
+                    'Excluir não liberou uma vaga para duplicação')
+                local sourceIndex=A.doc.active_layer
+                A.layerSession:setVisible(sourceIndex,true)
+                A.layerSession:setOpacity(sourceIndex,.65)
+                A.layerSession:beginEdit()
+                A.layerSession:pixel(4,4,0xe53b44ab)
+                assert(A.layerSession:finishEdit(),
+                    'Marca de origem não criou histórico raster')
+                A.dirty=true;rebuildImage()
+                local beforeCopyHistory=A.layerSession:historyStats().undo
+                local originalId=A.doc.layers[sourceIndex].id
+                local originalName=A.doc.layers[sourceIndex].name
+                local originalPixels=Native.bytes(A.layerSession.buffers[sourceIndex])
+                local originalThumb=layerThumb(sourceIndex)
+                assert(beforeCopyHistory>0,'Teste requer um histórico anterior')
+                love.draw();love.mousepressed(panel+132,448,1,false)
+                local duplicateIndex=sourceIndex+1
+                assert(#A.doc.layers==Store.MAX_LAYERS and
+                    A.doc.active_layer==duplicateIndex,
+                    'Duplicar não selecionou cópia acima da origem')
+                assert(A.doc.layers[duplicateIndex].id~=originalId and
+                    A.doc.layers[sourceIndex].id==originalId,
+                    'Duplicar reutilizou o identificador da origem')
+                assert(A.doc.layers[duplicateIndex].name==
+                    'Cópia de '..originalName,
+                    'Nome da cópia está incorreto')
+                assert(A.doc.layers[duplicateIndex].opacity==.65 and
+                    A.doc.layers[duplicateIndex].visible,
+                    'Cópia não preservou visibilidade e opacidade')
+                assert(Native.bytes(A.layerSession.buffers[duplicateIndex])==
+                    originalPixels and
+                    Native.bytes(A.layerSession.buffers[sourceIndex])==originalPixels,
+                    'Cópia não começou com pixels idênticos à origem')
+                assert(layerThumb(sourceIndex)==originalThumb and
+                    layerThumb(duplicateIndex)~=originalThumb,
+                    'A cópia não recebeu miniatura própria')
+                assert(Thumbnails.sample(A.layerSession.buffers[sourceIndex])==
+                    Thumbnails.sample(A.layerSession.buffers[duplicateIndex]),
+                    'Miniatura da cópia tem pixels diferentes da origem')
+                assert(A.layerSession:historyStats().undo==0,
+                    'Duplicar não zerou o histórico de edição estrutural')
+                A.layerSession:beginEdit()
+                A.layerSession:pixel(2,2,0x113355ff)
+                assert(A.layerSession:finishEdit(),
+                    'Editar a nova camada não criou histórico')
+                A.dirty=true;rebuildImage()
+                assert(Native.readPixel(A.layerSession.buffers[sourceIndex],2,2)~=
+                    0x113355ff,
+                    'Editar a cópia alterou pixels da origem')
+                undoDoc()
+                assert(Native.bytes(A.layerSession.buffers[duplicateIndex])==
+                    originalPixels,'Desfazer na cópia não restaurou pixels iniciais')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession.buffers[duplicateIndex],2,2)==
+                    0x113355ff,'Refazer na cópia perdeu os pixels')
+                local copyAfterEdit=Native.bytes(A.layerSession.buffers[duplicateIndex])
+                love.draw();love.mousepressed(panel+132,448,1,false)
+                assert(#A.doc.layers==Store.MAX_LAYERS and
+                    Native.bytes(A.layerSession.buffers[duplicateIndex])==copyAfterEdit,
+                    'Botão Duplicar não respeitou o limite de oito camadas')
+                saveDoc()
+                local duplicatedSaved=A.store:openProject(A.doc.id)
+                assert(duplicatedSaved.format==2 and
+                    duplicatedSaved.layer_count==Store.MAX_LAYERS and
+                    duplicatedSaved.layers[sourceIndex].pixels==originalPixels and
+                    duplicatedSaved.layers[duplicateIndex].pixels==copyAfterEdit and
+                    duplicatedSaved.layers[sourceIndex].id==originalId and
+                    duplicatedSaved.layers[duplicateIndex].id~=originalId,
+                    'RBD2 não preservou duas camadas independentes')
+                -- Make room again, then exercise the actual Ctrl+J handler.
+                love.draw();love.mousepressed(panel+211,448,1,false)
+                assert(#A.doc.layers==Store.MAX_LAYERS-1,
+                    'Excluir cópia não liberou vaga para atalho')
+                local control=love.keyboard.isDown
+                love.keyboard.isDown=function(...)
+                    for i=1,select('#',...) do
+                        if select(i,...)=='lctrl' then return true end
+                    end
+                    return control(...)
+                end
+                love.keypressed('j')
+                love.keyboard.isDown=control
+                assert(#A.doc.layers==Store.MAX_LAYERS and
+                    A.doc.active_layer==sourceIndex+1,
+                    'Ctrl+J não duplicou a camada ativa')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1287,6 +1376,9 @@ function love.update(dt)
                     layer_row_visibility_toggle=true,
                     layer_visibility_preserves_selection=true,
                     layer_properties_rbd2_roundtrip=true,
+                    layer_duplicate_button=true,layer_duplicate_deep_pixels=true,
+                    layer_duplicate_undo_redo=true,layer_duplicate_rbd2=true,
+                    layer_duplicate_capacity_guard=true,layer_duplicate_ctrl_j=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
