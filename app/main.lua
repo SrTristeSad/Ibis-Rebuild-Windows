@@ -980,6 +980,83 @@ local function verifyPrecisionSliders()
     A.stabilization=originalStabilization;A.fillTolerance=originalTolerance
     selectTool(originalTool);A.sideTab=originalTab
 end
+-- Exercise the actual editor preview image/cache and pointer handlers.
+-- Kept separate from large GUI self-test for LuaJIT's 200-local ceiling.
+local function verifyBrushTipHover()
+    local w,h=love.graphics.getDimensions()
+    local savedTool=A.tool
+    local savedDiameter,savedStyle=A.brushDiameter,A.brushStyle
+    local savedOpacity,savedColor=A.brushOpacity,A.color
+    local savedPreview=A.previewEnabled
+    local savedDirty=A.dirty
+    local layers=#A.doc.layers
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    selectTool('brush')
+    A.brushDiameter=18;A.brushStyle='soft';A.brushOpacity=.6
+    A.color=0xe53b44ff;A.previewEnabled=true
+    local x,y=View.center(viewData(),w,h)
+    love.mousemoved(x,y,0,0,false)
+    love.draw()
+    assert(A.tipCache and A.tipCache.stamp and
+        A.tipCache.key==Tip.key(Tip.options(
+            A.tool,A.brushDiameter,A.brushOpacity,A.color,
+            A.brushStyle,1,0,0,false)),
+        'Hover não gerou textura nativa coerente com o pincel')
+    local nativeReference=Tip.render(Native,Tip.options('brush',18,.6,
+        0xe53b44ff,'soft',1,0,0,false))
+    assert(Native.bytes(A.tipCache.stamp.buffer)==
+        Native.bytes(nativeReference.buffer),
+        'Prévia gráfica divergiu dos bytes RGBA do raster C++')
+    local cache=A.tipCache
+    love.draw()
+    assert(A.tipCache==cache,
+        'Preview precisa reutilizar textura entre frames sem alterações')
+    A.brushOpacity=.7
+    love.draw()
+    assert(A.tipCache~=cache and
+        Native.bytes(A.tipCache.stamp.buffer)~=
+            Native.bytes(nativeReference.buffer),
+        'Opacidade nova não atualizou a prévia nativa')
+    selectTool('erase')
+    love.draw()
+    assert(A.tipCache.stamp.kind=='erase' and
+        Native.readPixel(A.tipCache.stamp.buffer,
+            math.floor(A.tipCache.stamp.center),
+            math.floor(A.tipCache.stamp.center))%256>0,
+        'Borracha não mostrou sua máscara de remoção')
+    love.draw()
+    love.mousepressed(w-445,30,1,false)
+    assert(not A.previewEnabled,'Botão de prévia não desligou')
+    love.draw()
+    love.mousepressed(w-445,30,1,false)
+    assert(A.previewEnabled,'Botão de prévia não religou')
+    love.mousemoved(x,y,0,0,false)
+    assert(Tip.visible(A,w,h,x,y),'Prévia deve voltar no canvas')
+    A.brushLibrary=true
+    assert(not Tip.visible(A,w,h,x,y),
+        'Biblioteca aberta deve ocultar prévia')
+    A.brushLibrary=false
+    A.toolHelp=true
+    assert(not Tip.visible(A,w,h,x,y),
+        'Janela de ajuda deve ocultar prévia')
+    A.toolHelp=false
+    love.mousemoved(6,170,0,0,false)
+    assert(not Tip.visible(A,w,h,6,170),
+        'Fora da área de trabalho não pode haver prévia')
+    love.mousemoved(x,y,0,0,false)
+    assert(Tip.visible(A,w,h,x,y),
+        'Mouse deve restabelecer a posição de hover')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history and
+        #A.doc.layers==layers and A.dirty==savedDirty,
+        'Prévia visual alterou bytes, histórico ou estrutura da obra')
+    A.brushDiameter=savedDiameter;A.brushStyle=savedStyle
+    A.brushOpacity=savedOpacity;A.color=savedColor
+    A.previewEnabled=savedPreview
+    A.hoverX=nil;A.hoverY=nil
+    selectTool(savedTool)
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2223,6 +2300,7 @@ function love.update(dt)
                 verifyContextMenus()
                 verifyBrushLibrary()
                 verifyPrecisionSliders()
+                verifyBrushTipHover()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2299,6 +2377,10 @@ function love.update(dt)
                     precision_slider_drag=true,precision_slider_opacity=true,
                     precision_slider_stabilization=true,precision_slider_tolerance=true,
                     precision_slider_no_raster_edits=true,legacy_buttons_preserved=true,
+                    native_tip_hover=true,native_tip_cache=true,
+                    native_tip_opacity_refresh=true,native_eraser_mask=true,
+                    native_tip_toggle=true,native_tip_modal_isolation=true,
+                    native_tip_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
