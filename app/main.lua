@@ -261,6 +261,15 @@ local function duplicateActiveLayer()
     status('Camada duplicada · cópia independente '..index)
     return index
 end
+local function flipActiveLayer(axis)
+    assert(A.screen=='editor' and A.layerSession,'Abra uma obra antes de espelhar')
+    finishStroke()
+    A.layerSession:flip(axis)
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
+    A.dirty=true;rebuildImage()
+    status(axis==0 and 'Camada espelhada na horizontal' or
+        'Camada espelhada na vertical')
+end
 local function mergeActiveLayerDown()
     assert(A.screen=='editor' and A.layerSession,'Abra um projeto antes de mesclar')
     finishStroke()
@@ -1797,6 +1806,8 @@ local function drawEditor(w,h)
     button('Camadas',panel+20,366,107,32,function()A.sideTab='layers'end,A.sideTab=='layers')
     button('Pincel',panel+139,366,109,32,function()A.sideTab='brush'end,A.sideTab=='brush')
     if A.sideTab=='layers' then
+        button('Esp. H',panel+20,299,108,27,function()flipActiveLayer(0)end)
+        button('Esp. V',panel+140,299,108,27,function()flipActiveLayer(1)end)
         local ls=A.layerSession
         local count=#A.doc.layers
         text(('RASTERS %d/%d'):format(count,Store.MAX_LAYERS),
@@ -2339,6 +2350,16 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and
+        key=='h' and love.keyboard.isDown('lshift','rshift') then
+        guard(function()flipActiveLayer(0)end)()
+        return
+    end
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and
+        key=='v' and love.keyboard.isDown('lshift','rshift') then
+        guard(function()flipActiveLayer(1)end)()
         return
     end
     if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='e' then
