@@ -942,10 +942,21 @@ local function drawEditor(w,h)
             end
         end
         editShapeColorButton(panel,669)
-        text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
-            or A.tool=='brush' and 'Pincel C++ próprio · sem paridade Android'
-            or A.tool=='erase' and 'Borracha rígida · alfa editável'
-            or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
+        if A.tool=='brush' or A.tool=='erase' then
+            button('−',panel+20,705,42,29,function()
+                finishStroke()
+                A.stabilization=math.max(0,A.stabilization-1)
+            end,false,A.stabilization==0)
+            text(('Estabilizar %d / 5'):format(A.stabilization),
+                panel+68,713,'small','muted')
+            button('+',panel+206,705,42,29,function()
+                finishStroke()
+                A.stabilization=math.min(5,A.stabilization+1)
+            end,false,A.stabilization==5)
+        else
+            text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
+                or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
+        end
     end
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
