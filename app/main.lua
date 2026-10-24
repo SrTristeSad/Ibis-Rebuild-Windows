@@ -14,9 +14,10 @@ local Icons=require('ui_icons')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
 local Sliders=require('brush_sliders')
+local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -72,6 +73,12 @@ local function toolButton(slot)
         c('accent')
         love.graphics.rectangle('fill',x+8,109,w-16,2,1,1)
     end
+end
+local function releaseTipCache()
+    if A.tipCache and A.tipCache.image then
+        A.tipCache.image:release()
+    end
+    A.tipCache=nil
 end
 local function externalWrite(path,bytes)
     path=path:gsub('\\','/');local dir,name=path:match('^(.*)/([^/]+)$');assert(dir and name,'Caminho absoluto necessário')
@@ -166,7 +173,8 @@ local function openDoc(doc)
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
-    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
+    releaseTipCache()
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -971,6 +979,83 @@ local function verifyPrecisionSliders()
     A.brushDiameter=originalDiameter;A.brushOpacity=originalOpacity
     A.stabilization=originalStabilization;A.fillTolerance=originalTolerance
     selectTool(originalTool);A.sideTab=originalTab
+end
+-- Exercise the actual editor preview image/cache and pointer handlers.
+-- Kept separate from large GUI self-test for LuaJIT's 200-local ceiling.
+local function verifyBrushTipHover()
+    local w,h=love.graphics.getDimensions()
+    local savedTool=A.tool
+    local savedDiameter,savedStyle=A.brushDiameter,A.brushStyle
+    local savedOpacity,savedColor=A.brushOpacity,A.color
+    local savedPreview=A.previewEnabled
+    local savedDirty=A.dirty
+    local layers=#A.doc.layers
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    selectTool('brush')
+    A.brushDiameter=18;A.brushStyle='soft';A.brushOpacity=.6
+    A.color=0xe53b44ff;A.previewEnabled=true
+    local x,y=View.center(viewData(),w,h)
+    love.mousemoved(x,y,0,0,false)
+    love.draw()
+    assert(A.tipCache and A.tipCache.stamp and
+        A.tipCache.key==Tip.key(Tip.options(
+            A.tool,A.brushDiameter,A.brushOpacity,A.color,
+            A.brushStyle,1,0,0,false)),
+        'Hover não gerou textura nativa coerente com o pincel')
+    local nativeReference=Tip.render(Native,Tip.options('brush',18,.6,
+        0xe53b44ff,'soft',1,0,0,false))
+    assert(Native.bytes(A.tipCache.stamp.buffer)==
+        Native.bytes(nativeReference.buffer),
+        'Prévia gráfica divergiu dos bytes RGBA do raster C++')
+    local cache=A.tipCache
+    love.draw()
+    assert(A.tipCache==cache,
+        'Preview precisa reutilizar textura entre frames sem alterações')
+    A.brushOpacity=.7
+    love.draw()
+    assert(A.tipCache~=cache and
+        Native.bytes(A.tipCache.stamp.buffer)~=
+            Native.bytes(nativeReference.buffer),
+        'Opacidade nova não atualizou a prévia nativa')
+    selectTool('erase')
+    love.draw()
+    assert(A.tipCache.stamp.kind=='erase' and
+        Native.readPixel(A.tipCache.stamp.buffer,
+            math.floor(A.tipCache.stamp.center),
+            math.floor(A.tipCache.stamp.center))%256>0,
+        'Borracha não mostrou sua máscara de remoção')
+    love.draw()
+    love.mousepressed(w-445,30,1,false)
+    assert(not A.previewEnabled,'Botão de prévia não desligou')
+    love.draw()
+    love.mousepressed(w-445,30,1,false)
+    assert(A.previewEnabled,'Botão de prévia não religou')
+    love.mousemoved(x,y,0,0,false)
+    assert(Tip.visible(A,w,h,x,y),'Prévia deve voltar no canvas')
+    A.brushLibrary=true
+    assert(not Tip.visible(A,w,h,x,y),
+        'Biblioteca aberta deve ocultar prévia')
+    A.brushLibrary=false
+    A.toolHelp=true
+    assert(not Tip.visible(A,w,h,x,y),
+        'Janela de ajuda deve ocultar prévia')
+    A.toolHelp=false
+    love.mousemoved(6,170,0,0,false)
+    assert(not Tip.visible(A,w,h,6,170),
+        'Fora da área de trabalho não pode haver prévia')
+    love.mousemoved(x,y,0,0,false)
+    assert(Tip.visible(A,w,h,x,y),
+        'Mouse deve restabelecer a posição de hover')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history and
+        #A.doc.layers==layers and A.dirty==savedDirty,
+        'Prévia visual alterou bytes, histórico ou estrutura da obra')
+    A.brushDiameter=savedDiameter;A.brushStyle=savedStyle
+    A.brushOpacity=savedOpacity;A.color=savedColor
+    A.previewEnabled=savedPreview
+    A.hoverX=nil;A.hoverY=nil
+    selectTool(savedTool)
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -2215,6 +2300,7 @@ function love.update(dt)
                 verifyContextMenus()
                 verifyBrushLibrary()
                 verifyPrecisionSliders()
+                verifyBrushTipHover()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2291,6 +2377,10 @@ function love.update(dt)
                     precision_slider_drag=true,precision_slider_opacity=true,
                     precision_slider_stabilization=true,precision_slider_tolerance=true,
                     precision_slider_no_raster_edits=true,legacy_buttons_preserved=true,
+                    native_tip_hover=true,native_tip_cache=true,
+                    native_tip_opacity_refresh=true,native_eraser_mask=true,
+                    native_tip_toggle=true,native_tip_modal_isolation=true,
+                    native_tip_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -2341,6 +2431,41 @@ local function drawGallery(w,h)
         text('Crie uma pasta ou uma tela. Tudo é salvo neste computador.',44,335,'body','muted')
     end
 end
+-- A true renderer-produced single dab, composited over the canvas as
+-- ephemeral GUI. The scratch pixels never enter Layers/RBD2 or undo.
+local function drawBrushTip(w,h)
+    local x,y=A.hoverX,A.hoverY
+    if x==nil or y==nil then x,y=love.mouse.getPosition() end
+    if not Tip.visible(A,w,h,x,y) then return end
+    local settings=Tip.options(A.tool,A.brushDiameter,A.brushOpacity,
+        A.color,A.brushStyle,1,0,0,false)
+    local key=Tip.key(settings)
+    if not A.tipCache or A.tipCache.key~=key then
+        local stamp=Tip.render(Native,settings)
+        local pixels=Native.bytes(stamp.buffer)
+        local data=love.image.newImageData(stamp.size,stamp.size,
+            'rgba8',pixels)
+        local img=love.graphics.newImage(data)
+        data:release()
+        img:setFilter('nearest','nearest')
+        releaseTipCache()
+        A.tipCache={key=key,image=img,stamp=stamp}
+    end
+    local cache=A.tipCache
+    love.graphics.push()
+    love.graphics.translate(x,y)
+    love.graphics.rotate(A.rotation)
+    love.graphics.scale(A.zoom)
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(cache.image,-cache.stamp.center,
+        -cache.stamp.center)
+    love.graphics.pop()
+    love.graphics.setLineWidth(1)
+    love.graphics.setColor(0,0,0,.82)
+    love.graphics.circle('line',x,y,3,12)
+    love.graphics.setColor(1,1,1,.86)
+    love.graphics.circle('line',x,y,2,12)
+end
 local function drawEditor(w,h)
     local panel=w-268
     button('← Galeria',20,78,92,34,toGallery)
@@ -2348,6 +2473,10 @@ local function drawEditor(w,h)
     button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
     button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
         w-357,15,134,33,toggleFocusMode,A.focusMode)
+    button(A.previewEnabled and 'Prévia: ligada' or 'Prévia: desligada',
+        w-501,15,134,33,function()
+            A.previewEnabled=not A.previewEnabled
+        end,A.previewEnabled)
     local cx,cy=canvasTransform()
     box(12,120,w-Workspace.panelWidth(A.focusMode)-20,h-178,'canvas')
     love.graphics.setScissor(Workspace.scissor(w,h,A.focusMode))
@@ -2392,7 +2521,9 @@ local function drawEditor(w,h)
         love.graphics.rectangle('line',selected.x-dw/2,selected.y-dh/2,selected.w,selected.h)
     end
     c('accent');love.graphics.setLineWidth(1/A.zoom);love.graphics.rectangle('line',-dw/2,-dh/2,dw,dh)
-    love.graphics.pop();love.graphics.setScissor()
+    love.graphics.pop()
+    drawBrushTip(w,h)
+    love.graphics.setScissor()
     -- View-only controls remain outside the raster and layer history.
     local dockY=h-116
     button('−',20,dockY,36,30,function()zoomCanvas(1/1.25)end,
@@ -2902,6 +3033,7 @@ function love.draw()
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
+    A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.toolHelp then
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
@@ -3082,6 +3214,7 @@ local function pointerReleased(x,y,b,pressure)
     end
 end
 local function pointerMoved(x,y,dx,dy,pressure)
+    A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.sliderDrag then
         applyParameterSlider(A.sliderDrag,x)
         return
@@ -3151,6 +3284,7 @@ function love.touchreleased(id,x,y,dx,dy,pressure)
     if A.touchId~=id or Ink.mouseGuard() then return end
     pointerReleased(x,y,1,Pressure.normalize(pressure))
     A.touchId=nil
+    A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
 end
 -- Win32 pen events are delivered from the native queue on the LÖVE
 -- main thread, not from a LuaJIT callback invoked inside WndProc.
@@ -3182,14 +3316,21 @@ dispatchInkEvent=function(e)
                 pointerReleased(e.x,e.y,1,Pressure.normalize(e.pressure))
             end
             A.inkPenId=nil
+            A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
             if A.inkPreviousTool then
                 A.tool=A.inkPreviousTool;A.inkPreviousTool=nil
             end
         end
     end
 end
+function love.mousefocus(focused)
+    if not focused then
+        A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
+    end
+end
 function love.focus(focused)
     if not focused then
+        A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
@@ -3353,6 +3494,7 @@ end
 function love.resize()if A.doc then fit()end end
 function love.quit()
     Ink.close()
+    releaseTipCache()
     clearLayerThumbs()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end
