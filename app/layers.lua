@@ -50,6 +50,85 @@ function Layers:clearHistory()
     self.historyBytes=0
     self.pending=nil
 end
+-- Mixed chronological edit history, still session-only and bounded.
+-- Structural deltas store one affected layer's pixels at most, rather than
+-- copying all eight 2048x2048 rasters on every add/remove/reorder.
+function Layers:_pushHistory(entry)
+    for _,redo in ipairs(self.redoStack) do
+        self.historyBytes=self.historyBytes-redo.size
+    end
+    self.redoStack={}
+    while (#self.undoStack>=Layers.MAX_HISTORY_ENTRIES or
+        self.historyBytes+entry.size>Layers.MAX_HISTORY_BYTES) and
+        #self.undoStack>0 do
+        local evicted=table.remove(self.undoStack,1)
+        self.historyBytes=self.historyBytes-evicted.size
+    end
+    if entry.size>Layers.MAX_HISTORY_BYTES then return false end
+    self.undoStack[#self.undoStack+1]=entry
+    self.historyBytes=self.historyBytes+entry.size
+    return true
+end
+local function layerSnapshot(layer,buffer)
+    return {id=layer.id,name=layer.name,visible=layer.visible,
+        opacity=layer.opacity,pixels=Native.bytes(buffer)}
+end
+local function layerFromSnapshot(snapshot)
+    return {id=snapshot.id,name=snapshot.name,visible=snapshot.visible,
+        opacity=snapshot.opacity,pixels=snapshot.pixels}
+end
+function Layers:_structInsert(index,snapshot,active)
+    assert(#self.doc.layers<Store.MAX_LAYERS,'Limite de camadas no histórico')
+    assert(index>=1 and index<=#self.doc.layers+1,'Posição do histórico inválida')
+    for _,layer in ipairs(self.doc.layers) do
+        assert(layer.id~=snapshot.id,'Camada duplicada no histórico')
+    end
+    local buffer=Native.buffer(self.doc.width,self.doc.height,snapshot.pixels)
+    table.insert(self.doc.layers,index,layerFromSnapshot(snapshot))
+    table.insert(self.buffers,index,buffer)
+    self.doc.active_layer=active
+    self.doc.layer_count=#self.doc.layers
+end
+function Layers:_structRemove(index,id,active)
+    assert(#self.doc.layers>1 and self.doc.layers[index] and
+        self.doc.layers[index].id==id,
+        'Camada esperada não existe no histórico')
+    table.remove(self.doc.layers,index)
+    table.remove(self.buffers,index)
+    self.doc.active_layer=active
+    self.doc.layer_count=#self.doc.layers
+end
+local function reorder(self,from,to,active)
+    local layer=table.remove(self.doc.layers,from)
+    local buffer=table.remove(self.buffers,from)
+    table.insert(self.doc.layers,to,layer)
+    table.insert(self.buffers,to,buffer)
+    self.doc.active_layer=active
+end
+function Layers:_applyStructural(entry,undoing)
+    if entry.kind=='insert' then
+        if undoing then
+            self:_structRemove(entry.index,entry.layer.id,entry.activeBefore)
+        else
+            self:_structInsert(entry.index,entry.layer,entry.activeAfter)
+        end
+    elseif entry.kind=='remove' then
+        if undoing then
+            self:_structInsert(entry.index,entry.layer,entry.activeBefore)
+        else
+            self:_structRemove(entry.index,entry.layer.id,entry.activeAfter)
+        end
+    elseif entry.kind=='move' then
+        local from=undoing and entry.to or entry.from
+        local to=undoing and entry.from or entry.to
+        assert(self.doc.layers[from] and self.doc.layers[from].id==entry.id,
+            'Camada movimentada não coincide com o histórico')
+        reorder(self,from,to,undoing and entry.activeBefore or entry.activeAfter)
+    else
+        error('Ação estrutural inválida')
+    end
+    self:recompose()
+end
 function Layers:beginEdit()
     assert(not self.pending,'Uma edição já está aberta')
     local layer=self.doc.layers[self.doc.active_layer]
@@ -63,24 +142,9 @@ function Layers:finishEdit()
     assert(self.doc.layers[self.doc.active_layer].id==pending.id,
         'Camada alterada durante pincelada')
     if pending.before==after then return false end
-    for _,entry in ipairs(self.redoStack) do self.historyBytes=self.historyBytes-entry.size end
-    self.redoStack={}
-    local entry={id=pending.id,before=pending.before,after=after,
-        size=#pending.before+#after}
-    -- A 2048x2048 RGBA8 image fits a single 32-MiB history entry.
-    -- Larger than the budget cannot happen at the current 2048 axis cap.
-    while (#self.undoStack>=Layers.MAX_HISTORY_ENTRIES or
-        self.historyBytes+entry.size>Layers.MAX_HISTORY_BYTES) and
-        #self.undoStack>0 do
-        local evicted=table.remove(self.undoStack,1)
-        self.historyBytes=self.historyBytes-evicted.size
-    end
-    if entry.size<=Layers.MAX_HISTORY_BYTES then
-        self.undoStack[#self.undoStack+1]=entry
-        self.historyBytes=self.historyBytes+entry.size
-        return true
-    end
-    return false
+    return self:_pushHistory({kind='raster',id=pending.id,
+        before=pending.before,after=after,
+        size=#pending.before+#after})
 end
 function Layers:canUndo() return #self.undoStack>0 end
 function Layers:canRedo() return #self.redoStack>0 end
@@ -99,19 +163,25 @@ function Layers:_restore(entry,which)
 end
 function Layers:undo()
     assert(not self.pending,'Finalize a pincelada antes de desfazer')
-    local entry=table.remove(self.undoStack)
+    local entry=self.undoStack[#self.undoStack]
     if not entry then return false end
-    self:_restore(entry,'before')
+    local structural=entry.kind~='raster'
+    if structural then self:_applyStructural(entry,true)
+    else self:_restore(entry,'before') end
+    table.remove(self.undoStack)
     self.redoStack[#self.redoStack+1]=entry
-    return true
+    return true,structural
 end
 function Layers:redo()
     assert(not self.pending,'Finalize a pincelada antes de refazer')
-    local entry=table.remove(self.redoStack)
+    local entry=self.redoStack[#self.redoStack]
     if not entry then return false end
-    self:_restore(entry,'after')
+    local structural=entry.kind~='raster'
+    if structural then self:_applyStructural(entry,false)
+    else self:_restore(entry,'after') end
+    table.remove(self.redoStack)
     self.undoStack[#self.undoStack+1]=entry
-    return true
+    return true,structural
 end
 function Layers:add(name)
     local layers=self.doc.layers
