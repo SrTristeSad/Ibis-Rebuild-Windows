@@ -1540,6 +1540,35 @@ function love.update(dt)
                 undoDoc()
                 assert(#A.doc.layers==countBefore-1,
                     'Ctrl+Z não restaurou a segunda mesclagem')
+                -- Stage 23: GUI button uses C++ to mirror the active layer.
+                local flipIndex=A.doc.active_layer
+                local flipOriginal=Native.bytes(A.layerSession:activeBuffer())
+                local flipOther=Native.bytes(A.layerSession.buffers[1])
+                love.draw()
+                love.mousepressed(panel+74,313,1,false)
+                local horizontally=Native.bytes(A.layerSession:activeBuffer())
+                assert(horizontally~=flipOriginal,
+                    'Esp. H não espelhou a camada ativa')
+                undoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==flipOriginal,
+                    'Desfazer Esp. H não restaurou RGBA')
+                redoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==horizontally,
+                    'Refazer Esp. H não restaurou RGBA')
+                love.draw();love.mousepressed(panel+191,313,1,false)
+                local bothDirections=Native.bytes(A.layerSession:activeBuffer())
+                undoDoc();undoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==flipOriginal,
+                    'Duplo desfazer de espelhamento falhou')
+                redoDoc();redoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==bothDirections,
+                    'Duplo refazer de espelhamento falhou')
+                assert(Native.bytes(A.layerSession.buffers[1])==flipOther,
+                    'Espelhar camada ativa modificou a inferior')
+                saveDoc()
+                local flipSaved=A.store:openProject(A.doc.id)
+                assert(flipSaved.layers[flipIndex].pixels==bothDirections,
+                    'RBD2 não persistiu o espelhamento')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
