@@ -123,6 +123,9 @@ def run_tests(runtime_path, output):
             icon_program="return require('json').encode(require('tests.test_ui_icons').run())"
             icons=json.loads(native_state.execute(icon_program))
             assert icons.get('passed') and icons.get('complete_glyph_registry') and icons.get('normalized_bounds')
+            menus_program="return require('json').encode(require('tests.test_context_menus').run())"
+            menus=json.loads(native_state.execute(menus_program))
+            assert menus.get('passed') and menus.get('layer_commands') and menus.get('tool_commands') and menus.get('bounds_safe')
             thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
             thumbs=json.loads(native_state.execute(thumbnail_program))
             assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
@@ -177,6 +180,7 @@ def run_tests(runtime_path, output):
         report['focus_workspace'] = workspace
         report['editor_tool_registry'] = tool_registry
         report['editor_vector_icons'] = icons
+        report['editor_context_menus'] = menus
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result

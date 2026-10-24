@@ -11,9 +11,10 @@ local View=require('canvas_view')
 local EditorTools=require('editor_tools')
 local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
+local Menus=require('context_menus')
 local Workspace=require('workspace_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -163,7 +164,7 @@ local function openDoc(doc)
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
-    A.screen='editor';A.dirty=false;A.focusMode=false
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -228,7 +229,7 @@ local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
-    A.panning=false;A.panButton=nil
+    A.panning=false;A.panButton=nil;A.contextMenu=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -273,7 +274,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -288,6 +289,7 @@ local function exportPNG()
     return name
 end
 local function modal(kind)
+    A.contextMenu=nil
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
     A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
         kind=='color' and {Colors.format(A.color)} or {''}}
@@ -346,6 +348,96 @@ local function mergeActiveLayerDown()
     rebuildImage()
     status('Camadas mescladas abaixo · Ctrl+Z restaura ambas')
     return index
+end
+-- Route menu commands to established editing operations and transactions.
+-- No replacement raster implementation and no duplicated painting algorithm.
+local function performMenuAction(menu,key)
+    assert(menu and menu.kind and key,'Menu contextual inválido')
+    if menu.kind=='layer' then
+        assert(A.doc.layers[A.doc.active_layer] and
+            A.doc.active_layer==menu.target,
+            'Camada de destino não está selecionada')
+        local ls=A.layerSession
+        if key=='rename' then openLayerRename()
+        elseif key=='duplicate' then duplicateActiveLayer()
+        elseif key=='visibility' then
+            finishStroke()
+            local layer=A.doc.layers[A.doc.active_layer]
+            ls:setVisible(A.doc.active_layer,not layer.visible)
+            A.dirty=true;rebuildImage()
+            status(layer.visible and 'Camada visível' or 'Camada oculta')
+        elseif key=='clear' then clearActiveLayer()
+        elseif key=='flipH' then flipActiveLayer(0)
+        elseif key=='flipV' then flipActiveLayer(1)
+        elseif key=='merge' then mergeActiveLayerDown()
+        elseif key=='up' or key=='down' then
+            finishStroke()
+            local index=A.doc.active_layer
+            ls:move(index,index+(key=='up' and 1 or -1))
+            A.layerScroll=nil;A.dirty=true;rebuildImage()
+        elseif key=='delete' then
+            finishStroke()
+            ls:remove(A.doc.active_layer)
+            clearLayerThumbs();A.layerScroll=nil
+            A.dirty=true;rebuildImage()
+            status('Camada removida')
+        else error('Ação de camada desconhecida: '..tostring(key)) end
+        return
+    end
+    assert(menu.kind=='tool','Menu de ferramenta desconhecido')
+    assert(selectTool(menu.target),'Não é possível mudar a ferramenta durante a pincelada')
+    if key=='use' then return end
+    if key=='sizeDown' or key=='sizeUp' then
+        A.brushDiameter=math.max(1,math.min(256,
+            A.brushDiameter+(key=='sizeDown' and -2 or 2)))
+    elseif key=='opacityDown' or key=='opacityUp' then
+        A.brushOpacity=math.max(.1,math.min(1,
+            math.floor(A.brushOpacity*10+.5)/10+
+                (key=='opacityDown' and -.1 or .1)))
+    elseif key=='toleranceDown' or key=='toleranceUp' then
+        A.fillTolerance=math.max(0,math.min(255,
+            A.fillTolerance+(key=='toleranceDown' and -8 or 8)))
+    elseif key=='outline' or key=='filled' then
+        A.shapeFilled=key=='filled'
+    elseif key=='visible' or key=='active' then
+        A.pickerSource=key=='visible' and 'composite' or 'active'
+    elseif key=='deselect' then
+        A.selection=nil;A.selectAction=nil;A.movePreview=nil
+    elseif key=='color' then
+        modal('color')
+    elseif key=='help' then
+        A.toolHelp=true
+    else
+        error('Ação de ferramenta desconhecida: '..tostring(key))
+    end
+end
+local function openContextMenu(kind,target,x,y)
+    assert(A.screen=='editor' and A.doc and not A.modal and not A.toolHelp,
+        'Menu só pode abrir dentro do editor')
+    finishStroke()
+    A.panning=false;A.panButton=nil
+    local entries,title
+    if kind=='layer' then
+        if target~=A.doc.active_layer then
+            A.layerSession:select(target)
+            A.layerScroll=nil
+            A.dirty=true
+        end
+        local layer=A.doc.layers[target]
+        entries=Menus.layerEntries(#A.doc.layers,target,
+            Store.MAX_LAYERS,layer.visible)
+        title='Camada '..target..' · '..layer.name
+    elseif kind=='tool' then
+        local item=assert(EditorTools.fromId(target))
+        entries=Menus.toolEntries(target,{
+            size=A.brushDiameter,opacity=A.brushOpacity,
+            tolerance=A.fillTolerance,hasSelection=A.selection~=nil})
+        title=item.label..' · opções'
+    else error('Menu desconhecido') end
+    local w,h=love.graphics.getDimensions()
+    local px,py,pw,ph=Menus.place(x,y,w,h,entries)
+    A.contextMenu={kind=kind,target=target,title=title,
+        entries=entries,x=px,y=py,w=pw,h=ph,cursor=1}
 end
 local function submitModal()
     local m=A.modal
@@ -548,6 +640,129 @@ local function verifyFocusWorkspace()
         #A.doc.layers==count and A.dirty==dirty,
         'Modo foco alterou pixels, camadas, histórico ou dirty flag')
     selectTool(originalTool);A.sideTab=originalTab
+end
+-- GUI regression: events travel through real LÖVE mouse/key handlers.
+-- Kept outside the large legacy test closure for LuaJIT's local limit.
+local function verifyContextMenus()
+    local w,h=love.graphics.getDimensions()
+    local panel=w-268
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldDiameter,oldOpacity=A.brushDiameter,A.brushOpacity
+    local initialPixels=Native.bytes(A.layerSession.composite)
+    local initialLayerCount=#A.doc.layers
+    local initialHistory=A.layerSession:historyStats().undo
+    local function choose(key)
+        local menu=assert(A.contextMenu,'Menu esperado')
+        local index
+        for i,item in ipairs(menu.entries) do
+            if item.key==key then index=i;break end
+        end
+        assert(index and menu.entries[index].enabled,
+            'Ação não disponível: '..key)
+        love.draw()
+        love.mousepressed(menu.x+24,
+            menu.y+Menus.HEADER+(index-1)*Menus.ROW+10,1,false)
+        assert(not A.contextMenu,'Menu não fechou após ação')
+    end
+    -- Right-click on a toolbar slot opens options WITHOUT painting.
+    selectTool('inspect')
+    A.sideTab='layers'
+    love.draw()
+    love.mousepressed(245,92,2,false)
+    assert(A.contextMenu and A.contextMenu.kind=='tool' and
+        A.contextMenu.target=='brush' and A.tool=='inspect',
+        'Botão direito no pincel não abriu o menu correspondente')
+    choose('sizeUp')
+    assert(A.tool=='brush' and A.brushDiameter==oldDiameter+2,
+        'Menu de pincel não aplicou tamanho no estado real')
+    A.brushDiameter=oldDiameter
+    love.draw()
+    love.mousepressed(245,92,2,false)
+    assert(A.contextMenu,'Menu deveria reabrir')
+    love.keypressed('escape')
+    assert(not A.contextMenu,'Esc não fechou o menu de ferramenta')
+    love.draw()
+    love.mousepressed(536,90,2,false)
+    assert(A.contextMenu and A.contextMenu.target=='picker',
+        'Conta-gotas precisa de menu específico')
+    choose('active')
+    assert(A.tool=='picker' and A.pickerSource=='active',
+        'Menu de conta-gotas não mudou fonte')
+    A.pickerSource='composite'
+    love.draw()
+    love.mousepressed(480,92,2,false)
+    assert(A.contextMenu and A.contextMenu.target=='shape',
+        'Formas precisa de menu específico')
+    choose('filled')
+    assert(A.tool=='shape' and A.shapeFilled,
+        'Forma preenchida via menu não funcionou')
+    A.shapeFilled=false
+    -- Outside click dismisses instead of reaching canvas or toolbar.
+    selectTool('brush')
+    love.draw();love.mousepressed(245,92,2,false)
+    assert(A.contextMenu,'Menu não abriu para teste externo')
+    love.draw();love.mousepressed(math.min(700,w-305),250,1,false)
+    assert(not A.contextMenu and not A.drawing,
+        'Clique externo não pode iniciar uma pincelada')
+    selectTool('inspect')
+    A.sideTab='layers'
+    love.draw()
+    love.mousepressed(370,245,2,false)
+    assert(A.panning and not A.contextMenu,
+        'Botão direito no canvas precisa continuar movendo a vista')
+    love.mousereleased(370,245,2,false)
+    assert(not A.panning,'Arraste direito não foi encerrado')
+    -- Context action on an actual layer row, not just isolated APIs.
+    love.draw()
+    local rows=Thumbnails.rows(h)
+    local start,stop=Thumbnails.window(#A.doc.layers,
+        A.doc.active_layer,rows,A.layerScroll)
+    local target=stop
+    love.mousepressed(panel+75,487,2,false)
+    assert(A.contextMenu and A.contextMenu.kind=='layer' and
+        A.contextMenu.target==target and A.doc.active_layer==target,
+        'Botão direito na linha não selecionou camada nem abriu menu')
+    local originalVisibility=A.doc.layers[target].visible
+    love.keypressed('down')
+    love.keypressed('down')
+    assert(A.contextMenu and
+        A.contextMenu.entries[A.contextMenu.cursor].key=='visibility',
+        'Setas não navegam o menu')
+    love.keypressed('return')
+    assert(not A.contextMenu and
+        A.doc.layers[target].visible~=originalVisibility,
+        'Enter não acionou visibilidade')
+    undoDoc()
+    assert(A.doc.layers[target].visible==originalVisibility,
+        'Desfazer não restaurou visibilidade alterada pelo menu')
+    local beforeDuplicate=#A.doc.layers
+    if beforeDuplicate<Store.MAX_LAYERS then
+        A.layerScroll=nil
+        love.draw()
+        local st,sp=Thumbnails.window(beforeDuplicate,
+            A.doc.active_layer,Thumbnails.rows(h),A.layerScroll)
+        love.mousepressed(panel+74,487,2,false)
+        assert(A.contextMenu and A.contextMenu.target==sp,
+            'Menu de linha precisa respeitar rolagem de camadas')
+        choose('duplicate')
+        assert(#A.doc.layers==beforeDuplicate+1,
+            'Duplicação pelo menu não criou camada')
+        undoDoc()
+        assert(#A.doc.layers==beforeDuplicate,
+            'Desfazer não restaurou estrutura após duplicação no menu')
+    end
+    assert(Native.bytes(A.layerSession.composite)==initialPixels and
+        #A.doc.layers==initialLayerCount,
+        'Menus restaurados não podem alterar pixels ou camada total')
+    -- Menu never produces a paint history entry; actual operations above
+    -- create undoable metadata/structural history already tested.
+    assert(A.layerSession:historyStats().undo<=
+        math.min(initialHistory+1,A.layerSession.MAX_HISTORY_ENTRIES),
+        'Menu contextual inseriu operações de desenho inesperadas')
+    assert(not A.contextMenu and not A.modal,
+        'Menu ou modal residual após verificações')
+    A.brushDiameter=oldDiameter;A.brushOpacity=oldOpacity
+    selectTool(oldTool);A.sideTab=oldTab
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -1789,6 +2004,7 @@ function love.update(dt)
                     'Atalho Limpar atingiu outra camada')
                 verifyVisualToolbar()
                 verifyFocusWorkspace()
+                verifyContextMenus()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1855,6 +2071,10 @@ function love.update(dt)
                     focus_button=true,focus_tab_toggle=true,
                     focus_expanded_canvas=true,focus_quick_brush_controls=true,
                     focus_panel_restoration=true,focus_no_raster_edits=true,
+                    context_tool_menu=true,context_layer_menu=true,
+                    context_menu_click_actions=true,context_menu_keyboard=true,
+                    context_menu_outside_dismiss=true,context_right_pan_preserved=true,
+                    context_menu_undo_redo=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -2360,6 +2580,24 @@ local function drawToolHelp(w,h)
     button('Fechar ajuda',x+width-174,y+height-49,150,33,
         function()A.toolHelp=false end)
 end
+local function drawContextMenu()
+    local m=A.contextMenu
+    box(m.x,m.y,m.w,m.h,'panel')
+    c('accent')
+    love.graphics.rectangle('fill',m.x,m.y,3,m.h,2,2)
+    c('line')
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle('line',m.x+.5,m.y+.5,m.w-1,m.h-1,6,6)
+    text(m.title,m.x+12,m.y+10,'small','text')
+    for i,entry in ipairs(m.entries) do
+        local y=m.y+Menus.HEADER+(i-1)*Menus.ROW
+        button(entry.label,m.x+6,y,m.w-12,Menus.ROW-1,function()
+            local chosen=A.contextMenu
+            A.contextMenu=nil
+            performMenuAction(chosen,entry.key)
+        end,i==m.cursor,not entry.enabled)
+    end
+end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
     box(0,0,w,64,'panel')
@@ -2376,6 +2614,9 @@ function love.draw()
     elseif A.toolHelp and A.screen=='editor' then
         A.buttons={}
         drawToolHelp(w,h)
+    elseif A.contextMenu and A.screen=='editor' then
+        A.buttons={}
+        drawContextMenu()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
@@ -2390,6 +2631,38 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             end
         end
         return
+    end
+    if A.contextMenu then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        A.contextMenu=nil
+        return -- Outside click dismisses; never leaks to the canvas.
+    end
+    if A.screen=='editor' and not A.modal and buttonNumber==2 then
+        local toolId=Menus.toolAt(toolSlots,x,y)
+        if toolId then
+            openContextMenu('tool',toolId,x,y)
+            return
+        end
+        if not A.focusMode and A.sideTab=='layers' and A.tool~='shape'
+            and A.tool~='select' and A.tool~='picker' then
+            local count=#A.doc.layers
+            local rows=Thumbnails.rows(love.graphics.getHeight())
+            local start,stop=Thumbnails.window(count,
+                A.doc.active_layer,rows,A.layerScroll)
+            local index=Menus.layerAt(x,y,
+                love.graphics.getWidth()-268,start,stop)
+            if index then
+                openContextMenu('layer',index,x,y)
+                return
+            end
+        end
     end
     -- Middle/right mouse or Space+left pan the view without opening any
     -- painting, shape, selection or undo transaction.
@@ -2606,14 +2879,14 @@ function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false
+        A.toolHelp=false;A.contextMenu=nil
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.wheelmoved(x,y)
-    if A.toolHelp then return end
+    if A.toolHelp or A.contextMenu then return end
     if A.screen=='editor' and not A.modal then
         local mx=love.mouse.getPosition()
         if not A.focusMode and mx>=love.graphics.getWidth()-268 and
@@ -2657,6 +2930,28 @@ function love.keypressed(key)
         elseif EditorTools.fromKey(key) then
             if selectTool(EditorTools.fromKey(key).id) then
                 A.toolHelp=false
+            end
+        end
+        return
+    end
+    if A.screen=='editor' and A.contextMenu then
+        local menu=A.contextMenu
+        if key=='escape' then
+            A.contextMenu=nil
+        elseif key=='up' or key=='down' then
+            local step=key=='up' and -1 or 1
+            for offset=1,#menu.entries do
+                local index=(menu.cursor-1+step*offset)%#menu.entries+1
+                if menu.entries[index].enabled then
+                    menu.cursor=index
+                    break
+                end
+            end
+        elseif key=='return' or key=='kpenter' then
+            local entry=menu.entries[menu.cursor]
+            if entry and entry.enabled then
+                A.contextMenu=nil
+                guard(function()performMenuAction(menu,entry.key)end)()
             end
         end
         return
