@@ -620,3 +620,39 @@ rb_i32 rb_draw_feather_stroke(rb_u8* dst, rb_u64 capacity,
         static_cast<float>((rgba>>24)&255u),
         static_cast<float>((rgba>>16)&255u),
         static_cast<float>((rgba>>8)&255u)};
+    for (rb_i32 y=top;y<=bottom;++y) {
+        for (rb_i32 x=left;x<=right;++x) {
+            const float cx=static_cast<float>(x)+0.5f;
+            const float cy=static_cast<float>(y)+0.5f;
+            float t=0.0f;
+            if (len2>0.0f) {
+                t=((cx-x0)*dx+(cy-y0)*dy)/len2;
+                if (t<0.0f) t=0.0f;
+                if (t>1.0f) t=1.0f;
+            }
+            const float px=cx-(x0+t*dx);
+            const float py=cy-(y0+t*dy);
+            const float dist2=px*px+py*py;
+            if (dist2>=outer2) continue;
+            const float coverage=dist2<=inner2?1.0f:
+                (outer2-dist2)/(outer2-inner2);
+            const float sa=baseAlpha*coverage;
+            if (sa<=0.0f) continue;
+            rb_u8* pixel=dst+(static_cast<rb_u64>(y)*width+x)*4u;
+            const float da=static_cast<float>(pixel[3])/255.0f;
+            const float remain=da*(1.0f-sa);
+            const float oa=sa+remain;
+            if (oa<=0.0f) continue;
+            const float inv=1.0f/oa;
+            for (rb_u32 channel=0;channel<3u;++channel) {
+                float result=(src[channel]*sa+
+                    static_cast<float>(pixel[channel])*remain)*inv;
+                if (result>255.0f) result=255.0f;
+                if (result<0.0f) result=0.0f;
+                pixel[channel]=static_cast<rb_u8>(result+0.5f);
+            }
+            pixel[3]=static_cast<rb_u8>(oa*255.0f+0.5f);
+        }
+    }
+    return 0;
+}
