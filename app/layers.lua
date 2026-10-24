@@ -443,6 +443,15 @@ function Layers:flip(axis)
     self:recompose()
     return self:finishEdit()
 end
+-- Clear the active raster, not its layer identity, name or properties.
+-- Clearing an already transparent layer is a no-op in chronological history.
+function Layers:clearActive()
+    assert(not self.pending,'Finalize a pincelada antes de limpar')
+    self:beginEdit()
+    Native.clear(self:activeBuffer(),0x00000000)
+    self:recompose()
+    return self:finishEdit()
+end
 function Layers:moveSelection(x,y,w,h,toX,toY)
     assert(not self.pending,'Finalize o traço antes de mover uma seleção')
     assert(x>=0 and y>=0 and w>=1 and h>=1 and
