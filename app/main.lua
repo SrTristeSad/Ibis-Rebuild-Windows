@@ -9,8 +9,9 @@ local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
 local View=require('canvas_view')
 local EditorTools=require('editor_tools')
+local Thumbnails=require('layer_thumbnails')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -39,7 +40,43 @@ local function refreshGallery() A.folders=A.store:folders(A.folder);A.projects=A
 local function setFolder(id)
     A.folder=id or '';refreshGallery()
 end
+local function clearLayerThumbs()
+    if A.layerThumbs then
+        for _,entry in pairs(A.layerThumbs) do
+            entry.image:release()
+        end
+    end
+    A.layerThumbs={}
+    A.layerThumbDirty={}
+end
+local function layerThumb(index)
+    local layer=A.doc.layers[index]
+    assert(layer and A.layerSession.buffers[index],'Camada de miniatura inválida')
+    A.layerThumbs=A.layerThumbs or {}
+    A.layerThumbDirty=A.layerThumbDirty or {}
+    local entry=A.layerThumbs[layer.id]
+    if not entry or A.layerThumbDirty[layer.id] then
+        local pixels=Thumbnails.sample(A.layerSession.buffers[index])
+        local imageData=love.image.newImageData(
+            Thumbnails.SIZE,Thumbnails.SIZE,'rgba8',pixels)
+        local image=love.graphics.newImage(imageData)
+        imageData:release()
+        image:setFilter('nearest','nearest')
+        if entry then entry.image:release() end
+        entry={image=image}
+        A.layerThumbs[layer.id]=entry
+        A.layerThumbDirty[layer.id]=nil
+    end
+    return entry.image
+end
 local function rebuildImage()
+    if A.layerSession and A.doc and A.doc.layers then
+        local layer=A.doc.layers[A.doc.active_layer]
+        if layer then
+            A.layerThumbDirty=A.layerThumbDirty or {}
+            A.layerThumbDirty[layer.id]=true
+        end
+    end
     if A.image then A.image:release() end
     if A.imageData then A.imageData:release() end
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
@@ -82,6 +119,8 @@ local function resetCanvasRotation()
 end
 local function openDoc(doc)
     assert(Native.available,'O editor requer o motor C++ compilado. A galeria continua disponível.')
+    clearLayerThumbs()
+    A.layerScroll=nil
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
@@ -171,6 +210,7 @@ end
 local function toGallery()
     A.shapePreview=nil;A.toolHelp=false
     finishStroke()
+    clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
 end
@@ -1833,6 +1873,7 @@ end
 function love.resize()if A.doc then fit()end end
 function love.quit()
     Ink.close()
+    clearLayerThumbs()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end
         pcall(function()A.store:setPreferences(A.preferences);A.store:saveBrushes(A.brushes)end)
