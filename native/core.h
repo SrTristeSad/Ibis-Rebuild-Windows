@@ -166,4 +166,17 @@ RB_API rb_i32 rb_ink_poll(RBInkEvent* output, rb_u32 capacity);
 RB_API rb_u32 rb_ink_dropped(void);
 RB_API float rb_ink_pressure(rb_u32 raw, rb_u32 pen_mask);
 
+
+/* Independent anisotropic pen brush. A tilt of (0,0) forwards exactly
+   to the existing hard/feather round brush. Other valid tilt angles, in
+   [-90,+90] degrees on each axis, create an ellipse elongated along the
+   tilt vector, swept between endpoints. Hardness=1 is hard edged, lower
+   hardness feathers in normalized elliptical squared distance. Caller-
+   owned straight-alpha RGBA8; 0 success, -1 invalid with no writes.
+   No Windows Ink dependency: all inputs explicit for regression testing. */
+RB_API rb_i32 rb_draw_tilt_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, rb_u32 rgba, float opacity, float hardness,
+    float tilt_x, float tilt_y);
+
 #endif
