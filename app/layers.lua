@@ -180,6 +180,11 @@ function Layers:stroke(x0,y0,x1,y1,diameter,color,opacity)
     Native.basicStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,opacity or 1)
     self:recompose()
 end
+function Layers:softStroke(x0,y0,x1,y1,diameter,color,opacity,hardness)
+    Native.featherStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,
+        opacity or 1,hardness or 0.25)
+    self:recompose()
+end
 function Layers:erase(x0,y0,x1,y1,diameter,opacity)
     Native.basicErase(self:activeBuffer(),x0,y0,x1,y1,diameter,opacity or 1)
     self:recompose()
