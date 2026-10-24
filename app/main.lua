@@ -482,6 +482,73 @@ local function verifyVisualToolbar()
     selectTool('inspect')
     A.sideTab='layers'
 end
+-- Stage 26: exercise focus mode through actual buttons, keyboard and
+-- expanded-canvas hit testing without mutating the existing document.
+local function verifyFocusWorkspace()
+    local w,h=love.graphics.getDimensions()
+    local originalTool,originalTab=A.tool,A.sideTab
+    local diameter,opacity=A.brushDiameter,A.brushOpacity
+    local image=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    local count=#A.doc.layers
+    local dirty=A.dirty
+    local originalView=viewData()
+    local oldX,oldY=View.center(originalView,w,h)
+    assert(not A.focusMode,'Modo foco deve começar fechado no teste')
+    assert(not Workspace.contains(w,h,false,w-75,170),
+        'Região lateral não pode ser canvas com painel aberto')
+    love.draw()
+    love.mousepressed(w-290,31,1,false)
+    assert(A.focusMode,'Botão superior não recolheu o painel')
+    love.draw()
+    assert(Workspace.contains(w,h,true,w-75,170),
+        'Área do antigo painel não passou a ser canvas')
+    for _,target in ipairs(A.buttons) do
+        assert(not (target.x>=w-268 and target.y>64),
+            'Controle do painel permanece clicável após recolher')
+    end
+    local newX,newY=View.center(viewData(),w,h)
+    assert(math.abs(newX-oldX-134)<1e-6 and newY==oldY,
+        'Canvas não se recentralizou sem deslocar verticalmente')
+    A.lastPacket=nil
+    selectTool('inspect')
+    love.draw()
+    love.mousepressed(w-75,170,1,false)
+    assert(A.lastPacket,'Clique na área expandida não chegou ao canvas')
+    selectTool('brush')
+    A.brushDiameter=12;A.brushOpacity=.8
+    love.draw()
+    local dockY=h-116
+    love.mousepressed(506,dockY+12,1,false)
+    assert(A.brushDiameter==10,
+        'Controle rápido de tamanho não alterou o pincel')
+    love.draw();love.mousepressed(582,dockY+12,1,false)
+    assert(A.brushDiameter==12,'Controle rápido + não restaurou tamanho')
+    love.draw();love.mousepressed(674,dockY+12,1,false)
+    assert(math.abs(A.brushOpacity-.7)<1e-6,
+        'Controle rápido de opacidade não funcionou')
+    love.draw();love.mousepressed(754,dockY+12,1,false)
+    assert(math.abs(A.brushOpacity-.8)<1e-6,
+        'Controle rápido + não restaurou opacidade')
+    A.brushDiameter=diameter;A.brushOpacity=opacity
+    love.keypressed('tab')
+    assert(not A.focusMode,'Tab não restaurou painel')
+    local backX,backY=View.center(viewData(),w,h)
+    assert(backX==oldX and backY==oldY,
+        'Retornar do foco alterou posição do canvas')
+    love.keypressed('tab')
+    assert(A.focusMode,'Tab não entrou no foco pela segunda vez')
+    love.draw();love.mousepressed(w-290,31,1,false)
+    assert(not A.focusMode,'Botão superior não restaurou painel')
+    assert(A.zoom==originalView.zoom and A.rotation==originalView.rotation
+        and A.panX==originalView.panX and A.panY==originalView.panY,
+        'Foco alterou zoom, rotação ou pan anteriores')
+    assert(Native.bytes(A.layerSession.composite)==image and
+        A.layerSession:historyStats().undo==history and
+        #A.doc.layers==count and A.dirty==dirty,
+        'Modo foco alterou pixels, camadas, histórico ou dirty flag')
+    selectTool(originalTool);A.sideTab=originalTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -1721,6 +1788,7 @@ function love.update(dt)
                 assert(Native.bytes(A.layerSession.buffers[1])==lowerBeforeClear,
                     'Atalho Limpar atingiu outra camada')
                 verifyVisualToolbar()
+                verifyFocusWorkspace()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1784,6 +1852,9 @@ function love.update(dt)
                     layer_clear_isolated=true,layer_clear_rbd2=true,
                     vector_tool_glyphs=true,visual_toolbar_hitboxes=true,
                     visual_toolbar_switching=true,visual_only_no_raster_edits=true,
+                    focus_button=true,focus_tab_toggle=true,
+                    focus_expanded_canvas=true,focus_quick_brush_controls=true,
+                    focus_panel_restoration=true,focus_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
