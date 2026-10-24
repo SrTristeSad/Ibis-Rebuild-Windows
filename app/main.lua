@@ -907,8 +907,11 @@ function love.update(dt)
                 local beforePixels=Native.bytes(A.layerSession:activeBuffer())
                 local beforeHistory=A.layerSession:historyStats().undo
                 local firstZoom=A.zoom
+                love.draw();love.mousepressed(39,screenH-100,1)
+                local reducedZoom=A.zoom
+                assert(reducedZoom<firstZoom,'Botão − de zoom não funcionou')
                 love.draw();love.mousepressed(78,screenH-100,1)
-                assert(A.zoom>firstZoom,'Botão + de zoom não funcionou')
+                assert(A.zoom>reducedZoom,'Botão + de zoom não funcionou')
                 local anchoredX,anchoredY=canvasPoint(cursorX,cursorY)
                 assert(math.abs(anchoredX-viewBeforeX)<1e-5 and
                     math.abs(anchoredY-viewBeforeY)<1e-5,
@@ -925,11 +928,11 @@ function love.update(dt)
                 assert(A.panX==0 and A.panY==0 and A.rotation==0,
                     'Botão Encaixar não recentralizou')
                 local fitZoom=A.zoom
-                love.keypressed('=')
-                assert(A.zoom>fitZoom,'Atalho de aumentar zoom não funcionou')
                 love.keypressed('-')
+                assert(A.zoom<fitZoom,'Atalho de reduzir zoom não funcionou')
+                love.keypressed('=')
                 assert(math.abs(A.zoom-fitZoom)<1e-7,
-                    'Atalho de reduzir zoom não recuperou escala')
+                    'Atalho de aumentar zoom não recuperou escala')
                 love.keypressed('q')
                 assert(A.rotation<0,'Atalho Q não girou canvas')
                 love.keypressed('e')
@@ -963,13 +966,13 @@ function love.update(dt)
                 love.mousereleased(panX,panY,3,false)
                 assert(not A.panning,'Botão direito não encerrou navegação')
                 local wheelZoom=A.zoom
-                love.wheelmoved(0,1)
-                assert(A.zoom>wheelZoom,
-                    'Roda do mouse não aumentou zoom da tela')
-                local wheelReduced=A.zoom
                 love.wheelmoved(0,-1)
-                assert(A.zoom<wheelReduced,
+                assert(A.zoom<wheelZoom,
                     'Roda do mouse não reduziu zoom da tela')
+                local wheelReduced=A.zoom
+                love.wheelmoved(0,1)
+                assert(A.zoom>wheelReduced,
+                    'Roda do mouse não aumentou zoom da tela')
                 assert(Native.bytes(A.layerSession:activeBuffer())==beforePixels,
                     'Navegação modificou pixels da camada ativa')
                 assert(A.layerSession:historyStats().undo==beforeHistory,
