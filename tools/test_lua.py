@@ -117,6 +117,9 @@ def run_tests(runtime_path, output):
             tool_program="return require('json').encode(require('tests.test_editor_tools').run())"
             tool_registry=json.loads(native_state.execute(tool_program))
             assert tool_registry.get('passed') and tool_registry.get('ordered_shortcuts') and tool_registry.get('no_reserved_shortcut_collision')
+            icon_program="return require('json').encode(require('tests.test_ui_icons').run())"
+            icons=json.loads(native_state.execute(icon_program))
+            assert icons.get('passed') and icons.get('complete_glyph_registry') and icons.get('normalized_bounds')
             thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
             thumbs=json.loads(native_state.execute(thumbnail_program))
             assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
@@ -169,6 +172,7 @@ def run_tests(runtime_path, output):
         report['native_tilt_brush'] = tilt_brush
         report['canvas_view'] = viewport
         report['editor_tool_registry'] = tool_registry
+        report['editor_vector_icons'] = icons
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result
