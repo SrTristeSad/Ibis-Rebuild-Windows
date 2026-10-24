@@ -5,7 +5,8 @@ local FS=require('fs')
 local JSON=require('json')
 local Colors=require('colors')
 local Stabilizer=require('stroke_stabilizer')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local Pressure=require('touch_pressure')
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,touchId=nil,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -56,32 +57,33 @@ local function openDoc(doc)
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
 -- All stroke styles use the same compositing and transaction boundary.
-local function paintBrushSegment(x,y)
+local function paintBrushSegment(x,y,pressure)
     if not A.drawing then return end
     local previousX,previousY=A.lastStrokeX,A.lastStrokeY
+    A.lastPressure=Pressure.normalize(pressure or A.lastPressure)
     if x==previousX and y==previousY then return end
+    local diameter=Pressure.diameter(A.brushDiameter,A.lastPressure)
+    local opacity=Pressure.opacity(A.brushOpacity,A.lastPressure)
     if A.tool=='erase' then
-        A.layerSession:erase(previousX,previousY,x,y,
-            A.brushDiameter,A.brushOpacity)
+        A.layerSession:erase(previousX,previousY,x,y,diameter,opacity)
     elseif A.brushStyle=='soft' then
-        A.layerSession:softStroke(previousX,previousY,x,y,
-            A.brushDiameter,A.color,A.brushOpacity,0.25)
+        A.layerSession:softStroke(previousX,previousY,x,y,diameter,
+            A.color,opacity,0.25)
     else
-        A.layerSession:stroke(previousX,previousY,x,y,
-            A.brushDiameter,A.color,A.brushOpacity)
+        A.layerSession:stroke(previousX,previousY,x,y,diameter,A.color,opacity)
     end
     A.lastStrokeX=x;A.lastStrokeY=y
     A.dirty=true;rebuildImage()
 end
-local function finishStroke(finalX,finalY)
+local function finishStroke(finalX,finalY,pressure)
     if A.drawing and A.stabilizer then
         if finalX and finalY then
             local x,y=A.stabilizer:sample(finalX,finalY)
-            paintBrushSegment(x,y)
+            paintBrushSegment(x,y,pressure)
         end
         -- Final endpoint correction avoids dropped last pixel when smoothing.
         local x,y=A.stabilizer:finish()
-        paintBrushSegment(x,y)
+        paintBrushSegment(x,y,pressure)
     end
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
     A.drawing=false;A.stabilizer=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
@@ -669,6 +671,86 @@ function love.update(dt)
                     love.draw();love.mousepressed(panel+40,720,1)
                 end
                 assert(A.stabilization==0,'Stabilization decrement buttons failed')
+                -- Exercise actual LÖVE touch callbacks with simulated pressure.
+                A.layerSession:add('Pressão de toque GUI')
+                A.dirty=true;rebuildImage()
+                love.draw();love.mousepressed(252,90,1)
+                assert(A.tool=='brush' and A.brushStyle=='hard',
+                    'Touch test requires the hard C++ brush')
+                for i=1,3 do
+                    love.draw();love.mousepressed(panel+40,472,1)
+                end
+                assert(A.brushDiameter==2,'Touch test could not select thin brush')
+                love.draw();love.mousepressed(panel+226,637,1)
+                assert(math.abs(A.brushOpacity-1)<.001,
+                    'Touch test requires 100% base opacity')
+                local lowX,lowY=point(1,1)
+                local highX,highY=point(7,5)
+                local oldCount=A.layerSession:historyStats().undo
+                love.draw();love.touchpressed('contact-light',lowX,lowY,0,0,.2)
+                assert(A.touchId=='contact-light' and A.drawing,
+                    'Touch press did not own brush stroke')
+                local lowBeforeSynthetic=Native.readPixel(
+                    A.layerSession:activeBuffer(),1,1)
+                love.mousepressed(lowX,lowY,1,true)
+                love.mousemoved(highX,highY,highX-lowX,highY-lowY,true)
+                love.mousereleased(lowX,lowY,1,true)
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==
+                    lowBeforeSynthetic,'Synthetic touch mouse event painted twice')
+                love.touchpressed('contact-second',highX,highY,0,0,1)
+                love.touchreleased('contact-second',highX,highY,0,0,1)
+                assert(A.touchId=='contact-light' and
+                    Native.readPixel(A.layerSession:activeBuffer(),7,5)==0,
+                    'A second touch interrupted the active stroke')
+                love.touchreleased('contact-light',lowX,lowY,0,0,.2)
+                local lowAlpha=Native.readPixel(
+                    A.layerSession:activeBuffer(),1,1)%256
+                assert(lowAlpha>0 and lowAlpha<255 and A.touchId==nil,
+                    'Low touch pressure did not produce partial alpha')
+                assert(A.layerSession:historyStats().undo==oldCount+1,
+                    'Synthetic mouse events created duplicate undo entries')
+                love.draw();love.touchpressed('contact-strong',highX,highY,0,0,1)
+                love.touchreleased('contact-strong',highX,highY,0,0,1)
+                local highAlpha=Native.readPixel(
+                    A.layerSession:activeBuffer(),7,5)%256
+                assert(highAlpha>lowAlpha and highAlpha==255,
+                    'Full pressure should produce stronger C++ paint')
+                -- Moving pressure: release must reach exact endpoint with
+                -- one undo/redo transaction and preserve pixels in RBD2.
+                A.layerSession:add('Traço pressão variável GUI')
+                A.dirty=true;rebuildImage()
+                local sx,sy=point(1,3)
+                local mx,my=point(3,3)
+                local ex,ey=point(5,3)
+                local beforeTouch=A.layerSession:historyStats().undo
+                love.draw();love.touchpressed('contact-move',sx,sy,0,0,.2)
+                love.touchmoved('contact-move',mx,my,mx-sx,my-sy,.6)
+                assert(A.lastPressure==.6,
+                    'Pressure from touchmoved was not used')
+                love.touchreleased('contact-move',ex,ey,ex-mx,ey-my,1)
+                local lastPixel=Native.readPixel(A.layerSession:activeBuffer(),5,3)
+                assert(lastPixel%256>0 and not A.drawing and A.touchId==nil,
+                    'Pressure stroke failed to complete at release')
+                assert(A.layerSession:historyStats().undo==beforeTouch+1,
+                    'Moving touch must create one undo entry')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,3)==0,
+                    'Touch undo did not remove final pixel')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,3)==lastPixel,
+                    'Touch redo did not restore pressure stroke')
+                saveDoc()
+                local touchSaved=A.store:openProject(A.doc.id)
+                local lastOffset=(3*A.doc.width+5)*4+1
+                assert(touchSaved.layers[6].pixels:byte(lastOffset+3)==
+                    lastPixel%256,'Touch stroke not persisted in RBD2')
+                -- Touch must also operate existing toolbar/canvas without
+                -- duplicated mouse emulation.
+                love.draw()
+                love.touchpressed('touch-toolbar',192,90,0,0,1)
+                love.mousepressed(192,90,1,true)
+                love.touchreleased('touch-toolbar',192,90,0,0,1)
+                assert(A.tool=='pixel','Touch could not select existing toolbar')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -687,7 +769,10 @@ function love.update(dt)
                     stabilization_buttons=true,filtered_mouse_drag=true,
                     stabilized_exact_endpoint=true,stabilized_undo_redo=true,
                     stabilized_rbd2_roundtrip=true,
-                    persisted_from_real_editor=true}
+                    touch_pressure_low_high=true,touch_synthetic_suppression=true,
+                    touch_single_owner=true,touch_pressure_move=true,
+                    touch_undo_redo=true,touch_rbd2_roundtrip=true,
+                    touch_toolbar=true,persisted_from_real_editor=true}
             end)
             if not ok then
                 A.testReport.ok=false
@@ -1044,13 +1129,14 @@ function love.draw()
     if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
     if A.modal then A.buttons={};drawModal(w,h)end
 end
-function love.mousepressed(x,y,buttonNumber)
+local function pointerPressed(x,y,buttonNumber,pressure)
+    pressure=Pressure.normalize(pressure)
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and x<love.graphics.getWidth()-280 and y>125 and y<love.graphics.getHeight()-78 then
             guard(function()
                 local px,py=canvasPoint(x,y)
-                A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
+                A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=pressure,time=math.floor(love.timer.getTime()*1000)}})
                 if A.tool=='picker' then
                     pickColor(px,py)
                 elseif A.tool=='shape' and px>=0 and py>=0 and
@@ -1093,15 +1179,17 @@ function love.mousepressed(x,y,buttonNumber)
                     status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
+                    local diameter=Pressure.diameter(A.brushDiameter,pressure)
+                    local opacity=Pressure.opacity(A.brushOpacity,pressure)
                     if A.tool=='erase' then
-                        A.layerSession:erase(px,py,px,py,A.brushDiameter,A.brushOpacity)
+                        A.layerSession:erase(px,py,px,py,diameter,opacity)
                     elseif A.brushStyle=='soft' then
-                        A.layerSession:softStroke(px,py,px,py,A.brushDiameter,
-                            A.color,A.brushOpacity,0.25)
+                        A.layerSession:softStroke(px,py,px,py,diameter,
+                            A.color,opacity,0.25)
                     else
-                        A.layerSession:stroke(px,py,px,py,A.brushDiameter,
-                            A.color,A.brushOpacity)
+                        A.layerSession:stroke(px,py,px,py,diameter,A.color,opacity)
                     end
+                    A.lastPressure=pressure
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.stabilizer=Stabilizer.new(A.stabilization,px,py)
                     A.dirty=true;rebuildImage()
@@ -1112,7 +1200,7 @@ function love.mousepressed(x,y,buttonNumber)
         end
     elseif buttonNumber==3 and A.screen=='editor' then A.panning=true end
 end
-function love.mousereleased(x,y,b)
+local function pointerReleased(x,y,b,pressure)
     if b==3 then A.panning=false end
     if b==1 then
         guard(finishShape)()
@@ -1122,14 +1210,14 @@ function love.mousereleased(x,y,b)
                 local px,py=canvasPoint(x,y)
                 px=math.max(-16384,math.min(16384,px))
                 py=math.max(-16384,math.min(16384,py))
-                finishStroke(px,py)
+                finishStroke(px,py,pressure)
             end)()
         else
             guard(finishStroke)()
         end
     end
 end
-function love.mousemoved(x,y,dx,dy)
+local function pointerMoved(x,y,dx,dy,pressure)
     if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
     if A.shapePreview and A.screen=='editor' and A.tool=='shape' then
         local px,py=canvasPoint(x,y)
@@ -1160,13 +1248,41 @@ function love.mousemoved(x,y,dx,dy)
             px=math.max(-16384,math.min(16384,px))
             py=math.max(-16384,math.min(16384,py))
             local sx,sy=A.stabilizer:sample(px,py)
-            paintBrushSegment(sx,sy)
+            paintBrushSegment(sx,sy,pressure)
         end)()
     end
 end
+function love.mousepressed(x,y,buttonNumber,istouch)
+    if istouch or A.touchId~=nil then return end
+    pointerPressed(x,y,buttonNumber,1)
+end
+function love.mousereleased(x,y,b,istouch)
+    if istouch or A.touchId~=nil then return end
+    pointerReleased(x,y,b,1)
+end
+function love.mousemoved(x,y,dx,dy,istouch)
+    if istouch or A.touchId~=nil then return end
+    pointerMoved(x,y,dx,dy,1)
+end
+-- LÖVE 11.5 touch callbacks report pressure but do not distinguish a
+-- pen from a finger. Own exactly one contact until its release.
+function love.touchpressed(id,x,y,dx,dy,pressure)
+    if A.touchId~=nil or A.drawing then return end
+    A.touchId=id
+    pointerPressed(x,y,1,Pressure.normalize(pressure))
+end
+function love.touchmoved(id,x,y,dx,dy,pressure)
+    if A.touchId~=id then return end
+    pointerMoved(x,y,dx,dy,Pressure.normalize(pressure))
+end
+function love.touchreleased(id,x,y,dx,dy,pressure)
+    if A.touchId~=id then return end
+    pointerReleased(x,y,1,Pressure.normalize(pressure))
+    A.touchId=nil
+end
 function love.focus(focused)
     if not focused then
-        A.shapePreview=nil
+        A.shapePreview=nil;A.touchId=nil
         guard(finishSelection)()
         guard(finishStroke)()
     end
