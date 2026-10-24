@@ -1046,13 +1046,14 @@ function love.draw()
     if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
     if A.modal then A.buttons={};drawModal(w,h)end
 end
-function love.mousepressed(x,y,buttonNumber)
+local function pointerPressed(x,y,buttonNumber,pressure)
+    pressure=Pressure.normalize(pressure)
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and x<love.graphics.getWidth()-280 and y>125 and y<love.graphics.getHeight()-78 then
             guard(function()
                 local px,py=canvasPoint(x,y)
-                A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=Native.pressure(1,false,0,1),time=math.floor(love.timer.getTime()*1000)}})
+                A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=pressure,time=math.floor(love.timer.getTime()*1000)}})
                 if A.tool=='picker' then
                     pickColor(px,py)
                 elseif A.tool=='shape' and px>=0 and py>=0 and
@@ -1095,15 +1096,17 @@ function love.mousepressed(x,y,buttonNumber)
                     status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
+                    local diameter=Pressure.diameter(A.brushDiameter,pressure)
+                    local opacity=Pressure.opacity(A.brushOpacity,pressure)
                     if A.tool=='erase' then
-                        A.layerSession:erase(px,py,px,py,A.brushDiameter,A.brushOpacity)
+                        A.layerSession:erase(px,py,px,py,diameter,opacity)
                     elseif A.brushStyle=='soft' then
-                        A.layerSession:softStroke(px,py,px,py,A.brushDiameter,
-                            A.color,A.brushOpacity,0.25)
+                        A.layerSession:softStroke(px,py,px,py,diameter,
+                            A.color,opacity,0.25)
                     else
-                        A.layerSession:stroke(px,py,px,py,A.brushDiameter,
-                            A.color,A.brushOpacity)
+                        A.layerSession:stroke(px,py,px,py,diameter,A.color,opacity)
                     end
+                    A.lastPressure=pressure
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.stabilizer=Stabilizer.new(A.stabilization,px,py)
                     A.dirty=true;rebuildImage()
@@ -1114,7 +1117,7 @@ function love.mousepressed(x,y,buttonNumber)
         end
     elseif buttonNumber==3 and A.screen=='editor' then A.panning=true end
 end
-function love.mousereleased(x,y,b)
+local function pointerReleased(x,y,b,pressure)
     if b==3 then A.panning=false end
     if b==1 then
         guard(finishShape)()
@@ -1124,14 +1127,14 @@ function love.mousereleased(x,y,b)
                 local px,py=canvasPoint(x,y)
                 px=math.max(-16384,math.min(16384,px))
                 py=math.max(-16384,math.min(16384,py))
-                finishStroke(px,py)
+                finishStroke(px,py,pressure)
             end)()
         else
             guard(finishStroke)()
         end
     end
 end
-function love.mousemoved(x,y,dx,dy)
+local function pointerMoved(x,y,dx,dy,pressure)
     if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
     if A.shapePreview and A.screen=='editor' and A.tool=='shape' then
         local px,py=canvasPoint(x,y)
@@ -1162,13 +1165,41 @@ function love.mousemoved(x,y,dx,dy)
             px=math.max(-16384,math.min(16384,px))
             py=math.max(-16384,math.min(16384,py))
             local sx,sy=A.stabilizer:sample(px,py)
-            paintBrushSegment(sx,sy)
+            paintBrushSegment(sx,sy,pressure)
         end)()
     end
 end
+function love.mousepressed(x,y,buttonNumber,istouch)
+    if istouch or A.touchId~=nil then return end
+    pointerPressed(x,y,buttonNumber,1)
+end
+function love.mousereleased(x,y,b,istouch)
+    if istouch or A.touchId~=nil then return end
+    pointerReleased(x,y,b,1)
+end
+function love.mousemoved(x,y,dx,dy,istouch)
+    if istouch or A.touchId~=nil then return end
+    pointerMoved(x,y,dx,dy,1)
+end
+-- LÖVE 11.5 touch callbacks report pressure but do not distinguish a
+-- pen from a finger. Own exactly one contact until its release.
+function love.touchpressed(id,x,y,dx,dy,pressure)
+    if A.touchId~=nil or A.drawing then return end
+    A.touchId=id
+    pointerPressed(x,y,1,Pressure.normalize(pressure))
+end
+function love.touchmoved(id,x,y,dx,dy,pressure)
+    if A.touchId~=id then return end
+    pointerMoved(x,y,dx,dy,Pressure.normalize(pressure))
+end
+function love.touchreleased(id,x,y,dx,dy,pressure)
+    if A.touchId~=id then return end
+    pointerReleased(x,y,1,Pressure.normalize(pressure))
+    A.touchId=nil
+end
 function love.focus(focused)
     if not focused then
-        A.shapePreview=nil
+        A.shapePreview=nil;A.touchId=nil
         guard(finishSelection)()
         guard(finishStroke)()
     end
