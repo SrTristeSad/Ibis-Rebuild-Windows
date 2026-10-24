@@ -105,6 +105,60 @@ local function reorder(self,from,to,active)
     table.insert(self.buffers,to,buffer)
     self.doc.active_layer=active
 end
+-- Merge two adjacent normal-blend layers in C++ while preserving the
+-- visible contribution of each source (including layer opacity/visibility).
+-- The resulting lower layer has full opacity and keeps the lower layer ID.
+local function flattenedPair(self,below,above,belowBuffer,aboveBuffer)
+    local target=Native.buffer(self.doc.width,self.doc.height)
+    Native.clear(target,0x00000000)
+    if below.visible and below.opacity>0 then
+        Native.composite(target,belowBuffer,below.opacity)
+    end
+    if above.visible and above.opacity>0 then
+        Native.composite(target,aboveBuffer,above.opacity)
+    end
+    return target
+end
+local function finalMergedLayer(below,pixels)
+    return {id=below.id,name=below.name,opacity=1,
+        visible=true,pixels=pixels}
+end
+function Layers:_undoMerge(entry)
+    local lowerIndex=entry.index
+    assert(#self.doc.layers<Store.MAX_LAYERS and
+        self.doc.layers[lowerIndex] and
+        self.doc.layers[lowerIndex].id==entry.below.id,
+        'Camada mesclada não corresponde ao histórico')
+    local lowerBuffer=Native.buffer(self.doc.width,self.doc.height,
+        entry.below.pixels)
+    local upperBuffer=Native.buffer(self.doc.width,self.doc.height,
+        entry.above.pixels)
+    self.doc.layers[lowerIndex]=layerFromSnapshot(entry.below)
+    self.buffers[lowerIndex]=lowerBuffer
+    table.insert(self.doc.layers,lowerIndex+1,layerFromSnapshot(entry.above))
+    table.insert(self.buffers,lowerIndex+1,upperBuffer)
+    self.doc.active_layer=entry.activeBefore
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+end
+function Layers:_redoMerge(entry)
+    local lowerIndex=entry.index
+    assert(self.doc.layers[lowerIndex] and
+        self.doc.layers[lowerIndex].id==entry.below.id and
+        self.doc.layers[lowerIndex+1] and
+        self.doc.layers[lowerIndex+1].id==entry.above.id,
+        'As camadas originais não correspondem ao histórico')
+    local merged=flattenedPair(self,entry.below,entry.above,
+        self.buffers[lowerIndex],self.buffers[lowerIndex+1])
+    self.doc.layers[lowerIndex]=finalMergedLayer(entry.below,
+        Native.bytes(merged))
+    self.buffers[lowerIndex]=merged
+    table.remove(self.doc.layers,lowerIndex+1)
+    table.remove(self.buffers,lowerIndex+1)
+    self.doc.active_layer=entry.activeAfter
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+end
 function Layers:_applyStructural(entry,undoing)
     if entry.kind=='insert' then
         if undoing then
@@ -124,6 +178,10 @@ function Layers:_applyStructural(entry,undoing)
         assert(self.doc.layers[from] and self.doc.layers[from].id==entry.id,
             'Camada movimentada não coincide com o histórico')
         reorder(self,from,to,undoing and entry.activeBefore or entry.activeAfter)
+    elseif entry.kind=='merge' then
+        if undoing then self:_undoMerge(entry)
+        else self:_redoMerge(entry) end
+        return
     elseif entry.kind=='property' then
         local layer
         for _,candidate in ipairs(self.doc.layers) do
