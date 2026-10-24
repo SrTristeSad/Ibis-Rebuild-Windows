@@ -67,7 +67,7 @@ function T.run(root)
     recovered:setOpacity(2,.5)
     check(recovered:canUndo() and recovered:historyStats().undo==
         Layers.MAX_HISTORY_ENTRIES,'Opacity change must join bounded history')
-    recovered:beginEdit();recovered:erase(2.5,1.5,2.5,1,0)
+    recovered:beginEdit();recovered:erase(2.5,1.5,2.5,1.5,1,0)
     check(not recovered:finishEdit(),'no-op should not create history')
     check(recovered:historyStats().undo==Layers.MAX_HISTORY_ENTRIES,
         'No-op must not add a new history step')
