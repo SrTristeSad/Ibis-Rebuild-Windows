@@ -899,6 +899,84 @@ function love.update(dt)
                     'Pincel redondo desativado não desenhou centro')
                 love.draw();love.mousepressed(panel+120,428,1)
                 assert(A.penTiltEnabled,'Não foi possível reativar inclinação')
+                -- Stage 15: actual UI controls and simulated pointer navigation.
+                -- Navigation must be view-only: no pixels, layers or history changed.
+                local screenW,screenH=love.graphics.getDimensions()
+                local cursorX,cursorY=(screenW-280)/2,(screenH+56)/2
+                local viewBeforeX,viewBeforeY=canvasPoint(cursorX,cursorY)
+                local beforePixels=Native.bytes(A.layerSession:activeBuffer())
+                local beforeHistory=A.layerSession:historyStats().undo
+                local firstZoom=A.zoom
+                love.draw();love.mousepressed(78,screenH-100,1)
+                assert(A.zoom>firstZoom,'Botão + de zoom não funcionou')
+                local anchoredX,anchoredY=canvasPoint(cursorX,cursorY)
+                assert(math.abs(anchoredX-viewBeforeX)<1e-5 and
+                    math.abs(anchoredY-viewBeforeY)<1e-5,
+                    'Zoom via botão deslocou a âncora do canvas')
+                love.draw();love.mousepressed(122,screenH-100,1)
+                assert(A.rotation<0,'Botão de rotação não funcionou')
+                anchoredX,anchoredY=canvasPoint(cursorX,cursorY)
+                assert(math.abs(anchoredX-viewBeforeX)<1e-5 and
+                    math.abs(anchoredY-viewBeforeY)<1e-5,
+                    'Rotação pelo painel deslocou a âncora')
+                love.draw();love.mousepressed(201,screenH-100,1)
+                assert(A.rotation==0,'Botão 0° não resetou rotação')
+                love.draw();love.mousepressed(278,screenH-100,1)
+                assert(A.panX==0 and A.panY==0 and A.rotation==0,
+                    'Botão Encaixar não recentralizou')
+                local fitZoom=A.zoom
+                love.keypressed('=')
+                assert(A.zoom>fitZoom,'Atalho de aumentar zoom não funcionou')
+                love.keypressed('-')
+                assert(math.abs(A.zoom-fitZoom)<1e-7,
+                    'Atalho de reduzir zoom não recuperou escala')
+                love.keypressed('q')
+                assert(A.rotation<0,'Atalho Q não girou canvas')
+                love.keypressed('e')
+                assert(math.abs(A.rotation)<1e-7,'Atalho E não reverteu rotação')
+                love.keypressed('0')
+                assert(A.panX==0 and A.panY==0 and A.rotation==0,
+                    'Atalho 0 não executou ajuste')
+                local panX,panY=cursorX,cursorY
+                love.keypressed('space')
+                love.mousepressed(panX,panY,1,false)
+                assert(A.panning and A.panButton==1 and not A.drawing,
+                    'Espaço+arraste não entrou no modo mover tela')
+                local originalPanX,originalPanY=A.panX,A.panY
+                love.mousemoved(panX+43,panY-17,43,-17,false)
+                assert(A.panX==originalPanX+43 and A.panY==originalPanY-17,
+                    'Arraste em modo Espaço não deslocou a visualização')
+                love.mousereleased(panX+43,panY-17,1,false)
+                love.keyreleased('space')
+                assert(not A.panning and not A.spaceHeld,
+                    'Soltura do mouse/Espaço não encerrou navegação')
+                love.mousepressed(panX,panY,2,false)
+                assert(A.panning and A.panButton==2,
+                    'Botão do meio não ativou navegação')
+                love.mousemoved(panX-10,panY+12,-10,12,false)
+                love.mousereleased(panX-10,panY+12,2,false)
+                assert(not A.panning and A.panButton==nil,
+                    'Botão do meio não encerrou navegação')
+                love.mousepressed(panX,panY,3,false)
+                assert(A.panning and A.panButton==3,
+                    'Botão direito não ativou navegação')
+                love.mousereleased(panX,panY,3,false)
+                assert(not A.panning,'Botão direito não encerrou navegação')
+                local wheelZoom=A.zoom
+                love.wheelmoved(0,1)
+                assert(A.zoom>wheelZoom,
+                    'Roda do mouse não aumentou zoom da tela')
+                local wheelReduced=A.zoom
+                love.wheelmoved(0,-1)
+                assert(A.zoom<wheelReduced,
+                    'Roda do mouse não reduziu zoom da tela')
+                assert(Native.bytes(A.layerSession:activeBuffer())==beforePixels,
+                    'Navegação modificou pixels da camada ativa')
+                assert(A.layerSession:historyStats().undo==beforeHistory,
+                    'Navegação gerou indevidamente uma operação de desenho')
+                assert(not A.layerSession.pending and not A.drawing,
+                    'Navegação deixou transação de pincel aberta')
+                love.keypressed('f')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -926,6 +1004,10 @@ function love.update(dt)
                     winink_real_hwnd_attached=true,
                     tilted_pen_ellipse=true,tilted_pen_toggle=true,
                     tilted_pen_undo_redo=true,tilted_pen_rbd2_roundtrip=true,
+                    canvas_zoom_buttons=true,canvas_rotation_buttons=true,
+                    canvas_keyboard_shortcuts=true,canvas_pan_space=true,
+                    canvas_pan_middle_right=true,canvas_wheel_zoom=true,
+                    canvas_navigation_no_raster_edit=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
