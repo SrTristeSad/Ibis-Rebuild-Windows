@@ -7,8 +7,9 @@ local Colors=require('colors')
 local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
+local View=require('canvas_view')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -43,10 +44,40 @@ local function rebuildImage()
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
     A.image=love.graphics.newImage(A.imageData);A.image:setFilter('nearest','nearest')
 end
+local function viewData()
+    return {zoom=A.zoom,rotation=A.rotation,panX=A.panX,panY=A.panY,
+        width=A.doc.width,height=A.doc.height}
+end
+local function commitView(v)
+    A.zoom=v.zoom;A.rotation=v.rotation;A.panX=v.panX;A.panY=v.panY
+end
 local function fit()
     if not A.doc then return end
-    local w,h=love.graphics.getDimensions();A.zoom=math.min((w-380)/A.doc.width,(h-200)/A.doc.height)*.84
-    A.panX=0;A.panY=0;A.rotation=0
+    local w,h=love.graphics.getDimensions()
+    local v=viewData();View.fit(v,w,h);commitView(v)
+end
+local function zoomCanvas(factor,mx,my)
+    if not A.doc then return false end
+    local w,h=love.graphics.getDimensions()
+    mx=mx or (w-280)/2;my=my or (h+56)/2
+    local v=viewData()
+    local changed=View.zoomAt(v,w,h,mx,my,factor)
+    commitView(v);return changed
+end
+local function rotateCanvas(delta,mx,my)
+    if not A.doc then return false end
+    local w,h=love.graphics.getDimensions()
+    mx=mx or (w-280)/2;my=my or (h+56)/2
+    local v=viewData()
+    local changed=View.rotateAt(v,w,h,mx,my,delta)
+    commitView(v);return changed
+end
+local function resetCanvasRotation()
+    if not A.doc then return false end
+    local w,h=love.graphics.getDimensions()
+    local v=viewData()
+    local changed=View.resetRotation(v,w,h,(w-280)/2,(h+56)/2)
+    commitView(v);return changed
 end
 local function openDoc(doc)
     assert(Native.available,'O editor requer o motor C++ compilado. A galeria continua disponível.')
@@ -160,12 +191,12 @@ local function submitModal()
     love.keyboard.setTextInput(A.modal~=nil)
 end
 local function canvasTransform()
-    local w,h=love.graphics.getDimensions();return (w-280)/2+A.panX,(h+56)/2+A.panY
+    local w,h=love.graphics.getDimensions()
+    return View.center(viewData(),w,h)
 end
 local function canvasPoint(mx,my)
-    local cx,cy=canvasTransform();local dx,dy=(mx-cx)/A.zoom,(my-cy)/A.zoom
-    local ca,sa=math.cos(-A.rotation),math.sin(-A.rotation)
-    return dx*ca-dy*sa+A.doc.width/2,dx*sa+dy*ca+A.doc.height/2
+    local w,h=love.graphics.getDimensions()
+    return View.toCanvas(viewData(),w,h,mx,my)
 end
 local function clampPixel(value,size)
     return math.max(0,math.min(size-1,math.floor(value)))
@@ -868,6 +899,87 @@ function love.update(dt)
                     'Pincel redondo desativado não desenhou centro')
                 love.draw();love.mousepressed(panel+120,428,1)
                 assert(A.penTiltEnabled,'Não foi possível reativar inclinação')
+                -- Stage 15: actual UI controls and simulated pointer navigation.
+                -- Navigation must be view-only: no pixels, layers or history changed.
+                local screenW,screenH=love.graphics.getDimensions()
+                local cursorX,cursorY=(screenW-280)/2,(screenH+56)/2
+                local viewBeforeX,viewBeforeY=canvasPoint(cursorX,cursorY)
+                local beforePixels=Native.bytes(A.layerSession:activeBuffer())
+                local beforeHistory=A.layerSession:historyStats().undo
+                local firstZoom=A.zoom
+                love.draw();love.mousepressed(39,screenH-100,1)
+                local reducedZoom=A.zoom
+                assert(reducedZoom<firstZoom,'Botão − de zoom não funcionou')
+                love.draw();love.mousepressed(78,screenH-100,1)
+                assert(A.zoom>reducedZoom,'Botão + de zoom não funcionou')
+                local anchoredX,anchoredY=canvasPoint(cursorX,cursorY)
+                assert(math.abs(anchoredX-viewBeforeX)<1e-5 and
+                    math.abs(anchoredY-viewBeforeY)<1e-5,
+                    'Zoom via botão deslocou a âncora do canvas')
+                love.draw();love.mousepressed(122,screenH-100,1)
+                assert(A.rotation<0,'Botão de rotação não funcionou')
+                anchoredX,anchoredY=canvasPoint(cursorX,cursorY)
+                assert(math.abs(anchoredX-viewBeforeX)<1e-5 and
+                    math.abs(anchoredY-viewBeforeY)<1e-5,
+                    'Rotação pelo painel deslocou a âncora')
+                love.draw();love.mousepressed(201,screenH-100,1)
+                assert(A.rotation==0,'Botão 0° não resetou rotação')
+                love.draw();love.mousepressed(278,screenH-100,1)
+                assert(A.panX==0 and A.panY==0 and A.rotation==0,
+                    'Botão Encaixar não recentralizou')
+                local fitZoom=A.zoom
+                love.keypressed('-')
+                assert(A.zoom<fitZoom,'Atalho de reduzir zoom não funcionou')
+                love.keypressed('=')
+                assert(math.abs(A.zoom-fitZoom)<1e-7,
+                    'Atalho de aumentar zoom não recuperou escala')
+                love.keypressed('q')
+                assert(A.rotation<0,'Atalho Q não girou canvas')
+                love.keypressed('e')
+                assert(math.abs(A.rotation)<1e-7,'Atalho E não reverteu rotação')
+                love.keypressed('0')
+                assert(A.panX==0 and A.panY==0 and A.rotation==0,
+                    'Atalho 0 não executou ajuste')
+                local panX,panY=cursorX,cursorY
+                love.keypressed('space')
+                love.mousepressed(panX,panY,1,false)
+                assert(A.panning and A.panButton==1 and not A.drawing,
+                    'Espaço+arraste não entrou no modo mover tela')
+                local originalPanX,originalPanY=A.panX,A.panY
+                love.mousemoved(panX+43,panY-17,43,-17,false)
+                assert(A.panX==originalPanX+43 and A.panY==originalPanY-17,
+                    'Arraste em modo Espaço não deslocou a visualização')
+                love.mousereleased(panX+43,panY-17,1,false)
+                love.keyreleased('space')
+                assert(not A.panning and not A.spaceHeld,
+                    'Soltura do mouse/Espaço não encerrou navegação')
+                love.mousepressed(panX,panY,2,false)
+                assert(A.panning and A.panButton==2,
+                    'Botão do meio não ativou navegação')
+                love.mousemoved(panX-10,panY+12,-10,12,false)
+                love.mousereleased(panX-10,panY+12,2,false)
+                assert(not A.panning and A.panButton==nil,
+                    'Botão do meio não encerrou navegação')
+                love.mousepressed(panX,panY,3,false)
+                assert(A.panning and A.panButton==3,
+                    'Botão direito não ativou navegação')
+                love.mousereleased(panX,panY,3,false)
+                assert(not A.panning,'Botão direito não encerrou navegação')
+                local wheelZoom=A.zoom
+                love.wheelmoved(0,-1)
+                assert(A.zoom<wheelZoom,
+                    'Roda do mouse não reduziu zoom da tela')
+                local wheelReduced=A.zoom
+                love.wheelmoved(0,1)
+                assert(A.zoom>wheelReduced,
+                    'Roda do mouse não aumentou zoom da tela')
+                assert(Native.bytes(A.layerSession:activeBuffer())==beforePixels,
+                    'Navegação modificou pixels da camada ativa')
+                assert(A.layerSession:historyStats().undo==beforeHistory,
+                    'Navegação gerou indevidamente uma operação de desenho')
+                assert(not A.layerSession.pending and not A.drawing,
+                    'Navegação deixou transação de pincel aberta')
+                love.keypressed('f')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -895,6 +1007,10 @@ function love.update(dt)
                     winink_real_hwnd_attached=true,
                     tilted_pen_ellipse=true,tilted_pen_toggle=true,
                     tilted_pen_undo_redo=true,tilted_pen_rbd2_roundtrip=true,
+                    canvas_zoom_buttons=true,canvas_rotation_buttons=true,
+                    canvas_keyboard_shortcuts=true,canvas_pan_space=true,
+                    canvas_pan_middle_right=true,canvas_wheel_zoom=true,
+                    canvas_navigation_no_raster_edit=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -956,7 +1072,7 @@ local function drawEditor(w,h)
     button('Seleção',405,78,61,34,function()finishStroke();A.tool='select'end,A.tool=='select')
     button('Formas',470,78,62,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
     button('Gotas',536,78,79,34,function()finishStroke();A.tool='picker'end,A.tool=='picker')
-    button('Ajustar',619,78,67,34,fit)
+    button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
@@ -1001,6 +1117,17 @@ local function drawEditor(w,h)
     end
     c('accent');love.graphics.setLineWidth(1/A.zoom);love.graphics.rectangle('line',-dw/2,-dh/2,dw,dh)
     love.graphics.pop();love.graphics.setScissor()
+    -- View-only controls remain outside the raster and layer history.
+    local dockY=h-116
+    button('−',20,dockY,36,30,function()zoomCanvas(1/1.25)end,
+        false,A.zoom<=View.MIN_ZOOM)
+    button('+',60,dockY,36,30,function()zoomCanvas(1.25)end,
+        false,A.zoom>=View.MAX_ZOOM)
+    button('↶',102,dockY,36,30,function()rotateCanvas(-math.pi/12)end)
+    button('↷',142,dockY,36,30,function()rotateCanvas(math.pi/12)end)
+    button('0°',182,dockY,43,30,resetCanvasRotation)
+    button('Encaixar',230,dockY,83,30,fit)
+    text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
     box(panel,64,268,h-112,'panel')
     text('PROJETO',panel+20,88,'small','muted');text(A.doc.name:sub(1,28),panel+20,115,'title')
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
@@ -1223,7 +1350,8 @@ local function drawEditor(w,h)
         end
     end
     end
-    text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
+    text(('Zoom %.0f%% · ângulo %.0f° · Espaço + arrastar: mover · Ctrl +/−: zoom · Q/E: girar'):format(
+        A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
     if A.tool=='select' then
         text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
             or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
@@ -1266,6 +1394,18 @@ function love.draw()
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
+    -- Middle/right mouse or Space+left pan the view without opening any
+    -- painting, shape, selection or undo transaction.
+    if A.screen=='editor' and not A.modal and
+        (buttonNumber==2 or buttonNumber==3 or
+        (buttonNumber==1 and A.spaceHeld)) then
+        if x>=16 and x<love.graphics.getWidth()-268 and
+            y>=125 and y<love.graphics.getHeight()-78 then
+            finishStroke()
+            A.panning=true;A.panButton=buttonNumber
+            return
+        end
+    end
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and x<love.graphics.getWidth()-280 and y>125 and y<love.graphics.getHeight()-78 then
@@ -1338,10 +1478,13 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 end
             end)()
         end
-    elseif buttonNumber==3 and A.screen=='editor' then A.panning=true end
+    end
 end
 local function pointerReleased(x,y,b,pressure)
-    if b==3 then A.panning=false end
+    if A.panning and b==A.panButton then
+        A.panning=false;A.panButton=nil
+        return
+    end
     if b==1 then
         guard(finishShape)()
         guard(finishSelection)()
@@ -1358,7 +1501,10 @@ local function pointerReleased(x,y,b,pressure)
     end
 end
 local function pointerMoved(x,y,dx,dy,pressure)
-    if A.panning then A.panX=A.panX+dx;A.panY=A.panY+dy end
+    if A.panning then
+        View.pan(A,dx,dy)
+        return
+    end
     if A.shapePreview and A.screen=='editor' and A.tool=='shape' then
         local px,py=canvasPoint(x,y)
         A.shapePreview.x1=clampPixel(px,A.doc.width)
@@ -1459,6 +1605,7 @@ end
 function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
+        A.panning=false;A.panButton=nil;A.spaceHeld=false
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
@@ -1475,8 +1622,17 @@ function love.wheelmoved(x,y)
             end
             return
         end
-        if love.keyboard.isDown('lshift','rshift')then A.rotation=A.rotation+y*math.pi/36
-        else A.zoom=math.max(.05,math.min(32,A.zoom*(1.15^y)))end
+        if y==0 then return end
+        local w,h=love.graphics.getDimensions()
+        local my=select(2,love.mouse.getPosition())
+        if mx<16 or mx>=w-268 or my<125 or my>=h-78 then
+            mx=(w-280)/2;my=(h+56)/2
+        end
+        if love.keyboard.isDown('lshift','rshift') then
+            rotateCanvas(y*math.pi/36,mx,my)
+        else
+            zoomCanvas(1.15^y,mx,my)
+        end
     end
 end
 function love.textinput(t)
@@ -1490,6 +1646,10 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
+    if A.screen=='editor' and key=='space' then
+        A.spaceHeld=true
+        return
+    end
     if A.screen=='editor' and key=='escape' and A.shapePreview then
         A.shapePreview=nil;status('Forma cancelada')
     elseif A.screen=='editor' and (key=='escape' or
@@ -1501,8 +1661,22 @@ function love.keypressed(key)
     elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='s'then guard(saveDoc)()
     elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='n' then modal('new')
     elseif key=='escape' and A.screen=='editor' then guard(toGallery)()
-    elseif key=='f' and A.screen=='editor'then fit()
-    elseif key=='r' then A.rotation=0 end
+    elseif A.screen=='editor' and (key=='=' or key=='+' or key=='kp+') then
+        zoomCanvas(1.25)
+    elseif A.screen=='editor' and (key=='-' or key=='kp-') then
+        zoomCanvas(1/1.25)
+    elseif A.screen=='editor' and (key=='0' or key=='f') then fit()
+    elseif A.screen=='editor' and key=='q' then rotateCanvas(-math.pi/12)
+    elseif A.screen=='editor' and key=='e' then rotateCanvas(math.pi/12)
+    elseif A.screen=='editor' and key=='r' then resetCanvasRotation() end
+end
+function love.keyreleased(key)
+    if key=='space' then
+        A.spaceHeld=false
+        if A.panning and A.panButton==1 then
+            A.panning=false;A.panButton=nil
+        end
+    end
 end
 function love.resize()if A.doc then fit()end end
 function love.quit()
