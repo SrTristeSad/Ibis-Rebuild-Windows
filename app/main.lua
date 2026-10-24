@@ -7,8 +7,9 @@ local Colors=require('colors')
 local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
+local View=require('canvas_view')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -43,10 +44,40 @@ local function rebuildImage()
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
     A.image=love.graphics.newImage(A.imageData);A.image:setFilter('nearest','nearest')
 end
+local function viewData()
+    return {zoom=A.zoom,rotation=A.rotation,panX=A.panX,panY=A.panY,
+        width=A.doc.width,height=A.doc.height}
+end
+local function commitView(v)
+    A.zoom=v.zoom;A.rotation=v.rotation;A.panX=v.panX;A.panY=v.panY
+end
 local function fit()
     if not A.doc then return end
-    local w,h=love.graphics.getDimensions();A.zoom=math.min((w-380)/A.doc.width,(h-200)/A.doc.height)*.84
-    A.panX=0;A.panY=0;A.rotation=0
+    local w,h=love.graphics.getDimensions()
+    local v=viewData();View.fit(v,w,h);commitView(v)
+end
+local function zoomCanvas(factor,mx,my)
+    if not A.doc then return false end
+    local w,h=love.graphics.getDimensions()
+    mx=mx or (w-280)/2;my=my or (h+56)/2
+    local v=viewData()
+    local changed=View.zoomAt(v,w,h,mx,my,factor)
+    commitView(v);return changed
+end
+local function rotateCanvas(delta,mx,my)
+    if not A.doc then return false end
+    local w,h=love.graphics.getDimensions()
+    mx=mx or (w-280)/2;my=my or (h+56)/2
+    local v=viewData()
+    local changed=View.rotateAt(v,w,h,mx,my,delta)
+    commitView(v);return changed
+end
+local function resetCanvasRotation()
+    if not A.doc then return false end
+    local w,h=love.graphics.getDimensions()
+    local v=viewData()
+    local changed=View.resetRotation(v,w,h,(w-280)/2,(h+56)/2)
+    commitView(v);return changed
 end
 local function openDoc(doc)
     assert(Native.available,'O editor requer o motor C++ compilado. A galeria continua disponível.')
@@ -160,12 +191,12 @@ local function submitModal()
     love.keyboard.setTextInput(A.modal~=nil)
 end
 local function canvasTransform()
-    local w,h=love.graphics.getDimensions();return (w-280)/2+A.panX,(h+56)/2+A.panY
+    local w,h=love.graphics.getDimensions()
+    return View.center(viewData(),w,h)
 end
 local function canvasPoint(mx,my)
-    local cx,cy=canvasTransform();local dx,dy=(mx-cx)/A.zoom,(my-cy)/A.zoom
-    local ca,sa=math.cos(-A.rotation),math.sin(-A.rotation)
-    return dx*ca-dy*sa+A.doc.width/2,dx*sa+dy*ca+A.doc.height/2
+    local w,h=love.graphics.getDimensions()
+    return View.toCanvas(viewData(),w,h,mx,my)
 end
 local function clampPixel(value,size)
     return math.max(0,math.min(size-1,math.floor(value)))
