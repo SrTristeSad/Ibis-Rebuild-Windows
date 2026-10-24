@@ -1092,6 +1092,67 @@ function love.update(dt)
                 assert(A.layerSession:historyStats().undo==historyBefore and
                     not A.layerSession.pending and not A.drawing,
                     'Paleta criou entradas no histórico de desenho')
+                -- Stage 17: thumbnail previews and page buttons in the
+                -- actual LÖVE layer panel, preserving original raster/undo.
+                love.draw();love.mousepressed(panel+70,382,1,false)
+                assert(A.sideTab=='layers','Camadas não abriu o painel')
+                local layerCount=#A.doc.layers
+                assert(layerCount==Store.MAX_LAYERS,
+                    'Teste de paginação requer oito camadas')
+                local currentLayer=A.doc.active_layer
+                local layerId=A.doc.layers[currentLayer].id
+                love.draw()
+                local cacheImage=layerThumb(currentLayer)
+                assert(cacheImage==layerThumb(currentLayer),
+                    'Miniatura idêntica não reutilizou cache')
+                local originalRaster=Native.bytes(A.layerSession:activeBuffer())
+                local originalEntries=A.layerSession:historyStats().undo
+                local thumbnailBytes=Thumbnails.sample(
+                    A.layerSession:activeBuffer())
+                assert(#thumbnailBytes==Thumbnails.SIZE^2*4,
+                    'Miniatura real não possui bytes RGBA completos')
+                assert(Native.bytes(A.layerSession:activeBuffer())==originalRaster,
+                    'Amostragem de miniatura escreveu no raster')
+                A.layerSession:beginEdit()
+                A.layerSession:pixel(8,6,0x73aa45ff)
+                assert(A.layerSession:finishEdit(),
+                    'Teste de edição da miniatura não criou histórico')
+                A.dirty=true;rebuildImage()
+                assert(A.layerThumbDirty[layerId],
+                    'Editar o raster não invalidou sua miniatura')
+                local newerImage=layerThumb(currentLayer)
+                assert(newerImage~=cacheImage and not A.layerThumbDirty[layerId],
+                    'Miniatura não foi atualizada depois do desenho')
+                assert(newerImage==layerThumb(currentLayer),
+                    'Miniatura reconstruída não foi armazenada no cache')
+                undoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==originalRaster
+                    and A.layerSession:historyStats().undo==originalEntries,
+                    'Desfazer não recuperou o raster após atualização da prévia')
+                local previewAfterUndo=layerThumb(currentLayer)
+                assert(previewAfterUndo~=newerImage,
+                    'Desfazer não invalidou a prévia')
+                local panelStart,panelStop=Thumbnails.window(layerCount,
+                    A.doc.active_layer,Thumbnails.rows(screenH),A.layerScroll)
+                assert(panelStart==4 and panelStop==8,
+                    'Lista não exibiu a camada ativa superior')
+                love.draw();love.mousepressed(panel+230,411,1,false)
+                assert(A.layerScroll==3,
+                    'Seta ▼ não percorreu a lista de camadas')
+                love.draw()
+                assert(A.layerThumbs[A.doc.layers[3].id]~=nil,
+                    'Nova camada visível não recebeu miniatura')
+                love.mousepressed(panel+189,411,1,false)
+                assert(A.layerScroll==4,
+                    'Seta ▲ não retornou à camada superior')
+                love.draw();love.mousepressed(panel+110,528,1,false)
+                assert(A.doc.active_layer==7,
+                    'Linha com miniatura não permitiu selecionar camada')
+                local selectedBytes=Native.bytes(A.layerSession:activeBuffer())
+                local historySelected=A.layerSession:historyStats().undo
+                assert(selectedBytes==Native.bytes(A.layerSession:activeBuffer())
+                    and historySelected==A.layerSession:historyStats().undo,
+                    'Selecionar linha alterou pixels ou histórico')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1126,6 +1187,9 @@ function love.update(dt)
                     editor_tool_shortcuts=true,tool_help_sidebar_button=true,
                     tool_help_keyboard=true,tool_help_tool_buttons=true,
                     tool_help_blocks_canvas=true,tool_help_no_raster_edit=true,
+                    layer_rgba_thumbnails=true,layer_thumbnail_cache=true,
+                    layer_thumbnail_refresh_undo=true,layer_panel_page_buttons=true,
+                    layer_preview_click_selection=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
