@@ -21,6 +21,7 @@ int32_t rb_transform_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32
 int32_t rb_flood_fill_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t*,uint64_t,uint8_t*,uint64_t,uint32_t*);
 int32_t rb_draw_shape_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint32_t);
 int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
+int32_t rb_flip_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,uint32_t);
 ]]
 local N={available=false,errors={}}
 -- Only load our own compiled C++ DLL. No Lua rasterizer fallback.
@@ -113,6 +114,13 @@ function N.tiltStroke(buffer,x0,y0,x1,y1,diameter,rgba,opacity,hardness,tiltX,ti
         opacity,hardness,tiltX,tiltY)
     assert(result==0,'Pincel inclinado C++ inválido: '..tonumber(result))
 end
+function N.flip(buffer,axis)
+    ready()
+    local result=N.lib.rb_flip_rgba(buffer.bytes,buffer.size,
+        buffer.width,buffer.height,axis)
+    assert(result==0,'Espelhamento C++ inválido: '..tonumber(result))
+end
+
 -- Desktop-only C++ destination-out hard round eraser.
 function N.basicErase(buffer,x0,y0,x1,y1,diameter,opacity)
     ready()
