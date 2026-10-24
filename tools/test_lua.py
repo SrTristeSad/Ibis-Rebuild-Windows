@@ -91,6 +91,11 @@ def run_tests(runtime_path, output):
                             +json.dumps(colors_root)+"))")
             color_lines=json.loads(native_state.execute(colors_program))
             assert color_lines.get('passed') and color_lines.get('line_cpp') and color_lines.get('hex_rgba')
+            feather_root=(output / ('feather-brush-' + str(time.time_ns()))).as_posix()
+            feather_program=("return require('json').encode(require('tests.test_soft_brush').run("
+                             +json.dumps(feather_root)+"))")
+            feather=json.loads(native_state.execute(feather_program))
+            assert feather.get('passed') and feather.get('soft_edge') and feather.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -99,6 +104,7 @@ def run_tests(runtime_path, output):
         report['native_fill'] = fill
         report['native_shapes'] = shapes
         report['native_colors_lines'] = color_lines
+        report['native_feather_brush'] = feather
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
