@@ -150,6 +150,11 @@ def run_tests(runtime_path, output):
                           +json.dumps(flip_root)+"))")
             flip=json.loads(native_state.execute(flip_program))
             assert flip.get('passed') and flip.get('exact_rgba') and flip.get('rbd2_roundtrip')
+            clear_root=(output / ('layer-clear-' + str(time.time_ns()))).as_posix()
+            clear_program=("return require('json').encode(require('tests.test_layer_clear').run("
+                           +json.dumps(clear_root)+"))")
+            cleared=json.loads(native_state.execute(clear_program))
+            assert cleared.get('passed') and cleared.get('exact_rgba') and cleared.get('no_op_empty') and cleared.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -171,6 +176,7 @@ def run_tests(runtime_path, output):
         report['mixed_property_history'] = property_history
         report['layer_merge_down'] = merged
         report['native_layer_flip'] = flip
+        report['native_layer_clear'] = cleared
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
