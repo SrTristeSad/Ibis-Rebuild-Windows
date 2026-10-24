@@ -381,6 +381,40 @@ function Layers:move(index,to)
         activeBefore=before,activeAfter=active,size=128})
     return true
 end
+-- Merge active (or explicit) upper layer into the layer immediately below.
+-- Undo restores both original RGBA buffers, metadata, order and persistent IDs.
+-- Redo deterministically recomputes the merged raster from those sources,
+-- avoiding a third full-image snapshot in the bounded session history.
+function Layers:mergeDown(index)
+    assertIndex(self,index)
+    assert(index>1,'A primeira camada não tem outra abaixo para mesclar')
+    if self.pending then self:finishEdit() end
+    local belowIndex=index-1
+    local below=layerSnapshot(self.doc.layers[belowIndex],
+        self.buffers[belowIndex])
+    local above=layerSnapshot(self.doc.layers[index],
+        self.buffers[index])
+    local before=self.doc.active_layer
+    local merged=flattenedPair(self,below,above,
+        self.buffers[belowIndex],self.buffers[index])
+    local pixels=Native.bytes(merged)
+    -- A pair costs at most 32 MiB at the current 2048² RGBA8 limit;
+    -- record this before structural mutation to keep undo guaranteed.
+    local cost=#below.pixels+#above.pixels+256
+    assert(cost<=Layers.MAX_HISTORY_BYTES,'Mesclagem excede o histórico')
+    self.doc.layers[belowIndex]=finalMergedLayer(below,pixels)
+    self.buffers[belowIndex]=merged
+    table.remove(self.doc.layers,index)
+    table.remove(self.buffers,index)
+    self.doc.active_layer=belowIndex
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+    assert(self:_pushHistory({kind='merge',index=belowIndex,
+        below=below,above=above,
+        activeBefore=before,activeAfter=belowIndex,
+        size=cost}),'Não foi possível registrar a mesclagem')
+    return belowIndex
+end
 function Layers:stroke(x0,y0,x1,y1,diameter,color,opacity)
     Native.basicStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,opacity or 1)
     self:recompose()
