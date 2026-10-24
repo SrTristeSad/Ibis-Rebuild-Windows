@@ -8,8 +8,9 @@ local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
 local View=require('canvas_view')
+local EditorTools=require('editor_tools')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -86,6 +87,7 @@ local function openDoc(doc)
     A.buffer=A.layerSession.composite
     A.screen='editor';A.dirty=false
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
+    A.toolHelp=false
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
@@ -126,6 +128,22 @@ local function finishStroke(finalX,finalY,pressure)
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
     A.drawing=false;A.stabilizer=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
+local function selectTool(id)
+    local item=EditorTools.fromId(id)
+    assert(item,'Ferramenta inválida')
+    -- A tap on a toolbar button owns a touch/pen contact, but is not a
+    -- drawing stroke. Reject only mid-stroke device tool changes.
+    if A.screen~='editor' or
+        (A.drawing and (A.inkPenId~=nil or A.touchId~=nil)) then
+        return false
+    end
+    finishStroke()
+    if A.tool~=id then A.shapePreview=nil end
+    A.tool=id
+    local tab=EditorTools.panelFor(id)
+    if tab then A.sideTab=tab end
+    return true
+end
 local function undoDoc()
     A.shapePreview=nil
     finishStroke()
@@ -151,7 +169,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil
+    A.shapePreview=nil;A.toolHelp=false
     finishStroke()
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
@@ -980,6 +998,60 @@ function love.update(dt)
                 assert(not A.layerSession.pending and not A.drawing,
                     'Navegação deixou transação de pincel aberta')
                 love.keypressed('f')
+                -- Stage 16: use real shortcut callbacks and the actual
+                -- interactive help overlay, without modifying any pixels.
+                local toolsBefore=Native.bytes(A.layerSession:activeBuffer())
+                local historyBefore=A.layerSession:historyStats().undo
+                local toolIds={'inspect','pixel','brush','erase','fill',
+                               'select','shape','picker'}
+                for i,id in ipairs(toolIds) do
+                    love.keypressed(tostring(i))
+                    assert(A.tool==id,
+                        'Atalho de ferramenta '..i..' não selecionou '..id)
+                end
+                love.keypressed('3')
+                assert(A.tool=='brush' and A.sideTab=='brush',
+                    'Atalho Pincel não abriu as configurações')
+                local helpPanel=love.graphics.getWidth()-268
+                love.draw()
+                love.mousepressed(helpPanel+206,96,1,false)
+                assert(A.toolHelp,'Botão de ajuda não abriu a paleta')
+                love.draw()
+                local helpZoom=A.zoom
+                love.mousepressed(80,200,1,false)
+                love.mousemoved(120,220,40,20,false)
+                love.mousereleased(120,220,1,false)
+                love.wheelmoved(0,2)
+                assert(A.toolHelp and A.tool=='brush' and A.zoom==helpZoom,
+                    'Paleta não bloqueou entradas no canvas/zoom')
+                love.keypressed('6')
+                assert(not A.toolHelp and A.tool=='select',
+                    'Atalho dentro da ajuda não selecionou ferramenta')
+                love.keypressed('f1')
+                assert(A.toolHelp,'F1 não reabriu ajuda')
+                love.draw()
+                local helpWidth=math.min(640,screenW-80)
+                local helpHeight=math.min(544,screenH-72)
+                local helpX=(screenW-helpWidth)/2
+                local helpY=(screenH-helpHeight)/2
+                love.mousepressed(helpX+60,helpY+94+65+17,1,false)
+                assert(not A.toolHelp and A.tool=='brush',
+                    'Clique no Pincel da paleta não selecionou ferramenta')
+                love.keypressed('h')
+                assert(A.toolHelp,'H não abriu ajuda')
+                love.keypressed('escape')
+                assert(not A.toolHelp and A.screen=='editor',
+                    'Esc não fechou ajuda mantendo o editor aberto')
+                love.keypressed('f1')
+                love.draw()
+                love.mousepressed(helpX+helpWidth-95,
+                    helpY+helpHeight-33,1,false)
+                assert(not A.toolHelp,'Botão Fechar ajuda não funcionou')
+                assert(Native.bytes(A.layerSession:activeBuffer())==toolsBefore,
+                    'Atalhos ou paleta alteraram pixels da obra')
+                assert(A.layerSession:historyStats().undo==historyBefore and
+                    not A.layerSession.pending and not A.drawing,
+                    'Paleta criou entradas no histórico de desenho')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1011,6 +1083,9 @@ function love.update(dt)
                     canvas_keyboard_shortcuts=true,canvas_pan_space=true,
                     canvas_pan_middle_right=true,canvas_wheel_zoom=true,
                     canvas_navigation_no_raster_edit=true,
+                    editor_tool_shortcuts=true,tool_help_sidebar_button=true,
+                    tool_help_keyboard=true,tool_help_tool_buttons=true,
+                    tool_help_blocks_canvas=true,tool_help_no_raster_edit=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -1064,14 +1139,14 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     button('← Galeria',20,78,92,34,toGallery)
-    button('Ver',116,78,53,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel',173,78,45,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel',222,78,57,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Apagar',283,78,61,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Balde',348,78,53,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
-    button('Seleção',405,78,61,34,function()finishStroke();A.tool='select'end,A.tool=='select')
-    button('Formas',470,78,62,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
-    button('Gotas',536,78,79,34,function()finishStroke();A.tool='picker'end,A.tool=='picker')
+    button('Ver',116,78,53,34,function()selectTool('inspect')end,A.tool=='inspect')
+    button('Pixel',173,78,45,34,function()selectTool('pixel')end,A.tool=='pixel')
+    button('Pincel',222,78,57,34,function()selectTool('brush')end,A.tool=='brush')
+    button('Apagar',283,78,61,34,function()selectTool('erase')end,A.tool=='erase')
+    button('Balde',348,78,53,34,function()selectTool('fill')end,A.tool=='fill')
+    button('Seleção',405,78,61,34,function()selectTool('select')end,A.tool=='select')
+    button('Formas',470,78,62,34,function()selectTool('shape')end,A.tool=='shape')
+    button('Gotas',536,78,79,34,function()selectTool('picker')end,A.tool=='picker')
     button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
@@ -1129,7 +1204,11 @@ local function drawEditor(w,h)
     button('Encaixar',230,dockY,83,30,fit)
     text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
     box(panel,64,268,h-112,'panel')
-    text('PROJETO',panel+20,88,'small','muted');text(A.doc.name:sub(1,28),panel+20,115,'title')
+    text('PROJETO',panel+20,88,'small','muted')
+    button('? Ajuda',panel+172,82,76,31,function()
+        finishStroke();A.toolHelp=true
+    end)
+    text(A.doc.name:sub(1,28),panel+20,115,'title')
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
     text(A.inkAttached and ('Windows Ink · '..(A.inkPenId and 'caneta ativa'
         or 'aguardando caneta')) or 'Caneta Win32: modo alternativo',
@@ -1382,6 +1461,41 @@ local function drawModal(w,h)
     button('Cancelar',x+24,y+357,150,38,function()A.modal=nil;love.keyboard.setTextInput(false)end)
     button('Criar / confirmar',x+190,y+357,226,38,submitModal,true)
 end
+-- Non-editable tool hub. Its own button hit-map replaces all canvas controls.
+local function drawToolHelp(w,h)
+    love.graphics.setColor(0,0,0,.78)
+    love.graphics.rectangle('fill',0,0,w,h)
+    local width=math.min(640,w-80)
+    local height=math.min(544,h-72)
+    local x=(w-width)/2
+    local y=(h-height)/2
+    box(x,y,width,height,'panel')
+    c('accent');love.graphics.rectangle('fill',x,y,5,height)
+    text('Ferramentas e atalhos',x+22,y+20,'title')
+    text('Escolha uma ferramenta ou pressione 1 a 8.',
+        x+22,y+59,'small','muted')
+    local cellWidth=(width-60)/2
+    for i,item in ipairs(EditorTools.items) do
+        local column=(i-1)%2
+        local line=math.floor((i-1)/2)
+        local left=x+20+column*(cellWidth+20)
+        local top=y+94+line*65
+        button(item.key..'  '..item.label,left,top,cellWidth,34,
+            function()
+                if selectTool(item.id) then A.toolHelp=false end
+            end,A.tool==item.id)
+        text(item.hint,left+8,top+39,'small','muted')
+    end
+    text('NAVEGAÇÃO',x+22,y+377,'small','accent')
+    text('Espaço + arrastar · mover tela     Roda · zoom     Shift + roda · girar',
+        x+22,y+399,'small','muted')
+    text('Q / E · rotação     + / − · zoom     0 / F · encaixar     Ctrl+Z / Y · histórico',
+        x+22,y+423,'small','muted')
+    text('F1 ou H: abrir/fechar · Esc: fechar · Nenhum pixel é alterado.',
+        x+22,y+447,'small','muted')
+    button('Fechar ajuda',x+width-174,y+height-49,150,33,
+        function()A.toolHelp=false end)
+end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
     box(0,0,w,64,'panel');text('DESKTOP REBUILD',24,17,'title')
@@ -1390,10 +1504,25 @@ function love.draw()
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     box(0,h-48,w,48,'panel');text(A.message or '',20,h-33,'small','muted')
     if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
-    if A.modal then A.buttons={};drawModal(w,h)end
+    if A.modal then A.buttons={};drawModal(w,h)
+    elseif A.toolHelp and A.screen=='editor' then
+        A.buttons={}
+        drawToolHelp(w,h)
+    end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
+    if A.toolHelp then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        return
+    end
     -- Middle/right mouse or Space+left pan the view without opening any
     -- painting, shape, selection or undo transaction.
     if A.screen=='editor' and not A.modal and
@@ -1481,6 +1610,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.toolHelp then return end
     if A.panning and b==A.panButton then
         A.panning=false;A.panButton=nil
         return
@@ -1501,6 +1631,7 @@ local function pointerReleased(x,y,b,pressure)
     end
 end
 local function pointerMoved(x,y,dx,dy,pressure)
+    if A.toolHelp then return end
     if A.panning then
         View.pan(A,dx,dy)
         return
@@ -1606,12 +1737,14 @@ function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
+        A.toolHelp=false
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.wheelmoved(x,y)
+    if A.toolHelp then return end
     if A.screen=='editor' and not A.modal then
         local mx=love.mouse.getPosition()
         if mx>=love.graphics.getWidth()-268 and A.sideTab=='layers' then
@@ -1644,6 +1777,25 @@ function love.keypressed(key)
         elseif key=='return'then guard(submitModal)()
         elseif key=='tab'then A.modal.focus=A.modal.focus%#A.modal.values+1
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
+        return
+    end
+    if A.screen=='editor' and A.toolHelp then
+        if key=='escape' or key=='f1' or key=='h' then
+            A.toolHelp=false
+        elseif EditorTools.fromKey(key) then
+            if selectTool(EditorTools.fromKey(key).id) then
+                A.toolHelp=false
+            end
+        end
+        return
+    end
+    if A.screen=='editor' and (key=='f1' or key=='h') then
+        finishStroke();A.toolHelp=true
+        return
+    end
+    if A.screen=='editor' and EditorTools.fromKey(key) and
+        not love.keyboard.isDown('lctrl','rctrl','lalt','ralt') then
+        selectTool(EditorTools.fromKey(key).id)
         return
     end
     if A.screen=='editor' and key=='space' then

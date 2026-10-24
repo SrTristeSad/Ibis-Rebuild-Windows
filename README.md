@@ -32,6 +32,8 @@ A etapa 14 adiciona [pincel elíptico orientado pela inclinação da caneta](doc
 
 A etapa 15 introduz [navegação da tela de desenho com zoom ancorado no cursor, rotação e Espaço+arraste](docs/CANVAS_NAVIGATION_STAGE15.md). A interface possui controles visíveis e atalhos; a visualização muda sem alterar os pixels nem o histórico RBD2.
 
+A etapa 16 traz uma [central de ferramentas e atalhos no editor](docs/TOOL_HUB_STAGE16.md): seleção por 1–8, ajuda F1/H ou botão no painel, escolha por clique e proteção do canvas enquanto a ajuda está aberta. Essa etapa reorganiza o acesso às ferramentas sem modificar o raster nativo nem o RBD2.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -56,6 +58,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Ponte Windows Ink nativa opcional | Etapa 13: WM_POINTER e pressão de caneta com DLL C++, sem garantia de compatibilidade com hardware não testado |
 | Ponta elíptica orientada por inclinação | Etapa 14: cilindro elíptico raster C++, sem tilt preserva pincel anterior; hardware físico não verificado |
 | Navegação e rotação do canvas | Etapa 15: zoom e rotação sob cursor, Espaço/meio/direito para deslocar, atalhos e dock; sem edições no raster |
+| Central de ferramentas e atalhos | Etapa 16: teclas 1–8, ajuda por F1/H, paleta clicável e bloqueio de edição com ajuda aberta |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 

@@ -114,6 +114,9 @@ def run_tests(runtime_path, output):
             view_program="return require('json').encode(require('tests.test_canvas_view').run())"
             viewport=json.loads(native_state.execute(view_program))
             assert viewport.get('passed') and viewport.get('cursor_anchor') and viewport.get('bounds')
+            tool_program="return require('json').encode(require('tests.test_editor_tools').run())"
+            tool_registry=json.loads(native_state.execute(tool_program))
+            assert tool_registry.get('passed') and tool_registry.get('ordered_shortcuts') and tool_registry.get('no_reserved_shortcut_collision')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -127,6 +130,7 @@ def run_tests(runtime_path, output):
         report['touch_pressure'] = pressure_result
         report['native_tilt_brush'] = tilt_brush
         report['canvas_view'] = viewport
+        report['editor_tool_registry'] = tool_registry
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
