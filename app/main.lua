@@ -1680,6 +1680,30 @@ function love.update(dt)
                     'Refazer Shift+Delete não limpou camada')
                 assert(Native.bytes(A.layerSession.buffers[1])==lowerBeforeClear,
                     'Atalho Limpar atingiu outra camada')
+                -- Stage 25: click every newly drawn vector tool slot and
+                -- ensure visual-only work never creates raster history.
+                local appearancePixels=Native.bytes(A.layerSession.composite)
+                local appearanceUndo=A.layerSession:historyStats().undo
+                local appearanceLayerCount=#A.doc.layers
+                for _,slot in ipairs(toolSlots) do
+                    assert(Icons.commands(slot.id) and #Icons.commands(slot.id)>=2,
+                        'Ícone vetorial ausente no editor')
+                    love.draw()
+                    local hit=false
+                    for _,target in ipairs(A.buttons) do
+                        if target.x==slot.x and target.y==78 and
+                            target.w==slot.w and target.h==34 then hit=true;break end
+                    end
+                    assert(hit,'Barra visual perdeu região clicável da ferramenta '..slot.id)
+                    love.mousepressed(slot.x+slot.w/2,94,1,false)
+                    assert(A.tool==slot.id,
+                        'Ferramenta visual não selecionou '..slot.id)
+                end
+                assert(Native.bytes(A.layerSession.composite)==appearancePixels and
+                    A.layerSession:historyStats().undo==appearanceUndo and
+                    #A.doc.layers==appearanceLayerCount,
+                    'Novo layout alterou o raster, histórico ou camadas')
+                selectTool('inspect');A.sideTab='layers'
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1741,6 +1765,8 @@ function love.update(dt)
                     layer_clear_button=true,layer_clear_noop=true,
                     layer_clear_shift_delete=true,layer_clear_undo_redo=true,
                     layer_clear_isolated=true,layer_clear_rbd2=true,
+                    vector_tool_glyphs=true,visual_toolbar_hitboxes=true,
+                    visual_toolbar_switching=true,visual_only_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
