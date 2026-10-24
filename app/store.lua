@@ -17,6 +17,7 @@ local function textName(name)
     assert(not name:find('[%z\1-\31]') and name:match('%S'),'store: empty/control name')
     return name
 end
+Store.validateName=textName
 local function validId(id,prefix)
     assert(type(id)=='string' and #id<=80 and id:match('^'..prefix..'_[A-Za-z0-9_%-]+$'),'store: invalid '..prefix..' identifier')
     return id
