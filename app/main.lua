@@ -270,6 +270,20 @@ local function flipActiveLayer(axis)
     status(axis==0 and 'Camada espelhada na horizontal' or
         'Camada espelhada na vertical')
 end
+local function clearActiveLayer()
+    assert(A.screen=='editor' and A.layerSession,'Abra uma obra antes de limpar')
+    finishStroke()
+    local changed=A.layerSession:clearActive()
+    if changed then
+        A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
+        A.dirty=true
+        rebuildImage()
+        status('Pixels da camada apagados · Ctrl+Z restaura')
+    else
+        status('Camada já está transparente')
+    end
+    return changed
+end
 local function mergeActiveLayerDown()
     assert(A.screen=='editor' and A.layerSession,'Abra um projeto antes de mesclar')
     finishStroke()
@@ -1575,6 +1589,57 @@ function love.update(dt)
                 local flipSaved=A.store:openProject(A.doc.id)
                 assert(flipSaved.layers[flipIndex].pixels==bothDirections,
                     'RBD2 não persistiu o espelhamento')
+                -- Stage 24: the actual action row clears only the active
+                -- raster, and integrates with the existing history/RBD2.
+                local preClear=Native.bytes(A.layerSession:activeBuffer())
+                local lowerBeforeClear=Native.bytes(A.layerSession.buffers[1])
+                local clearCount=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(panel+73,344,1,false)
+                local zero=string.rep('\\0',#preClear)
+                assert(Native.bytes(A.layerSession:activeBuffer())==zero,
+                    'Limpar não deixou pixels transparentes')
+                assert(A.layerSession:historyStats().undo==clearCount+1,
+                    'Limpar deve registrar um passo de histórico')
+                assert(Native.bytes(A.layerSession.buffers[1])==lowerBeforeClear,
+                    'Limpar modificou outra camada')
+                undoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==preClear,
+                    'Desfazer Limpar não restaurou pixels RGBA')
+                redoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==zero,
+                    'Refazer Limpar não apagou pixels')
+                saveDoc()
+                local clearSaved=A.store:openProject(A.doc.id)
+                assert(clearSaved.layers[flipIndex].pixels==zero,
+                    'RBD2 não persistiu limpeza da camada')
+                local noOpHistory=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(panel+73,344,1,false)
+                assert(A.layerSession:historyStats().undo==noOpHistory,
+                    'Limpar camada vazia criou histórico desnecessário')
+                -- Shortcut must use the same native path, not delete layer.
+                A.layerSession:beginEdit()
+                A.layerSession:pixel(1,1,0x47ca21b4)
+                assert(A.layerSession:finishEdit(),'Fixture Shift+Delete falhou')
+                A.dirty=true;rebuildImage()
+                local previousIsDown=love.keyboard.isDown
+                love.keyboard.isDown=function(...)
+                    for j=1,select('#',...) do
+                        if select(j,...)=='lshift' then return true end
+                    end
+                    return false
+                end
+                love.keypressed('delete')
+                love.keyboard.isDown=previousIsDown
+                assert(Native.bytes(A.layerSession:activeBuffer())==zero,
+                    'Shift+Delete não limpou camada ativa')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==
+                    0x47ca21b4,'Desfazer Shift+Delete perdeu pixel')
+                redoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==zero,
+                    'Refazer Shift+Delete não limpou camada')
+                assert(Native.bytes(A.layerSession.buffers[1])==lowerBeforeClear,
+                    'Atalho Limpar atingiu outra camada')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1633,6 +1698,9 @@ function love.update(dt)
                     merge_down_rbd2=true,
                     flip_hv_buttons=true,flip_undo_redo=true,
                     flip_rbd2_roundtrip=true,flip_layer_isolation=true,
+                    layer_clear_button=true,layer_clear_noop=true,
+                    layer_clear_shift_delete=true,layer_clear_undo_redo=true,
+                    layer_clear_isolated=true,layer_clear_rbd2=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -1765,11 +1833,14 @@ local function drawEditor(w,h)
     button('Renomear',panel+20,282,107,34,function()modal('rename');A.modal.values[1]=A.doc.name end)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
-    text('PAINEL',panel+20,343,'small','muted')
     if A.sideTab=='layers' and A.tool~='picker' and A.tool~='shape' and
         A.tool~='select' then
+        -- Existing action row: replace passive heading with useful command.
+        button('Limpar',panel+20,329,106,30,clearActiveLayer)
         button('Mesclar ↓',panel+142,329,106,30,mergeActiveLayerDown,
             false,A.doc.active_layer<=1)
+    else
+        text('PAINEL',panel+20,343,'small','muted')
     end
     if A.tool=='picker' then
         text('CONTA-GOTAS · RGBA',panel+20,378,'small','muted')
@@ -2387,6 +2458,11 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and key=='delete' and
+        love.keyboard.isDown('lshift','rshift') then
+        guard(clearActiveLayer)()
         return
     end
     if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and
