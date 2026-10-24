@@ -60,6 +60,8 @@ A etapa 28 introduz a [biblioteca de pincéis raster (Ctrl+B)](docs/BRUSH_LIBRAR
 
 A etapa 29 incorpora [barras deslizantes de precisão](docs/PRECISION_SLIDERS_STAGE29.md) para diâmetro (1–256 px), opacidade do traço (10–100% em passos de 1%), estabilização (0–5) e tolerância do balde (0–255), sem remover os controles anteriores e sem alterar pixels ao arrastar os ajustes.
 
+A etapa 30 apresenta uma [prévia não destrutiva da ponta do pincel/borracha](docs/NATIVE_BRUSH_TIP_STAGE30.md), renderizada em um buffer RGBA temporário pelo mesmo C++ utilizado na pintura, com textura em cache, zoom/rotação e botão de liga/desliga. Não insere pixels no canvas nem modifica histórico/RBD2; hover real de caneta não é alegado.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
