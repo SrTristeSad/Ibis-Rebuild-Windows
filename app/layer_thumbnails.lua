@@ -51,7 +51,7 @@ function Thumb.window(count,selected,rows,start)
     if start==nil then
         start=selected-math.floor(visible/2)
     end
-    assert(integer(start,-16,32),'Deslocamento de camadas inválido')
+    assert(integer(start,-999999999,999999999),'Deslocamento de camadas inválido')
     start=math.max(1,math.min(maximum,start))
     return start,start+visible-1,maximum
 end
