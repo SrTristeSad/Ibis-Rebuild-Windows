@@ -130,6 +130,9 @@ def run_tests(runtime_path, output):
             brush_program=("return require('json').encode(require('tests.test_brush_presets').run(" + json.dumps(brush_root) + "))")
             brush_presets=json.loads(native_state.execute(brush_program))
             assert brush_presets.get('passed') and brush_presets.get('local_roundtrip') and brush_presets.get('legacy_library_preserved')
+            slider_program="return require('json').encode(require('tests.test_brush_sliders').run())"
+            sliders=json.loads(native_state.execute(slider_program))
+            assert sliders.get('passed') and sliders.get('one_percent_opacity') and sliders.get('panel_isolation')
             thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
             thumbs=json.loads(native_state.execute(thumbnail_program))
             assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
@@ -186,6 +189,7 @@ def run_tests(runtime_path, output):
         report['editor_vector_icons'] = icons
         report['editor_context_menus'] = menus
         report['brush_library'] = brush_presets
+        report['precision_brush_sliders'] = sliders
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result
