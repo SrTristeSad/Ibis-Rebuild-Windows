@@ -8,7 +8,7 @@ local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -68,6 +68,11 @@ local function paintBrushSegment(x,y,pressure)
     local opacity=Pressure.opacity(A.brushOpacity,A.lastPressure)
     if A.tool=='erase' then
         A.layerSession:erase(previousX,previousY,x,y,diameter,opacity)
+    elseif A.inkPenId~=nil and A.penTiltEnabled and
+        (A.inkTiltX~=0 or A.inkTiltY~=0) then
+        A.layerSession:tiltStroke(previousX,previousY,x,y,diameter,A.color,
+            opacity,A.brushStyle=='soft' and 0.25 or 1,
+            A.inkTiltX,A.inkTiltY)
     elseif A.brushStyle=='soft' then
         A.layerSession:softStroke(previousX,previousY,x,y,diameter,
             A.color,opacity,0.25)
@@ -1083,7 +1088,16 @@ local function drawEditor(w,h)
                 A.fillTolerance=math.min(255,A.fillTolerance+8)end,
                 false,A.fillTolerance==255)
         else
-            text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,429,'small','muted')
+            if A.tool=='brush' then
+                button(A.penTiltEnabled and 'Inclinação Ink: ativa'
+                    or 'Inclinação Ink: desligada',
+                    panel+20,416,228,28,function()
+                        finishStroke()
+                        A.penTiltEnabled=not A.penTiltEnabled
+                    end,A.penTiltEnabled)
+            else
+                text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,429,'small','muted')
+            end
             button('−',panel+20,456,46,32,function()
                 A.brushDiameter=math.max(1,A.brushDiameter-2)end)
             text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
@@ -1249,6 +1263,11 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     local opacity=Pressure.opacity(A.brushOpacity,pressure)
                     if A.tool=='erase' then
                         A.layerSession:erase(px,py,px,py,diameter,opacity)
+                    elseif A.inkPenId~=nil and A.penTiltEnabled and
+                        (A.inkTiltX~=0 or A.inkTiltY~=0) then
+                        A.layerSession:tiltStroke(px,py,px,py,diameter,A.color,
+                            opacity,A.brushStyle=='soft' and 0.25 or 1,
+                            A.inkTiltX,A.inkTiltY)
                     elseif A.brushStyle=='soft' then
                         A.layerSession:softStroke(px,py,px,py,diameter,
                             A.color,opacity,0.25)
@@ -1364,14 +1383,15 @@ dispatchInkEvent=function(e)
             '% · inclinação '..A.inkTiltX..'°/'..A.inkTiltY..'°')
     elseif e.id==A.inkPenId then
         if e.kind==2 then
-            pointerMoved(e.x,e.y,0,0,Pressure.normalize(e.pressure))
             A.inkTiltX=e.tiltX or 0;A.inkTiltY=e.tiltY or 0
+            pointerMoved(e.x,e.y,0,0,Pressure.normalize(e.pressure))
         elseif e.kind==3 or e.kind==4 then
             if e.kind==4 then
                 guard(finishStroke)()
                 A.shapePreview=nil
                 guard(finishSelection)()
             else
+                A.inkTiltX=e.tiltX or 0;A.inkTiltY=e.tiltY or 0
                 pointerReleased(e.x,e.y,1,Pressure.normalize(e.pressure))
             end
             A.inkPenId=nil
