@@ -46,6 +46,8 @@ A etapa 21 inclui [nome, visibilidade e opacidade de camadas no histórico de de
 
 A etapa 22 traz [Mesclar abaixo (Ctrl+E)](docs/MERGE_DOWN_STAGE22.md): duas camadas normais são compostas pelo C++ nativo, preservando opacidade e visibilidade no resultado, e a operação pode ser desfeita/refeita pelo histórico unificado com restauração dos dois buffers originais. Não modifica o RBD2 nem requer novas DLLs.
 
+A etapa 23 acrescenta [espelhamento horizontal e vertical da camada ativa](docs/LAYER_FLIP_STAGE23.md), usando raster C++ nativo sem alterar outras camadas; ambos os eixos suportam desfazer/refazer cronológico e RBD2.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |

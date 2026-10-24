@@ -179,4 +179,11 @@ RB_API rb_i32 rb_draw_tilt_stroke(rb_u8* dst, rb_u64 capacity,
     float diameter, rb_u32 rgba, float opacity, float hardness,
     float tilt_x, float tilt_y);
 
+
+/* In-place flip of caller-owned RGBA8 raster.
+   axis=0 horizontal; axis=1 vertical. No heap allocation.
+   Invalid arguments return -1 before changing any pixel. */
+RB_API rb_i32 rb_flip_rgba(rb_u8* dst,rb_u64 capacity,
+    rb_u32 width,rb_u32 height,rb_u32 axis);
+
 #endif

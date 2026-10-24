@@ -434,6 +434,15 @@ function Layers:erase(x0,y0,x1,y1,diameter,opacity)
     self:recompose()
 end
 -- One rectangle translation = one reversible raster operation on active layer.
+-- Flip only the active native layer. One chronological raster undo entry.
+function Layers:flip(axis)
+    assert(not self.pending,'Finalize a pincelada antes de espelhar')
+    assert(axis==0 or axis==1,'Eixo do espelhamento inválido')
+    self:beginEdit()
+    Native.flip(self:activeBuffer(),axis)
+    self:recompose()
+    return self:finishEdit()
+end
 function Layers:moveSelection(x,y,w,h,toX,toY)
     assert(not self.pending,'Finalize o traço antes de mover uma seleção')
     assert(x>=0 and y>=0 and w>=1 and h>=1 and

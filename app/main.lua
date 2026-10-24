@@ -261,6 +261,15 @@ local function duplicateActiveLayer()
     status('Camada duplicada · cópia independente '..index)
     return index
 end
+local function flipActiveLayer(axis)
+    assert(A.screen=='editor' and A.layerSession,'Abra uma obra antes de espelhar')
+    finishStroke()
+    A.layerSession:flip(axis)
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
+    A.dirty=true;rebuildImage()
+    status(axis==0 and 'Camada espelhada na horizontal' or
+        'Camada espelhada na vertical')
+end
 local function mergeActiveLayerDown()
     assert(A.screen=='editor' and A.layerSession,'Abra um projeto antes de mesclar')
     finishStroke()
@@ -1531,6 +1540,41 @@ function love.update(dt)
                 undoDoc()
                 assert(#A.doc.layers==countBefore-1,
                     'Ctrl+Z não restaurou a segunda mesclagem')
+                -- Stage 23: GUI button uses C++ to mirror the active layer.
+                local flipIndex=A.doc.active_layer
+                A.layerSession:beginEdit()
+                A.layerSession:pixel(0,0,0xff1122ff)
+                A.layerSession:pixel(A.doc.width-1,A.doc.height-1,0x1133aaff)
+                assert(A.layerSession:finishEdit(),
+                    'Fixture de espelhamento não criou pixels assimétricos')
+                A.dirty=true;rebuildImage()
+                local flipOriginal=Native.bytes(A.layerSession:activeBuffer())
+                local flipOther=Native.bytes(A.layerSession.buffers[1])
+                love.draw()
+                love.mousepressed(panel+74,313,1,false)
+                local horizontally=Native.bytes(A.layerSession:activeBuffer())
+                assert(horizontally~=flipOriginal,
+                    'Esp. H não espelhou a camada ativa')
+                undoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==flipOriginal,
+                    'Desfazer Esp. H não restaurou RGBA')
+                redoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==horizontally,
+                    'Refazer Esp. H não restaurou RGBA')
+                love.draw();love.mousepressed(panel+191,313,1,false)
+                local bothDirections=Native.bytes(A.layerSession:activeBuffer())
+                undoDoc();undoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==flipOriginal,
+                    'Duplo desfazer de espelhamento falhou')
+                redoDoc();redoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==bothDirections,
+                    'Duplo refazer de espelhamento falhou')
+                assert(Native.bytes(A.layerSession.buffers[1])==flipOther,
+                    'Espelhar camada ativa modificou a inferior')
+                saveDoc()
+                local flipSaved=A.store:openProject(A.doc.id)
+                assert(flipSaved.layers[flipIndex].pixels==bothDirections,
+                    'RBD2 não persistiu o espelhamento')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1587,6 +1631,8 @@ function love.update(dt)
                     merge_down_button=true,merge_down_undo=true,
                     merge_down_redo=true,merge_down_ctrl_e=true,
                     merge_down_rbd2=true,
+                    flip_hv_buttons=true,flip_undo_redo=true,
+                    flip_rbd2_roundtrip=true,flip_layer_isolation=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -1797,6 +1843,8 @@ local function drawEditor(w,h)
     button('Camadas',panel+20,366,107,32,function()A.sideTab='layers'end,A.sideTab=='layers')
     button('Pincel',panel+139,366,109,32,function()A.sideTab='brush'end,A.sideTab=='brush')
     if A.sideTab=='layers' then
+        button('Esp. H',panel+20,299,108,27,function()flipActiveLayer(0)end)
+        button('Esp. V',panel+140,299,108,27,function()flipActiveLayer(1)end)
         local ls=A.layerSession
         local count=#A.doc.layers
         text(('RASTERS %d/%d'):format(count,Store.MAX_LAYERS),
@@ -2339,6 +2387,16 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and
+        key=='h' and love.keyboard.isDown('lshift','rshift') then
+        guard(function()flipActiveLayer(0)end)()
+        return
+    end
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and
+        key=='v' and love.keyboard.isDown('lshift','rshift') then
+        guard(function()flipActiveLayer(1)end)()
         return
     end
     if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='e' then
