@@ -757,6 +757,57 @@ function love.update(dt)
                 love.mousepressed(192,90,1,true)
                 love.touchreleased('touch-toolbar',192,90,0,0,1)
                 assert(A.tool=='pixel','Touch could not select existing toolbar')
+                -- Simulated WM_POINTER pen packets through the actual GUI
+                -- dispatcher. This verifies routing, not physical pen drivers.
+                A.layerSession:add('Windows Ink teste')
+                A.dirty=true;rebuildImage()
+                love.draw();love.mousepressed(252,90,1)
+                assert(A.tool=='brush','Pen test failed to choose brush')
+                local ax,ay=point(2,1)
+                local bx,by=point(5,1)
+                local penHistory=A.layerSession:historyStats().undo
+                dispatchInkEvent({kind=1,id=87,x=ax,y=ay,pressure=.4,
+                    tiltX=12,tiltY=-9,flags=0,mask=13})
+                assert(A.inkPenId==87 and A.drawing and A.inkTiltX==12,
+                    'Native pen DOWN was not captured')
+                love.mousepressed(ax,ay,1,false)
+                love.touchpressed('duplicate-pen-touch',ax,ay,0,0,1)
+                assert(A.touchId==nil,'Pen stroke accepted synthetic touch')
+                dispatchInkEvent({kind=2,id=88,x=bx,y=by,pressure=1,
+                    tiltX=0,tiltY=0,flags=0,mask=1})
+                assert(A.inkPenId==87,'Foreign pointer modified active pen')
+                dispatchInkEvent({kind=2,id=87,x=bx,y=by,pressure=.4,
+                    tiltX=10,tiltY=-5,flags=0,mask=13})
+                dispatchInkEvent({kind=3,id=87,x=bx,y=by,pressure=.4,
+                    tiltX=10,tiltY=-5,flags=0,mask=13})
+                assert(A.inkPenId==nil and not A.drawing,
+                    'Native pen UP failed to end brush')
+                local inkPixel=Native.readPixel(A.layerSession:activeBuffer(),5,1)
+                assert(inkPixel%256>0 and inkPixel%256<255,
+                    'Native pen pressure not passed into C++ brush')
+                assert(A.layerSession:historyStats().undo==penHistory+1,
+                    'Native pen stroke must have one undo step')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0,
+                    'Undo did not remove Windows Ink stroke')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==inkPixel,
+                    'Redo did not restore Windows Ink stroke')
+                saveDoc()
+                local penSaved=A.store:openProject(A.doc.id)
+                local penAt=(1*A.doc.width+5)*4+1
+                assert(penSaved.layers[7].pixels:byte(penAt+3)==inkPixel%256,
+                    'Pen-drawn RGBA not persisted in RBD2')
+                dispatchInkEvent({kind=1,id=89,x=bx,y=by,pressure=1,
+                    tiltX=0,tiltY=0,flags=4,mask=1})
+                assert(A.inkPreviousTool=='brush' and A.tool=='erase',
+                    'Inverted pen was not switched to eraser')
+                dispatchInkEvent({kind=3,id=89,x=bx,y=by,pressure=1,
+                    tiltX=0,tiltY=0,flags=4,mask=1})
+                assert(A.tool=='brush' and A.inkPenId==nil,
+                    'Inverted pen did not restore previous tool')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0,
+                    'Inverted pen eraser failed to erase')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -778,7 +829,10 @@ function love.update(dt)
                     touch_pressure_low_high=true,touch_synthetic_suppression=true,
                     touch_single_owner=true,touch_pressure_move=true,
                     touch_undo_redo=true,touch_rbd2_roundtrip=true,
-                    touch_toolbar=true,persisted_from_real_editor=true}
+                    touch_toolbar=true,winink_pointer_dispatch=true,
+                    winink_mouse_touch_guard=true,winink_pressure_undo_rbd2=true,
+                    winink_eraser_inversion=true,
+                    persisted_from_real_editor=true}
             end)
             if not ok then
                 A.testReport.ok=false
