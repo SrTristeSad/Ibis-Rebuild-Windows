@@ -236,6 +236,17 @@ local function openLayerRename()
     A.modal.values[1]=layer.name
     A.modal.layerId=layer.id
 end
+local function duplicateActiveLayer()
+    assert(A.screen=='editor' and A.layerSession,
+        'Abra um projeto antes de duplicar')
+    finishStroke()
+    local index=A.layerSession:duplicate(A.doc.active_layer)
+    A.layerScroll=nil
+    A.dirty=true
+    rebuildImage()
+    status('Camada duplicada · cópia independente '..index)
+    return index
+end
 local function submitModal()
     local m=A.modal
     if m.kind=='folder' then
@@ -1495,14 +1506,16 @@ local function drawEditor(w,h)
         button('▼',panel+213,398,35,27,function()
             A.layerScroll=Thumbnails.scroll(start,maxStart,-1)
         end,false,start<=1)
-        button('+ Camada',panel+20,431,109,34,function()
+        button('+ Camada',panel+20,431,72,34,function()
             finishStroke()
             ls:add()
             A.layerScroll=nil
             A.dirty=true;rebuildImage()
             status('Camada raster adicionada')
         end,false,count>=Store.MAX_LAYERS)
-        button('Excluir',panel+139,431,109,34,function()
+        button('Duplicar',panel+96,431,75,34,duplicateActiveLayer,
+            false,count>=Store.MAX_LAYERS)
+        button('Excluir',panel+175,431,73,34,function()
             finishStroke()
             ls:remove(A.doc.active_layer)
             clearLayerThumbs()
@@ -2021,6 +2034,10 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='j' then
+        guard(duplicateActiveLayer)()
         return
     end
     if A.screen=='editor' and key=='f2' then
