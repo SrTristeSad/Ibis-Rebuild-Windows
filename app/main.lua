@@ -1422,6 +1422,7 @@ local function drawEditor(w,h)
         local count=#A.doc.layers
         text(('RASTERS %d/%d'):format(count,Store.MAX_LAYERS),
             panel+20,407,'small','muted')
+        button('Nome',panel+87,398,78,27,openLayerRename)
         local rows=Thumbnails.rows(h)
         local start,stop,maxStart=Thumbnails.window(count,
             A.doc.active_layer,rows,A.layerScroll)
@@ -1460,9 +1461,20 @@ local function drawEditor(w,h)
             box(panel+24,rowY+2,29,29,'line')
             love.graphics.setColor(1,1,1,1)
             love.graphics.draw(layerThumb(i),panel+24.5,rowY+2.5)
-            text((layer.visible and '● ' or '○ ')..i..' '..
-                layer.name:sub(1,15),panel+62,rowY+8,'body',
+            local label=layer.name
+            local utf8=require('utf8')
+            local cut=utf8.offset(label,12)
+            if cut then label=label:sub(1,cut-1)..'…' end
+            text(i..' '..label,panel+62,rowY+8,'body',
                 A.doc.active_layer==i and 'bg' or 'text')
+            button(layer.visible and 'Vis' or 'Oc.',
+                panel+210,rowY+4,35,25,function()
+                    finishStroke()
+                    ls:setVisible(i,not layer.visible)
+                    A.dirty=true;rebuildImage()
+                    status(layer.visible and 'Camada visível'
+                        or 'Camada oculta')
+                end,layer.visible)
             y=y+37
         end
         local active=A.doc.layers[A.doc.active_layer]
