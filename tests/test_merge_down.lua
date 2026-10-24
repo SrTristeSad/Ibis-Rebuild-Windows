@@ -16,6 +16,7 @@ function T.run(root)
     local doc=store:createProject('Mesclar abaixo',5,5,'',
         string.rep('\0',5*5*4))
     local ls=Layers.open(store,store:openProject(doc.id))
+    local backgroundId=ls.doc.layers[1].id
     ls:pixel(2,2,0x224466ff)
     local background=Native.bytes(ls.buffers[1])
     ls:add('Aquarela')
@@ -40,7 +41,7 @@ function T.run(root)
         ls.doc.layers[2].opacity==1 and ls.doc.layers[2].visible,
         'Merged layer metadata is not normalized')
     check(ls.doc.layers[2].name=='Aquarela' and
-        ls.doc.layers[1].id==doc.layers[1].id,
+        ls.doc.layers[1].id==backgroundId,
         'Merge incorrectly changed surviving layer identity/name')
     local merged=Native.bytes(ls.buffers[2])
     check(merged~=bottom and merged~=upper,'Merged raster was not composited')
