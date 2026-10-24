@@ -1537,8 +1537,17 @@ function love.wheelmoved(x,y)
             end
             return
         end
-        if love.keyboard.isDown('lshift','rshift')then A.rotation=A.rotation+y*math.pi/36
-        else A.zoom=math.max(.05,math.min(32,A.zoom*(1.15^y)))end
+        if y==0 then return end
+        local w,h=love.graphics.getDimensions()
+        local my=select(2,love.mouse.getPosition())
+        if mx<16 or mx>=w-268 or my<125 or my>=h-78 then
+            mx=(w-280)/2;my=(h+56)/2
+        end
+        if love.keyboard.isDown('lshift','rshift') then
+            rotateCanvas(y*math.pi/36,mx,my)
+        else
+            zoomCanvas(1.15^y,mx,my)
+        end
     end
 end
 function love.textinput(t)
@@ -1552,6 +1561,10 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
+    if A.screen=='editor' and key=='space' then
+        A.spaceHeld=true
+        return
+    end
     if A.screen=='editor' and key=='escape' and A.shapePreview then
         A.shapePreview=nil;status('Forma cancelada')
     elseif A.screen=='editor' and (key=='escape' or
@@ -1563,8 +1576,22 @@ function love.keypressed(key)
     elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='s'then guard(saveDoc)()
     elseif (love.keyboard.isDown('lctrl','rctrl')) and key=='n' then modal('new')
     elseif key=='escape' and A.screen=='editor' then guard(toGallery)()
-    elseif key=='f' and A.screen=='editor'then fit()
-    elseif key=='r' then A.rotation=0 end
+    elseif A.screen=='editor' and (key=='=' or key=='+' or key=='kp+') then
+        zoomCanvas(1.25)
+    elseif A.screen=='editor' and (key=='-' or key=='kp-') then
+        zoomCanvas(1/1.25)
+    elseif A.screen=='editor' and (key=='0' or key=='f') then fit()
+    elseif A.screen=='editor' and key=='q' then rotateCanvas(-math.pi/12)
+    elseif A.screen=='editor' and key=='e' then rotateCanvas(math.pi/12)
+    elseif A.screen=='editor' and key=='r' then resetCanvasRotation() end
+end
+function love.keyreleased(key)
+    if key=='space' then
+        A.spaceHeld=false
+        if A.panning and A.panButton==1 then
+            A.panning=false;A.panButton=nil
+        end
+    end
 end
 function love.resize()if A.doc then fit()end end
 function love.quit()
