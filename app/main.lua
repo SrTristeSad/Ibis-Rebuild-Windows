@@ -12,9 +12,10 @@ local EditorTools=require('editor_tools')
 local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
 local Menus=require('context_menus')
+local Presets=require('brush_presets')
 local Workspace=require('workspace_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -164,7 +165,7 @@ local function openDoc(doc)
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
-    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -229,7 +230,7 @@ local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
-    A.panning=false;A.panButton=nil;A.contextMenu=nil
+    A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -274,7 +275,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -438,6 +439,45 @@ local function openContextMenu(kind,target,x,y)
     local px,py,pw,ph=Menus.place(x,y,w,h,entries)
     A.contextMenu={kind=kind,target=target,title=title,
         entries=entries,x=px,y=py,w=pw,h=ph,cursor=1}
+end
+local function openBrushLibrary()
+    assert(A.screen=='editor' and A.layerSession and not A.modal,
+        'Abra uma obra para escolher um pincel')
+    finishStroke()
+    A.contextMenu=nil;A.toolHelp=false
+    A.brushLibrary=true
+    status('Biblioteca: opções de pincel próprio · Esc fecha')
+end
+local function applyBrushPreset(preset)
+    finishStroke()
+    local chosen=Presets.copy(preset)
+    assert(selectTool('brush'),'Não é possível selecionar pincel agora')
+    A.brushStyle=chosen.style
+    A.brushDiameter=chosen.diameter
+    A.brushOpacity=chosen.opacity
+    A.stabilization=chosen.stabilization
+    A.selectedBrushCustom=Presets.slot(preset)
+    A.brushLibrary=false
+    status('Pincel: '..preset.name..' · configurações aplicadas')
+end
+local function saveCustomBrush()
+    finishStroke()
+    local nextItems,preset,index=Presets.save(A.brushes,{
+        style=A.brushStyle,diameter=A.brushDiameter,
+        opacity=A.brushOpacity,stabilization=A.stabilization})
+    -- Only replace the live library after atomic serialization succeeds.
+    A.store:saveBrushes(nextItems)
+    A.brushes=nextItems
+    A.selectedBrushCustom=index
+    status('Ajuste pessoal salvo: '..preset.name)
+end
+local function deleteCustomBrush()
+    assert(A.selectedBrushCustom,'Selecione um ajuste pessoal para excluir')
+    local nextItems=Presets.remove(A.brushes,A.selectedBrushCustom)
+    A.store:saveBrushes(nextItems)
+    A.brushes=nextItems
+    A.selectedBrushCustom=nil
+    status('Ajuste pessoal excluído · pincel atual mantido')
 end
 local function submitModal()
     local m=A.modal
@@ -2212,6 +2252,8 @@ local function drawEditor(w,h)
         button('Limpar',panel+20,329,106,30,clearActiveLayer)
         button('Mesclar ↓',panel+142,329,106,30,mergeActiveLayerDown,
             false,A.doc.active_layer<=1)
+    elseif A.sideTab=='brush' and (A.tool=='brush' or A.tool=='erase') then
+        button('Biblioteca de pincéis',panel+20,329,228,30,openBrushLibrary)
     else
         text('PAINEL',panel+20,343,'small','muted')
     end
@@ -2598,6 +2640,62 @@ local function drawContextMenu()
         end,i==m.cursor,not entry.enabled)
     end
 end
+-- Modal brush catalogue. Every preview uses native renderer parameters
+-- only as a schematic sample, never claims a pixel-perfect Android stroke.
+local function drawBrushLibrary(w,h)
+    local rect=Presets.layout(w,h)
+    love.graphics.setColor(0,0,0,.78)
+    love.graphics.rectangle('fill',0,0,w,h)
+    box(rect.x,rect.y,rect.w,rect.h,'panel')
+    c('accent')
+    love.graphics.rectangle('fill',rect.x,rect.y,4,rect.h)
+    text('Biblioteca de pincéis',rect.x+20,rect.y+12,'title')
+    text('Predefinições raster · não reproduzem os pincéis Android',
+        rect.x+20,rect.y+49,'small','muted')
+    local saved=Presets.custom(A.brushes)
+    local half=(rect.w-56)/2
+    for i=1,8 do
+        local column=(i-1)%2
+        local line=math.floor((i-1)/2)
+        local x=rect.x+20+column*(half+16)
+        local y=rect.y+80+line*88
+        local preset=i<=4 and Presets.BUILTINS[i] or saved[i-4]
+        if preset then
+            local selected=Presets.matches(preset,A)
+            button('',x,y,half,80,function()
+                applyBrushPreset(preset)
+            end,selected)
+            text(preset.name,x+12,y+5,'body')
+            text(('%d px  ·  %s  ·  %.0f%%  ·  Est. %d'):format(
+                preset.diameter,preset.style=='hard' and 'rígido' or 'suave',
+                preset.opacity*100,preset.stabilization),
+                x+12,y+28,'small','muted')
+            local r,g,b=Colors.channels(A.color)
+            love.graphics.setColor(r/255,g/255,b/255,preset.opacity)
+            love.graphics.setLineWidth(math.min(14,math.max(2,
+                preset.diameter/3)))
+            love.graphics.line(x+25,y+61,x+half-25,y+61)
+            love.graphics.setLineWidth(1)
+        else
+            box(x,y,half,80,'card')
+            text('Espaço pessoal '..(i-4),x+12,y+16,'body','muted')
+            text('Salve o pincel atual abaixo',x+12,y+42,'small','muted')
+        end
+    end
+    local filled=0
+    for i=1,Presets.LIMIT do
+        if saved[i] then filled=filled+1 end
+    end
+    text(('AJUSTES SALVOS  %d / %d'):format(filled,Presets.LIMIT),
+        rect.x+20,rect.y+452,'small','muted')
+    button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
+        saveCustomBrush,false,filled>=Presets.LIMIT)
+    button('Excluir pessoal',rect.x+240,rect.y+480,170,37,
+        deleteCustomBrush,false,not A.selectedBrushCustom or
+        not saved[A.selectedBrushCustom])
+    button('Fechar · Esc',rect.x+rect.w-166,rect.y+480,146,37,
+        function()A.brushLibrary=false end)
+end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
     box(0,0,w,64,'panel')
@@ -2614,6 +2712,9 @@ function love.draw()
     elseif A.toolHelp and A.screen=='editor' then
         A.buttons={}
         drawToolHelp(w,h)
+    elseif A.brushLibrary and A.screen=='editor' then
+        A.buttons={}
+        drawBrushLibrary(w,h)
     elseif A.contextMenu and A.screen=='editor' then
         A.buttons={}
         drawContextMenu()
@@ -2631,6 +2732,17 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             end
         end
         return
+    end
+    if A.brushLibrary then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        return -- The underlying canvas is always inert.
     end
     if A.contextMenu then
         if buttonNumber==1 then
@@ -2879,14 +2991,14 @@ function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false;A.contextMenu=nil
+        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.wheelmoved(x,y)
-    if A.toolHelp or A.contextMenu then return end
+    if A.toolHelp or A.contextMenu or A.brushLibrary then return end
     if A.screen=='editor' and not A.modal then
         local mx=love.mouse.getPosition()
         if not A.focusMode and mx>=love.graphics.getWidth()-268 and
@@ -2924,6 +3036,10 @@ function love.keypressed(key)
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
         return
     end
+    if A.screen=='editor' and A.brushLibrary then
+        if key=='escape' then A.brushLibrary=false end
+        return
+    end
     if A.screen=='editor' and A.toolHelp then
         if key=='escape' or key=='f1' or key=='h' then
             A.toolHelp=false
@@ -2954,6 +3070,11 @@ function love.keypressed(key)
                 guard(function()performMenuAction(menu,entry.key)end)()
             end
         end
+        return
+    end
+    if A.screen=='editor' and key=='b' and
+        love.keyboard.isDown('lctrl','rctrl') then
+        guard(openBrushLibrary)()
         return
     end
     if A.screen=='editor' and key=='tab' then
