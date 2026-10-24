@@ -10,9 +10,12 @@ local Ink=require('windows_ink')
 local View=require('canvas_view')
 local EditorTools=require('editor_tools')
 local Thumbnails=require('layer_thumbnails')
+local Icons=require('ui_icons')
 local dispatchInkEvent
 local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
-local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
+-- Visual language: neutral studio workspace, clear blue tool state and
+-- compact layer controls. All painting remains inside the native canvas.
+local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
     {name='Vermelho',rgba=0xe53b44ff},{name='Verde',rgba=0x20ba84ff},
@@ -20,17 +23,51 @@ local swatches={
 }
 local function c(key,alpha) local v=palette[key];love.graphics.setColor(v[1],v[2],v[3],alpha or 1) end
 local function text(value,x,y,font,key) c(key or 'text');love.graphics.setFont(A.fonts[font or 'body']);love.graphics.print(value,x,y) end
-local function box(x,y,w,h,key) c(key);love.graphics.rectangle('fill',x,y,w,h,8,8) end
+local function box(x,y,w,h,key)
+    c(key)
+    love.graphics.rectangle('fill',x,y,w,h,6,6)
+end
 local function status(s) A.message=s;A.messageTime=love.timer.getTime() end
 local function guard(fn)
     return function(...) local ok,err=pcall(fn,...);if not ok then status(tostring(err)) end end
 end
 local function button(label,x,y,w,h,fn,active,disabled)
-    local mx,my=love.mouse.getPosition();local hover=mx>=x and mx<=x+w and my>=y and my<=y+h
-    box(x,y,w,h,disabled and 'panel' or active and 'accent' or hover and 'line' or 'card')
-    c(active and 'bg' or disabled and 'muted' or 'text');love.graphics.setFont(A.fonts.body)
-    love.graphics.printf(label,x,y+(h-17)/2,w,'center')
-    if not disabled then A.buttons[#A.buttons+1]={x=x,y=y,w=w,h=h,fn=guard(fn)} end
+    local mx,my=love.mouse.getPosition()
+    local hover=not disabled and mx>=x and mx<=x+w and my>=y and my<=y+h
+    box(x,y,w,h,disabled and 'panel' or active and 'selected'
+        or hover and 'line' or 'card')
+    c(active and 'accent' or 'line')
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle('line',x+.5,y+.5,w-1,h-1,6,6)
+    c(disabled and 'muted' or 'text')
+    love.graphics.setFont(A.fonts.body)
+    love.graphics.printf(label,x,y+(h-A.fonts.body:getHeight())/2,w,'center')
+    if not disabled then
+        A.buttons[#A.buttons+1]={x=x,y=y,w=w,h=h,fn=guard(fn)}
+    end
+end
+-- Same click rectangles as earlier stages; only their rendering changes.
+local toolSlots={
+    {id='inspect',x=116,w=53},{id='pixel',x=173,w=45},
+    {id='brush',x=222,w=57},{id='erase',x=283,w=61},
+    {id='fill',x=348,w=53},{id='select',x=405,w=61},
+    {id='shape',x=470,w=62},{id='picker',x=536,w=79}
+}
+local selectTool
+local function toolButton(slot)
+    local item=assert(EditorTools.fromId(slot.id))
+    local x,w=slot.x,slot.w
+    local selected=A.tool==item.id
+    button('',x,78,w,34,function()selectTool(item.id)end,selected)
+    c(selected and 'accent' or 'text')
+    Icons.draw(item.id,x+w/2,88,15)
+    c(selected and 'text' or 'muted')
+    love.graphics.setFont(A.fonts.small)
+    love.graphics.printf(item.label,x,98,w,'center')
+    if selected then
+        c('accent')
+        love.graphics.rectangle('fill',x+8,109,w-16,2,1,1)
+    end
 end
 local function externalWrite(path,bytes)
     path=path:gsub('\\','/');local dir,name=path:match('^(.*)/([^/]+)$');assert(dir and name,'Caminho absoluto necessário')
@@ -167,7 +204,7 @@ local function finishStroke(finalX,finalY,pressure)
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
     A.drawing=false;A.stabilizer=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
-local function selectTool(id)
+selectTool=function(id)
     local item=EditorTools.fromId(id)
     assert(item,'Ferramenta inválida')
     -- A tap on a toolbar button owns a touch/pen contact, but is not a
@@ -1757,16 +1794,10 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     button('← Galeria',20,78,92,34,toGallery)
-    button('Ver',116,78,53,34,function()selectTool('inspect')end,A.tool=='inspect')
-    button('Pixel',173,78,45,34,function()selectTool('pixel')end,A.tool=='pixel')
-    button('Pincel',222,78,57,34,function()selectTool('brush')end,A.tool=='brush')
-    button('Apagar',283,78,61,34,function()selectTool('erase')end,A.tool=='erase')
-    button('Balde',348,78,53,34,function()selectTool('fill')end,A.tool=='fill')
-    button('Seleção',405,78,61,34,function()selectTool('select')end,A.tool=='select')
-    button('Formas',470,78,62,34,function()selectTool('shape')end,A.tool=='shape')
-    button('Gotas',536,78,79,34,function()selectTool('picker')end,A.tool=='picker')
+    for _,slot in ipairs(toolSlots) do toolButton(slot) end
     button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
     local cx,cy=canvasTransform()
+    box(12,120,panel-20,h-178,'canvas')
     love.graphics.setScissor(16,125,panel-32,h-194)
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
@@ -1822,7 +1853,9 @@ local function drawEditor(w,h)
     button('Encaixar',230,dockY,83,30,fit)
     text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
     box(panel,64,268,h-112,'panel')
-    text('PROJETO',panel+20,88,'small','muted')
+    c('line')
+    love.graphics.rectangle('fill',panel,64,1,h-112)
+    text('CAMADAS E PROJETO',panel+20,88,'small','muted')
     button('? Ajuda',panel+172,82,76,31,function()
         finishStroke();A.toolHelp=true
     end)
@@ -1961,15 +1994,26 @@ local function drawEditor(w,h)
                 end
                 A.layerScroll=start
             end,A.doc.active_layer==i)
-            box(panel+24,rowY+2,29,29,'line')
+            -- Real RGBA miniature on a checkerboard, including transparent pixels.
+            for ty=0,3 do for tx=0,3 do
+                local light=(tx+ty)%2==0
+                love.graphics.setColor(light and .78 or .57,
+                    light and .80 or .60,light and .82 or .63,1)
+                love.graphics.rectangle('fill',panel+24+tx*7,rowY+2+ty*7,7,7)
+            end end
             love.graphics.setColor(1,1,1,1)
             love.graphics.draw(layerThumb(i),panel+24.5,rowY+2.5)
+            c('line')
+            love.graphics.rectangle('line',panel+24,rowY+2,29,29,2,2)
+            if A.doc.active_layer==i then
+                c('accent')
+                love.graphics.rectangle('fill',panel+19,rowY+5,3,27,1,1)
+            end
             local label=layer.name
             local utf8=require('utf8')
             local cut=utf8.offset(label,12)
             if cut then label=label:sub(1,cut-1)..'…' end
-            text(i..' '..label,panel+62,rowY+8,'body',
-                A.doc.active_layer==i and 'bg' or 'text')
+            text(i..'  '..label,panel+62,rowY+8,'body','text')
             button(layer.visible and 'Vis' or 'Oc.',
                 panel+210,rowY+4,35,25,function()
                     finishStroke()
@@ -2005,6 +2049,11 @@ local function drawEditor(w,h)
                 ls:setOpacity(A.doc.active_layer,math.min(1,active.opacity+.1))
                 A.dirty=true;rebuildImage()
             end)
+            -- Passive opacity meter; editing remains on the existing buttons.
+            box(panel+20,h-58,228,4,'line')
+            c('accent')
+            love.graphics.rectangle('fill',panel+20,h-58,
+                228*math.max(0,math.min(1,active.opacity)),4,2,2)
         end
     else
         if A.tool=='fill' then
@@ -2170,9 +2219,13 @@ local function drawToolHelp(w,h)
 end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
-    box(0,0,w,64,'panel');text('DESKTOP REBUILD',24,17,'title')
-    text('ibisPaint Android 14.1.2 · reconstrução progressiva',285,24,'body','muted')
-    text(Native.available and 'Lua ↔ C++ · offline' or 'Lua · C++ indisponível',w-222,24,'small',Native.available and 'accent' or 'warn')
+    box(0,0,w,64,'panel')
+    c('accent');love.graphics.rectangle('fill',0,0,4,64)
+    text('Ibis Rebuild',24,13,'title')
+    text(A.screen=='editor' and 'Área de desenho' or 'Minha galeria',
+        232,24,'body','muted')
+    text(Native.available and '●  Editor local' or '●  Motor indisponível',
+        w-202,24,'small',Native.available and 'accent' or 'warn')
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     box(0,h-48,w,48,'panel');text(A.message or '',20,h-33,'small','muted')
     if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
