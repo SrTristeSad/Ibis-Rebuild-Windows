@@ -701,7 +701,7 @@ local function verifyContextMenus()
     selectTool('brush')
     love.draw();love.mousepressed(245,92,2,false)
     assert(A.contextMenu,'Menu não abriu para teste externo')
-    love.draw();love.mousepressed(380,250,1,false)
+    love.draw();love.mousepressed(math.min(700,w-305),250,1,false)
     assert(not A.contextMenu and not A.drawing,
         'Clique externo não pode iniciar uma pincelada')
     selectTool('inspect')
