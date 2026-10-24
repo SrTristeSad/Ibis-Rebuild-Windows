@@ -261,6 +261,18 @@ local function duplicateActiveLayer()
     status('Camada duplicada · cópia independente '..index)
     return index
 end
+local function mergeActiveLayerDown()
+    assert(A.screen=='editor' and A.layerSession,'Abra um projeto antes de mesclar')
+    finishStroke()
+    local index=A.layerSession:mergeDown(A.doc.active_layer)
+    clearLayerThumbs()
+    A.layerScroll=nil
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
+    A.dirty=true
+    rebuildImage()
+    status('Camadas mescladas abaixo · Ctrl+Z restaura ambas')
+    return index
+end
 local function submitModal()
     local m=A.modal
     if m.kind=='folder' then
@@ -1466,6 +1478,59 @@ function love.update(dt)
                         loweredOpacity)<1e-5 and
                     propertiesSaved.layers[metaIndex].pixels==metaPixels,
                     'RBD2 não preservou propriedades reversíveis da camada')
+                -- Stage 22: merge via the real editor button, undo original
+                -- layers and verify deterministic redo and persistent RGBA.
+                local mergeIndex=A.doc.active_layer
+                assert(A.sideTab=='layers' and mergeIndex>2,
+                    'Mesclar precisa de uma camada acima de duas outras')
+                local countBefore=#A.doc.layers
+                local lowerId=A.doc.layers[mergeIndex-1].id
+                local upperId=A.doc.layers[mergeIndex].id
+                local originalLower=Native.bytes(A.layerSession.buffers[mergeIndex-1])
+                local originalUpper=Native.bytes(A.layerSession.buffers[mergeIndex])
+                local historyBefore=A.layerSession:historyStats().undo
+                love.draw()
+                love.mousepressed(panel+190,344,1,false)
+                assert(#A.doc.layers==countBefore-1 and
+                    A.doc.active_layer==mergeIndex-1 and
+                    A.doc.layers[mergeIndex-1].id==lowerId,
+                    'Botão Mesclar abaixo não funcionou')
+                local mergedPixels=Native.bytes(A.layerSession.buffers[mergeIndex-1])
+                assert(A.layerSession:historyStats().undo==historyBefore+1,
+                    'Mesclar não criou exatamente uma etapa de histórico')
+                undoDoc()
+                assert(#A.doc.layers==countBefore and
+                    A.doc.layers[mergeIndex-1].id==lowerId and
+                    A.doc.layers[mergeIndex].id==upperId and
+                    Native.bytes(A.layerSession.buffers[mergeIndex-1])==originalLower and
+                    Native.bytes(A.layerSession.buffers[mergeIndex])==originalUpper,
+                    'Desfazer Mesclar não recuperou os pixels/IDs originais')
+                assert(layerThumb(mergeIndex)~=nil,
+                    'Miniatura da camada restaurada não reapareceu')
+                redoDoc()
+                assert(#A.doc.layers==countBefore-1 and
+                    Native.bytes(A.layerSession.buffers[mergeIndex-1])==mergedPixels,
+                    'Refazer Mesclar não reproduziu o resultado C++')
+                saveDoc()
+                local mergedSave=A.store:openProject(A.doc.id)
+                assert(mergedSave.layer_count==countBefore-1 and
+                    mergedSave.layers[mergeIndex-1].pixels==mergedPixels and
+                    mergedSave.layers[mergeIndex-1].id==lowerId,
+                    'RBD2 não persistiu resultado Mesclar abaixo')
+                local originalIsDown=love.keyboard.isDown
+                love.keyboard.isDown=function(...)
+                    for j=1,select('#',...) do
+                        if select(j,...)=='lctrl' then return true end
+                    end
+                    return originalIsDown(...)
+                end
+                love.keypressed('e')
+                love.keyboard.isDown=originalIsDown
+                assert(#A.doc.layers==countBefore-2,
+                    'Ctrl+E não executou Mesclar abaixo')
+                undoDoc()
+                assert(#A.doc.layers==countBefore-1,
+                    'Ctrl+Z não restaurou a segunda mesclagem')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1519,6 +1584,9 @@ function love.update(dt)
                     metadata_rename_undo_redo=true,metadata_visibility_undo_redo=true,
                     metadata_opacity_undo_redo=true,metadata_pixels_preserved=true,
                     metadata_rbd2_roundtrip=true,
+                    merge_down_button=true,merge_down_undo=true,
+                    merge_down_redo=true,merge_down_ctrl_e=true,
+                    merge_down_rbd2=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -1652,6 +1720,11 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
+    if A.sideTab=='layers' and A.tool~='picker' and A.tool~='shape' and
+        A.tool~='select' then
+        button('Mesclar ↓',panel+142,329,106,30,mergeActiveLayerDown,
+            false,A.doc.active_layer<=1)
+    end
     if A.tool=='picker' then
         text('CONTA-GOTAS · RGBA',panel+20,378,'small','muted')
         button('Visível',panel+20,419,108,35,function()
@@ -2266,6 +2339,10 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='e' then
+        guard(mergeActiveLayerDown)()
         return
     end
     if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='j' then

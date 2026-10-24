@@ -105,6 +105,60 @@ local function reorder(self,from,to,active)
     table.insert(self.buffers,to,buffer)
     self.doc.active_layer=active
 end
+-- Merge two adjacent normal-blend layers in C++ while preserving the
+-- visible contribution of each source (including layer opacity/visibility).
+-- The resulting lower layer has full opacity and keeps the lower layer ID.
+local function flattenedPair(self,below,above,belowBuffer,aboveBuffer)
+    local target=Native.buffer(self.doc.width,self.doc.height)
+    Native.clear(target,0x00000000)
+    if below.visible and below.opacity>0 then
+        Native.composite(target,belowBuffer,below.opacity)
+    end
+    if above.visible and above.opacity>0 then
+        Native.composite(target,aboveBuffer,above.opacity)
+    end
+    return target
+end
+local function finalMergedLayer(below,pixels)
+    return {id=below.id,name=below.name,opacity=1,
+        visible=true,pixels=pixels}
+end
+function Layers:_undoMerge(entry)
+    local lowerIndex=entry.index
+    assert(#self.doc.layers<Store.MAX_LAYERS and
+        self.doc.layers[lowerIndex] and
+        self.doc.layers[lowerIndex].id==entry.below.id,
+        'Camada mesclada não corresponde ao histórico')
+    local lowerBuffer=Native.buffer(self.doc.width,self.doc.height,
+        entry.below.pixels)
+    local upperBuffer=Native.buffer(self.doc.width,self.doc.height,
+        entry.above.pixels)
+    self.doc.layers[lowerIndex]=layerFromSnapshot(entry.below)
+    self.buffers[lowerIndex]=lowerBuffer
+    table.insert(self.doc.layers,lowerIndex+1,layerFromSnapshot(entry.above))
+    table.insert(self.buffers,lowerIndex+1,upperBuffer)
+    self.doc.active_layer=entry.activeBefore
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+end
+function Layers:_redoMerge(entry)
+    local lowerIndex=entry.index
+    assert(self.doc.layers[lowerIndex] and
+        self.doc.layers[lowerIndex].id==entry.below.id and
+        self.doc.layers[lowerIndex+1] and
+        self.doc.layers[lowerIndex+1].id==entry.above.id,
+        'As camadas originais não correspondem ao histórico')
+    local merged=flattenedPair(self,entry.below,entry.above,
+        self.buffers[lowerIndex],self.buffers[lowerIndex+1])
+    self.doc.layers[lowerIndex]=finalMergedLayer(entry.below,
+        Native.bytes(merged))
+    self.buffers[lowerIndex]=merged
+    table.remove(self.doc.layers,lowerIndex+1)
+    table.remove(self.buffers,lowerIndex+1)
+    self.doc.active_layer=entry.activeAfter
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+end
 function Layers:_applyStructural(entry,undoing)
     if entry.kind=='insert' then
         if undoing then
@@ -124,6 +178,10 @@ function Layers:_applyStructural(entry,undoing)
         assert(self.doc.layers[from] and self.doc.layers[from].id==entry.id,
             'Camada movimentada não coincide com o histórico')
         reorder(self,from,to,undoing and entry.activeBefore or entry.activeAfter)
+    elseif entry.kind=='merge' then
+        if undoing then self:_undoMerge(entry)
+        else self:_redoMerge(entry) end
+        return
     elseif entry.kind=='property' then
         local layer
         for _,candidate in ipairs(self.doc.layers) do
@@ -322,6 +380,40 @@ function Layers:move(index,to)
     self:_pushHistory({kind='move',from=index,to=to,id=id,
         activeBefore=before,activeAfter=active,size=128})
     return true
+end
+-- Merge active (or explicit) upper layer into the layer immediately below.
+-- Undo restores both original RGBA buffers, metadata, order and persistent IDs.
+-- Redo deterministically recomputes the merged raster from those sources,
+-- avoiding a third full-image snapshot in the bounded session history.
+function Layers:mergeDown(index)
+    assertIndex(self,index)
+    assert(index>1,'A primeira camada não tem outra abaixo para mesclar')
+    if self.pending then self:finishEdit() end
+    local belowIndex=index-1
+    local below=layerSnapshot(self.doc.layers[belowIndex],
+        self.buffers[belowIndex])
+    local above=layerSnapshot(self.doc.layers[index],
+        self.buffers[index])
+    local before=self.doc.active_layer
+    local merged=flattenedPair(self,below,above,
+        self.buffers[belowIndex],self.buffers[index])
+    local pixels=Native.bytes(merged)
+    -- A pair costs at most 32 MiB at the current 2048² RGBA8 limit;
+    -- record this before structural mutation to keep undo guaranteed.
+    local cost=#below.pixels+#above.pixels+256
+    assert(cost<=Layers.MAX_HISTORY_BYTES,'Mesclagem excede o histórico')
+    self.doc.layers[belowIndex]=finalMergedLayer(below,pixels)
+    self.buffers[belowIndex]=merged
+    table.remove(self.doc.layers,index)
+    table.remove(self.buffers,index)
+    self.doc.active_layer=belowIndex
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+    assert(self:_pushHistory({kind='merge',index=belowIndex,
+        below=below,above=above,
+        activeBefore=before,activeAfter=belowIndex,
+        size=cost}),'Não foi possível registrar a mesclagem')
+    return belowIndex
 end
 function Layers:stroke(x0,y0,x1,y1,diameter,color,opacity)
     Native.basicStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,opacity or 1)
