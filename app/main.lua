@@ -1346,6 +1346,65 @@ function love.update(dt)
                 assert(#A.doc.layers==Store.MAX_LAYERS and
                     A.doc.active_layer==sourceIndex+1,
                     'Ctrl+J não duplicou a camada ativa')
+                -- Stage 20: undo and redo actual structural operations
+                -- via the same editor commands used for raster painting.
+                local lastId=A.doc.layers[A.doc.active_layer].id
+                local originalIdAfterCopy=A.doc.layers[sourceIndex].id
+                local originalAtSource=Native.bytes(A.layerSession.buffers[sourceIndex])
+                local beforeStructural=A.layerSession:historyStats().undo
+                assert(beforeStructural>=2,
+                    'Historical painting and duplicate must share timeline')
+                undoDoc()
+                assert(#A.doc.layers==Store.MAX_LAYERS-1 and
+                    A.doc.active_layer==sourceIndex and
+                    A.doc.layers[sourceIndex].id==originalIdAfterCopy,
+                    'Desfazer Ctrl+J não removeu apenas a cópia')
+                assert(A.layerSession:canRedo(),
+                    'Duplicação desfeita não entrou no histórico de refazer')
+                assert(Native.bytes(A.layerSession.buffers[sourceIndex])==
+                    originalAtSource,'Desfazer cópia alterou original')
+                redoDoc()
+                assert(#A.doc.layers==Store.MAX_LAYERS and
+                    A.doc.layers[sourceIndex+1].id==lastId,
+                    'Refazer Ctrl+J não recuperou o mesmo ID de camada')
+                assert(layerThumb(sourceIndex+1)~=nil and
+                    layerThumb(sourceIndex)~=nil,
+                    'Histórico estrutural não recuperou miniaturas')
+                love.draw();love.mousepressed(panel+214,448,1,false)
+                assert(#A.doc.layers==Store.MAX_LAYERS-1,
+                    'Excluir no novo histórico falhou')
+                local afterRemove=A.layerSession:historyStats().undo
+                undoDoc()
+                assert(#A.doc.layers==Store.MAX_LAYERS and
+                    A.doc.layers[sourceIndex+1].id==lastId,
+                    'Desfazer Excluir não restaurou identidade')
+                assert(A.layerSession:historyStats().undo==afterRemove-1,
+                    'Desfazer Excluir não avançou um passo')
+                redoDoc()
+                assert(#A.doc.layers==Store.MAX_LAYERS-1,
+                    'Refazer Excluir não removeu camada novamente')
+                undoDoc()
+                assert(#A.doc.layers==Store.MAX_LAYERS and
+                    A.doc.layers[sourceIndex+1].id==lastId,
+                    'Desfazer depois de refazer Excluir falhou')
+                local finalCount=A.layerSession:historyStats().undo
+                local lastLayer=A.doc.active_layer
+                A.layerSession:move(lastLayer,lastLayer-1)
+                A.dirty=true;rebuildImage()
+                assert(A.layerSession:historyStats().undo==finalCount+1,
+                    'Mover não entrou na linha do tempo')
+                local movedId=A.doc.layers[lastLayer-1].id
+                undoDoc()
+                assert(A.doc.layers[lastLayer].id==movedId,
+                    'Desfazer movimentação não restaurou ordem')
+                redoDoc()
+                assert(A.doc.layers[lastLayer-1].id==movedId,
+                    'Refazer movimentação não recuperou ordem')
+                saveDoc()
+                local mixedSaved=A.store:openProject(A.doc.id)
+                assert(mixedSaved.layers[lastLayer-1].id==movedId and
+                    mixedSaved.layer_count==Store.MAX_LAYERS,
+                    'RBD2 não preservou a estrutura após desfazer/refazer')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1391,6 +1450,11 @@ function love.update(dt)
                     layer_duplicate_button=true,layer_duplicate_deep_pixels=true,
                     layer_duplicate_undo_redo=true,layer_duplicate_rbd2=true,
                     layer_duplicate_capacity_guard=true,layer_duplicate_ctrl_j=true,
+                    structural_undo_duplicate=true,structural_redo_duplicate=true,
+                    structural_undo_delete=true,structural_redo_delete=true,
+                    structural_undo_move=true,structural_redo_move=true,
+                    structural_thumbnails_restored=true,
+                    mixed_history_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
