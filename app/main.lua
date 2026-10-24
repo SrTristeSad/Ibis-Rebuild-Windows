@@ -9,8 +9,9 @@ local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
 local View=require('canvas_view')
 local EditorTools=require('editor_tools')
+local Thumbnails=require('layer_thumbnails')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -39,7 +40,43 @@ local function refreshGallery() A.folders=A.store:folders(A.folder);A.projects=A
 local function setFolder(id)
     A.folder=id or '';refreshGallery()
 end
+local function clearLayerThumbs()
+    if A.layerThumbs then
+        for _,entry in pairs(A.layerThumbs) do
+            entry.image:release()
+        end
+    end
+    A.layerThumbs={}
+    A.layerThumbDirty={}
+end
+local function layerThumb(index)
+    local layer=A.doc.layers[index]
+    assert(layer and A.layerSession.buffers[index],'Camada de miniatura inválida')
+    A.layerThumbs=A.layerThumbs or {}
+    A.layerThumbDirty=A.layerThumbDirty or {}
+    local entry=A.layerThumbs[layer.id]
+    if not entry or A.layerThumbDirty[layer.id] then
+        local pixels=Thumbnails.sample(A.layerSession.buffers[index])
+        local imageData=love.image.newImageData(
+            Thumbnails.SIZE,Thumbnails.SIZE,'rgba8',pixels)
+        local image=love.graphics.newImage(imageData)
+        imageData:release()
+        image:setFilter('nearest','nearest')
+        if entry then entry.image:release() end
+        entry={image=image}
+        A.layerThumbs[layer.id]=entry
+        A.layerThumbDirty[layer.id]=nil
+    end
+    return entry.image
+end
 local function rebuildImage()
+    if A.layerSession and A.doc and A.doc.layers then
+        local layer=A.doc.layers[A.doc.active_layer]
+        if layer then
+            A.layerThumbDirty=A.layerThumbDirty or {}
+            A.layerThumbDirty[layer.id]=true
+        end
+    end
     if A.image then A.image:release() end
     if A.imageData then A.imageData:release() end
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
@@ -82,6 +119,8 @@ local function resetCanvasRotation()
 end
 local function openDoc(doc)
     assert(Native.available,'O editor requer o motor C++ compilado. A galeria continua disponível.')
+    clearLayerThumbs()
+    A.layerScroll=nil
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
@@ -171,6 +210,7 @@ end
 local function toGallery()
     A.shapePreview=nil;A.toolHelp=false
     finishStroke()
+    clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
 end
@@ -1052,6 +1092,67 @@ function love.update(dt)
                 assert(A.layerSession:historyStats().undo==historyBefore and
                     not A.layerSession.pending and not A.drawing,
                     'Paleta criou entradas no histórico de desenho')
+                -- Stage 17: thumbnail previews and page buttons in the
+                -- actual LÖVE layer panel, preserving original raster/undo.
+                love.draw();love.mousepressed(panel+70,382,1,false)
+                assert(A.sideTab=='layers','Camadas não abriu o painel')
+                local layerCount=#A.doc.layers
+                assert(layerCount==Store.MAX_LAYERS,
+                    'Teste de paginação requer oito camadas')
+                local currentLayer=A.doc.active_layer
+                local layerId=A.doc.layers[currentLayer].id
+                love.draw()
+                local cacheImage=layerThumb(currentLayer)
+                assert(cacheImage==layerThumb(currentLayer),
+                    'Miniatura idêntica não reutilizou cache')
+                local originalRaster=Native.bytes(A.layerSession:activeBuffer())
+                local originalEntries=A.layerSession:historyStats().undo
+                local thumbnailBytes=Thumbnails.sample(
+                    A.layerSession:activeBuffer())
+                assert(#thumbnailBytes==Thumbnails.SIZE^2*4,
+                    'Miniatura real não possui bytes RGBA completos')
+                assert(Native.bytes(A.layerSession:activeBuffer())==originalRaster,
+                    'Amostragem de miniatura escreveu no raster')
+                A.layerSession:beginEdit()
+                A.layerSession:pixel(8,6,0x73aa45ff)
+                assert(A.layerSession:finishEdit(),
+                    'Teste de edição da miniatura não criou histórico')
+                A.dirty=true;rebuildImage()
+                assert(A.layerThumbDirty[layerId],
+                    'Editar o raster não invalidou sua miniatura')
+                local newerImage=layerThumb(currentLayer)
+                assert(newerImage~=cacheImage and not A.layerThumbDirty[layerId],
+                    'Miniatura não foi atualizada depois do desenho')
+                assert(newerImage==layerThumb(currentLayer),
+                    'Miniatura reconstruída não foi armazenada no cache')
+                undoDoc()
+                assert(Native.bytes(A.layerSession:activeBuffer())==originalRaster
+                    and A.layerSession:historyStats().undo==originalEntries,
+                    'Desfazer não recuperou o raster após atualização da prévia')
+                local previewAfterUndo=layerThumb(currentLayer)
+                assert(previewAfterUndo~=newerImage,
+                    'Desfazer não invalidou a prévia')
+                local panelStart,panelStop=Thumbnails.window(layerCount,
+                    A.doc.active_layer,Thumbnails.rows(screenH),A.layerScroll)
+                assert(panelStart==4 and panelStop==8,
+                    'Lista não exibiu a camada ativa superior')
+                love.draw();love.mousepressed(panel+230,411,1,false)
+                assert(A.layerScroll==3,
+                    'Seta ▼ não percorreu a lista de camadas')
+                love.draw()
+                assert(A.layerThumbs[A.doc.layers[3].id]~=nil,
+                    'Nova camada visível não recebeu miniatura')
+                love.mousepressed(panel+189,411,1,false)
+                assert(A.layerScroll==4,
+                    'Seta ▲ não retornou à camada superior')
+                love.draw();love.mousepressed(panel+110,528,1,false)
+                assert(A.doc.active_layer==7,
+                    'Linha com miniatura não permitiu selecionar camada')
+                local selectedBytes=Native.bytes(A.layerSession:activeBuffer())
+                local historySelected=A.layerSession:historyStats().undo
+                assert(selectedBytes==Native.bytes(A.layerSession:activeBuffer())
+                    and historySelected==A.layerSession:historyStats().undo,
+                    'Selecionar linha alterou pixels ou histórico')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1086,6 +1187,9 @@ function love.update(dt)
                     editor_tool_shortcuts=true,tool_help_sidebar_button=true,
                     tool_help_keyboard=true,tool_help_tool_buttons=true,
                     tool_help_blocks_canvas=true,tool_help_no_raster_edit=true,
+                    layer_rgba_thumbnails=true,layer_thumbnail_cache=true,
+                    layer_thumbnail_refresh_undo=true,layer_panel_page_buttons=true,
+                    layer_preview_click_selection=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -1293,24 +1397,50 @@ local function drawEditor(w,h)
     if A.sideTab=='layers' then
         local ls=A.layerSession
         local count=#A.doc.layers
-        text(('RASTERS %d / %d · NORMAL'):format(count,Store.MAX_LAYERS),panel+20,407,'small','muted')
+        text(('RASTERS %d/%d'):format(count,Store.MAX_LAYERS),
+            panel+20,407,'small','muted')
+        local rows=Thumbnails.rows(h)
+        local start,stop,maxStart=Thumbnails.window(count,
+            A.doc.active_layer,rows,A.layerScroll)
+        button('▲',panel+172,398,35,27,function()
+            A.layerScroll=Thumbnails.scroll(start,maxStart,1)
+        end,false,start>=maxStart)
+        button('▼',panel+213,398,35,27,function()
+            A.layerScroll=Thumbnails.scroll(start,maxStart,-1)
+        end,false,start<=1)
         button('+ Camada',panel+20,431,109,34,function()
-            ls:add();A.dirty=true;rebuildImage();status('Camada raster adicionada')
+            finishStroke()
+            ls:add()
+            A.layerScroll=nil
+            A.dirty=true;rebuildImage()
+            status('Camada raster adicionada')
         end,false,count>=Store.MAX_LAYERS)
         button('Excluir',panel+139,431,109,34,function()
-            ls:remove(A.doc.active_layer);A.dirty=true;rebuildImage()
+            finishStroke()
+            ls:remove(A.doc.active_layer)
+            clearLayerThumbs()
+            A.layerScroll=nil
+            A.dirty=true;rebuildImage()
             status('Camada removida')
         end,false,count<=1)
-        -- Reserve the footer actions even at the minimum 640px window height.
-        local rows=math.max(1,math.min(6,math.floor((h-131-475)/30)))
-        local start=math.max(1,math.min(A.doc.active_layer-math.floor(rows/2),count-rows+1))
-        local stop=math.min(count,start+rows-1)
+        -- Lower pane must stay usable at 960x640: one 33px row.
         local y=475
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
-            button((layer.visible and '● ' or '○ ')..i..' '..layer.name:sub(1,17),
-                panel+20,y,228,27,function()if A.doc.active_layer~=i then finishStroke();ls:select(i);A.dirty=true end end,A.doc.active_layer==i)
-            y=y+30
+            local rowY=y
+            button(' ',panel+20,rowY,228,33,function()
+                if A.doc.active_layer~=i then
+                    finishStroke();ls:select(i);A.dirty=true
+                end
+                A.layerScroll=start
+            end,A.doc.active_layer==i)
+            box(panel+24,rowY+2,29,29,'line')
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(layerThumb(i),panel+24.5,rowY+2.5)
+            text((layer.visible and '● ' or '○ ')..i..' '..
+                layer.name:sub(1,15),panel+62,rowY+8,'body',
+                A.doc.active_layer==i and 'bg' or 'text')
+            y=y+37
         end
         local active=A.doc.layers[A.doc.active_layer]
         do
@@ -1751,7 +1881,9 @@ function love.wheelmoved(x,y)
             local count=#A.doc.layers
             local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
             if y~=0 and index~=A.doc.active_layer then
-                finishStroke();A.layerSession:select(index);A.dirty=true
+                finishStroke();A.layerSession:select(index)
+                A.layerScroll=nil
+                A.dirty=true
             end
             return
         end
@@ -1833,6 +1965,7 @@ end
 function love.resize()if A.doc then fit()end end
 function love.quit()
     Ink.close()
+    clearLayerThumbs()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end
         pcall(function()A.store:setPreferences(A.preferences);A.store:saveBrushes(A.brushes)end)

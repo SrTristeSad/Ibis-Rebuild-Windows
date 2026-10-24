@@ -34,6 +34,8 @@ A etapa 15 introduz [navegação da tela de desenho com zoom ancorado no cursor,
 
 A etapa 16 traz uma [central de ferramentas e atalhos no editor](docs/TOOL_HUB_STAGE16.md): seleção por 1–8, ajuda F1/H ou botão no painel, escolha por clique e proteção do canvas enquanto a ajuda está aberta. Essa etapa reorganiza o acesso às ferramentas sem modificar o raster nativo nem o RBD2.
 
+A etapa 17 adiciona [miniaturas RGBA reais no painel de camadas, cache de visualização e paginação adaptada à altura da janela](docs/LAYER_THUMBNAILS_STAGE17.md). A prévia amostra somente 28×28 pixels diretamente do buffer raster nativo e não altera camadas, histórico nem RBD2.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -59,6 +61,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Ponta elíptica orientada por inclinação | Etapa 14: cilindro elíptico raster C++, sem tilt preserva pincel anterior; hardware físico não verificado |
 | Navegação e rotação do canvas | Etapa 15: zoom e rotação sob cursor, Espaço/meio/direito para deslocar, atalhos e dock; sem edições no raster |
 | Central de ferramentas e atalhos | Etapa 16: teclas 1–8, ajuda por F1/H, paleta clicável e bloqueio de edição com ajuda aberta |
+| Miniaturas e navegação de camadas | Etapa 17: prévias de pixels reais, cache por camada, setas de paginação e layout para janelas menores |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
