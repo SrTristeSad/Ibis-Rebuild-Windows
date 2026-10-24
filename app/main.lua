@@ -1048,6 +1048,7 @@ function love.mousepressed(x,y,buttonNumber)
                             A.color,A.brushOpacity)
                     end
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
+                    A.stabilizer=Stabilizer.new(A.stabilization,px,py)
                     A.dirty=true;rebuildImage()
                     status(A.tool=='erase' and 'Borracha C++ · apaga a camada ativa'
                         or 'Pincel C++ · histórico por pincelada · Ctrl+Z')
@@ -1061,7 +1062,16 @@ function love.mousereleased(x,y,b)
     if b==1 then
         guard(finishShape)()
         guard(finishSelection)()
-        guard(finishStroke)()
+        if A.drawing then
+            guard(function()
+                local px,py=canvasPoint(x,y)
+                px=math.max(-16384,math.min(16384,px))
+                py=math.max(-16384,math.min(16384,py))
+                finishStroke(px,py)
+            end)()
+        else
+            guard(finishStroke)()
+        end
     end
 end
 function love.mousemoved(x,y,dx,dy)
@@ -1092,18 +1102,10 @@ function love.mousemoved(x,y,dx,dy)
     if A.drawing and A.screen=='editor' and (A.tool=='brush' or A.tool=='erase') and not A.modal then
         guard(function()
             local px,py=canvasPoint(x,y)
-            if A.tool=='erase' then
-                A.layerSession:erase(A.lastStrokeX,A.lastStrokeY,px,py,
-                    A.brushDiameter,A.brushOpacity)
-            elseif A.brushStyle=='soft' then
-                A.layerSession:softStroke(A.lastStrokeX,A.lastStrokeY,px,py,
-                    A.brushDiameter,A.color,A.brushOpacity,0.25)
-            else
-                A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,
-                    A.brushDiameter,A.color,A.brushOpacity)
-            end
-            A.lastStrokeX=px;A.lastStrokeY=py
-            A.dirty=true;rebuildImage()
+            px=math.max(-16384,math.min(16384,px))
+            py=math.max(-16384,math.min(16384,py))
+            local sx,sy=A.stabilizer:sample(px,py)
+            paintBrushSegment(sx,sy)
         end)()
     end
 end
