@@ -1407,6 +1407,63 @@ function love.update(dt)
                 assert(mixedSaved.layers[lastLayer-1].id==movedId and
                     mixedSaved.layer_count==Store.MAX_LAYERS,
                     'RBD2 não preservou a estrutura após desfazer/refazer')
+                -- Stage 21: real modal and panel properties participate in
+                -- the same undo/redo stack as raster and structural edits.
+                local metaIndex=A.doc.active_layer
+                local metaId=A.doc.layers[metaIndex].id
+                local previousName=A.doc.layers[metaIndex].name
+                local metaPixels=Native.bytes(A.layerSession:activeBuffer())
+                love.keypressed('f2')
+                assert(A.modal and A.modal.kind=='renameLayer',
+                    'F2 não abriu renomeio no histórico de propriedades')
+                A.modal.values[1]='Camada histórica 21'
+                love.keypressed('return')
+                assert(A.doc.layers[metaIndex].name=='Camada histórica 21' and
+                    not A.modal,'Editar nome não registrou alteração')
+                local entry=A.layerSession.undoStack[#A.layerSession.undoStack]
+                assert(entry and entry.kind=='property' and entry.field=='name',
+                    'Renomear não criou etapa reversível')
+                undoDoc()
+                assert(A.doc.layers[metaIndex].name==previousName,
+                    'Ctrl+Z não restaurou nome da camada')
+                redoDoc()
+                assert(A.doc.layers[metaIndex].name=='Camada histórica 21',
+                    'Ctrl+Y não refez nome da camada')
+                local wasVisible=A.doc.layers[metaIndex].visible
+                love.draw()
+                love.mousepressed(panel+70,screenH-116,1,false)
+                assert(A.doc.layers[metaIndex].visible~=wasVisible,
+                    'Botão Ocultar/Mostrar não registrou visibilidade')
+                undoDoc()
+                assert(A.doc.layers[metaIndex].visible==wasVisible,
+                    'Desfazer visibilidade não restaurou estado')
+                redoDoc()
+                assert(A.doc.layers[metaIndex].visible~=wasVisible,
+                    'Refazer visibilidade falhou')
+                local priorOpacity=A.doc.layers[metaIndex].opacity
+                love.draw()
+                love.mousepressed(panel+40,screenH-79,1,false)
+                local loweredOpacity=A.doc.layers[metaIndex].opacity
+                assert(loweredOpacity<priorOpacity,
+                    'Controle − de opacidade não modificou camada')
+                undoDoc()
+                assert(math.abs(A.doc.layers[metaIndex].opacity-priorOpacity)<1e-5,
+                    'Desfazer opacidade não restaurou valor original')
+                redoDoc()
+                assert(math.abs(A.doc.layers[metaIndex].opacity-loweredOpacity)<1e-5,
+                    'Refazer opacidade não recuperou valor')
+                assert(A.doc.layers[metaIndex].id==metaId and
+                    Native.bytes(A.layerSession:activeBuffer())==metaPixels,
+                    'Histórico de propriedades alterou ID ou raster original')
+                saveDoc()
+                local propertiesSaved=A.store:openProject(A.doc.id)
+                assert(propertiesSaved.layers[metaIndex].id==metaId and
+                    propertiesSaved.layers[metaIndex].name=='Camada histórica 21'
+                    and propertiesSaved.layers[metaIndex].visible~=wasVisible
+                    and math.abs(propertiesSaved.layers[metaIndex].opacity-
+                        loweredOpacity)<1e-5 and
+                    propertiesSaved.layers[metaIndex].pixels==metaPixels,
+                    'RBD2 não preservou propriedades reversíveis da camada')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1457,6 +1514,9 @@ function love.update(dt)
                     structural_undo_move=true,structural_redo_move=true,
                     structural_thumbnails_restored=true,
                     mixed_history_rbd2_roundtrip=true,
+                    metadata_rename_undo_redo=true,metadata_visibility_undo_redo=true,
+                    metadata_opacity_undo_redo=true,metadata_pixels_preserved=true,
+                    metadata_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
