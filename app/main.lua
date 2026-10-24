@@ -834,15 +834,42 @@ local function drawEditor(w,h)
             A.buttons[#A.buttons+1]={x=x,y=533,w=33,h=31,
                 fn=function()A.color=swatch.rgba;status('Cor: '..swatch.name)end}
         end
-        text('ENTRADA',panel+20,589,'small','muted')
-        text('Mouse · pressão 1 · ângulos 0',panel+20,616,'small','muted')
-        if A.lastPacket then
-            local f=A.lastPacket.floats
-            text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
-                panel+20,646,'small','muted')
+        if A.tool=='brush' or A.tool=='erase' then
+            if A.tool=='brush' then
+                button('Rígido',panel+20,579,108,31,function()
+                    finishStroke();A.brushStyle='hard'
+                end,A.brushStyle=='hard')
+                button('Suave',panel+140,579,108,31,function()
+                    finishStroke();A.brushStyle='soft'
+                end,A.brushStyle=='soft')
+            else
+                text('BORRACHA REDONDA · ALFA',panel+20,586,'small','muted')
+            end
+            button('−',panel+20,622,42,30,function()
+                finishStroke()
+                A.brushOpacity=math.max(.1,
+                    math.floor(A.brushOpacity*10+0.5)/10-.1)
+            end,false,A.brushOpacity<=.101)
+            text(('Opacidade %.0f%%'):format(A.brushOpacity*100+0.01),
+                panel+69,630,'small','muted')
+            button('+',panel+206,622,42,30,function()
+                finishStroke()
+                A.brushOpacity=math.min(1,
+                    math.floor(A.brushOpacity*10+0.5)/10+.1)
+            end,false,A.brushOpacity>=.999)
+        else
+            text('ENTRADA',panel+20,589,'small','muted')
+            text('Mouse · pressão 1 · ângulos 0',panel+20,616,'small','muted')
+            if A.lastPacket then
+                local f=A.lastPacket.floats
+                text(('x %.1f  y %.1f · p %.3f'):format(f[1],f[2],f[5]),
+                    panel+20,646,'small','muted')
+            end
         end
         editShapeColorButton(panel,669)
         text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
+            or A.tool=='brush' and 'Pincel C++ próprio · sem paridade Android'
+            or A.tool=='erase' and 'Borracha rígida · alfa editável'
             or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
     end
     end
