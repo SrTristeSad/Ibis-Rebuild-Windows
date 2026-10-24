@@ -89,6 +89,8 @@ class KernelTests(unittest.TestCase):
                 F32, F32, F32, F32, F32, U32, F32]),
             'rb_draw_feather_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, U32, F32, F32]),
+            'rb_draw_tilt_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
+                F32, F32, F32, F32, F32, U32, F32, F32, F32, F32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
             'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
@@ -752,6 +754,73 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(self.lib.rb_ink_detach(),0)
         self.assertEqual(self.lib.rb_ink_is_attached(),0)
         self.assertEqual(self.lib.rb_ink_detach(),0)
+
+
+    def test_tilt_ellipse_orientation_and_swept_segment(self):
+        draw=self.lib.rb_draw_tilt_stroke
+        size=25*25*4
+        horizontal=(U8*size)()
+        vertical=(U8*size)()
+        self.assertEqual(draw(horizontal,size,25,25,12.5,12.5,12.5,12.5,
+            8.0,0xe53b44ff,1.0,1.0,90.0,0.0),0)
+        self.assertEqual(draw(vertical,size,25,25,12.5,12.5,12.5,12.5,
+            8.0,0xe53b44ff,1.0,1.0,0.0,90.0),0)
+        at=lambda x,y:(y*25+x)*4
+        self.assertEqual(bytes(horizontal[at(18,12):at(18,12)+4]),
+            bytes.fromhex('e53b44ff'))
+        self.assertEqual(bytes(horizontal[at(12,18):at(12,18)+4]),bytes(4))
+        self.assertEqual(bytes(vertical[at(12,18):at(12,18)+4]),
+            bytes.fromhex('e53b44ff'))
+        self.assertEqual(bytes(vertical[at(18,12):at(18,12)+4]),bytes(4))
+        line=(U8*size)()
+        self.assertEqual(draw(line,size,25,25,3.5,8.5,21.5,8.5,
+            4.0,0x3366aaff,.7,1.0,90.0,0.0),0)
+        self.assertGreater(line[at(12,8)+3],0)
+        self.assertGreater(line[at(21,8)+3],0)
+        self.assertEqual(line[at(12,14)+3],0)
+
+    def test_tilt_zero_matches_old_hard_and_soft_brush(self):
+        tilt=self.lib.rb_draw_tilt_stroke
+        hard=self.lib.rb_draw_basic_stroke
+        feather=self.lib.rb_draw_feather_stroke
+        length=19*19*4
+        for hardness in (1.0,0.25,0.0):
+            before=(U8*length)()
+            after=(U8*length)()
+            args=(2.2,4.5,13.8,17.1,6.5,0x887766cc,.72)
+            if hardness==1.0:
+                self.assertEqual(hard(before,length,19,19,*args),0)
+            else:
+                self.assertEqual(feather(before,length,19,19,*args,hardness),0)
+            self.assertEqual(tilt(after,length,19,19,*args,hardness,0.,0.),0)
+            self.assertEqual(bytes(after),bytes(before))
+        a=(U8*length)()
+        self.assertEqual(tilt(a,length,19,19,9.5,9.5,9.5,9.5,7.,
+            0xff0000ff,.6,.25,60.,0.),0)
+        center=(9*19+9)*4
+        self.assertGreater(a[center+3],0)
+        self.assertLess(a[center+3],255)
+
+    def test_tilt_rejects_invalid_without_mutating_pixels(self):
+        draw=self.lib.rb_draw_tilt_stroke
+        pixels=(U8*16)(*bytes.fromhex('01020304 10111213 20212223 30313233'))
+        before=bytes(pixels)
+        for x,y,diam,alpha,hardness,tx,ty in [
+            (0,0,0,1.,1.,0.,0.),
+            (0,0,257,1.,1.,0.,0.),
+            (0,0,4,-.1,1.,0.,0.),
+            (0,0,4,1.,-.1,0.,0.),
+            (0,0,4,1.,1.,91.,0.),
+            (0,0,4,1.,1.,0.,-91.),
+            (math.nan,0,4,1.,1.,0.,0.),
+            (0,0,4,1.,1.,math.inf,0.),
+        ]:
+            self.assertEqual(draw(pixels,16,2,2,x,y,x,y,
+                diam,0xffffffff,alpha,hardness,tx,ty),-1)
+            self.assertEqual(bytes(pixels),before)
+        self.assertEqual(draw(pixels,15,2,2,0.,0.,0.,0.,
+            4.,0xffffffff,1.,1.,20.,0.),-1)
+        self.assertEqual(bytes(pixels),before)
 
 
 if __name__ == '__main__':

@@ -185,6 +185,11 @@ function Layers:softStroke(x0,y0,x1,y1,diameter,color,opacity,hardness)
         opacity or 1,hardness or 0.25)
     self:recompose()
 end
+function Layers:tiltStroke(x0,y0,x1,y1,diameter,color,opacity,hardness,tiltX,tiltY)
+    Native.tiltStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,
+        opacity,hardness,tiltX,tiltY)
+    self:recompose()
+end
 function Layers:erase(x0,y0,x1,y1,diameter,opacity)
     Native.basicErase(self:activeBuffer(),x0,y0,x1,y1,diameter,opacity or 1)
     self:recompose()
