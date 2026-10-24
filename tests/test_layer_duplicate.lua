@@ -23,7 +23,8 @@ function T.run(root)
     scene:beginEdit()
     scene:pixel(5,5,0xff8800ff)
     check(scene:finishEdit(),'Prior edit must be tracked')
-    check(scene:historyStats().undo==1,'Missing raster history before duplication')
+    check(scene:historyStats().undo==4,
+        'Add, opacity, visibility and raster painting must share one history')
     local beforeHistory=scene:historyStats().undo
     local newIndex=scene:duplicate(source)
     check(newIndex==3 and scene.doc.active_layer==3 and #scene.doc.layers==3,
