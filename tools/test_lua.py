@@ -117,6 +117,9 @@ def run_tests(runtime_path, output):
             tool_program="return require('json').encode(require('tests.test_editor_tools').run())"
             tool_registry=json.loads(native_state.execute(tool_program))
             assert tool_registry.get('passed') and tool_registry.get('ordered_shortcuts') and tool_registry.get('no_reserved_shortcut_collision')
+            thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
+            thumbs=json.loads(native_state.execute(thumbnail_program))
+            assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -131,6 +134,7 @@ def run_tests(runtime_path, output):
         report['native_tilt_brush'] = tilt_brush
         report['canvas_view'] = viewport
         report['editor_tool_registry'] = tool_registry
+        report['native_layer_thumbnails'] = thumbs
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
