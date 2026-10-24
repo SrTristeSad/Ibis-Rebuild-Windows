@@ -28,6 +28,8 @@ A etapa 12 recebe [eventos de toque do LÖVE com pressão variável](docs/TOUCH_
 
 A etapa 13 integra uma [ponte Windows Ink opcional na DLL C++](docs/WINDOWS_INK_STAGE13.md), conectando mensagens `WM_POINTER` de canetas ao editor sem WebView, com pressão 0–1024, inclinação informativa, borracha por ponta invertida e alternativa de mouse/toque. **O CI não atesta compatibilidade com canetas ou drivers físicos**.
 
+A etapa 14 adiciona [pincel elíptico orientado pela inclinação da caneta](docs/TILT_BRUSH_STAGE14.md), implementado no núcleo C++ e selecionável no painel. O modo de inclinação zero preserva bit a bit os pincéis anteriores; os testes não substituem a validação com caneta física.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -50,6 +52,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Estabilização de traço pelo mouse | Etapa 11: níveis 0–5, filtro de movimento e preservação exata do ponto final |
 | Eventos de toque/pressão do LÖVE | Etapa 12: largura/alfa variáveis, contato único, sem duplicação do mouse simulado; drivers físicos não verificados |
 | Ponte Windows Ink nativa opcional | Etapa 13: WM_POINTER e pressão de caneta com DLL C++, sem garantia de compatibilidade com hardware não testado |
+| Ponta elíptica orientada por inclinação | Etapa 14: cilindro elíptico raster C++, sem tilt preserva pincel anterior; hardware físico não verificado |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
