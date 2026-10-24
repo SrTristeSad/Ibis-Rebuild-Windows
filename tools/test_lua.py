@@ -120,6 +120,11 @@ def run_tests(runtime_path, output):
             thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
             thumbs=json.loads(native_state.execute(thumbnail_program))
             assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
+            properties_root=(output / ('layer-properties-' + str(time.time_ns()))).as_posix()
+            properties_program=("return require('json').encode(require('tests.test_layer_properties').run("
+                                +json.dumps(properties_root)+"))")
+            properties=json.loads(native_state.execute(properties_program))
+            assert properties.get('passed') and properties.get('utf8_name') and properties.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -135,6 +140,7 @@ def run_tests(runtime_path, output):
         report['canvas_view'] = viewport
         report['editor_tool_registry'] = tool_registry
         report['native_layer_thumbnails'] = thumbs
+        report['layer_metadata_properties'] = properties
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
