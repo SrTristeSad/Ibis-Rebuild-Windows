@@ -853,7 +853,10 @@ function love.update(dt)
                     'Inclinação não persistiu no RBD2')
                 love.draw();love.mousepressed(panel+120,428,1)
                 assert(not A.penTiltEnabled,'Botão não desativou inclinação')
-                A.layerSession:add('Inclinação desligada')
+                -- Clear this CI-only eighth layer; the max is eight layers.
+                A.layerSession:clearHistory()
+                Native.clear(A.layerSession:activeBuffer(),0)
+                A.layerSession:recompose()
                 A.dirty=true;rebuildImage()
                 dispatchInkEvent({kind=1,id=94,x=tiltX,y=tiltY,pressure=1,
                     tiltX=90,tiltY=0,flags=0,mask=5})
