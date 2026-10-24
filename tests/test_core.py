@@ -77,6 +77,8 @@ class KernelTests(unittest.TestCase):
             'rb_get_pixel': (I32, [C.POINTER(U8), U64, U32, U32, I32, I32, C.POINTER(U32)]),
             'rb_draw_basic_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, U32, F32]),
+            'rb_draw_feather_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
+                F32, F32, F32, F32, F32, U32, F32, F32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
             'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
@@ -640,6 +642,72 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(bytes(rgba),original)
         self.assertEqual(draw(rgba,4,1,1,0,0,0,0,0,1,1,0x11223300),0)
         self.assertEqual(bytes(rgba),original)
+
+
+    def test_feather_brush_soft_core_and_translucent_fringe(self):
+        size=17*17*4
+        image=(U8*size)()
+        draw=self.lib.rb_draw_feather_stroke
+        self.assertEqual(draw(image,size,17,17,8.5,8.5,8.5,8.5,
+            8.0,0xff0000ff,1.0,0.25),0)
+        at=lambda x,y:(y*17+x)*4
+        center=image[at(8,8)+3]
+        fringe=image[at(11,8)+3]
+        outside=image[at(12,8)+3]
+        self.assertEqual(center,255)
+        self.assertGreater(fringe,0)
+        self.assertLess(fringe,center)
+        self.assertEqual(outside,0)
+        self.assertEqual(bytes(image[at(11,8):at(11,8)+3]),bytes.fromhex('ff0000'))
+        self.assertEqual(bytes(image[at(8,8):at(8,8)+4]),bytes.fromhex('ff0000ff'))
+
+    def test_feather_hardness_one_equals_existing_brush(self):
+        pixels=20*20*4
+        rigid=(U8*pixels)()
+        feather=(U8*pixels)()
+        hard=self.lib.rb_draw_basic_stroke
+        soft=self.lib.rb_draw_feather_stroke
+        self.assertEqual(hard(rigid,pixels,20,20,2.2,1.8,15.7,17.1,
+            7.0,0x8020c0bb,0.65),0)
+        self.assertEqual(soft(feather,pixels,20,20,2.2,1.8,15.7,17.1,
+            7.0,0x8020c0bb,0.65,1.0),0)
+        self.assertEqual(bytes(rigid),bytes(feather))
+
+    def test_feather_opacity_and_noop(self):
+        plane=(U8*(13*13*4))()
+        size=len(plane)
+        soft=self.lib.rb_draw_feather_stroke
+        self.assertEqual(soft(plane,size,13,13,6.5,6.5,6.5,6.5,
+            6.0,0x224466ff,0.5,0.25),0)
+        at=(6*13+6)*4
+        self.assertEqual(bytes(plane[at:at+3]),bytes.fromhex('224466'))
+        self.assertIn(plane[at+3],(127,128))
+        snapshot=bytes(plane)
+        self.assertEqual(soft(plane,size,13,13,6.5,6.5,6.5,6.5,
+            6.0,0xff00ffff,0.0,0.25),0)
+        self.assertEqual(bytes(plane),snapshot)
+        self.assertEqual(soft(plane,size,13,13,6.5,6.5,6.5,6.5,
+            6.0,0xff00ff00,1.0,0.25),0)
+        self.assertEqual(bytes(plane),snapshot)
+
+    def test_feather_brush_invalid_is_atomic(self):
+        plane=(U8*16)(*bytes.fromhex('11223344 55667788 99aabbcc ddeeff00'))
+        snapshot=bytes(plane)
+        soft=self.lib.rb_draw_feather_stroke
+        for args in [
+            (0.,0.,0.,0.,0.,0xffffffff,1.,0.25),
+            (0.,0.,0.,0.,257.,0xffffffff,1.,0.25),
+            (0.,0.,0.,0.,4.,0xffffffff,-0.1,0.25),
+            (0.,0.,0.,0.,4.,0xffffffff,1.,-0.01),
+            (0.,0.,0.,0.,4.,0xffffffff,1.,1.01),
+            (math.nan,0.,0.,0.,4.,0xffffffff,1.,0.25),
+            (0.,0.,math.inf,0.,4.,0xffffffff,1.,0.25),
+        ]:
+            self.assertEqual(soft(plane,16,2,2,*args),-1)
+            self.assertEqual(bytes(plane),snapshot)
+        self.assertEqual(soft(plane,15,2,2,0.,0.,0.,0.,
+            4.,0xffffffff,1.,0.25),-1)
+        self.assertEqual(bytes(plane),snapshot)
 
 
 if __name__ == '__main__':
