@@ -16,7 +16,7 @@ A nova camada recebe sua própria miniatura RGBA real. O cache da miniatura da o
 
 A versão desktop mantém o máximo de **oito camadas**. Com oito camadas existentes, o botão fica desativado e a função de duplicação rejeita a ação **sem modificar o documento nem o histórico**. Os argumentos e os dados da cópia são validados/preparados antes da alteração estrutural.
 
-Como adicionar, excluir e reordenar, duplicar uma camada é uma alteração **estrutural** que limpa o histórico de desfazer/refazer das operações raster em memória. A duplicação **não é um passo desfeito por Ctrl+Z**. Após duplicar, novas pinceladas na cópia podem ser desfeitas/refeitas normalmente. Essa limitação permanece explícita até a implementação futura de um histórico estrutural completo. O formato de arquivo não mudou: as duas camadas são gravadas independentemente no **RBD2**.
+**Atualização da Etapa 20:** o histórico estrutural misto passou a registrar também a duplicação como um único passo de `Ctrl+Z` / `Ctrl+Y`, preservando as pinceladas anteriores dentro dos limites de 24 entradas e 48 MiB da sessão. A etapa 19 originalmente tinha a limitação de apagar o histórico, que foi superada na etapa seguinte. O formato de arquivo não mudou: as duas camadas são gravadas independentemente no **RBD2**.
 
 ## Verificação
 
