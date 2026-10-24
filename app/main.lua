@@ -485,7 +485,7 @@ function love.update(dt)
                 assert(#A.doc.layers==before+1 and A.doc.active_layer==before+1,
                     'Botão Nova camada não atualizou a sessão')
                 love.draw()
-                love.mousepressed(panel+165,448,1)
+                love.mousepressed(panel+210,448,1)
                 assert(#A.doc.layers==before,'Botão Excluir não atualizou a sessão')
                 saveDoc()
                 local reopened=A.store:openProject(A.doc.id)
