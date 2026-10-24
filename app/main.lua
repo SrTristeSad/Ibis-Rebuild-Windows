@@ -1333,24 +1333,50 @@ local function drawEditor(w,h)
     if A.sideTab=='layers' then
         local ls=A.layerSession
         local count=#A.doc.layers
-        text(('RASTERS %d / %d · NORMAL'):format(count,Store.MAX_LAYERS),panel+20,407,'small','muted')
+        text(('RASTERS %d/%d'):format(count,Store.MAX_LAYERS),
+            panel+20,407,'small','muted')
+        local rows=Thumbnails.rows(h)
+        local start,stop,maxStart=Thumbnails.window(count,
+            A.doc.active_layer,rows,A.layerScroll)
+        button('▲',panel+172,398,35,27,function()
+            A.layerScroll=Thumbnails.scroll(start,maxStart,1)
+        end,false,start>=maxStart)
+        button('▼',panel+213,398,35,27,function()
+            A.layerScroll=Thumbnails.scroll(start,maxStart,-1)
+        end,false,start<=1)
         button('+ Camada',panel+20,431,109,34,function()
-            ls:add();A.dirty=true;rebuildImage();status('Camada raster adicionada')
+            finishStroke()
+            ls:add()
+            A.layerScroll=nil
+            A.dirty=true;rebuildImage()
+            status('Camada raster adicionada')
         end,false,count>=Store.MAX_LAYERS)
         button('Excluir',panel+139,431,109,34,function()
-            ls:remove(A.doc.active_layer);A.dirty=true;rebuildImage()
+            finishStroke()
+            ls:remove(A.doc.active_layer)
+            clearLayerThumbs()
+            A.layerScroll=nil
+            A.dirty=true;rebuildImage()
             status('Camada removida')
         end,false,count<=1)
-        -- Reserve the footer actions even at the minimum 640px window height.
-        local rows=math.max(1,math.min(6,math.floor((h-131-475)/30)))
-        local start=math.max(1,math.min(A.doc.active_layer-math.floor(rows/2),count-rows+1))
-        local stop=math.min(count,start+rows-1)
+        -- Lower pane must stay usable at 960x640: one 33px row.
         local y=475
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
-            button((layer.visible and '● ' or '○ ')..i..' '..layer.name:sub(1,17),
-                panel+20,y,228,27,function()if A.doc.active_layer~=i then finishStroke();ls:select(i);A.dirty=true end end,A.doc.active_layer==i)
-            y=y+30
+            local rowY=y
+            button(' ',panel+20,rowY,228,33,function()
+                if A.doc.active_layer~=i then
+                    finishStroke();ls:select(i);A.dirty=true
+                end
+                A.layerScroll=start
+            end,A.doc.active_layer==i)
+            box(panel+24,rowY+2,29,29,'line')
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(layerThumb(i),panel+24.5,rowY+2.5)
+            text((layer.visible and '● ' or '○ ')..i..' '..
+                layer.name:sub(1,15),panel+62,rowY+8,'body',
+                A.doc.active_layer==i and 'bg' or 'text')
+            y=y+37
         end
         local active=A.doc.layers[A.doc.active_layer]
         do
@@ -1791,7 +1817,9 @@ function love.wheelmoved(x,y)
             local count=#A.doc.layers
             local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
             if y~=0 and index~=A.doc.active_layer then
-                finishStroke();A.layerSession:select(index);A.dirty=true
+                finishStroke();A.layerSession:select(index)
+                A.layerScroll=nil
+                A.dirty=true
             end
             return
         end
