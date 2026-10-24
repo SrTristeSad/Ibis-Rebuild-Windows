@@ -1625,6 +1625,8 @@ function love.update(dt)
                     merge_down_button=true,merge_down_undo=true,
                     merge_down_redo=true,merge_down_ctrl_e=true,
                     merge_down_rbd2=true,
+                    flip_hv_buttons=true,flip_undo_redo=true,
+                    flip_rbd2_roundtrip=true,flip_layer_isolation=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
