@@ -656,3 +656,101 @@ rb_i32 rb_draw_feather_stroke(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+
+/* Normalized anisotropic capsule: pixel-to-segment squared distance in a
+   two-axis ellipse metric. Squared projections avoid sqrt/CRT dependencies. */
+rb_i32 rb_draw_tilt_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter, rb_u32 rgba, float opacity, float hardness,
+    float tilt_x, float tilt_y) {
+    if (!plane(dst,capacity,width,height) ||
+        !(diameter>=1.0f && diameter<=256.0f) ||
+        !(opacity>=0.0f && opacity<=1.0f) ||
+        !(hardness>=0.0f && hardness<=1.0f) ||
+        !(tilt_x>=-90.0f && tilt_x<=90.0f) ||
+        !(tilt_y>=-90.0f && tilt_y<=90.0f) ||
+        !(x0>=-16384.0f && x0<=16384.0f) ||
+        !(y0>=-16384.0f && y0<=16384.0f) ||
+        !(x1>=-16384.0f && x1<=16384.0f) ||
+        !(y1>=-16384.0f && y1<=16384.0f)) return -1;
+    if (tilt_x==0.0f && tilt_y==0.0f) {
+        if (hardness==1.0f)
+            return rb_draw_basic_stroke(dst,capacity,width,height,
+                x0,y0,x1,y1,diameter,rgba,opacity);
+        return rb_draw_feather_stroke(dst,capacity,width,height,
+            x0,y0,x1,y1,diameter,rgba,opacity,hardness);
+    }
+    const float srcAlpha=static_cast<float>(rgba&255u)/255.0f*opacity;
+    if (srcAlpha<=0.0f) return 0;
+    const float xt=tilt_x, yt=tilt_y;
+    const float length2=xt*xt+yt*yt;
+    const float tiltMax=(xt<0?-xt:xt)>(yt<0?-yt:yt)?
+        (xt<0?-xt:xt):(yt<0?-yt:yt);
+    const float strength=tiltMax/90.0f;
+    const float radius=diameter*0.5f;
+    const float major=radius*(1.0f+0.75f*strength);
+    const float minor=radius*(1.0f-0.15f*strength);
+    const float alongFactor=1.0f/(length2*major*major);
+    const float acrossFactor=1.0f/(length2*minor*minor);
+    const float segX=x1-x0,segY=y1-y0;
+    const float alongSeg=segX*xt+segY*yt;
+    const float acrossSeg=segY*xt-segX*yt;
+    const float segMetric=alongSeg*alongSeg*alongFactor+
+                          acrossSeg*acrossSeg*acrossFactor;
+    const float minX=(x0<x1?x0:x1)-major-1.0f;
+    const float minY=(y0<y1?y0:y1)-major-1.0f;
+    const float maxX=(x0>x1?x0:x1)+major+1.0f;
+    const float maxY=(y0>y1?y0:y1)+major+1.0f;
+    if (maxX<0.0f || maxY<0.0f ||
+        minX>=static_cast<float>(width) ||
+        minY>=static_cast<float>(height)) return 0;
+    rb_i32 left=static_cast<rb_i32>(minX),top=static_cast<rb_i32>(minY);
+    rb_i32 right=static_cast<rb_i32>(maxX),bottom=static_cast<rb_i32>(maxY);
+    if (left<0) left=0;
+    if (top<0) top=0;
+    if (right>=static_cast<rb_i32>(width)) right=static_cast<rb_i32>(width)-1;
+    if (bottom>=static_cast<rb_i32>(height)) bottom=static_cast<rb_i32>(height)-1;
+    const float inner2=hardness*hardness;
+    const float src[3]={static_cast<float>((rgba>>24)&255u),
+                        static_cast<float>((rgba>>16)&255u),
+                        static_cast<float>((rgba>>8)&255u)};
+    for (rb_i32 y=top;y<=bottom;++y) {
+        for (rb_i32 x=left;x<=right;++x) {
+            const float px=static_cast<float>(x)+0.5f-x0;
+            const float py=static_cast<float>(y)+0.5f-y0;
+            const float along=px*xt+py*yt;
+            const float across=py*xt-px*yt;
+            float t=0.0f;
+            if (segMetric>0.0f) {
+                t=(along*alongSeg*alongFactor+
+                    across*acrossSeg*acrossFactor)/segMetric;
+                if (t<0.0f)t=0.0f;
+                if (t>1.0f)t=1.0f;
+            }
+            const float alongOffset=along-t*alongSeg;
+            const float acrossOffset=across-t*acrossSeg;
+            const float distance2=alongOffset*alongOffset*alongFactor+
+                                  acrossOffset*acrossOffset*acrossFactor;
+            if (distance2>=1.0f) continue;
+            const float coverage=(hardness>=1.0f || distance2<=inner2)?1.0f:
+                (1.0f-distance2)/(1.0f-inner2);
+            const float sa=srcAlpha*coverage;
+            if (sa<=0.0f) continue;
+            rb_u8* pixel=dst+(static_cast<rb_u64>(y)*width+x)*4u;
+            const float da=static_cast<float>(pixel[3])/255.0f;
+            const float remain=da*(1.0f-sa),outA=sa+remain;
+            if (outA<=0.0f) continue;
+            const float inverse=1.0f/outA;
+            for (rb_u32 channel=0;channel<3u;++channel) {
+                float result=(src[channel]*sa+
+                    static_cast<float>(pixel[channel])*remain)*inverse;
+                if (result>255.0f) result=255.0f;
+                if (result<0.0f) result=0.0f;
+                pixel[channel]=static_cast<rb_u8>(result+0.5f);
+            }
+            pixel[3]=static_cast<rb_u8>(outA*255.0f+0.5f);
+        }
+    }
+    return 0;
+}
