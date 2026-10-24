@@ -42,6 +42,8 @@ A etapa 19 acrescenta [duplicação independente de camadas pelo botão Duplicar
 
 A etapa 20 implementa [histórico misto de pintura e alterações estruturais de camadas](docs/MIXED_HISTORY_STAGE20.md): adicionar, duplicar, excluir e reordenar agora podem ser desfeitos/refeitos na mesma linha do tempo das pinceladas, respeitando o orçamento de memória da sessão e sem alterar o RBD2.
 
+A etapa 21 inclui [nome, visibilidade e opacidade de camadas no histórico de desfazer/refazer](docs/LAYER_METADATA_HISTORY_STAGE21.md), sem copiar os rasters nem alterar o formato RBD2. Essa evolução completa o histórico misto da etapa 20, preservando o teto de 24 passos/48 MiB por sessão.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -71,6 +73,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Propriedades individuais de camadas | Etapa 18: renomeio com validação RBD2 e botão Vis/Oc. por linha sem alterar a camada selecionada |
 | Duplicação de camada independente | Etapa 19: novo buffer RGBA, cópia de metadados, botão/Ctrl+J e RBD2; respeita 8 camadas |
 | Histórico estrutural e pintura | Etapa 20: Ctrl+Z/Y intercalando inserir, copiar, apagar e mover camadas com pintura, em memória limitada |
+| Histórico das propriedades das camadas | Etapa 21: renomear, ocultar e alterar opacidade também admitem Ctrl+Z/Y e respeitam a mesma linha do tempo |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
