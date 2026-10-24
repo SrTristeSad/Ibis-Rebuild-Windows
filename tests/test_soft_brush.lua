@@ -26,7 +26,7 @@ function T.run(root)
         'Soft stroke modified lower raster')
     check(Native.readPixel(scene.composite,8,8)==0xe53b44ff,
         'Composite did not show opaque soft brush center')
-    check(scene:historyStats().undo==1,'Stroke should make one undo entry')
+    check(scene:historyStats().undo==2,'Stroke should append one step after Add')
     check(scene:undo(),'Soft stroke could not be undone')
     check(Native.readPixel(scene.composite,8,8)==0x00ff00ff,
         'Undo did not uncover lower layer')

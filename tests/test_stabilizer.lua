@@ -58,7 +58,7 @@ function T.run(root)
         'Release cursor endpoint not rasterized by C++')
     check(Native.readPixel(session.buffers[1],10,10)==0x00ff00ff,
         'Active painting leaked to lower layer')
-    check(session:historyStats().undo==1,'Filtered path must be one undo item')
+    check(session:historyStats().undo==2,'Filtered path must append one undo item after Add')
     check(session:undo(),'Filtered brush undo failed')
     check(Native.readPixel(session.composite,24,8)==0,
         'Undo left final raster endpoint')

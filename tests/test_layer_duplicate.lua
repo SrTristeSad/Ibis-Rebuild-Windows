@@ -24,6 +24,7 @@ function T.run(root)
     scene:pixel(5,5,0xff8800ff)
     check(scene:finishEdit(),'Prior edit must be tracked')
     check(scene:historyStats().undo==1,'Missing raster history before duplication')
+    local beforeHistory=scene:historyStats().undo
     local newIndex=scene:duplicate(source)
     check(newIndex==3 and scene.doc.active_layer==3 and #scene.doc.layers==3,
         'Duplicate not inserted directly above source and activated')
@@ -42,9 +43,9 @@ function T.run(root)
         'Duplicate RGBA differs from current unsaved native source buffer')
     check(Native.bytes(scene.composite)==beforeComposite,
         'Duplicating a hidden source changed visible composite')
-    check(scene:historyStats().undo==0 and
+    check(scene:historyStats().undo==beforeHistory+1 and
         scene:historyStats().redo==0,
-        'Structural duplication did not clear session undo/redo')
+        'Duplicating should append one reversible structural step')
     scene:pixel(2,2,0x00ff00ff)
     check(Native.readPixel(scene.buffers[source],2,2)==0x4477aacc,
         'Editing copied pixels changed source: backing buffers aliased')
@@ -114,7 +115,7 @@ function T.run(root)
         'Long UTF-8 duplicate name did not survive RBD2')
     return {suite='layer-duplicate-independent-rbd2',passed=true,
         assertions=count,deep_rgba_copy=true,properties_copied=true,
-        independent_history=true,limit_atomic=true,utf8_truncation=true,
+        independent_history=true,structural_undo=true,limit_atomic=true,utf8_truncation=true,
         rbd2_roundtrip=true}
 end
 return T

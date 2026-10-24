@@ -20,7 +20,7 @@ function T.run(root)
         'Outline incorrectly covered lower layer center')
     check(Native.readPixel(scene:activeBuffer(),4,4)==0,
         'Outline must not touch center pixel on active layer')
-    check(scene:historyStats().undo==1,'Shape should create one undo entry')
+    check(scene:historyStats().undo==2,'Shape should append one step after Add')
     check(scene:undo(),'Rectangle undo failed')
     check(Native.readPixel(scene.composite,2,2)==0,
         'Rectangle undo left pixels')

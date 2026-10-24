@@ -54,7 +54,7 @@ function T.run(root)
         'Light pressure incorrectly used full brush radius')
     check(Native.readPixel(scene.buffers[1],4,9)==0x00ff00ff,
         'Pressure stroke modified background layer')
-    check(scene:historyStats().undo==2,'Touches should form individual history entries')
+    check(scene:historyStats().undo==3,'Two touches append after reversible layer Add')
     check(scene:undo(),'Strong-touch undo failed')
     check(Native.readPixel(scene:activeBuffer(),20,4)==0,
         'Undo left strong-pressure stroke')

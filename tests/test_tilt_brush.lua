@@ -22,7 +22,7 @@ function T.run(root)
         'Horizontal tilt leaked into minor-axis pixel')
     check(Native.readPixel(scene.buffers[1],2,2)==0x00ff00ff,
         'Tilt stroke modified underlying layer')
-    check(scene:historyStats().undo==1,'Tilted pen must make one undo entry')
+    check(scene:historyStats().undo==2,'Tilted pen must append one step after Add')
     check(scene:undo(),'Tilted pen undo failed')
     check(Native.readPixel(scene:activeBuffer(),18,12)==0,
         'Undo left tilted pixel')

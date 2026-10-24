@@ -23,7 +23,8 @@ function T.run(root)
     check(ls:redo(),'redo not available')
     check(Native.readPixel(ls.composite,3,1)==red,'redo not exact')
     ls:add('Cobertura')
-    check(not ls:canUndo() and not ls:canRedo(),'structural change must invalidate pixel history')
+    check(ls:historyStats().undo==2 and not ls:canRedo(),
+        'Layer insertion must join prior paint in mixed history')
     ls:beginEdit();ls:stroke(1.5,1.5,5.5,1.5,1,0x0000ffff,1)
     ls:finishEdit()
     check(Native.readPixel(ls.composite,3,1)==0x0000ffff,'top did not cover base')
@@ -70,6 +71,6 @@ function T.run(root)
     check(not recovered:canUndo(),'no-op should not mutate history')
     return {suite='layered-edit-history',passed=true,assertions=count,
         native_eraser=true,undo_redo=true,history_bounded=true,rbd2_preserved=true,
-        scope='Session-local raster stroke history; not Android undo model'}
+        scope='Session-local chronological raster and layer history; not Android undo model'}
 end
 return T
