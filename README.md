@@ -56,6 +56,8 @@ A etapa 26 adiciona [modo foco (Tab), canvas ampliado e ajustes rápidos do pinc
 
 A etapa 27 acrescenta [menus contextuais de camadas e ferramentas](docs/CONTEXT_MENUS_STAGE27.md) com botão direito sobre linhas de camadas/ícones de ferramenta, ações existentes, opções indisponíveis desabilitadas e navegação por teclado. O botão direito no canvas continua sendo navegação sem pintura.
 
+A etapa 28 introduz a [biblioteca de pincéis raster (Ctrl+B)](docs/BRUSH_LIBRARY_STAGE28.md): quatro predefinições de traço rígido/suave usando o motor C++ atual, miniaturas esquemáticas e quatro espaços pessoais persistidos no `brushes.json` existente. A configuração não altera a obra RBD2 nem seu histórico.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
