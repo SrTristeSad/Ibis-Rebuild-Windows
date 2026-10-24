@@ -127,6 +127,40 @@ function Layers:add(name)
     self:recompose()
     return index
 end
+-- Duplicate a full native RGBA layer above its source, with an independent
+-- pixel allocation and a distinct persistent ID. Structural edits clear the
+-- session-only raster undo stacks, matching add/remove/reorder semantics.
+-- Allocate/validate everything before changing layer order or history.
+local function copyLayerName(name)
+    local prefix='Cópia de '
+    local result=prefix..name
+    while #result>240 do result=result:sub(1,-2) end
+    -- Truncation may cut the final byte of a multibyte UTF-8 codepoint.
+    while not pcall(Store.validateName,result) do
+        result=result:sub(1,-2)
+    end
+    return result
+end
+function Layers:duplicate(index)
+    assertIndex(self,index)
+    assert(#self.doc.layers<Store.MAX_LAYERS,
+        'Limite de camadas atingido: não é possível duplicar')
+    local source=self.doc.layers[index]
+    local name=copyLayerName(source.name)
+    local bytes=Native.bytes(self.buffers[index])
+    local newBuffer=Native.buffer(self.doc.width,self.doc.height,bytes)
+    local newId=self.store:newLayerId()
+    local new={id=newId,name=name,visible=source.visible,
+        opacity=source.opacity,pixels=bytes}
+    self:clearHistory()
+    local target=index+1
+    table.insert(self.doc.layers,target,new)
+    table.insert(self.buffers,target,newBuffer)
+    self.doc.active_layer=target
+    self.doc.layer_count=#self.doc.layers
+    self:recompose()
+    return target
+end
 function Layers:select(index)
     assertIndex(self,index)
     if self.pending and index~=self.doc.active_layer then self:finishEdit() end
