@@ -40,6 +40,8 @@ A etapa 18 acrescenta [renomear camadas por F2/Nome e visibilidade direta na lis
 
 A etapa 19 acrescenta [duplicação independente de camadas pelo botão Duplicar ou Ctrl+J](docs/LAYER_DUPLICATE_STAGE19.md), com cópia completa do buffer RGBA nativo, novo ID, miniatura própria, opacidade e visibilidade preservadas e persistência RBD2. A duplicação é estrutural e limpa o histórico raster atual, como adicionar/remover camadas.
 
+A etapa 20 implementa [histórico misto de pintura e alterações estruturais de camadas](docs/MIXED_HISTORY_STAGE20.md): adicionar, duplicar, excluir e reordenar agora podem ser desfeitos/refeitos na mesma linha do tempo das pinceladas, respeitando o orçamento de memória da sessão e sem alterar o RBD2.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -68,6 +70,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Miniaturas e navegação de camadas | Etapa 17: prévias de pixels reais, cache por camada, setas de paginação e layout para janelas menores |
 | Propriedades individuais de camadas | Etapa 18: renomeio com validação RBD2 e botão Vis/Oc. por linha sem alterar a camada selecionada |
 | Duplicação de camada independente | Etapa 19: novo buffer RGBA, cópia de metadados, botão/Ctrl+J e RBD2; respeita 8 camadas |
+| Histórico estrutural e pintura | Etapa 20: Ctrl+Z/Y intercalando inserir, copiar, apagar e mover camadas com pintura, em memória limitada |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
