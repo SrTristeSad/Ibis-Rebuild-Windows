@@ -24,6 +24,8 @@ A etapa 10 introduz [pincel suave de borda gradual e controle de opacidade da pi
 
 A etapa 11 acrescenta [estabilização de traços pelo mouse com níveis de 0 a 5](docs/STROKE_STABILIZER_STAGE11.md) para os pincéis e a borracha, com correção da extremidade ao soltar o mouse. Os pixels continuam rasterizados pelo C++ e salvos no RBD2; não equivale à estabilização do ibisPaint Android.
 
+A etapa 12 recebe [eventos de toque do LÖVE com pressão variável](docs/TOUCH_PRESSURE_STAGE12.md): ajusta espessura e opacidade de pincéis/borracha, ignora o mouse sintetizado pelo toque e mantém histórico RBD2. Não existe suporte comprovado a drivers Windows Ink/Wintab nem identificação segura de canetas físicas.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -44,6 +46,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Conta-gotas, cores RGBA personalizadas e linha reta | Etapa 9: leitura do raster nativo, cor hexadecimal estrita, traço C++ reversível |
 | Pincel suave e opacidade por traço | Etapa 10: borda gradual C++, estilo rígido/suave e opacidade 10–100% |
 | Estabilização de traço pelo mouse | Etapa 11: níveis 0–5, filtro de movimento e preservação exata do ponto final |
+| Eventos de toque/pressão do LÖVE | Etapa 12: largura/alfa variáveis, contato único, sem duplicação do mouse simulado; drivers físicos não verificados |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
