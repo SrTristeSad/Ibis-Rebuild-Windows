@@ -11,9 +11,10 @@ local View=require('canvas_view')
 local EditorTools=require('editor_tools')
 local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
+local Menus=require('context_menus')
 local Workspace=require('workspace_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -163,7 +164,7 @@ local function openDoc(doc)
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
-    A.screen='editor';A.dirty=false;A.focusMode=false
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -228,7 +229,7 @@ local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
-    A.panning=false;A.panButton=nil
+    A.panning=false;A.panButton=nil;A.contextMenu=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -273,7 +274,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -288,6 +289,7 @@ local function exportPNG()
     return name
 end
 local function modal(kind)
+    A.contextMenu=nil
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
     A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
         kind=='color' and {Colors.format(A.color)} or {''}}
@@ -346,6 +348,96 @@ local function mergeActiveLayerDown()
     rebuildImage()
     status('Camadas mescladas abaixo · Ctrl+Z restaura ambas')
     return index
+end
+-- Route menu commands to established editing operations and transactions.
+-- No replacement raster implementation and no duplicated painting algorithm.
+local function performMenuAction(menu,key)
+    assert(menu and menu.kind and key,'Menu contextual inválido')
+    if menu.kind=='layer' then
+        assert(A.doc.layers[A.doc.active_layer] and
+            A.doc.active_layer==menu.target,
+            'Camada de destino não está selecionada')
+        local ls=A.layerSession
+        if key=='rename' then openLayerRename()
+        elseif key=='duplicate' then duplicateActiveLayer()
+        elseif key=='visibility' then
+            finishStroke()
+            local layer=A.doc.layers[A.doc.active_layer]
+            ls:setVisible(A.doc.active_layer,not layer.visible)
+            A.dirty=true;rebuildImage()
+            status(layer.visible and 'Camada visível' or 'Camada oculta')
+        elseif key=='clear' then clearActiveLayer()
+        elseif key=='flipH' then flipActiveLayer(0)
+        elseif key=='flipV' then flipActiveLayer(1)
+        elseif key=='merge' then mergeActiveLayerDown()
+        elseif key=='up' or key=='down' then
+            finishStroke()
+            local index=A.doc.active_layer
+            ls:move(index,index+(key=='up' and 1 or -1))
+            A.layerScroll=nil;A.dirty=true;rebuildImage()
+        elseif key=='delete' then
+            finishStroke()
+            ls:remove(A.doc.active_layer)
+            clearLayerThumbs();A.layerScroll=nil
+            A.dirty=true;rebuildImage()
+            status('Camada removida')
+        else error('Ação de camada desconhecida: '..tostring(key)) end
+        return
+    end
+    assert(menu.kind=='tool','Menu de ferramenta desconhecido')
+    assert(selectTool(menu.target),'Não é possível mudar a ferramenta durante a pincelada')
+    if key=='use' then return end
+    if key=='sizeDown' or key=='sizeUp' then
+        A.brushDiameter=math.max(1,math.min(256,
+            A.brushDiameter+(key=='sizeDown' and -2 or 2)))
+    elseif key=='opacityDown' or key=='opacityUp' then
+        A.brushOpacity=math.max(.1,math.min(1,
+            math.floor(A.brushOpacity*10+.5)/10+
+                (key=='opacityDown' and -.1 or .1)))
+    elseif key=='toleranceDown' or key=='toleranceUp' then
+        A.fillTolerance=math.max(0,math.min(255,
+            A.fillTolerance+(key=='toleranceDown' and -8 or 8)))
+    elseif key=='outline' or key=='filled' then
+        A.shapeFilled=key=='filled'
+    elseif key=='visible' or key=='active' then
+        A.pickerSource=key=='visible' and 'composite' or 'active'
+    elseif key=='deselect' then
+        A.selection=nil;A.selectAction=nil;A.movePreview=nil
+    elseif key=='color' then
+        modal('color')
+    elseif key=='help' then
+        A.toolHelp=true
+    else
+        error('Ação de ferramenta desconhecida: '..tostring(key))
+    end
+end
+local function openContextMenu(kind,target,x,y)
+    assert(A.screen=='editor' and A.doc and not A.modal and not A.toolHelp,
+        'Menu só pode abrir dentro do editor')
+    finishStroke()
+    A.panning=false;A.panButton=nil
+    local entries,title
+    if kind=='layer' then
+        if target~=A.doc.active_layer then
+            A.layerSession:select(target)
+            A.layerScroll=nil
+            A.dirty=true
+        end
+        local layer=A.doc.layers[target]
+        entries=Menus.layerEntries(#A.doc.layers,target,
+            Store.MAX_LAYERS,layer.visible)
+        title='Camada '..target..' · '..layer.name
+    elseif kind=='tool' then
+        local item=assert(EditorTools.fromId(target))
+        entries=Menus.toolEntries(target,{
+            size=A.brushDiameter,opacity=A.brushOpacity,
+            tolerance=A.fillTolerance,hasSelection=A.selection~=nil})
+        title=item.label..' · opções'
+    else error('Menu desconhecido') end
+    local w,h=love.graphics.getDimensions()
+    local px,py,pw,ph=Menus.place(x,y,w,h,entries)
+    A.contextMenu={kind=kind,target=target,title=title,
+        entries=entries,x=px,y=py,w=pw,h=ph,cursor=1}
 end
 local function submitModal()
     local m=A.modal
