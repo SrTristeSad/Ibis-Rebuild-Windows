@@ -1262,36 +1262,72 @@ local function pointerMoved(x,y,dx,dy,pressure)
     end
 end
 function love.mousepressed(x,y,buttonNumber,istouch)
-    if istouch or A.touchId~=nil then return end
+    if istouch or A.touchId~=nil or A.inkPenId~=nil or Ink.mouseGuard() then return end
     pointerPressed(x,y,buttonNumber,1)
 end
 function love.mousereleased(x,y,b,istouch)
-    if istouch or A.touchId~=nil then return end
+    if istouch or A.touchId~=nil or A.inkPenId~=nil or Ink.mouseGuard() then return end
     pointerReleased(x,y,b,1)
 end
 function love.mousemoved(x,y,dx,dy,istouch)
-    if istouch or A.touchId~=nil then return end
+    if istouch or A.touchId~=nil or A.inkPenId~=nil or Ink.mouseGuard() then return end
     pointerMoved(x,y,dx,dy,1)
 end
 -- LÖVE 11.5 touch callbacks report pressure but do not distinguish a
 -- pen from a finger. Own exactly one contact until its release.
 function love.touchpressed(id,x,y,dx,dy,pressure)
-    if A.touchId~=nil or A.drawing then return end
+    if A.touchId~=nil or A.drawing or A.inkPenId~=nil or Ink.mouseGuard() then return end
     A.touchId=id
     pointerPressed(x,y,1,Pressure.normalize(pressure))
 end
 function love.touchmoved(id,x,y,dx,dy,pressure)
-    if A.touchId~=id then return end
+    if A.touchId~=id or Ink.mouseGuard() then return end
     pointerMoved(x,y,dx,dy,Pressure.normalize(pressure))
 end
 function love.touchreleased(id,x,y,dx,dy,pressure)
-    if A.touchId~=id then return end
+    if A.touchId~=id or Ink.mouseGuard() then return end
     pointerReleased(x,y,1,Pressure.normalize(pressure))
     A.touchId=nil
 end
+-- Win32 pen events are delivered from the native queue on the LÖVE
+-- main thread, not from a LuaJIT callback invoked inside WndProc.
+dispatchInkEvent=function(e)
+    if e.kind==1 then
+        if A.inkPenId~=nil or A.touchId~=nil or A.drawing then return end
+        A.inkPenId=e.id
+        A.inkTiltX=e.tiltX or 0;A.inkTiltY=e.tiltY or 0
+        A.inkPreviousTool=nil
+        if e.flags and (e.flags%8>=2) and A.screen=='editor' then
+            -- PEN_FLAG_INVERTED (2) or ERASER (4): erase temporarily.
+            A.inkPreviousTool=A.tool
+            A.tool='erase'
+        end
+        pointerPressed(e.x,e.y,1,Pressure.normalize(e.pressure))
+        status('Windows Ink: caneta '..math.floor(e.pressure*100+.5)..
+            '% · inclinação '..A.inkTiltX..'°/'..A.inkTiltY..'°')
+    elseif e.id==A.inkPenId then
+        if e.kind==2 then
+            pointerMoved(e.x,e.y,0,0,Pressure.normalize(e.pressure))
+            A.inkTiltX=e.tiltX or 0;A.inkTiltY=e.tiltY or 0
+        elseif e.kind==3 or e.kind==4 then
+            if e.kind==4 then
+                guard(finishStroke)()
+                A.shapePreview=nil
+                guard(finishSelection)()
+            else
+                pointerReleased(e.x,e.y,1,Pressure.normalize(e.pressure))
+            end
+            A.inkPenId=nil
+            if A.inkPreviousTool then
+                A.tool=A.inkPreviousTool;A.inkPreviousTool=nil
+            end
+        end
+    end
+end
 function love.focus(focused)
     if not focused then
-        A.shapePreview=nil;A.touchId=nil
+        A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
+        if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
@@ -1338,6 +1374,7 @@ function love.keypressed(key)
 end
 function love.resize()if A.doc then fit()end end
 function love.quit()
+    Ink.close()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end
         pcall(function()A.store:setPreferences(A.preferences);A.store:saveBrushes(A.brushes)end)
