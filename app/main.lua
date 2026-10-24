@@ -909,6 +909,69 @@ local function verifyBrushLibrary()
     selectTool(originalTool)
     A.sideTab=originalTab
 end
+-- Stage 29: tests actual LÖVE drag handlers rather than just slider math.
+-- Keep isolated to avoid LuaJIT's per-function local-variable ceiling.
+local function verifyPrecisionSliders()
+    local panel=love.graphics.getWidth()-268
+    local originalTool,originalTab=A.tool,A.sideTab
+    local originalDiameter,originalOpacity=A.brushDiameter,A.brushOpacity
+    local originalStabilization,originalTolerance=A.stabilization,A.fillTolerance
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    local dirty=A.dirty
+    local count=#A.doc.layers
+    selectTool('brush')
+    A.sideTab='brush'
+    local diameter=Sliders.rail('diameter',panel)
+    love.draw()
+    love.mousepressed(diameter.x,diameter.y+5,1,false)
+    assert(A.sliderDrag=='diameter' and A.brushDiameter==1 and
+        not A.drawing,'Click on size rail must capture slider without painting')
+    love.mousemoved(diameter.x+diameter.w/2,diameter.y+5,53,0,false)
+    assert(A.brushDiameter==129,'Size drag failed at center')
+    -- Release on the canvas side: no stroke or selection is allowed.
+    love.mousereleased(300,250,1,false)
+    assert(A.sliderDrag==nil and A.brushDiameter==256 and
+        not A.drawing,'Release outside rail must clamp and stop capture')
+    love.draw()
+    local opacity=Sliders.rail('opacity',panel)
+    love.mousepressed(opacity.x+opacity.w/2,opacity.y+4,1,false)
+    assert(A.sliderDrag=='opacity' and math.abs(A.brushOpacity-.55)<1e-8,
+        'Opacity should support 1% precision, starting at 55%')
+    love.mousemoved(opacity.x+opacity.w,opacity.y+4,53,0,false)
+    love.mousereleased(opacity.x+opacity.w,opacity.y+4,1,false)
+    assert(A.brushOpacity==1 and A.sliderDrag==nil,
+        'Opacity drag must reach 100% and release')
+    love.draw()
+    local stabil=Sliders.rail('stabilization',panel)
+    love.mousepressed(stabil.x+stabil.w/2,stabil.y+4,1,false)
+    love.mousereleased(stabil.x+stabil.w/2,stabil.y+4,1,false)
+    assert(A.stabilization==3,'Stabilization rail did not choose level 3')
+    selectTool('fill')
+    love.draw()
+    local tolerance=Sliders.rail('tolerance',panel)
+    love.mousepressed(tolerance.x+tolerance.w/2,tolerance.y+5,1,false)
+    love.mousereleased(tolerance.x+tolerance.w/2,tolerance.y+5,1,false)
+    assert(A.fillTolerance==128 and not A.drawing,
+        'Fill rail must choose tolerance 128 without painting')
+    -- Former +/- buttons remain functional in the same legacy rectangles.
+    selectTool('brush')
+    love.draw()
+    love.mousepressed(panel+40,472,1,false)
+    assert(A.brushDiameter==256,
+        'Legacy +/− button changed or escaped native range')
+    A.brushDiameter=4
+    love.draw();love.mousepressed(panel+208,472,1,false)
+    assert(A.brushDiameter==6,'Legacy diameter + stopped working')
+    assert(A.sliderDrag==nil and
+        Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history and
+        A.dirty==dirty and #A.doc.layers==count,
+        'Slider input must not affect document raster/history/dirty flag')
+    A.brushDiameter=originalDiameter;A.brushOpacity=originalOpacity
+    A.stabilization=originalStabilization;A.fillTolerance=originalTolerance
+    selectTool(originalTool);A.sideTab=originalTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2151,6 +2214,7 @@ function love.update(dt)
                 verifyFocusWorkspace()
                 verifyContextMenus()
                 verifyBrushLibrary()
+                verifyPrecisionSliders()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2224,6 +2288,9 @@ function love.update(dt)
                     brush_library_button=true,brush_library_ctrl_b=true,
                     brush_library_builtin=true,brush_library_personal_roundtrip=true,
                     brush_library_isolated=true,brush_library_escape=true,
+                    precision_slider_drag=true,precision_slider_opacity=true,
+                    precision_slider_stabilization=true,precision_slider_tolerance=true,
+                    precision_slider_no_raster_edits=true,legacy_buttons_preserved=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
