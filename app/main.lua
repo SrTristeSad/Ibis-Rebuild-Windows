@@ -4,7 +4,7 @@ local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
 local Colors=require('colors')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -937,9 +937,13 @@ function love.mousepressed(x,y,buttonNumber)
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
                     if A.tool=='erase' then
-                        A.layerSession:erase(px,py,px,py,A.brushDiameter,1)
+                        A.layerSession:erase(px,py,px,py,A.brushDiameter,A.brushOpacity)
+                    elseif A.brushStyle=='soft' then
+                        A.layerSession:softStroke(px,py,px,py,A.brushDiameter,
+                            A.color,A.brushOpacity,0.25)
                     else
-                        A.layerSession:stroke(px,py,px,py,A.brushDiameter,A.color,1)
+                        A.layerSession:stroke(px,py,px,py,A.brushDiameter,
+                            A.color,A.brushOpacity)
                     end
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.dirty=true;rebuildImage()
@@ -987,9 +991,14 @@ function love.mousemoved(x,y,dx,dy)
         guard(function()
             local px,py=canvasPoint(x,y)
             if A.tool=='erase' then
-                A.layerSession:erase(A.lastStrokeX,A.lastStrokeY,px,py,A.brushDiameter,1)
+                A.layerSession:erase(A.lastStrokeX,A.lastStrokeY,px,py,
+                    A.brushDiameter,A.brushOpacity)
+            elseif A.brushStyle=='soft' then
+                A.layerSession:softStroke(A.lastStrokeX,A.lastStrokeY,px,py,
+                    A.brushDiameter,A.color,A.brushOpacity,0.25)
             else
-                A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,A.brushDiameter,A.color,1)
+                A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,
+                    A.brushDiameter,A.color,A.brushOpacity)
             end
             A.lastStrokeX=px;A.lastStrokeY=py
             A.dirty=true;rebuildImage()
