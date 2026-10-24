@@ -228,6 +228,14 @@ local function modal(kind)
         kind=='color' and {Colors.format(A.color)} or {''}}
     love.keyboard.setTextInput(true)
 end
+local function openLayerRename()
+    if A.screen~='editor' or not A.doc then return end
+    finishStroke()
+    local layer=A.doc.layers[A.doc.active_layer]
+    modal('renameLayer')
+    A.modal.values[1]=layer.name
+    A.modal.layerId=layer.id
+end
 local function submitModal()
     local m=A.modal
     if m.kind=='folder' then
@@ -240,6 +248,21 @@ local function submitModal()
         A.modal=nil;openDoc(doc)
     elseif m.kind=='rename' then
         A.doc.name=m.values[1];saveDoc();A.modal=nil
+    elseif m.kind=='renameLayer' then
+        assert(A.screen=='editor' and A.layerSession and m.layerId,
+            'Não existe camada para renomear')
+        local index
+        for i,layer in ipairs(A.doc.layers) do
+            if layer.id==m.layerId then index=i;break end
+        end
+        assert(index,'A camada original não existe mais')
+        local changed=A.layerSession:rename(index,m.values[1])
+        if changed then
+            A.dirty=true
+            saveDoc()
+            status('Camada renomeada: '..m.values[1])
+        end
+        A.modal=nil
     elseif m.kind=='color' then
         local value,err=Colors.parseHex(m.values[1])
         assert(value,err)
@@ -1153,6 +1176,64 @@ function love.update(dt)
                 assert(selectedBytes==Native.bytes(A.layerSession:activeBuffer())
                     and historySelected==A.layerSession:historyStats().undo,
                     'Selecionar linha alterou pixels ou histórico')
+                -- Stage 18: rename the current layer by keyboard and
+                -- toggle a DIFFERENT layer's visibility directly in its row.
+                local selectedId=A.doc.layers[7].id
+                local beforeName=A.doc.layers[7].name
+                local renamePixelBytes=Native.bytes(A.layerSession.buffers[7])
+                local historyBeforeRename=A.layerSession:historyStats().undo
+                local previewBeforeRename=layerThumb(7)
+                love.keypressed('f2')
+                assert(A.modal and A.modal.kind=='renameLayer' and
+                    A.modal.layerId==selectedId and A.modal.values[1]==beforeName,
+                    'F2 não abriu renomeio na camada atual')
+                A.modal.values[1]='  '
+                love.keypressed('return')
+                assert(A.modal and A.doc.layers[7].name==beforeName,
+                    'Renomeio inválido não foi rejeitado')
+                A.modal.values[1]=''
+                love.textinput('Arte azul Étapa 18')
+                love.keypressed('return')
+                assert(not A.modal and A.doc.layers[7].name=='Arte azul Étapa 18',
+                    'Renomeio pela interface não salvou nome UTF-8')
+                assert(Native.bytes(A.layerSession.buffers[7])==renamePixelBytes
+                    and A.layerSession:historyStats().undo==historyBeforeRename,
+                    'Renomear camada mudou pixels ou histórico')
+                assert(layerThumb(7)==previewBeforeRename,
+                    'Renomeio recriou miniatura desnecessariamente')
+                local renameSaved=A.store:openProject(A.doc.id)
+                assert(renameSaved.layers[7].name=='Arte azul Étapa 18' and
+                    renameSaved.layers[7].id==selectedId,
+                    'Nome de camada não persistiu no RBD2')
+                love.draw();love.mousepressed(panel+120,411,1,false)
+                assert(A.modal and A.modal.kind=='renameLayer',
+                    'Botão Nome não abriu editor de camada')
+                love.keypressed('escape')
+                assert(not A.modal and A.doc.layers[7].name=='Arte azul Étapa 18',
+                    'Cancelar renomeio não preservou nome anterior')
+                local otherIndex=8
+                local otherVisible=A.doc.layers[otherIndex].visible
+                local selectedIndex=A.doc.active_layer
+                local otherId=A.doc.layers[otherIndex].id
+                local otherPixels=Native.bytes(A.layerSession.buffers[otherIndex])
+                local thumbBeforeVisibility=layerThumb(otherIndex)
+                love.draw();love.mousepressed(panel+228,492,1,false)
+                assert(A.doc.layers[otherIndex].visible~=otherVisible and
+                    A.doc.active_layer==selectedIndex,
+                    'Botão de visibilidade por linha trocou camada selecionada')
+                assert(Native.bytes(A.layerSession.buffers[otherIndex])==otherPixels,
+                    'Alternar visibilidade modificou pixels da camada')
+                assert(layerThumb(otherIndex)==thumbBeforeVisibility,
+                    'Alternar visibilidade recriou prévia sem alterar pixels')
+                love.draw();love.mousepressed(panel+228,492,1,false)
+                assert(A.doc.layers[otherIndex].visible==otherVisible,
+                    'Botão por linha não restaurou a visibilidade')
+                saveDoc()
+                local metadataSaved=A.store:openProject(A.doc.id)
+                assert(metadataSaved.layers[otherIndex].id==otherId and
+                    metadataSaved.layers[otherIndex].visible==otherVisible and
+                    metadataSaved.layers[7].name=='Arte azul Étapa 18',
+                    'Propriedades das camadas não persistiram')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1190,6 +1271,11 @@ function love.update(dt)
                     layer_rgba_thumbnails=true,layer_thumbnail_cache=true,
                     layer_thumbnail_refresh_undo=true,layer_panel_page_buttons=true,
                     layer_preview_click_selection=true,
+                    layer_f2_rename_modal=true,layer_rename_validation=true,
+                    layer_rename_utf8_rbd2=true,layer_rename_preview_preserved=true,
+                    layer_row_visibility_toggle=true,
+                    layer_visibility_preserves_selection=true,
+                    layer_properties_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -1399,6 +1485,7 @@ local function drawEditor(w,h)
         local count=#A.doc.layers
         text(('RASTERS %d/%d'):format(count,Store.MAX_LAYERS),
             panel+20,407,'small','muted')
+        button('Nome',panel+87,398,78,27,openLayerRename)
         local rows=Thumbnails.rows(h)
         local start,stop,maxStart=Thumbnails.window(count,
             A.doc.active_layer,rows,A.layerScroll)
@@ -1437,9 +1524,20 @@ local function drawEditor(w,h)
             box(panel+24,rowY+2,29,29,'line')
             love.graphics.setColor(1,1,1,1)
             love.graphics.draw(layerThumb(i),panel+24.5,rowY+2.5)
-            text((layer.visible and '● ' or '○ ')..i..' '..
-                layer.name:sub(1,15),panel+62,rowY+8,'body',
+            local label=layer.name
+            local utf8=require('utf8')
+            local cut=utf8.offset(label,12)
+            if cut then label=label:sub(1,cut-1)..'…' end
+            text(i..' '..label,panel+62,rowY+8,'body',
                 A.doc.active_layer==i and 'bg' or 'text')
+            button(layer.visible and 'Vis' or 'Oc.',
+                panel+210,rowY+4,35,25,function()
+                    finishStroke()
+                    ls:setVisible(i,not layer.visible)
+                    A.dirty=true;rebuildImage()
+                    status(layer.visible and 'Camada visível'
+                        or 'Camada oculta')
+                end,layer.visible)
             y=y+37
         end
         local active=A.doc.layers[A.doc.active_layer]
@@ -1574,7 +1672,8 @@ local function drawModal(w,h)
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
     local x,y=w/2-220,h/2-210;box(x,y,440,420,'panel')
     local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or
-        m.kind=='color' and 'Editar cor RGBA' or 'Renomear projeto'
+        m.kind=='color' and 'Editar cor RGBA' or
+        m.kind=='renameLayer' and 'Renomear camada' or 'Renomear projeto'
     text(title,x+24,y+24,'title')
     local names=m.kind=='new' and {'Nome','Largura','Altura'} or
         m.kind=='color' and {'Hexadecimal (#RRGGBB ou #RRGGBBAA)'} or {'Nome'}
@@ -1587,6 +1686,9 @@ local function drawModal(w,h)
     if m.kind=='new' then text('Fundo transparente · limite inicial 2048 × 2048',x+24,y+314,'small','muted')end
     if m.kind=='color' then
         text('6 dígitos: alfa FF. 8 dígitos: alfa personalizado.',x+24,y+314,'small','muted')
+    elseif m.kind=='renameLayer' then
+        text('Nome UTF-8 · até 240 bytes · os pixels permanecem iguais.',
+            x+24,y+314,'small','muted')
     end
     button('Cancelar',x+24,y+357,150,38,function()A.modal=nil;love.keyboard.setTextInput(false)end)
     button('Criar / confirmar',x+190,y+357,226,38,submitModal,true)
@@ -1919,6 +2021,10 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and key=='f2' then
+        openLayerRename()
         return
     end
     if A.screen=='editor' and (key=='f1' or key=='h') then

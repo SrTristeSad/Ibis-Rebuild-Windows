@@ -36,6 +36,8 @@ A etapa 16 traz uma [central de ferramentas e atalhos no editor](docs/TOOL_HUB_S
 
 A etapa 17 adiciona [miniaturas RGBA reais no painel de camadas, cache de visualização e paginação adaptada à altura da janela](docs/LAYER_THUMBNAILS_STAGE17.md). A prévia amostra somente 28×28 pixels diretamente do buffer raster nativo e não altera camadas, histórico nem RBD2.
 
+A etapa 18 acrescenta [renomear camadas por F2/Nome e visibilidade direta na lista](docs/LAYER_PROPERTIES_STAGE18.md), com validação UTF-8 idêntica ao RBD2 e manutenção de pixels, miniaturas e histórico ao mudar apenas o nome.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -62,6 +64,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Navegação e rotação do canvas | Etapa 15: zoom e rotação sob cursor, Espaço/meio/direito para deslocar, atalhos e dock; sem edições no raster |
 | Central de ferramentas e atalhos | Etapa 16: teclas 1–8, ajuda por F1/H, paleta clicável e bloqueio de edição com ajuda aberta |
 | Miniaturas e navegação de camadas | Etapa 17: prévias de pixels reais, cache por camada, setas de paginação e layout para janelas menores |
+| Propriedades individuais de camadas | Etapa 18: renomeio com validação RBD2 e botão Vis/Oc. por linha sem alterar a camada selecionada |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 

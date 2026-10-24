@@ -146,6 +146,16 @@ function Layers:remove(index)
     self.doc.layer_count=#self.doc.layers
     self:recompose()
 end
+-- Metadata-only operation: does not change RGBA pixels or invalidate
+-- raster undo history. Store's RBD2 name validation stays authoritative.
+function Layers:rename(index,name)
+    assertIndex(self,index)
+    Store.validateName(name)
+    local layer=self.doc.layers[index]
+    if layer.name==name then return false end
+    layer.name=name
+    return true
+end
 function Layers:setVisible(index,visible)
     assertIndex(self,index)
     assert(type(visible)=='boolean','Visibilidade inválida')
