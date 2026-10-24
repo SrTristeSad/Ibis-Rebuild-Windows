@@ -44,6 +44,8 @@ A etapa 20 implementa [histórico misto de pintura e alterações estruturais de
 
 A etapa 21 inclui [nome, visibilidade e opacidade de camadas no histórico de desfazer/refazer](docs/LAYER_METADATA_HISTORY_STAGE21.md), sem copiar os rasters nem alterar o formato RBD2. Essa evolução completa o histórico misto da etapa 20, preservando o teto de 24 passos/48 MiB por sessão.
 
+A etapa 22 traz [Mesclar abaixo (Ctrl+E)](docs/MERGE_DOWN_STAGE22.md): duas camadas normais são compostas pelo C++ nativo, preservando opacidade e visibilidade no resultado, e a operação pode ser desfeita/refeita pelo histórico unificado com restauração dos dois buffers originais. Não modifica o RBD2 nem requer novas DLLs.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
