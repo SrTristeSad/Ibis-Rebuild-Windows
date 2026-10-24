@@ -166,7 +166,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil
+    A.shapePreview=nil;A.toolHelp=false
     finishStroke()
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
@@ -1452,6 +1452,17 @@ function love.draw()
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
+    if A.toolHelp then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        return
+    end
     -- Middle/right mouse or Space+left pan the view without opening any
     -- painting, shape, selection or undo transaction.
     if A.screen=='editor' and not A.modal and
@@ -1539,6 +1550,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.toolHelp then return end
     if A.panning and b==A.panButton then
         A.panning=false;A.panButton=nil
         return
@@ -1559,6 +1571,7 @@ local function pointerReleased(x,y,b,pressure)
     end
 end
 local function pointerMoved(x,y,dx,dy,pressure)
+    if A.toolHelp then return end
     if A.panning then
         View.pan(A,dx,dy)
         return
@@ -1664,12 +1677,14 @@ function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
+        A.toolHelp=false
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.wheelmoved(x,y)
+    if A.toolHelp then return end
     if A.screen=='editor' and not A.modal then
         local mx=love.mouse.getPosition()
         if mx>=love.graphics.getWidth()-268 and A.sideTab=='layers' then
@@ -1702,6 +1717,25 @@ function love.keypressed(key)
         elseif key=='return'then guard(submitModal)()
         elseif key=='tab'then A.modal.focus=A.modal.focus%#A.modal.values+1
         elseif key=='backspace'then local utf8=require('utf8');local s=A.modal.values[A.modal.focus];local pos=utf8.offset(s,-1);if pos then A.modal.values[A.modal.focus]=s:sub(1,pos-1)end end
+        return
+    end
+    if A.screen=='editor' and A.toolHelp then
+        if key=='escape' or key=='f1' or key=='h' then
+            A.toolHelp=false
+        elseif EditorTools.fromKey(key) then
+            if selectTool(EditorTools.fromKey(key).id) then
+                A.toolHelp=false
+            end
+        end
+        return
+    end
+    if A.screen=='editor' and (key=='f1' or key=='h') then
+        finishStroke();A.toolHelp=true
+        return
+    end
+    if A.screen=='editor' and EditorTools.fromKey(key) and
+        not love.keyboard.isDown('lctrl','rctrl','lalt','ralt') then
+        selectTool(EditorTools.fromKey(key).id)
         return
     end
     if A.screen=='editor' and key=='space' then
