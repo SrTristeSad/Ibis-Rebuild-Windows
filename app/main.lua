@@ -931,8 +931,8 @@ local function verifyPrecisionSliders()
     assert(A.brushDiameter==129,'Size drag failed at center')
     -- Release on the canvas side: no stroke or selection is allowed.
     love.mousereleased(300,250,1,false)
-    assert(A.sliderDrag==nil and A.brushDiameter==256 and
-        not A.drawing,'Release outside rail must clamp and stop capture')
+    assert(A.sliderDrag==nil and A.brushDiameter==1 and
+        not A.drawing,'Release left of rail must clamp and stop capture')
     love.draw()
     local opacity=Sliders.rail('opacity',panel)
     love.mousepressed(opacity.x+opacity.w/2,opacity.y+4,1,false)
@@ -958,8 +958,8 @@ local function verifyPrecisionSliders()
     selectTool('brush')
     love.draw()
     love.mousepressed(panel+40,472,1,false)
-    assert(A.brushDiameter==256,
-        'Legacy +/− button changed or escaped native range')
+    assert(A.brushDiameter==1,
+        'Legacy − button changed or escaped native range')
     A.brushDiameter=4
     love.draw();love.mousepressed(panel+208,472,1,false)
     assert(A.brushDiameter==6,'Legacy diameter + stopped working')
