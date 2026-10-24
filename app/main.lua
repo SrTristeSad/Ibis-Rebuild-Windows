@@ -1300,8 +1300,8 @@ function love.update(dt)
                 assert(Thumbnails.sample(A.layerSession.buffers[sourceIndex])==
                     Thumbnails.sample(A.layerSession.buffers[duplicateIndex]),
                     'Miniatura da cópia tem pixels diferentes da origem')
-                assert(A.layerSession:historyStats().undo==0,
-                    'Duplicar não zerou o histórico de edição estrutural')
+                assert(A.layerSession:historyStats().undo==beforeCopyHistory+1,
+                    'Duplicar não foi registrado como passo reversível')
                 A.layerSession:beginEdit()
                 A.layerSession:pixel(2,2,0x113355ff)
                 assert(A.layerSession:finishEdit(),
