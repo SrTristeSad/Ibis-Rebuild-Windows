@@ -52,6 +52,8 @@ A etapa 24 adiciona [Limpar camada (Shift+Delete)](docs/LAYER_CLEAR_STAGE24.md):
 
 A etapa 25 melhora o [acabamento visual do editor](docs/EDITOR_VISUAL_STAGE25.md): botões das oito ferramentas com ícones vetoriais próprios, paleta de alto contraste, miniaturas sobre fundo de transparência e realce da camada ativa, mantendo os mesmos alvos clicáveis, atalhos e o motor de edição. Não representa equivalência visual 1:1 comprovada com o Android.
 
+A etapa 26 adiciona [modo foco (Tab), canvas ampliado e ajustes rápidos do pincel](docs/FOCUS_WORKSPACE_STAGE26.md). O painel direito pode ser recolhido/restaurado sem alterar zoom, rotação, pixels, camadas, RBD2 ou histórico; os limites de desenho acompanham o espaço visível.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |

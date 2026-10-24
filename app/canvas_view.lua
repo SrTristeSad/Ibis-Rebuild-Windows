@@ -1,6 +1,7 @@
 -- Independent view transform; never mutates the document or raster.
 -- Canvas coordinates are pixels at 0..width,0..height, screen coordinates
 -- are logical LÖVE points. UI panel occupies the rightmost 268 pixels.
+local Workspace=require('workspace_layout')
 local View={}
 View.MIN_ZOOM=0.05
 View.MAX_ZOOM=32
@@ -12,11 +13,13 @@ local function validate(v,w,h)
         finite(v.rotation) and finite(v.panX) and finite(v.panY) and
         finite(v.width) and finite(v.height) and
         v.width>0 and v.height>0 and finite(w) and finite(h) and
+        (v.focusMode==nil or type(v.focusMode)=='boolean') and
         w>320 and h>100,'Estado de visualização inválido')
 end
 function View.center(v,w,h)
     validate(v,w,h)
-    return (w-280)/2+v.panX,(h+56)/2+v.panY
+    local cx,cy=Workspace.center(w,h,v.focusMode==true)
+    return cx+v.panX,cy+v.panY
 end
 function View.toCanvas(v,w,h,mx,my)
     validate(v,w,h)
@@ -74,7 +77,7 @@ function View.pan(v,dx,dy)
 end
 function View.fit(v,w,h)
     validate(v,w,h)
-    local safeW=math.max(1,w-380)
+    local safeW=Workspace.fitWidth(w,v.focusMode==true)
     local safeH=math.max(1,h-200)
     v.zoom=math.max(View.MIN_ZOOM,math.min(View.MAX_ZOOM,
         math.min(safeW/v.width,safeH/v.height)*0.84))

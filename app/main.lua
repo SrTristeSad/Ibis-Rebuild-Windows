@@ -11,8 +11,9 @@ local View=require('canvas_view')
 local EditorTools=require('editor_tools')
 local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
+local Workspace=require('workspace_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -121,7 +122,7 @@ local function rebuildImage()
 end
 local function viewData()
     return {zoom=A.zoom,rotation=A.rotation,panX=A.panX,panY=A.panY,
-        width=A.doc.width,height=A.doc.height}
+        width=A.doc.width,height=A.doc.height,focusMode=A.focusMode}
 end
 local function commitView(v)
     A.zoom=v.zoom;A.rotation=v.rotation;A.panX=v.panX;A.panY=v.panY
@@ -134,16 +135,16 @@ end
 local function zoomCanvas(factor,mx,my)
     if not A.doc then return false end
     local w,h=love.graphics.getDimensions()
-    mx=mx or (w-280)/2;my=my or (h+56)/2
     local v=viewData()
+    if not mx or not my then mx,my=View.center(v,w,h) end
     local changed=View.zoomAt(v,w,h,mx,my,factor)
     commitView(v);return changed
 end
 local function rotateCanvas(delta,mx,my)
     if not A.doc then return false end
     local w,h=love.graphics.getDimensions()
-    mx=mx or (w-280)/2;my=my or (h+56)/2
     local v=viewData()
+    if not mx or not my then mx,my=View.center(v,w,h) end
     local changed=View.rotateAt(v,w,h,mx,my,delta)
     commitView(v);return changed
 end
@@ -151,7 +152,8 @@ local function resetCanvasRotation()
     if not A.doc then return false end
     local w,h=love.graphics.getDimensions()
     local v=viewData()
-    local changed=View.resetRotation(v,w,h,(w-280)/2,(h+56)/2)
+    local centerX,centerY=View.center(v,w,h)
+    local changed=View.resetRotation(v,w,h,centerX,centerY)
     commitView(v);return changed
 end
 local function openDoc(doc)
@@ -161,7 +163,7 @@ local function openDoc(doc)
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
-    A.screen='editor';A.dirty=false
+    A.screen='editor';A.dirty=false;A.focusMode=false
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -219,6 +221,18 @@ selectTool=function(id)
     local tab=EditorTools.panelFor(id)
     if tab then A.sideTab=tab end
     return true
+end
+-- The canvas gains horizontal workspace while the document/view state is
+-- untouched. All editing shortcuts remain active with the pane hidden.
+local function toggleFocusMode()
+    assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
+    finishStroke()
+    A.shapePreview=nil
+    A.panning=false;A.panButton=nil
+    A.focusMode=not A.focusMode
+    status(A.focusMode and 'Modo foco · Tab restaura painel' or
+        'Painel de ferramentas restaurado')
+    return A.focusMode
 end
 local function undoDoc()
     A.shapePreview=nil
@@ -467,6 +481,73 @@ local function verifyVisualToolbar()
         'Novo layout alterou raster, histórico ou camadas')
     selectTool('inspect')
     A.sideTab='layers'
+end
+-- Stage 26: exercise focus mode through actual buttons, keyboard and
+-- expanded-canvas hit testing without mutating the existing document.
+local function verifyFocusWorkspace()
+    local w,h=love.graphics.getDimensions()
+    local originalTool,originalTab=A.tool,A.sideTab
+    local diameter,opacity=A.brushDiameter,A.brushOpacity
+    local image=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    local count=#A.doc.layers
+    local dirty=A.dirty
+    local originalView=viewData()
+    local oldX,oldY=View.center(originalView,w,h)
+    assert(not A.focusMode,'Modo foco deve começar fechado no teste')
+    assert(not Workspace.contains(w,h,false,w-75,170),
+        'Região lateral não pode ser canvas com painel aberto')
+    love.draw()
+    love.mousepressed(w-290,31,1,false)
+    assert(A.focusMode,'Botão superior não recolheu o painel')
+    love.draw()
+    assert(Workspace.contains(w,h,true,w-75,170),
+        'Área do antigo painel não passou a ser canvas')
+    for _,target in ipairs(A.buttons) do
+        assert(not (target.x>=w-268 and target.y>64),
+            'Controle do painel permanece clicável após recolher')
+    end
+    local newX,newY=View.center(viewData(),w,h)
+    assert(math.abs(newX-oldX-134)<1e-6 and newY==oldY,
+        'Canvas não se recentralizou sem deslocar verticalmente')
+    A.lastPacket=nil
+    selectTool('inspect')
+    love.draw()
+    love.mousepressed(w-75,170,1,false)
+    assert(A.lastPacket,'Clique na área expandida não chegou ao canvas')
+    selectTool('brush')
+    A.brushDiameter=12;A.brushOpacity=.8
+    love.draw()
+    local dockY=h-116
+    love.mousepressed(506,dockY+12,1,false)
+    assert(A.brushDiameter==10,
+        'Controle rápido de tamanho não alterou o pincel')
+    love.draw();love.mousepressed(582,dockY+12,1,false)
+    assert(A.brushDiameter==12,'Controle rápido + não restaurou tamanho')
+    love.draw();love.mousepressed(674,dockY+12,1,false)
+    assert(math.abs(A.brushOpacity-.7)<1e-6,
+        'Controle rápido de opacidade não funcionou')
+    love.draw();love.mousepressed(754,dockY+12,1,false)
+    assert(math.abs(A.brushOpacity-.8)<1e-6,
+        'Controle rápido + não restaurou opacidade')
+    A.brushDiameter=diameter;A.brushOpacity=opacity
+    love.keypressed('tab')
+    assert(not A.focusMode,'Tab não restaurou painel')
+    local backX,backY=View.center(viewData(),w,h)
+    assert(backX==oldX and backY==oldY,
+        'Retornar do foco alterou posição do canvas')
+    love.keypressed('tab')
+    assert(A.focusMode,'Tab não entrou no foco pela segunda vez')
+    love.draw();love.mousepressed(w-290,31,1,false)
+    assert(not A.focusMode,'Botão superior não restaurou painel')
+    assert(A.zoom==originalView.zoom and A.rotation==originalView.rotation
+        and A.panX==originalView.panX and A.panY==originalView.panY,
+        'Foco alterou zoom, rotação ou pan anteriores')
+    assert(Native.bytes(A.layerSession.composite)==image and
+        A.layerSession:historyStats().undo==history and
+        #A.doc.layers==count and A.dirty==dirty,
+        'Modo foco alterou pixels, camadas, histórico ou dirty flag')
+    selectTool(originalTool);A.sideTab=originalTab
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -1707,6 +1788,7 @@ function love.update(dt)
                 assert(Native.bytes(A.layerSession.buffers[1])==lowerBeforeClear,
                     'Atalho Limpar atingiu outra camada')
                 verifyVisualToolbar()
+                verifyFocusWorkspace()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1770,6 +1852,9 @@ function love.update(dt)
                     layer_clear_isolated=true,layer_clear_rbd2=true,
                     vector_tool_glyphs=true,visual_toolbar_hitboxes=true,
                     visual_toolbar_switching=true,visual_only_no_raster_edits=true,
+                    focus_button=true,focus_tab_toggle=true,
+                    focus_expanded_canvas=true,focus_quick_brush_controls=true,
+                    focus_panel_restoration=true,focus_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -1825,9 +1910,11 @@ local function drawEditor(w,h)
     button('← Galeria',20,78,92,34,toGallery)
     for _,slot in ipairs(toolSlots) do toolButton(slot) end
     button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
+    button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
+        w-357,15,134,33,toggleFocusMode,A.focusMode)
     local cx,cy=canvasTransform()
-    box(12,120,panel-20,h-178,'canvas')
-    love.graphics.setScissor(16,125,panel-32,h-194)
+    box(12,120,w-Workspace.panelWidth(A.focusMode)-20,h-178,'canvas')
+    love.graphics.setScissor(Workspace.scissor(w,h,A.focusMode))
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
     local checker=math.max(8,math.ceil(math.max(dw,dh)/64))
@@ -1881,6 +1968,7 @@ local function drawEditor(w,h)
     button('0°',182,dockY,43,30,resetCanvasRotation)
     button('Encaixar',230,dockY,83,30,fit)
     text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
+    if not A.focusMode then
     box(panel,64,268,h-112,'panel')
     c('line')
     love.graphics.rectangle('fill',panel,64,1,h-112)
@@ -2175,6 +2263,32 @@ local function drawEditor(w,h)
         end
     end
     end
+    end -- right-side panel, hidden during focus mode
+    if A.focusMode and (A.tool=='brush' or A.tool=='erase') then
+        -- Keep the most-used drawing controls accessible without the pane.
+        text('Tamanho',430,dockY+7,'small','muted')
+        button('−',490,dockY,32,30,function()
+            finishStroke()
+            A.brushDiameter=math.max(1,A.brushDiameter-2)
+        end,false,A.brushDiameter<=1)
+        text(('%dpx'):format(A.brushDiameter),528,dockY+7,'small')
+        button('+',566,dockY,32,30,function()
+            finishStroke()
+            A.brushDiameter=math.min(256,A.brushDiameter+2)
+        end,false,A.brushDiameter>=256)
+        text('Opac.',608,dockY+7,'small','muted')
+        button('−',658,dockY,32,30,function()
+            finishStroke()
+            A.brushOpacity=math.max(.1,
+                math.floor(A.brushOpacity*10+.5)/10-.1)
+        end,false,A.brushOpacity<=.101)
+        text(('%.0f%%'):format(A.brushOpacity*100),694,dockY+7,'small')
+        button('+',739,dockY,32,30,function()
+            finishStroke()
+            A.brushOpacity=math.min(1,
+                math.floor(A.brushOpacity*10+.5)/10+.1)
+        end,false,A.brushOpacity>=.999)
+    end
     text(('Zoom %.0f%% · ângulo %.0f° · Espaço + arrastar: mover · Ctrl +/−: zoom · Q/E: girar'):format(
         A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
     if A.tool=='select' then
@@ -2239,7 +2353,7 @@ local function drawToolHelp(w,h)
     text('NAVEGAÇÃO',x+22,y+377,'small','accent')
     text('Espaço + arrastar · mover tela     Roda · zoom     Shift + roda · girar',
         x+22,y+399,'small','muted')
-    text('Q / E · rotação     + / − · zoom     0 / F · encaixar     Ctrl+Z / Y · histórico',
+    text('Q / E · girar     0 / F · encaixar     Tab · modo foco     Ctrl+Z / Y',
         x+22,y+423,'small','muted')
     text('F1 ou H: abrir/fechar · Esc: fechar · Nenhum pixel é alterado.',
         x+22,y+447,'small','muted')
@@ -2282,8 +2396,8 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     if A.screen=='editor' and not A.modal and
         (buttonNumber==2 or buttonNumber==3 or
         (buttonNumber==1 and A.spaceHeld)) then
-        if x>=16 and x<love.graphics.getWidth()-268 and
-            y>=125 and y<love.graphics.getHeight()-78 then
+        if Workspace.contains(love.graphics.getWidth(),
+            love.graphics.getHeight(),A.focusMode,x,y) then
             finishStroke()
             A.panning=true;A.panButton=buttonNumber
             return
@@ -2291,7 +2405,8 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
-        if A.screen=='editor' and not A.modal and x<love.graphics.getWidth()-280 and y>125 and y<love.graphics.getHeight()-78 then
+        if A.screen=='editor' and not A.modal and Workspace.contains(
+            love.graphics.getWidth(),love.graphics.getHeight(),A.focusMode,x,y) then
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=pressure,time=math.floor(love.timer.getTime()*1000)}})
@@ -2501,7 +2616,8 @@ function love.wheelmoved(x,y)
     if A.toolHelp then return end
     if A.screen=='editor' and not A.modal then
         local mx=love.mouse.getPosition()
-        if mx>=love.graphics.getWidth()-268 and A.sideTab=='layers' then
+        if not A.focusMode and mx>=love.graphics.getWidth()-268 and
+            A.sideTab=='layers' then
             local count=#A.doc.layers
             local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
             if y~=0 and index~=A.doc.active_layer then
@@ -2514,8 +2630,8 @@ function love.wheelmoved(x,y)
         if y==0 then return end
         local w,h=love.graphics.getDimensions()
         local my=select(2,love.mouse.getPosition())
-        if mx<16 or mx>=w-268 or my<125 or my>=h-78 then
-            mx=(w-280)/2;my=(h+56)/2
+        if not Workspace.contains(w,h,A.focusMode,mx,my) then
+            mx,my=View.center(viewData(),w,h)
         end
         if love.keyboard.isDown('lshift','rshift') then
             rotateCanvas(y*math.pi/36,mx,my)
@@ -2543,6 +2659,10 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and key=='tab' then
+        guard(toggleFocusMode)()
         return
     end
     if A.screen=='editor' and key=='delete' and
