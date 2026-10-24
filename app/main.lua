@@ -1595,7 +1595,7 @@ function love.update(dt)
                 local lowerBeforeClear=Native.bytes(A.layerSession.buffers[1])
                 local clearCount=A.layerSession:historyStats().undo
                 love.draw();love.mousepressed(panel+73,344,1,false)
-                local zero=string.rep('\\0',#preClear)
+                local zero=string.rep(string.char(0),#preClear)
                 assert(Native.bytes(A.layerSession:activeBuffer())==zero,
                     'Limpar não deixou pixels transparentes')
                 assert(A.layerSession:historyStats().undo==clearCount+1,
