@@ -186,21 +186,26 @@ end
 function Layers:add(name)
     local layers=self.doc.layers
     assert(#layers<Store.MAX_LAYERS,'Limite inicial de camadas atingido')
-    self:clearHistory()
-    local index=self.doc.active_layer+1
+    Store.validateName(name or 'Nova camada')
+    if self.pending then self:finishEdit() end
+    local before=self.doc.active_layer
+    local index=before+1
     local new={id=self.store:newLayerId(),name=name or 'Nova camada',
         visible=true,opacity=1,pixels=string.rep('\0',self.doc.width*self.doc.height*4)}
+    local buffer=Native.buffer(self.doc.width,self.doc.height,new.pixels)
     table.insert(layers,index,new)
-    table.insert(self.buffers,index,Native.buffer(self.doc.width,self.doc.height))
+    table.insert(self.buffers,index,buffer)
     self.doc.active_layer=index
     self.doc.layer_count=#layers
     self:recompose()
+    local snapshot=layerSnapshot(new,buffer)
+    self:_pushHistory({kind='insert',index=index,layer=snapshot,
+        activeBefore=before,activeAfter=index,size=#snapshot.pixels+128})
     return index
 end
--- Duplicate a full native RGBA layer above its source, with an independent
--- pixel allocation and a distinct persistent ID. Structural edits clear the
--- session-only raster undo stacks, matching add/remove/reorder semantics.
--- Allocate/validate everything before changing layer order or history.
+-- Duplicate native RGBA pixels into a distinct buffer and persistent ID.
+-- This structural insert can now be undone and redone within the session.
+-- Validate and allocate before changing ordering or history.
 local function copyLayerName(name)
     local prefix='Cópia de '
     local result=prefix..name
@@ -222,13 +227,17 @@ function Layers:duplicate(index)
     local newId=self.store:newLayerId()
     local new={id=newId,name=name,visible=source.visible,
         opacity=source.opacity,pixels=bytes}
-    self:clearHistory()
+    if self.pending then self:finishEdit() end
+    local before=self.doc.active_layer
     local target=index+1
     table.insert(self.doc.layers,target,new)
     table.insert(self.buffers,target,newBuffer)
     self.doc.active_layer=target
     self.doc.layer_count=#self.doc.layers
     self:recompose()
+    local snapshot=layerSnapshot(new,newBuffer)
+    self:_pushHistory({kind='insert',index=target,layer=snapshot,
+        activeBefore=before,activeAfter=target,size=#snapshot.pixels+128})
     return target
 end
 function Layers:select(index)
@@ -240,7 +249,9 @@ end
 function Layers:remove(index)
     assertIndex(self,index)
     assert(#self.doc.layers>1,'Não é possível remover a última camada')
-    self:clearHistory()
+    if self.pending then self:finishEdit() end
+    local before=self.doc.active_layer
+    local snapshot=layerSnapshot(self.doc.layers[index],self.buffers[index])
     table.remove(self.doc.layers,index)
     table.remove(self.buffers,index)
     if self.doc.active_layer>index then self.doc.active_layer=self.doc.active_layer-1
@@ -249,6 +260,9 @@ function Layers:remove(index)
     end
     self.doc.layer_count=#self.doc.layers
     self:recompose()
+    self:_pushHistory({kind='remove',index=index,layer=snapshot,
+        activeBefore=before,activeAfter=self.doc.active_layer,
+        size=#snapshot.pixels+128})
 end
 -- Metadata-only operation: does not change RGBA pixels or invalidate
 -- raster undo history. Store's RBD2 name validation stays authoritative.
@@ -277,18 +291,19 @@ function Layers:setOpacity(index,opacity)
 end
 function Layers:move(index,to)
     assertIndex(self,index);assertIndex(self,to)
-    if index==to then return end
-    self:clearHistory()
-    local layer=table.remove(self.doc.layers,index)
-    local buffer=table.remove(self.buffers,index)
-    table.insert(self.doc.layers,to,layer)
-    table.insert(self.buffers,to,buffer)
-    local active=self.doc.active_layer
+    if index==to then return false end
+    if self.pending then self:finishEdit() end
+    local before=self.doc.active_layer
+    local id=self.doc.layers[index].id
+    local active=before
     if active==index then active=to
     elseif index<active and to>=active then active=active-1
     elseif index>active and to<=active then active=active+1 end
-    self.doc.active_layer=active
+    reorder(self,index,to,active)
     self:recompose()
+    self:_pushHistory({kind='move',from=index,to=to,id=id,
+        activeBefore=before,activeAfter=active,size=128})
+    return true
 end
 function Layers:stroke(x0,y0,x1,y1,diameter,color,opacity)
     Native.basicStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,opacity or 1)
