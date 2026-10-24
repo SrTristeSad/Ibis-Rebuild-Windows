@@ -125,6 +125,11 @@ def run_tests(runtime_path, output):
                                 +json.dumps(properties_root)+"))")
             properties=json.loads(native_state.execute(properties_program))
             assert properties.get('passed') and properties.get('utf8_name') and properties.get('rbd2_roundtrip')
+            duplicate_root=(output / ('layer-duplicate-' + str(time.time_ns()))).as_posix()
+            duplicate_program=("return require('json').encode(require('tests.test_layer_duplicate').run("
+                               +json.dumps(duplicate_root)+"))")
+            duplicate_result=json.loads(native_state.execute(duplicate_program))
+            assert duplicate_result.get('passed') and duplicate_result.get('deep_rgba_copy') and duplicate_result.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -141,6 +146,7 @@ def run_tests(runtime_path, output):
         report['editor_tool_registry'] = tool_registry
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
+        report['layer_duplicate'] = duplicate_result
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
