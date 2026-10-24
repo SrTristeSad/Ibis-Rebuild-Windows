@@ -348,6 +348,8 @@ function love.update(dt)
             local ok,err=pcall(function()
                 assert(A.screen=='editor' and A.sideTab=='layers',
                     'Teste GUI de camadas requer editor real')
+                assert(A.inkAttached and Ink.lib.rb_ink_is_attached()==1,
+                    'A ponte Windows Ink não se anexou à janela LÖVE real')
                 local panel=love.graphics.getWidth()-268
                 local before=#A.doc.layers
                 love.draw()
@@ -832,6 +834,7 @@ function love.update(dt)
                     touch_toolbar=true,winink_pointer_dispatch=true,
                     winink_mouse_touch_guard=true,winink_pressure_undo_rbd2=true,
                     winink_eraser_inversion=true,
+                    winink_real_hwnd_attached=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
