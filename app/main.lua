@@ -1079,14 +1079,14 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     button('← Galeria',20,78,92,34,toGallery)
-    button('Ver',116,78,53,34,function()finishStroke();A.tool='inspect'end,A.tool=='inspect')
-    button('Pixel',173,78,45,34,function()finishStroke();A.tool='pixel'end,A.tool=='pixel')
-    button('Pincel',222,78,57,34,function()finishStroke();A.tool='brush';A.sideTab='brush'end,A.tool=='brush')
-    button('Apagar',283,78,61,34,function()finishStroke();A.tool='erase';A.sideTab='brush'end,A.tool=='erase')
-    button('Balde',348,78,53,34,function()finishStroke();A.tool='fill';A.sideTab='brush'end,A.tool=='fill')
-    button('Seleção',405,78,61,34,function()finishStroke();A.tool='select'end,A.tool=='select')
-    button('Formas',470,78,62,34,function()finishStroke();A.tool='shape'end,A.tool=='shape')
-    button('Gotas',536,78,79,34,function()finishStroke();A.tool='picker'end,A.tool=='picker')
+    button('Ver',116,78,53,34,function()selectTool('inspect')end,A.tool=='inspect')
+    button('Pixel',173,78,45,34,function()selectTool('pixel')end,A.tool=='pixel')
+    button('Pincel',222,78,57,34,function()selectTool('brush')end,A.tool=='brush')
+    button('Apagar',283,78,61,34,function()selectTool('erase')end,A.tool=='erase')
+    button('Balde',348,78,53,34,function()selectTool('fill')end,A.tool=='fill')
+    button('Seleção',405,78,61,34,function()selectTool('select')end,A.tool=='select')
+    button('Formas',470,78,62,34,function()selectTool('shape')end,A.tool=='shape')
+    button('Gotas',536,78,79,34,function()selectTool('picker')end,A.tool=='picker')
     button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
     local cx,cy=canvasTransform()
     love.graphics.setScissor(16,125,panel-32,h-194)
@@ -1144,7 +1144,11 @@ local function drawEditor(w,h)
     button('Encaixar',230,dockY,83,30,fit)
     text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
     box(panel,64,268,h-112,'panel')
-    text('PROJETO',panel+20,88,'small','muted');text(A.doc.name:sub(1,28),panel+20,115,'title')
+    text('PROJETO',panel+20,88,'small','muted')
+    button('? Ajuda',panel+172,82,76,31,function()
+        finishStroke();A.toolHelp=true
+    end)
+    text(A.doc.name:sub(1,28),panel+20,115,'title')
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
     text(A.inkAttached and ('Windows Ink · '..(A.inkPenId and 'caneta ativa'
         or 'aguardando caneta')) or 'Caneta Win32: modo alternativo',
@@ -1397,6 +1401,41 @@ local function drawModal(w,h)
     button('Cancelar',x+24,y+357,150,38,function()A.modal=nil;love.keyboard.setTextInput(false)end)
     button('Criar / confirmar',x+190,y+357,226,38,submitModal,true)
 end
+-- Non-editable tool hub. Its own button hit-map replaces all canvas controls.
+local function drawToolHelp(w,h)
+    love.graphics.setColor(0,0,0,.78)
+    love.graphics.rectangle('fill',0,0,w,h)
+    local width=math.min(640,w-80)
+    local height=math.min(544,h-72)
+    local x=(w-width)/2
+    local y=(h-height)/2
+    box(x,y,width,height,'panel')
+    c('accent');love.graphics.rectangle('fill',x,y,5,height)
+    text('Ferramentas e atalhos',x+22,y+20,'title')
+    text('Escolha uma ferramenta ou pressione 1 a 8.',
+        x+22,y+59,'small','muted')
+    local cellWidth=(width-60)/2
+    for i,item in ipairs(EditorTools.items) do
+        local column=(i-1)%2
+        local line=math.floor((i-1)/2)
+        local left=x+20+column*(cellWidth+20)
+        local top=y+94+line*65
+        button(item.key..'  '..item.label,left,top,cellWidth,34,
+            function()
+                if selectTool(item.id) then A.toolHelp=false end
+            end,A.tool==item.id)
+        text(item.hint,left+8,top+39,'small','muted')
+    end
+    text('NAVEGAÇÃO',x+22,y+377,'small','accent')
+    text('Espaço + arrastar · mover tela     Roda · zoom     Shift + roda · girar',
+        x+22,y+399,'small','muted')
+    text('Q / E · rotação     + / − · zoom     0 / F · encaixar     Ctrl+Z / Y · histórico',
+        x+22,y+423,'small','muted')
+    text('F1 ou H: abrir/fechar · Esc: fechar · Nenhum pixel é alterado.',
+        x+22,y+447,'small','muted')
+    button('Fechar ajuda',x+width-174,y+height-49,150,33,
+        function()A.toolHelp=false end)
+end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
     box(0,0,w,64,'panel');text('DESKTOP REBUILD',24,17,'title')
@@ -1405,7 +1444,11 @@ function love.draw()
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     box(0,h-48,w,48,'panel');text(A.message or '',20,h-33,'small','muted')
     if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
-    if A.modal then A.buttons={};drawModal(w,h)end
+    if A.modal then A.buttons={};drawModal(w,h)
+    elseif A.toolHelp and A.screen=='editor' then
+        A.buttons={}
+        drawToolHelp(w,h)
+    end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
