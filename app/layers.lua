@@ -180,7 +180,7 @@ function Layers:undo()
     else self:_restore(entry,'before') end
     table.remove(self.undoStack)
     self.redoStack[#self.redoStack+1]=entry
-    return true,structural
+    return true,structural,metadata
 end
 function Layers:redo()
     assert(not self.pending,'Finalize a pincelada antes de refazer')
@@ -192,7 +192,7 @@ function Layers:redo()
     else self:_restore(entry,'after') end
     table.remove(self.redoStack)
     self.undoStack[#self.undoStack+1]=entry
-    return true,structural
+    return true,structural,metadata
 end
 function Layers:add(name)
     local layers=self.doc.layers
