@@ -135,6 +135,11 @@ def run_tests(runtime_path, output):
                                 +json.dumps(structural_root)+"))")
             structural=json.loads(native_state.execute(structural_program))
             assert structural.get('passed') and structural.get('chronological_undo_redo') and structural.get('rbd2_roundtrip')
+            property_root=(output / ('property-history-' + str(time.time_ns()))).as_posix()
+            property_program=("return require('json').encode(require('tests.test_layer_property_history').run("
+                              +json.dumps(property_root)+"))")
+            property_history=json.loads(native_state.execute(property_program))
+            assert property_history.get('passed') and property_history.get('mixed_chronology') and property_history.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -153,6 +158,7 @@ def run_tests(runtime_path, output):
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result
         report['mixed_structural_history'] = structural
+        report['mixed_property_history'] = property_history
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,

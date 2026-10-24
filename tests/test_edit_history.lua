@@ -65,10 +65,16 @@ function T.run(root)
     check(stats.bytes<=Layers.MAX_HISTORY_BYTES and stats.bytes>=0,
         'history byte accounting exceeded budget')
     recovered:setOpacity(2,.5)
-    check(not recovered:canUndo(),'opacity mutation did not invalidate history')
+    check(recovered:canUndo() and recovered:historyStats().undo==
+        Layers.MAX_HISTORY_ENTRIES,'Opacity change must join bounded history')
     recovered:beginEdit();recovered:erase(2.5,1.5,2.5,1.5,1,0)
     check(not recovered:finishEdit(),'no-op should not create history')
-    check(not recovered:canUndo(),'no-op should not mutate history')
+    check(recovered:historyStats().undo==Layers.MAX_HISTORY_ENTRIES,
+        'No-op must not add a new history step')
+    local changed,structural,metadata=recovered:undo()
+    check(changed and not structural and metadata and
+        recovered.doc.layers[2].opacity==1,
+        'Undo opacity should restore property without modifying raster history')
     return {suite='layered-edit-history',passed=true,assertions=count,
         native_eraser=true,undo_redo=true,history_bounded=true,rbd2_preserved=true,
         scope='Session-local chronological raster and layer history; not Android undo model'}
