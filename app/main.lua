@@ -804,6 +804,86 @@ local function verifyContextMenus()
     A.brushDiameter=oldDiameter;A.brushOpacity=oldOpacity
     selectTool(oldTool);A.sideTab=oldTab
 end
+-- Stage 28: exercise real clickable picker, save/remove and storage,
+-- plus isolation from raster/history in the current active document.
+local function verifyBrushLibrary()
+    local w,h=love.graphics.getDimensions()
+    local panel=w-268
+    local rect=Presets.layout(w,h)
+    local originalTool,originalTab=A.tool,A.sideTab
+    local originalStyle,originalDiameter=A.brushStyle,A.brushDiameter
+    local originalOpacity,originalStabilization=A.brushOpacity,A.stabilization
+    local originalSlot=A.selectedBrushCustom
+    local originalDirty=A.dirty
+    local originalPixels=Native.bytes(A.layerSession.composite)
+    local originalHistory=A.layerSession:historyStats().undo
+    local originalLayers=#A.doc.layers
+    local originals=A.store:getBrushes()
+    selectTool('brush')
+    A.sideTab='brush'
+    love.draw()
+    love.mousepressed(panel+100,344,1,false)
+    assert(A.brushLibrary,'Botão Biblioteca não abriu')
+    love.draw()
+    -- Built-in #3 occupies the second row, first column.
+    love.mousepressed(rect.x+34,rect.y+80+88+10,1,false)
+    assert(not A.brushLibrary and A.brushStyle=='soft' and
+        A.brushDiameter==24 and math.abs(A.brushOpacity-.6)<1e-6 and
+        A.stabilization==2,'Biblioteca não aplicou o Marcador suave')
+    local originalIsDown=love.keyboard.isDown
+    love.keyboard.isDown=function(...)
+        for i=1,select('#',...) do
+            if select(i,...)=='lctrl' then return true end
+        end
+        return false
+    end
+    love.keypressed('b')
+    love.keyboard.isDown=originalIsDown
+    assert(A.brushLibrary,'Ctrl+B não abriu biblioteca')
+    love.draw()
+    love.mousepressed(100,245,1,false)
+    assert(A.brushLibrary and
+        Native.bytes(A.layerSession.composite)==originalPixels,
+        'Clique externo não deve fechar nem pintar por baixo do modal')
+    love.draw()
+    love.mousepressed(rect.x+90,rect.y+496,1,false)
+    local saved=Presets.custom(A.store:getBrushes())
+    assert(saved[1] and saved[1].diameter==24 and
+        math.abs(saved[1].opacity-.6)<1e-6,
+        'Salvar pessoal não persistiu no brushes.json')
+    assert(A.selectedBrushCustom==1 and A.brushLibrary,
+        'Salvar ajuste deve manter a biblioteca aberta')
+    A.brushDiameter=7
+    love.draw()
+    love.mousepressed(rect.x+35,rect.y+80+4*88+10,1,false)
+    assert(not A.brushLibrary and A.brushDiameter==24 and
+        A.selectedBrushCustom==1,
+        'Aplicar ajuste salvo não recuperou o pincel')
+    love.keypressed('escape') -- closed library; should not mutate brush.
+    openBrushLibrary()
+    assert(A.brushLibrary,'Reabrir biblioteca falhou')
+    love.draw()
+    love.mousepressed(rect.x+270,rect.y+496,1,false)
+    assert(not Presets.custom(A.store:getBrushes())[1] and
+        not A.selectedBrushCustom,
+        'Excluir ajuste pessoal não atualizou armazenamento')
+    love.keypressed('escape')
+    assert(not A.brushLibrary,'Esc não fechou biblioteca')
+    assert(#A.store:getBrushes()==#originals,
+        'Entrada antiga foi adicionada/removida sem solicitação')
+    assert(A.dirty==originalDirty and
+        Native.bytes(A.layerSession.composite)==originalPixels and
+        A.layerSession:historyStats().undo==originalHistory and
+        #A.doc.layers==originalLayers,
+        'Biblioteca alterou pixels, dirty flag, camadas ou histórico')
+    A.brushStyle=originalStyle
+    A.brushDiameter=originalDiameter
+    A.brushOpacity=originalOpacity
+    A.stabilization=originalStabilization
+    A.selectedBrushCustom=originalSlot
+    selectTool(originalTool)
+    A.sideTab=originalTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2045,6 +2125,7 @@ function love.update(dt)
                 verifyVisualToolbar()
                 verifyFocusWorkspace()
                 verifyContextMenus()
+                verifyBrushLibrary()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2115,6 +2196,9 @@ function love.update(dt)
                     context_menu_click_actions=true,context_menu_keyboard=true,
                     context_menu_outside_dismiss=true,context_right_pan_preserved=true,
                     context_menu_undo_redo=true,
+                    brush_library_button=true,brush_library_ctrl_b=true,
+                    brush_library_builtin=true,brush_library_personal_roundtrip=true,
+                    brush_library_isolated=true,brush_library_escape=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
