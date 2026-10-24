@@ -815,6 +815,56 @@ function love.update(dt)
                     'Inverted pen did not restore previous tool')
                 assert(Native.readPixel(A.layerSession:activeBuffer(),5,1)==0,
                     'Inverted pen eraser failed to erase')
+                -- Independent tilted geometry via actual Windows Ink dispatcher
+                -- and the live enable/disable button. Prior tools remain.
+                A.layerSession:add('Inclinação ativa')
+                A.dirty=true;rebuildImage()
+                love.draw()
+                assert(A.penTiltEnabled and A.tool=='brush',
+                    'Tilt must be enabled for real pen by default')
+                for i=1,2 do
+                    love.draw();love.mousepressed(panel+226,472,1)
+                end
+                assert(A.brushDiameter==6,'Tilt test must use 6-pixel base width')
+                local tiltX,tiltY=point(3,3)
+                local historyTilt=A.layerSession:historyStats().undo
+                dispatchInkEvent({kind=1,id=93,x=tiltX,y=tiltY,pressure=1,
+                    tiltX=90,tiltY=0,flags=0,mask=5})
+                dispatchInkEvent({kind=3,id=93,x=tiltX,y=tiltY,pressure=1,
+                    tiltX=90,tiltY=0,flags=0,mask=5})
+                assert(Native.readPixel(A.layerSession:activeBuffer(),7,3)==A.color,
+                    'Inclinação horizontal não alargou ponta elíptica')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,6)==0,
+                    'Ponta inclinada desenhou fora do eixo estreito')
+                assert(A.layerSession:historyStats().undo==historyTilt+1,
+                    'Pincel inclinado não criou uma única operação')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),7,3)==0,
+                    'Inclinação: desfazer falhou')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),7,3)==A.color,
+                    'Inclinação: refazer falhou')
+                saveDoc()
+                local tiltSaved=A.store:openProject(A.doc.id)
+                local horizontalOffset=(3*A.doc.width+7)*4+1
+                local r,g,b,a=Colors.channels(A.color)
+                assert(tiltSaved.layers[8].pixels:sub(horizontalOffset,
+                    horizontalOffset+3)==string.char(r,g,b,a),
+                    'Inclinação não persistiu no RBD2')
+                love.draw();love.mousepressed(panel+120,428,1)
+                assert(not A.penTiltEnabled,'Botão não desativou inclinação')
+                A.layerSession:add('Inclinação desligada')
+                A.dirty=true;rebuildImage()
+                dispatchInkEvent({kind=1,id=94,x=tiltX,y=tiltY,pressure=1,
+                    tiltX=90,tiltY=0,flags=0,mask=5})
+                dispatchInkEvent({kind=3,id=94,x=tiltX,y=tiltY,pressure=1,
+                    tiltX=90,tiltY=0,flags=0,mask=5})
+                assert(Native.readPixel(A.layerSession:activeBuffer(),7,3)==0,
+                    'Desativar tilt não restaurou pincel redondo')
+                assert(Native.readPixel(A.layerSession:activeBuffer(),3,3)==A.color,
+                    'Pincel redondo desativado não desenhou centro')
+                love.draw();love.mousepressed(panel+120,428,1)
+                assert(A.penTiltEnabled,'Não foi possível reativar inclinação')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -840,6 +890,8 @@ function love.update(dt)
                     winink_mouse_touch_guard=true,winink_pressure_undo_rbd2=true,
                     winink_eraser_inversion=true,
                     winink_real_hwnd_attached=true,
+                    tilted_pen_ellipse=true,tilted_pen_toggle=true,
+                    tilted_pen_undo_redo=true,tilted_pen_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
