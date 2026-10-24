@@ -6,7 +6,9 @@ local JSON=require('json')
 local Colors=require('colors')
 local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,touchId=nil,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local Ink=require('windows_ink')
+local dispatchInkEvent
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -286,6 +288,7 @@ function love.load(args)
     A.options=options;local base=love.filesystem.getSourceBaseDirectory()
     package.path=base..'/?.lua;'..base..'/?/init.lua;'..package.path
     Native.load(base)
+    A.inkAttached=Ink.init(Native)
     A.root=options.data or (base..'/user-data');A.store=Store.open(A.root)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
     refreshGallery();status(Native.available and 'Motor C++ v1 carregado' or 'Galeria disponível · motor C++ ainda não compilado')
@@ -314,6 +317,9 @@ function love.errorhandler(message)
     return function()return 2 end
 end
 function love.update(dt)
+    if A.inkAttached and dispatchInkEvent then
+        for _,event in ipairs(Ink.poll()) do dispatchInkEvent(event) end
+    end
     if A.testReport then
         A.testFrames=A.testFrames+1
         if A.testFrames==2 and not A.options.selfTest and A.testReport.ok then
@@ -881,6 +887,9 @@ local function drawEditor(w,h)
     box(panel,64,268,h-112,'panel')
     text('PROJETO',panel+20,88,'small','muted');text(A.doc.name:sub(1,28),panel+20,115,'title')
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
+    text(A.inkAttached and ('Windows Ink · '..(A.inkPenId and 'caneta ativa'
+        or 'aguardando caneta')) or 'Caneta Win32: modo alternativo',
+        panel+20,171,'small','muted')
     button('Salvar · Ctrl+S',panel+20,186,228,38,saveDoc,A.dirty)
     button('Exportar PNG',panel+20,234,228,38,exportPNG)
     button('Renomear',panel+20,282,107,34,function()modal('rename');A.modal.values[1]=A.doc.name end)
