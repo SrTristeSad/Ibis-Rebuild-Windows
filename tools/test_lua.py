@@ -114,6 +114,9 @@ def run_tests(runtime_path, output):
             view_program="return require('json').encode(require('tests.test_canvas_view').run())"
             viewport=json.loads(native_state.execute(view_program))
             assert viewport.get('passed') and viewport.get('cursor_anchor') and viewport.get('bounds')
+            workspace_program="return require('json').encode(require('tests.test_workspace_layout').run())"
+            workspace=json.loads(native_state.execute(workspace_program))
+            assert workspace.get('passed') and workspace.get('expanded_canvas') and workspace.get('focus_zoom_anchor')
             tool_program="return require('json').encode(require('tests.test_editor_tools').run())"
             tool_registry=json.loads(native_state.execute(tool_program))
             assert tool_registry.get('passed') and tool_registry.get('ordered_shortcuts') and tool_registry.get('no_reserved_shortcut_collision')
@@ -171,6 +174,7 @@ def run_tests(runtime_path, output):
         report['touch_pressure'] = pressure_result
         report['native_tilt_brush'] = tilt_brush
         report['canvas_view'] = viewport
+        report['focus_workspace'] = workspace
         report['editor_tool_registry'] = tool_registry
         report['editor_vector_icons'] = icons
         report['native_layer_thumbnails'] = thumbs
