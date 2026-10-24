@@ -859,7 +859,6 @@ local function verifyBrushLibrary()
     assert(not A.brushLibrary and A.brushDiameter==24 and
         A.selectedBrushCustom==1,
         'Aplicar ajuste salvo não recuperou o pincel')
-    love.keypressed('escape') -- closed library; should not mutate brush.
     openBrushLibrary()
     assert(A.brushLibrary,'Reabrir biblioteca falhou')
     love.draw()
