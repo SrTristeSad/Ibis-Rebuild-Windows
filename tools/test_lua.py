@@ -111,6 +111,9 @@ def run_tests(runtime_path, output):
                           +json.dumps(tilt_root)+"))")
             tilt_brush=json.loads(native_state.execute(tilt_program))
             assert tilt_brush.get('passed') and tilt_brush.get('ellipse_orientation') and tilt_brush.get('rbd2_roundtrip')
+            view_program="return require('json').encode(require('tests.test_canvas_view').run())"
+            viewport=json.loads(native_state.execute(view_program))
+            assert viewport.get('passed') and viewport.get('cursor_anchor') and viewport.get('bounds')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -123,6 +126,7 @@ def run_tests(runtime_path, output):
         report['mouse_stabilizer'] = stabilizer
         report['touch_pressure'] = pressure_result
         report['native_tilt_brush'] = tilt_brush
+        report['canvas_view'] = viewport
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,
