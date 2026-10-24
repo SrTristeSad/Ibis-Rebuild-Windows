@@ -186,17 +186,29 @@ end
 local function undoDoc()
     A.shapePreview=nil
     finishStroke()
-    if A.layerSession and A.layerSession:undo() then
-        A.selection=nil;A.selectAction=nil;A.movePreview=nil
-        A.dirty=true;rebuildImage();status('Desfeito · apenas histórico desta sessão')
+    if A.layerSession then
+        local changed,structural=A.layerSession:undo()
+        if changed then
+            A.selection=nil;A.selectAction=nil;A.movePreview=nil
+            if structural then clearLayerThumbs();A.layerScroll=nil end
+            A.dirty=true;rebuildImage()
+            status(structural and 'Estrutura desfeita · sessão atual'
+                or 'Pintura desfeita · sessão atual')
+        end
     end
 end
 local function redoDoc()
     A.shapePreview=nil
     finishStroke()
-    if A.layerSession and A.layerSession:redo() then
-        A.selection=nil;A.selectAction=nil;A.movePreview=nil
-        A.dirty=true;rebuildImage();status('Refeito · apenas histórico desta sessão')
+    if A.layerSession then
+        local changed,structural=A.layerSession:redo()
+        if changed then
+            A.selection=nil;A.selectAction=nil;A.movePreview=nil
+            if structural then clearLayerThumbs();A.layerScroll=nil end
+            A.dirty=true;rebuildImage()
+            status(structural and 'Estrutura refeita · sessão atual'
+                or 'Pintura refeita · sessão atual')
+        end
     end
 end
 local function saveDoc()
