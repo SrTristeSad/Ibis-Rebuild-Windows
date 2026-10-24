@@ -43,7 +43,7 @@ function Icons.draw(id,cx,cy,size)
     g.translate(cx,cy)
     g.scale(size/16)
     g.setLineWidth(1.65)
-    g.setLineJoin('round')
+    g.setLineJoin('bevel')
     for _,command in ipairs(shapes) do
         if command.op=='line' then
             g.line(unpack(command.points))
