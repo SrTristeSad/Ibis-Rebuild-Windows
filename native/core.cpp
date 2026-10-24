@@ -754,3 +754,32 @@ rb_i32 rb_draw_tilt_stroke(rb_u8* dst, rb_u64 capacity,
     }
     return 0;
 }
+
+
+/* Reversible, allocation-free flip of a native RGBA8 raster. */
+rb_i32 rb_flip_rgba(rb_u8* dst,rb_u64 capacity,
+    rb_u32 width,rb_u32 height,rb_u32 axis) {
+    if (!plane(dst,capacity,width,height) || axis>1u) return -1;
+    if (axis==0u) {
+        for (rb_u32 y=0;y<height;++y) {
+            for (rb_u32 x=0;x<width/2;++x) {
+                rb_u8* left=dst+(static_cast<rb_u64>(y)*width+x)*4u;
+                rb_u8* right=dst+(static_cast<rb_u64>(y)*width+(width-1u-x))*4u;
+                for (rb_u32 c=0;c<4u;++c) {
+                    const rb_u8 tmp=left[c];left[c]=right[c];right[c]=tmp;
+                }
+            }
+        }
+    } else {
+        for (rb_u32 y=0;y<height/2;++y) {
+            for (rb_u32 x=0;x<width;++x) {
+                rb_u8* top=dst+(static_cast<rb_u64>(y)*width+x)*4u;
+                rb_u8* bottom=dst+(static_cast<rb_u64>(height-1u-y)*width+x)*4u;
+                for (rb_u32 c=0;c<4u;++c) {
+                    const rb_u8 tmp=top[c];top[c]=bottom[c];bottom[c]=tmp;
+                }
+            }
+        }
+    }
+    return 0;
+}
