@@ -58,6 +58,8 @@ A etapa 27 acrescenta [menus contextuais de camadas e ferramentas](docs/CONTEXT_
 
 A etapa 28 introduz a [biblioteca de pincéis raster (Ctrl+B)](docs/BRUSH_LIBRARY_STAGE28.md): quatro predefinições de traço rígido/suave usando o motor C++ atual, miniaturas esquemáticas e quatro espaços pessoais persistidos no `brushes.json` existente. A configuração não altera a obra RBD2 nem seu histórico.
 
+A etapa 29 incorpora [barras deslizantes de precisão](docs/PRECISION_SLIDERS_STAGE29.md) para diâmetro (1–256 px), opacidade do traço (10–100% em passos de 1%), estabilização (0–5) e tolerância do balde (0–255), sem remover os controles anteriores e sem alterar pixels ao arrastar os ajustes.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |

@@ -13,9 +13,10 @@ local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
+local Sliders=require('brush_sliders')
 local Workspace=require('workspace_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -165,7 +166,7 @@ local function openDoc(doc)
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
-    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -230,7 +231,7 @@ local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
-    A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false
+    A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -275,7 +276,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -478,6 +479,31 @@ local function deleteCustomBrush()
     A.brushes=nextItems
     A.selectedBrushCustom=nil
     status('Ajuste pessoal excluído · pincel atual mantido')
+end
+-- Parameter rails change only brush/fill settings. Never call raster APIs.
+local function applyParameterSlider(kind,x)
+    local panel=love.graphics.getWidth()-268
+    local value=Sliders.value(kind,x,panel)
+    if kind=='diameter' then A.brushDiameter=value
+    elseif kind=='opacity' then A.brushOpacity=value
+    elseif kind=='stabilization' then A.stabilization=value
+    elseif kind=='tolerance' then A.fillTolerance=value
+    else error('Controle deslizante desconhecido') end
+    return value
+end
+local function drawParameterSlider(kind,panel,value)
+    local rail=Sliders.rail(kind,panel)
+    local fraction=Sliders.fraction(kind,value)
+    c('line')
+    love.graphics.rectangle('fill',rail.x,rail.y+3,rail.w,4,2,2)
+    c('accent')
+    love.graphics.rectangle('fill',rail.x,rail.y+3,
+        math.max(.5,rail.w*fraction),4,2,2)
+    local cx=rail.x+rail.w*fraction
+    c('text')
+    love.graphics.circle('fill',cx,rail.y+rail.h/2,4,16)
+    c('accent')
+    love.graphics.circle('line',cx,rail.y+rail.h/2,4.5,16)
 end
 local function submitModal()
     local m=A.modal
@@ -882,6 +908,69 @@ local function verifyBrushLibrary()
     A.selectedBrushCustom=originalSlot
     selectTool(originalTool)
     A.sideTab=originalTab
+end
+-- Stage 29: tests actual LÖVE drag handlers rather than just slider math.
+-- Keep isolated to avoid LuaJIT's per-function local-variable ceiling.
+local function verifyPrecisionSliders()
+    local panel=love.graphics.getWidth()-268
+    local originalTool,originalTab=A.tool,A.sideTab
+    local originalDiameter,originalOpacity=A.brushDiameter,A.brushOpacity
+    local originalStabilization,originalTolerance=A.stabilization,A.fillTolerance
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    local dirty=A.dirty
+    local count=#A.doc.layers
+    selectTool('brush')
+    A.sideTab='brush'
+    local diameter=Sliders.rail('diameter',panel)
+    love.draw()
+    love.mousepressed(diameter.x,diameter.y+5,1,false)
+    assert(A.sliderDrag=='diameter' and A.brushDiameter==1 and
+        not A.drawing,'Click on size rail must capture slider without painting')
+    love.mousemoved(diameter.x+diameter.w/2,diameter.y+5,53,0,false)
+    assert(A.brushDiameter==129,'Size drag failed at center')
+    -- Release on the canvas side: no stroke or selection is allowed.
+    love.mousereleased(300,250,1,false)
+    assert(A.sliderDrag==nil and A.brushDiameter==1 and
+        not A.drawing,'Release left of rail must clamp and stop capture')
+    love.draw()
+    local opacity=Sliders.rail('opacity',panel)
+    love.mousepressed(opacity.x+opacity.w/2,opacity.y+4,1,false)
+    assert(A.sliderDrag=='opacity' and math.abs(A.brushOpacity-.55)<1e-8,
+        'Opacity should support 1% precision, starting at 55%')
+    love.mousemoved(opacity.x+opacity.w,opacity.y+4,53,0,false)
+    love.mousereleased(opacity.x+opacity.w,opacity.y+4,1,false)
+    assert(A.brushOpacity==1 and A.sliderDrag==nil,
+        'Opacity drag must reach 100% and release')
+    love.draw()
+    local stabil=Sliders.rail('stabilization',panel)
+    love.mousepressed(stabil.x+stabil.w/2,stabil.y+4,1,false)
+    love.mousereleased(stabil.x+stabil.w/2,stabil.y+4,1,false)
+    assert(A.stabilization==3,'Stabilization rail did not choose level 3')
+    selectTool('fill')
+    love.draw()
+    local tolerance=Sliders.rail('tolerance',panel)
+    love.mousepressed(tolerance.x+tolerance.w/2,tolerance.y+5,1,false)
+    love.mousereleased(tolerance.x+tolerance.w/2,tolerance.y+5,1,false)
+    assert(A.fillTolerance==128 and not A.drawing,
+        'Fill rail must choose tolerance 128 without painting')
+    -- Former +/- buttons remain functional in the same legacy rectangles.
+    selectTool('brush')
+    love.draw()
+    love.mousepressed(panel+40,472,1,false)
+    assert(A.brushDiameter==1,
+        'Legacy − button changed or escaped native range')
+    A.brushDiameter=4
+    love.draw();love.mousepressed(panel+208,472,1,false)
+    assert(A.brushDiameter==6,'Legacy diameter + stopped working')
+    assert(A.sliderDrag==nil and
+        Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history and
+        A.dirty==dirty and #A.doc.layers==count,
+        'Slider input must not affect document raster/history/dirty flag')
+    A.brushDiameter=originalDiameter;A.brushOpacity=originalOpacity
+    A.stabilization=originalStabilization;A.fillTolerance=originalTolerance
+    selectTool(originalTool);A.sideTab=originalTab
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -2125,6 +2214,7 @@ function love.update(dt)
                 verifyFocusWorkspace()
                 verifyContextMenus()
                 verifyBrushLibrary()
+                verifyPrecisionSliders()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2198,6 +2288,9 @@ function love.update(dt)
                     brush_library_button=true,brush_library_ctrl_b=true,
                     brush_library_builtin=true,brush_library_personal_roundtrip=true,
                     brush_library_isolated=true,brush_library_escape=true,
+                    precision_slider_drag=true,precision_slider_opacity=true,
+                    precision_slider_stabilization=true,precision_slider_tolerance=true,
+                    precision_slider_no_raster_edits=true,legacy_buttons_preserved=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -2524,6 +2617,7 @@ local function drawEditor(w,h)
                 A.fillTolerance=math.max(0,A.fillTolerance-8)end,
                 false,A.fillTolerance==0)
             text(('Tol. %d / 255'):format(A.fillTolerance),panel+77,464,'small')
+            drawParameterSlider('tolerance',panel,A.fillTolerance)
             button('+',panel+182,456,46,32,function()
                 A.fillTolerance=math.min(255,A.fillTolerance+8)end,
                 false,A.fillTolerance==255)
@@ -2541,6 +2635,7 @@ local function drawEditor(w,h)
             button('−',panel+20,456,46,32,function()
                 A.brushDiameter=math.max(1,A.brushDiameter-2)end)
             text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
+            drawParameterSlider('diameter',panel,A.brushDiameter)
             button('+',panel+182,456,46,32,function()
                 A.brushDiameter=math.min(256,A.brushDiameter+2)end)
         end
@@ -2576,6 +2671,7 @@ local function drawEditor(w,h)
             end,false,A.brushOpacity<=.101)
             text(('Opacidade %.0f%%'):format(A.brushOpacity*100+0.01),
                 panel+69,630,'small','muted')
+            drawParameterSlider('opacity',panel,A.brushOpacity)
             button('+',panel+206,622,42,30,function()
                 finishStroke()
                 A.brushOpacity=math.min(1,
@@ -2598,6 +2694,7 @@ local function drawEditor(w,h)
             end,false,A.stabilization==0)
             text(('Estabilizar %d / 5'):format(A.stabilization),
                 panel+68,713,'small','muted')
+            drawParameterSlider('stabilization',panel,A.stabilization)
             button('+',panel+206,705,42,29,function()
                 finishStroke()
                 A.stabilization=math.min(5,A.stabilization+1)
@@ -2859,6 +2956,18 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             end
         end
     end
+    if buttonNumber==1 and A.screen=='editor' and not A.modal
+        and not A.spaceHeld then
+        local panel=love.graphics.getWidth()-268
+        local kind=Sliders.kindAt(A.tool,A.sideTab,A.focusMode,panel,x,y)
+        if kind then
+            finishStroke()
+            A.shapePreview=nil
+            A.sliderDrag=kind
+            applyParameterSlider(kind,x)
+            return
+        end
+    end
     -- Middle/right mouse or Space+left pan the view without opening any
     -- painting, shape, selection or undo transaction.
     if A.screen=='editor' and not A.modal and
@@ -2947,6 +3056,11 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.sliderDrag and b==1 then
+        applyParameterSlider(A.sliderDrag,x)
+        A.sliderDrag=nil
+        return
+    end
     if A.toolHelp then return end
     if A.panning and b==A.panButton then
         A.panning=false;A.panButton=nil
@@ -2968,6 +3082,10 @@ local function pointerReleased(x,y,b,pressure)
     end
 end
 local function pointerMoved(x,y,dx,dy,pressure)
+    if A.sliderDrag then
+        applyParameterSlider(A.sliderDrag,x)
+        return
+    end
     if A.toolHelp then return end
     if A.panning then
         View.pan(A,dx,dy)
@@ -3074,7 +3192,7 @@ function love.focus(focused)
     if not focused then
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false
+        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
