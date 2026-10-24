@@ -27,8 +27,8 @@ function T.run(root)
     check(scene:rename(2,newName),'Valid UTF-8 layer rename did not apply')
     check(scene.doc.layers[2].name==newName,'Renamed metadata missing')
     check(not scene:rename(2,newName),'Identical name must be no-op')
-    check(scene:historyStats().undo==beforeHistory,
-        'Renaming metadata improperly invalidated raster undo')
+    check(scene:historyStats().undo==beforeHistory+1,
+        'Renaming metadata must append one history step without discarding painting')
     check(Native.bytes(scene.buffers[1])==lower and
         Native.bytes(scene.buffers[2])==upper,
         'Rename modified pixels')
