@@ -261,6 +261,18 @@ local function duplicateActiveLayer()
     status('Camada duplicada · cópia independente '..index)
     return index
 end
+local function mergeActiveLayerDown()
+    assert(A.screen=='editor' and A.layerSession,'Abra um projeto antes de mesclar')
+    finishStroke()
+    local index=A.layerSession:mergeDown(A.doc.active_layer)
+    clearLayerThumbs()
+    A.layerScroll=nil
+    A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
+    A.dirty=true
+    rebuildImage()
+    status('Camadas mescladas abaixo · Ctrl+Z restaura ambas')
+    return index
+end
 local function submitModal()
     local m=A.modal
     if m.kind=='folder' then
@@ -1652,6 +1664,11 @@ local function drawEditor(w,h)
     button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
     button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
     text('PAINEL',panel+20,343,'small','muted')
+    if A.sideTab=='layers' and A.tool~='picker' and A.tool~='shape' and
+        A.tool~='select' then
+        button('Mesclar ↓',panel+142,329,106,30,mergeActiveLayerDown,
+            false,A.doc.active_layer<=1)
+    end
     if A.tool=='picker' then
         text('CONTA-GOTAS · RGBA',panel+20,378,'small','muted')
         button('Visível',panel+20,419,108,35,function()
@@ -2266,6 +2283,10 @@ function love.keypressed(key)
                 A.toolHelp=false
             end
         end
+        return
+    end
+    if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='e' then
+        guard(mergeActiveLayerDown)()
         return
     end
     if A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='j' then
