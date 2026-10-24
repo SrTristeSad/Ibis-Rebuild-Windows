@@ -38,6 +38,8 @@ A etapa 17 adiciona [miniaturas RGBA reais no painel de camadas, cache de visual
 
 A etapa 18 acrescenta [renomear camadas por F2/Nome e visibilidade direta na lista](docs/LAYER_PROPERTIES_STAGE18.md), com validação UTF-8 idêntica ao RBD2 e manutenção de pixels, miniaturas e histórico ao mudar apenas o nome.
 
+A etapa 19 acrescenta [duplicação independente de camadas pelo botão Duplicar ou Ctrl+J](docs/LAYER_DUPLICATE_STAGE19.md), com cópia completa do buffer RGBA nativo, novo ID, miniatura própria, opacidade e visibilidade preservadas e persistência RBD2. A duplicação é estrutural e limpa o histórico raster atual, como adicionar/remover camadas.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -65,6 +67,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Central de ferramentas e atalhos | Etapa 16: teclas 1–8, ajuda por F1/H, paleta clicável e bloqueio de edição com ajuda aberta |
 | Miniaturas e navegação de camadas | Etapa 17: prévias de pixels reais, cache por camada, setas de paginação e layout para janelas menores |
 | Propriedades individuais de camadas | Etapa 18: renomeio com validação RBD2 e botão Vis/Oc. por linha sem alterar a camada selecionada |
+| Duplicação de camada independente | Etapa 19: novo buffer RGBA, cópia de metadados, botão/Ctrl+J e RBD2; respeita 8 camadas |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 
