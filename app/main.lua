@@ -1222,8 +1222,8 @@ function love.update(dt)
                 assert(not A.modal and A.doc.layers[7].name=='Arte azul Étapa 18',
                     'Renomeio pela interface não salvou nome UTF-8')
                 assert(Native.bytes(A.layerSession.buffers[7])==renamePixelBytes
-                    and A.layerSession:historyStats().undo==historyBeforeRename,
-                    'Renomear camada mudou pixels ou histórico')
+                    and A.layerSession:historyStats().undo==historyBeforeRename+1,
+                    'Renomear camada deve criar histórico sem modificar pixels')
                 assert(layerThumb(7)==previewBeforeRename,
                     'Renomeio recriou miniatura desnecessariamente')
                 local renameSaved=A.store:openProject(A.doc.id)
