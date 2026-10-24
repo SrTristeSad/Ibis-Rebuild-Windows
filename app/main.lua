@@ -1542,6 +1542,12 @@ function love.update(dt)
                     'Ctrl+Z não restaurou a segunda mesclagem')
                 -- Stage 23: GUI button uses C++ to mirror the active layer.
                 local flipIndex=A.doc.active_layer
+                A.layerSession:beginEdit()
+                A.layerSession:pixel(0,0,0xff1122ff)
+                A.layerSession:pixel(A.doc.width-1,A.doc.height-1,0x1133aaff)
+                assert(A.layerSession:finishEdit(),
+                    'Fixture de espelhamento não criou pixels assimétricos')
+                A.dirty=true;rebuildImage()
                 local flipOriginal=Native.bytes(A.layerSession:activeBuffer())
                 local flipOther=Native.bytes(A.layerSession.buffers[1])
                 love.draw()
