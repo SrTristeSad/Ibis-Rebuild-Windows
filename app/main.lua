@@ -4,7 +4,8 @@ local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
 local Colors=require('colors')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local Stabilizer=require('stroke_stabilizer')
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -54,9 +55,36 @@ local function openDoc(doc)
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
-local function finishStroke()
+-- All stroke styles use the same compositing and transaction boundary.
+local function paintBrushSegment(x,y)
+    if not A.drawing then return end
+    local previousX,previousY=A.lastStrokeX,A.lastStrokeY
+    if x==previousX and y==previousY then return end
+    if A.tool=='erase' then
+        A.layerSession:erase(previousX,previousY,x,y,
+            A.brushDiameter,A.brushOpacity)
+    elseif A.brushStyle=='soft' then
+        A.layerSession:softStroke(previousX,previousY,x,y,
+            A.brushDiameter,A.color,A.brushOpacity,0.25)
+    else
+        A.layerSession:stroke(previousX,previousY,x,y,
+            A.brushDiameter,A.color,A.brushOpacity)
+    end
+    A.lastStrokeX=x;A.lastStrokeY=y
+    A.dirty=true;rebuildImage()
+end
+local function finishStroke(finalX,finalY)
+    if A.drawing and A.stabilizer then
+        if finalX and finalY then
+            local x,y=A.stabilizer:sample(finalX,finalY)
+            paintBrushSegment(x,y)
+        end
+        -- Final endpoint correction avoids dropped last pixel when smoothing.
+        local x,y=A.stabilizer:finish()
+        paintBrushSegment(x,y)
+    end
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
-    A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil
+    A.drawing=false;A.stabilizer=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
 local function undoDoc()
     A.shapePreview=nil
