@@ -96,6 +96,11 @@ def run_tests(runtime_path, output):
                              +json.dumps(feather_root)+"))")
             feather=json.loads(native_state.execute(feather_program))
             assert feather.get('passed') and feather.get('soft_edge') and feather.get('rbd2_roundtrip')
+            stabilizer_root=(output / ('stroke-stabilizer-' + str(time.time_ns()))).as_posix()
+            stabilizer_program=("return require('json').encode(require('tests.test_stabilizer').run("
+                                +json.dumps(stabilizer_root)+"))")
+            stabilizer=json.loads(native_state.execute(stabilizer_program))
+            assert stabilizer.get('passed') and stabilizer.get('endpoint_exact') and stabilizer.get('rbd2_roundtrip')
 
         assert native_state.close_succeeded
         report['native_layers'] = layers
@@ -105,6 +110,7 @@ def run_tests(runtime_path, output):
         report['native_shapes'] = shapes
         report['native_colors_lines'] = color_lines
         report['native_feather_brush'] = feather
+        report['mouse_stabilizer'] = stabilizer
     report['native_luajit_ffi'] = native_ffi
     report.update(ok=True, lua_identity=identity, lifecycle_cycles=lifecycle,
                   close_succeeded=True, syntax_checked=len(sources), storage=storage,

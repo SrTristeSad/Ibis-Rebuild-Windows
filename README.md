@@ -22,6 +22,8 @@ A etapa 9 adiciona [conta-gotas de pixels visíveis ou da camada ativa, cores he
 
 A etapa 10 introduz [pincel suave de borda gradual e controle de opacidade da pintura](docs/FEATHER_BRUSH_STAGE10.md). O pincel rígido antigo permanece inalterado; ambos usam C++ e camadas RBD2, com desfazer/refazer por arraste. Não há equivalência com os pincéis Android.
 
+A etapa 11 acrescenta [estabilização de traços pelo mouse com níveis de 0 a 5](docs/STROKE_STABILIZER_STAGE11.md) para os pincéis e a borracha, com correção da extremidade ao soltar o mouse. Os pixels continuam rasterizados pelo C++ e salvos no RBD2; não equivale à estabilização do ibisPaint Android.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
@@ -41,6 +43,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 | Formas: retângulo e elipse, cheias ou com contorno | Implementação raster independente da etapa 8, com arraste e histórico |
 | Conta-gotas, cores RGBA personalizadas e linha reta | Etapa 9: leitura do raster nativo, cor hexadecimal estrita, traço C++ reversível |
 | Pincel suave e opacidade por traço | Etapa 10: borda gradual C++, estilo rígido/suave e opacidade 10–100% |
+| Estabilização de traço pelo mouse | Etapa 11: níveis 0–5, filtro de movimento e preservação exata do ponto final |
 | Seleções avançadas, preenchimento e transformações Android | Pendente |
 | Formas avançadas, filtros, texto, importação IPV e paridade Android | Pendente |
 

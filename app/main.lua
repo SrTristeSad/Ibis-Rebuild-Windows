@@ -4,7 +4,8 @@ local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
 local Colors=require('colors')
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
+local Stabilizer=require('stroke_stabilizer')
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,stabilization=0,stabilizer=nil,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers'}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -54,9 +55,36 @@ local function openDoc(doc)
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
-local function finishStroke()
+-- All stroke styles use the same compositing and transaction boundary.
+local function paintBrushSegment(x,y)
+    if not A.drawing then return end
+    local previousX,previousY=A.lastStrokeX,A.lastStrokeY
+    if x==previousX and y==previousY then return end
+    if A.tool=='erase' then
+        A.layerSession:erase(previousX,previousY,x,y,
+            A.brushDiameter,A.brushOpacity)
+    elseif A.brushStyle=='soft' then
+        A.layerSession:softStroke(previousX,previousY,x,y,
+            A.brushDiameter,A.color,A.brushOpacity,0.25)
+    else
+        A.layerSession:stroke(previousX,previousY,x,y,
+            A.brushDiameter,A.color,A.brushOpacity)
+    end
+    A.lastStrokeX=x;A.lastStrokeY=y
+    A.dirty=true;rebuildImage()
+end
+local function finishStroke(finalX,finalY)
+    if A.drawing and A.stabilizer then
+        if finalX and finalY then
+            local x,y=A.stabilizer:sample(finalX,finalY)
+            paintBrushSegment(x,y)
+        end
+        -- Final endpoint correction avoids dropped last pixel when smoothing.
+        local x,y=A.stabilizer:finish()
+        paintBrushSegment(x,y)
+    end
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
-    A.drawing=false;A.lastStrokeX=nil;A.lastStrokeY=nil
+    A.drawing=false;A.stabilizer=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
 local function undoDoc()
     A.shapePreview=nil
@@ -600,6 +628,47 @@ function love.update(dt)
                     'RBD2 did not preserve soft brush opacity')
                 love.draw();love.mousepressed(panel+72,594,1)
                 assert(A.brushStyle=='hard','Hard brush toggle did not work')
+                -- Actual stabilization buttons, pointer events and exact release.
+                assert(A.stabilization==0,'Stabilizer should default to off')
+                for i=1,3 do
+                    love.draw();love.mousepressed(panel+226,720,1)
+                end
+                assert(A.stabilization==3,'Stabilization increment buttons failed')
+                A.layerSession:add('Traço filtrado GUI')
+                A.dirty=true;rebuildImage()
+                local startX,startY=point(1,5)
+                local moveX,moveY=point(3,5)
+                local endX,endY=point(8,5)
+                local undoCount=A.layerSession:historyStats().undo
+                love.draw();love.mousepressed(startX,startY,1)
+                assert(A.stabilizer and A.stabilizer.level==3,
+                    'Mouse press failed to create smoothing state')
+                love.mousemoved(moveX,moveY,moveX-startX,moveY-startY)
+                assert(A.lastStrokeX<3.5,
+                    'Stabilized move must follow behind the raw pointer')
+                love.mousereleased(endX,endY,1)
+                assert(A.stabilizer==nil and not A.drawing,
+                    'Release did not finish the stabilization session')
+                local endpoint=Native.readPixel(A.layerSession:activeBuffer(),8,5)
+                assert(endpoint%256>0,
+                    'Smoothed stroke failed to reach actual release pixel')
+                assert(A.layerSession:historyStats().undo==undoCount+1,
+                    'Filtered drag must be only one undo step')
+                undoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),8,5)==0,
+                    'Stabilized stroke undo failed')
+                redoDoc()
+                assert(Native.readPixel(A.layerSession:activeBuffer(),8,5)==endpoint,
+                    'Stabilized stroke redo failed')
+                saveDoc()
+                local stabilized=A.store:openProject(A.doc.id)
+                local finalOffset=(5*A.doc.width+8)*4+1
+                assert(stabilized.layers[4].pixels:byte(finalOffset+3)==endpoint%256,
+                    'Stabilized endpoint failed RBD2 roundtrip')
+                for i=1,3 do
+                    love.draw();love.mousepressed(panel+40,720,1)
+                end
+                assert(A.stabilization==0,'Stabilization decrement buttons failed')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -615,6 +684,9 @@ function love.update(dt)
                     soft_brush_toggle=true,brush_opacity_control=true,
                     feather_drag_alpha=true,brush_undo_redo=true,
                     soft_brush_rbd2_roundtrip=true,
+                    stabilization_buttons=true,filtered_mouse_drag=true,
+                    stabilized_exact_endpoint=true,stabilized_undo_redo=true,
+                    stabilized_rbd2_roundtrip=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -914,10 +986,21 @@ local function drawEditor(w,h)
             end
         end
         editShapeColorButton(panel,669)
-        text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
-            or A.tool=='brush' and 'Pincel C++ próprio · sem paridade Android'
-            or A.tool=='erase' and 'Borracha rígida · alfa editável'
-            or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
+        if A.tool=='brush' or A.tool=='erase' then
+            button('−',panel+20,705,42,29,function()
+                finishStroke()
+                A.stabilization=math.max(0,A.stabilization-1)
+            end,false,A.stabilization==0)
+            text(('Estabilizar %d / 5'):format(A.stabilization),
+                panel+68,713,'small','muted')
+            button('+',panel+206,705,42,29,function()
+                finishStroke()
+                A.stabilization=math.min(5,A.stabilization+1)
+            end,false,A.stabilization==5)
+        else
+            text(A.tool=='fill' and 'Tolerância por canal RGBA · camada ativa'
+                or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
+        end
     end
     end
     text(('Zoom %.0f%% · rotação %.0f°'):format(A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
@@ -1020,6 +1103,7 @@ function love.mousepressed(x,y,buttonNumber)
                             A.color,A.brushOpacity)
                     end
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
+                    A.stabilizer=Stabilizer.new(A.stabilization,px,py)
                     A.dirty=true;rebuildImage()
                     status(A.tool=='erase' and 'Borracha C++ · apaga a camada ativa'
                         or 'Pincel C++ · histórico por pincelada · Ctrl+Z')
@@ -1033,7 +1117,16 @@ function love.mousereleased(x,y,b)
     if b==1 then
         guard(finishShape)()
         guard(finishSelection)()
-        guard(finishStroke)()
+        if A.drawing then
+            guard(function()
+                local px,py=canvasPoint(x,y)
+                px=math.max(-16384,math.min(16384,px))
+                py=math.max(-16384,math.min(16384,py))
+                finishStroke(px,py)
+            end)()
+        else
+            guard(finishStroke)()
+        end
     end
 end
 function love.mousemoved(x,y,dx,dy)
@@ -1064,18 +1157,10 @@ function love.mousemoved(x,y,dx,dy)
     if A.drawing and A.screen=='editor' and (A.tool=='brush' or A.tool=='erase') and not A.modal then
         guard(function()
             local px,py=canvasPoint(x,y)
-            if A.tool=='erase' then
-                A.layerSession:erase(A.lastStrokeX,A.lastStrokeY,px,py,
-                    A.brushDiameter,A.brushOpacity)
-            elseif A.brushStyle=='soft' then
-                A.layerSession:softStroke(A.lastStrokeX,A.lastStrokeY,px,py,
-                    A.brushDiameter,A.color,A.brushOpacity,0.25)
-            else
-                A.layerSession:stroke(A.lastStrokeX,A.lastStrokeY,px,py,
-                    A.brushDiameter,A.color,A.brushOpacity)
-            end
-            A.lastStrokeX=px;A.lastStrokeY=py
-            A.dirty=true;rebuildImage()
+            px=math.max(-16384,math.min(16384,px))
+            py=math.max(-16384,math.min(16384,py))
+            local sx,sy=A.stabilizer:sample(px,py)
+            paintBrushSegment(sx,sy)
         end)()
     end
 end
