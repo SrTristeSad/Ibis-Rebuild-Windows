@@ -8,8 +8,9 @@ local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
 local View=require('canvas_view')
+local EditorTools=require('editor_tools')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false}
 local palette={bg={.055,.070,.09},panel={.09,.111,.14},card={.12,.15,.19},line={.20,.24,.29},text={.90,.94,.97},muted={.55,.64,.72},accent={.24,.80,.70},warn={1,.70,.30}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
@@ -86,6 +87,7 @@ local function openDoc(doc)
     A.buffer=A.layerSession.composite
     A.screen='editor';A.dirty=false
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
+    A.toolHelp=false
     rebuildImage();fit()
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
@@ -125,6 +127,19 @@ local function finishStroke(finalX,finalY,pressure)
     end
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
     A.drawing=false;A.stabilizer=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
+end
+local function selectTool(id)
+    local item=EditorTools.fromId(id)
+    assert(item,'Ferramenta inválida')
+    if A.screen~='editor' or A.inkPenId~=nil or A.touchId~=nil then
+        return false
+    end
+    finishStroke()
+    if A.tool~=id then A.shapePreview=nil end
+    A.tool=id
+    local tab=EditorTools.panelFor(id)
+    if tab then A.sideTab=tab end
+    return true
 end
 local function undoDoc()
     A.shapePreview=nil
