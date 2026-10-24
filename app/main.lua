@@ -995,6 +995,60 @@ function love.update(dt)
                 assert(not A.layerSession.pending and not A.drawing,
                     'Navegação deixou transação de pincel aberta')
                 love.keypressed('f')
+                -- Stage 16: use real shortcut callbacks and the actual
+                -- interactive help overlay, without modifying any pixels.
+                local toolsBefore=Native.bytes(A.layerSession:activeBuffer())
+                local historyBefore=A.layerSession:historyStats().undo
+                local toolIds={'inspect','pixel','brush','erase','fill',
+                               'select','shape','picker'}
+                for i,id in ipairs(toolIds) do
+                    love.keypressed(tostring(i))
+                    assert(A.tool==id,
+                        'Atalho de ferramenta '..i..' não selecionou '..id)
+                end
+                love.keypressed('3')
+                assert(A.tool=='brush' and A.sideTab=='brush',
+                    'Atalho Pincel não abriu as configurações')
+                local helpPanel=love.graphics.getWidth()-268
+                love.draw()
+                love.mousepressed(helpPanel+206,96,1,false)
+                assert(A.toolHelp,'Botão de ajuda não abriu a paleta')
+                love.draw()
+                local helpZoom=A.zoom
+                love.mousepressed(80,200,1,false)
+                love.mousemoved(120,220,40,20,false)
+                love.mousereleased(120,220,1,false)
+                love.wheelmoved(0,2)
+                assert(A.toolHelp and A.tool=='brush' and A.zoom==helpZoom,
+                    'Paleta não bloqueou entradas no canvas/zoom')
+                love.keypressed('6')
+                assert(not A.toolHelp and A.tool=='select',
+                    'Atalho dentro da ajuda não selecionou ferramenta')
+                love.keypressed('f1')
+                assert(A.toolHelp,'F1 não reabriu ajuda')
+                love.draw()
+                local helpWidth=math.min(640,screenW-80)
+                local helpHeight=math.min(544,screenH-72)
+                local helpX=(screenW-helpWidth)/2
+                local helpY=(screenH-helpHeight)/2
+                love.mousepressed(helpX+60,helpY+94+65+17,1,false)
+                assert(not A.toolHelp and A.tool=='brush',
+                    'Clique no Pincel da paleta não selecionou ferramenta')
+                love.keypressed('h')
+                assert(A.toolHelp,'H não abriu ajuda')
+                love.keypressed('escape')
+                assert(not A.toolHelp and A.screen=='editor',
+                    'Esc não fechou ajuda mantendo o editor aberto')
+                love.keypressed('f1')
+                love.draw()
+                love.mousepressed(helpX+helpWidth-95,
+                    helpY+helpHeight-33,1,false)
+                assert(not A.toolHelp,'Botão Fechar ajuda não funcionou')
+                assert(Native.bytes(A.layerSession:activeBuffer())==toolsBefore,
+                    'Atalhos ou paleta alteraram pixels da obra')
+                assert(A.layerSession:historyStats().undo==historyBefore and
+                    not A.layerSession.pending and not A.drawing,
+                    'Paleta criou entradas no histórico de desenho')
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -1026,6 +1080,9 @@ function love.update(dt)
                     canvas_keyboard_shortcuts=true,canvas_pan_space=true,
                     canvas_pan_middle_right=true,canvas_wheel_zoom=true,
                     canvas_navigation_no_raster_edit=true,
+                    editor_tool_shortcuts=true,tool_help_sidebar_button=true,
+                    tool_help_keyboard=true,tool_help_tool_buttons=true,
+                    tool_help_blocks_canvas=true,tool_help_no_raster_edit=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
