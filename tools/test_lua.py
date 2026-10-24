@@ -126,6 +126,10 @@ def run_tests(runtime_path, output):
             menus_program="return require('json').encode(require('tests.test_context_menus').run())"
             menus=json.loads(native_state.execute(menus_program))
             assert menus.get('passed') and menus.get('layer_commands') and menus.get('tool_commands') and menus.get('bounds_safe')
+            brush_root=(output / ('brush-presets-' + str(time.time_ns()))).as_posix()
+            brush_program=("return require('json').encode(require('tests.test_brush_presets').run(" + json.dumps(brush_root) + "))")
+            brush_presets=json.loads(native_state.execute(brush_program))
+            assert brush_presets.get('passed') and brush_presets.get('local_roundtrip') and brush_presets.get('legacy_library_preserved')
             thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
             thumbs=json.loads(native_state.execute(thumbnail_program))
             assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
@@ -181,6 +185,7 @@ def run_tests(runtime_path, output):
         report['editor_tool_registry'] = tool_registry
         report['editor_vector_icons'] = icons
         report['editor_context_menus'] = menus
+        report['brush_library'] = brush_presets
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result
