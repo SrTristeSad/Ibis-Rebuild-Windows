@@ -855,7 +855,7 @@ local function verifyBrushLibrary()
         'Salvar ajuste deve manter a biblioteca aberta')
     A.brushDiameter=7
     love.draw()
-    love.mousepressed(rect.x+35,rect.y+80+4*88+10,1,false)
+    love.mousepressed(rect.x+35,rect.y+80+2*88+10,1,false)
     assert(not A.brushLibrary and A.brushDiameter==24 and
         A.selectedBrushCustom==1,
         'Aplicar ajuste salvo não recuperou o pincel')
