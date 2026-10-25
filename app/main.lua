@@ -14,12 +14,13 @@ local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
+local Samples=require('brush_samples')
 local Sliders=require('brush_sliders')
 local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -92,6 +93,14 @@ local function releaseTipCache()
         A.tipCache.image:release()
     end
     A.tipCache=nil
+end
+local function releaseBrushSamples()
+    if A.brushSampleCache then
+        for _,entry in pairs(A.brushSampleCache) do
+            if entry.image then entry.image:release() end
+        end
+    end
+    A.brushSampleCache={}
 end
 local function externalWrite(path,bytes)
     path=path:gsub('\\','/');local dir,name=path:match('^(.*)/([^/]+)$');assert(dir and name,'Caminho absoluto necessário')
@@ -191,6 +200,7 @@ local function openDoc(doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
     releaseTipCache()
+    releaseBrushSamples()
     A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
     A.compactPanel=nil;A.compactLayerStart=nil
@@ -549,7 +559,14 @@ local function openBrushLibrary()
     finishStroke()
     A.contextMenu=nil;A.toolHelp=false
     A.brushLibrary=true;A.brushFilter='all'
-    status('Biblioteca: opções de pincel próprio · Esc fecha')
+    local preferred=A.selectedBrushCustom and A.selectedBrushCustom+4 or 1
+    A.brushFocus=Presets.focus('all',Presets.custom(A.brushes),preferred)
+    status('Biblioteca: setas navegam · Enter aplica · Tab muda categoria')
+end
+local function switchBrushCategory(filter)
+    local saved=Presets.custom(A.brushes)
+    A.brushFilter=filter
+    A.brushFocus=Presets.focus(filter,saved,A.brushFocus)
 end
 local function applyBrushPreset(preset)
     finishStroke()
@@ -4380,6 +4397,7 @@ function love.resize()if A.doc then fit()end end
 function love.quit()
     Ink.close()
     releaseTipCache()
+    releaseBrushSamples()
     clearLayerThumbs()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end
