@@ -3648,6 +3648,58 @@ local function brushSampleImage(slot,preset)
 end
 -- Modal brush catalogue. Every preview uses native renderer parameters
 -- only as a schematic sample, never claims a pixel-perfect Android stroke.
+-- The larger live inspector uses the existing C++ preview renderer.
+-- It is a scratch image, never a document stroke.
+local function drawBrushLab(rect)
+    local p=Lab.layout(rect)
+    box(p.x,p.y,p.w,p.h,'card')
+    text('PRÉVIA',p.x+9,p.y+11,'small','muted')
+    local draft=assert(A.brushLabDraft,'Nenhum pincel em prévia')
+    text(draft.style=='hard' and 'Rígido' or 'Suave',
+        p.x+9,p.y+29,'small','accent')
+    local space=Lab.preview(rect)
+    local tile=11
+    for row=0,math.ceil(space.h/tile)-1 do
+        for col=0,math.ceil(space.w/tile)-1 do
+            local v=(row+col)%2==0 and .79 or .57
+            love.graphics.setColor(v,v,v,1)
+            love.graphics.rectangle('fill',space.x+col*tile,
+                space.y+row*tile,
+                math.min(tile,space.w-col*tile),
+                math.min(tile,space.h-row*tile))
+        end
+    end
+    local image=brushSampleImage('inspector',draft)
+    local fit=Lab.fit(image.sample.width,image.sample.height,space)
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(image.image,fit.x,fit.y,0,fit.sx,fit.sy)
+    local names={diameter='Tamanho',opacity='Opacidade',
+        stabilization='Estabil.'}
+    for _,kind in ipairs({'diameter','opacity','stabilization'}) do
+        local rail=Lab.rail(rect,kind)
+        local value=draft[kind]
+        local valueString=kind=='diameter' and
+            tostring(value)..' px' or kind=='opacity' and
+            ('%.0f%%'):format(value*100) or
+            tostring(value)..'/5'
+        text(names[kind],rail.x,rail.y-20,'small','muted')
+        love.graphics.setFont(A.fonts.small)
+        local labelWidth=A.fonts.small:getWidth(valueString)
+        text(valueString,rail.x+rail.w-labelWidth,rail.y-20,'small')
+        c('line');love.graphics.rectangle('fill',
+            rail.x,rail.y+4,rail.w,5,2,2)
+        c('accent')
+        local fraction=Lab.fraction(kind,value)
+        love.graphics.rectangle('fill',rail.x,rail.y+4,
+            math.max(1,rail.w*fraction),5,2,2)
+        c('text')
+        love.graphics.circle('fill',
+            rail.x+rail.w*fraction,rail.y+6.5,5,18)
+    end
+    button(A.brushLabEdited and 'Aplicar ajustes *' or
+        'Aplicar ajustes',p.x+8,p.y+p.h-36,p.w-16,31,
+        applyBrushLab)
+end
 local function drawBrushLibrary(w,h)
     local rect=Presets.layout(w,h)
     love.graphics.setColor(0,0,0,.78)
@@ -3665,7 +3717,7 @@ local function drawBrushLibrary(w,h)
     button('Meus',rect.x+567,rect.y+47,110,30,function()
         switchBrushCategory('personal') end,A.brushFilter=='personal')
     local saved=Presets.custom(A.brushes)
-    local half=(rect.w-56)/2
+    local half=(Lab.CATALOGUE_WIDTH-56)/2
     for i=1,8 do
         local column=(i-1)%2
         local line=math.floor((i-1)/2)
@@ -3713,7 +3765,8 @@ local function drawBrushLibrary(w,h)
     for i=1,Presets.LIMIT do
         if saved[i] then filled=filled+1 end
     end
-    text(('AJUSTES SALVOS  %d / %d · Amostras C++ (escala reduzida)'):format(
+    drawBrushLab(rect)
+    text(('AJUSTES SALVOS  %d / %d · Amostras C++'):format(
         filled,Presets.LIMIT),
         rect.x+20,rect.y+452,'small','muted')
     button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
