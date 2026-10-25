@@ -1731,6 +1731,13 @@ local function verifyBrushLabLive()
     assert(A.brushLabDraft.stabilization==5 and A.brushLabEdited,
         'Stabilizer and draft-modified indicator failed')
     love.draw()
+    local appliedPreview=assert(A.brushSampleCache.inspector_active,
+        'In-use C++ comparison sample must be rendered')
+    local inUse=brushInUse()
+    assert(appliedPreview.key==Samples.key(inUse,A.color) and
+        Native.bytes(appliedPreview.sample.buffer)==
+        Native.bytes(Samples.render(Native,inUse,A.color).buffer),
+        'In-use comparison differs from actual C++ brush parameters')
     local updated=assert(A.brushSampleCache.inspector)
     assert(updated~=initial and
         updated.key==Samples.key(A.brushLabDraft,A.color),
@@ -1758,8 +1765,27 @@ local function verifyBrushLabLive()
     local again=Lab.rail(rect,'diameter')
     love.mousepressed(again.x,again.y+7,1,false)
     love.mousereleased(again.x,again.y+7,1,false)
-    assert(A.brushLabDraft.diameter==1,
+    assert(A.brushLabDraft.diameter==1 and A.brushLabEdited,
         'Cancel test did not edit draft independently')
+    -- Restoring draft leaves the previously applied settings untouched.
+    love.draw()
+    local reset=Lab.resetRect(rect)
+    love.mousepressed(reset.x+reset.w/2,reset.y+reset.h/2,1,false)
+    assert(A.brushLibrary and A.brushLabDraft.diameter==3 and
+        A.brushLabDraft.opacity==1 and
+        A.brushLabEdited==false and A.brushDiameter==129,
+        'Repor must restore focused preset without changing applied brush')
+    love.draw()
+    assert(A.brushSampleCache.inspector.key==
+        Samples.key(A.brushLabDraft,A.color) and
+        Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history,
+        'Restored preview must redraw native sample without editing raster')
+    -- Edits can still be abandoned with Escape after a reset.
+    love.mousepressed(again.x,again.y+7,1,false)
+    love.mousereleased(again.x,again.y+7,1,false)
+    assert(A.brushLabDraft.diameter==1,
+        'Reset did not leave the inspector editable')
     love.keypressed('escape')
     assert(not A.brushLibrary and A.brushDiameter==129,
         'Escape must discard unsaved draft adjustments')
