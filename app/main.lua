@@ -12,6 +12,8 @@ local View=require('canvas_view')
 local EditorTools=require('editor_tools')
 local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
+local GalleryThumb=require('gallery_thumbnails')
+local TextFit=require('text_fit')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
 local Samples=require('brush_samples')
@@ -68,6 +70,17 @@ local function button(label,x,y,w,h,fn,active,disabled)
     if not disabled then
         A.buttons[#A.buttons+1]={x=x,y=y,w=w,h=h,fn=guard(fn)}
     end
+end
+local function iconButton(id,x,y,w,h,fn,active,disabled)
+    button('',x,y,w,h,fn,active,disabled)
+    c(disabled and 'muted' or active and 'accent' or 'text')
+    Icons.draw(id,x+w/2,y+h/2,17)
+end
+local function fitted(value,x,y,font,key,maxWidth)
+    local face=A.fonts[font or 'body']
+    text(TextFit.truncate(value,maxWidth,function(s)
+        return face:getWidth(s)
+    end),x,y,font,key)
 end
 -- Same click rectangles as earlier stages; only their rendering changes.
 local toolSlots={
@@ -3163,6 +3176,48 @@ function love.update(dt)
         end
     end
 end
+local function galleryPreview(doc)
+    if not Native.available then return nil end
+    A.galleryPreviewCache=A.galleryPreviewCache or {order={},entries={}}
+    local cache=A.galleryPreviewCache
+    local key=GalleryThumb.key(doc)
+    if cache.entries[key] then
+        return cache.entries[key].image
+    end
+    if (A.galleryPreviewBudget or 0)<=0 then return nil end
+    A.galleryPreviewBudget=A.galleryPreviewBudget-1
+    local ok,item=pcall(function()
+        local saved=A.store:openProject(doc.id)
+        local session=Layers.open(A.store,saved)
+        local width,height=GalleryThumb.size(saved.width,saved.height,176,74)
+        local data=love.image.newImageData(width,height,'rgba8')
+        GalleryThumb.sample(Native.bytes(session.composite),
+            saved.width,saved.height,width,height,function(r,g,b,a,x,y)
+                data:setPixel(x,y,r/255,g/255,b/255,a/255)
+            end)
+        local image=love.graphics.newImage(data)
+        image:setFilter('linear','linear')
+        data:release()
+        return image
+    end)
+    cache.entries[key]={image=ok and item or nil}
+    cache.order[#cache.order+1]=key
+    if #cache.order>16 then
+        local old=table.remove(cache.order,1)
+        local previous=cache.entries[old]
+        if previous and previous.image then previous.image:release() end
+        cache.entries[old]=nil
+    end
+    return ok and item or nil
+end
+local function releaseGalleryPreviews()
+    if A.galleryPreviewCache then
+        for _,entry in pairs(A.galleryPreviewCache.entries) do
+            if entry.image then entry.image:release() end
+        end
+    end
+    A.galleryPreviewCache=nil
+end
 local function drawGallery(w,h)
     text('Meus desenhos',42,106,'large');text('Projetos locais editáveis · organização offline',44,163,'body','muted')
     button('Nova tela',w-322,113,140,42,function()modal('new')end,true,not Native.available)
@@ -3170,21 +3225,47 @@ local function drawGallery(w,h)
     button('Raiz',44,206,70,32,function()setFolder('')end,A.folder=='')
     if A.folder~='' then text('/ '..A.folder,127,213,'small','muted') end
     local colw=230;local cols=math.max(1,math.floor((w-88)/colw));local index=0
-    local function card(label,sub,folder,fn)
+    local function card(label,sub,folder,fn,project)
         local x=44+(index%cols)*colw;local y=266+math.floor(index/cols)*172;index=index+1
         if y+150>h-66 then return end
         box(x,y,212,148,'card')
         if folder then
             c('accent');love.graphics.rectangle('fill',x+20,y+26,48,33,5,5);love.graphics.rectangle('fill',x+20,y+18,23,14,3,3)
         else
-            c('line');love.graphics.rectangle('fill',x+18,y+16,176,74,3,3)
-            c('muted');love.graphics.rectangle('line',x+77,y+27,58,52)
+            c('bg')
+            love.graphics.rectangle('fill',x+18,y+16,176,74,3,3)
+            local preview=project and galleryPreview(project)
+            if preview then
+                local pw,ph=preview:getDimensions()
+                local left=x+18+(176-pw)/2
+                local top=y+16+(74-ph)/2
+                local tile=8
+                for row=0,math.ceil(ph/tile)-1 do
+                    for col=0,math.ceil(pw/tile)-1 do
+                        local v=(row+col)%2==0 and .83 or .67
+                        love.graphics.setColor(v,v,v,1)
+                        love.graphics.rectangle('fill',
+                            left+col*tile,top+row*tile,
+                            math.min(tile,pw-col*tile),
+                            math.min(tile,ph-row*tile))
+                    end
+                end
+                love.graphics.setColor(1,1,1,1)
+                love.graphics.draw(preview,left,top)
+            else
+                c('muted')
+                love.graphics.rectangle('line',x+80,y+31,52,42,3,3)
+            end
         end
-        text(label:sub(1,30),x+18,y+102,'body');text(sub,x+18,y+124,'small','muted')
+        fitted(label,x+18,y+102,'body','text',176)
+        text(sub,x+18,y+124,'small','muted')
         A.buttons[#A.buttons+1]={x=x,y=y,w=212,h=148,fn=guard(fn)}
     end
     for _,folder in ipairs(A.folders) do card(folder.name,'Pasta',true,function()setFolder(folder.id)end) end
-    for _,doc in ipairs(A.projects) do card(doc.name,doc.width..' × '..doc.height..' · r'..(doc.revision or 1),false,function()openDoc(A.store:openProject(doc.id))end) end
+    for _,doc in ipairs(A.projects) do
+        card(doc.name,doc.width..' × '..doc.height..' · r'..(doc.revision or 1),
+            false,function()openDoc(A.store:openProject(doc.id))end,doc)
+    end
     if index==0 then
         text('Uma galeria vazia, pronta para a primeira tela.',44,290,'title','muted')
         text('Crie uma pasta ou uma tela. Tudo é salvo neste computador.',44,335,'body','muted')
@@ -3346,7 +3427,7 @@ local function drawEditor(w,h)
     button('? Ajuda',panel+172,82,76,31,function()
         finishStroke();A.toolHelp=true
     end)
-    text(A.doc.name:sub(1,28),panel+20,115,'title')
+    fitted(A.doc.name,panel+20,115,'title','text',228)
     text(dw..' × '..dh..' · RGBA8',panel+20,150,'body','muted')
     text(A.inkAttached and ('Windows Ink · '..(A.inkPenId and 'caneta ativa'
         or 'aguardando caneta')) or 'Caneta Win32: modo alternativo',
@@ -4217,7 +4298,9 @@ local function drawCompactPopup(w,h)
     end
 end
 function love.draw()
-    A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear((A.compactUi and compactPalette or palette).bg)
+    A.buttons={};A.galleryPreviewBudget=1
+    local w,h=love.graphics.getDimensions();c('bg')
+    love.graphics.clear((A.compactUi and compactPalette or palette).bg)
     box(0,0,w,64,'panel')
     c('accent');love.graphics.rectangle('fill',0,0,4,64)
     text('Ibis Rebuild',24,13,'title')
@@ -4225,8 +4308,10 @@ function love.draw()
         text(A.screen=='editor' and 'Área de desenho' or 'Minha galeria',
             232,24,'body','muted')
     end
-    text(Native.available and '●  Editor local' or '●  Motor indisponível',
-        w-202,24,'small',Native.available and 'accent' or 'warn')
+    c(Native.available and 'accent' or 'warn')
+    love.graphics.circle('fill',w-201,31,3.2,14)
+    text(Native.available and 'Editor local' or 'Motor indisponível',
+        w-191,24,'small',Native.available and 'accent' or 'warn')
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     box(0,h-48,w,48,'panel');text(A.message or '',20,h-33,'small','muted')
     if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
@@ -4842,6 +4927,7 @@ function love.quit()
     Ink.close()
     releaseTipCache()
     releaseBrushSamples()
+    releaseGalleryPreviews()
     clearLayerThumbs()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end
