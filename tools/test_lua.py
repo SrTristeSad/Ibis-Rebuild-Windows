@@ -133,6 +133,9 @@ def run_tests(runtime_path, output):
             sample_program="return require('json').encode(require('tests.test_brush_samples').run())"
             brush_samples=json.loads(native_state.execute(sample_program))
             assert brush_samples.get('passed') and brush_samples.get('exact_native_rgba') and brush_samples.get('filtered_keyboard_navigation')
+            lab_program="return require('json').encode(require('tests.test_brush_lab').run())"
+            brush_lab=json.loads(native_state.execute(lab_program))
+            assert brush_lab.get('passed') and brush_lab.get('exact_native_rgba') and brush_lab.get('original_presets_unchanged') and brush_lab.get('geometry_safe')
             slider_program="return require('json').encode(require('tests.test_brush_sliders').run())"
             sliders=json.loads(native_state.execute(slider_program))
             assert sliders.get('passed') and sliders.get('one_percent_opacity') and sliders.get('panel_isolation')
@@ -205,6 +208,7 @@ def run_tests(runtime_path, output):
         report['editor_context_menus'] = menus
         report['brush_library'] = brush_presets
         report['native_brush_catalogue_samples'] = brush_samples
+        report['native_brush_lab_inspector'] = brush_lab
         report['precision_brush_sliders'] = sliders
         report['native_brush_tip_cursor'] = cursor
         report['compact_workspace_layout'] = compact
