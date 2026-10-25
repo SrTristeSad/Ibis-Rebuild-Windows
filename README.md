@@ -62,6 +62,8 @@ A etapa 29 incorpora [barras deslizantes de precisão](docs/PRECISION_SLIDERS_ST
 
 A etapa 30 apresenta uma [prévia não destrutiva da ponta do pincel/borracha](docs/NATIVE_BRUSH_TIP_STAGE30.md), renderizada em um buffer RGBA temporário pelo mesmo C++ utilizado na pintura, com textura em cache, zoom/rotação e botão de liga/desliga. Não insere pixels no canvas nem modifica histórico/RBD2; hover real de caneta não é alegado.
 
+A etapa 31 introduz [layout compacto inspirado na barra principal oficial do ibisPaint](docs/COMPACT_ANDROID_STAGE31.md). A barra inferior dá acesso ao seletor de ferramentas, propriedades, cor, janela flutuante de camadas e retorno à galeria, enquanto um botão no cabeçalho restaura o layout desktop antigo. A tela mantém as operações nativas e não reivindica equivalência visual 1:1.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |

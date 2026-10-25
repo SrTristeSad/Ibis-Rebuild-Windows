@@ -65,17 +65,19 @@ function Tip.visible(state,w,h,x,y)
         or (state.tool~='brush' and state.tool~='erase')
         or state.modal or state.toolHelp or state.brushLibrary
         or state.contextMenu or state.panning or state.drawing
-        or state.sliderDrag or state.spaceHeld or
+        or state.sliderDrag or state.compactPanel or state.spaceHeld or
         state.inkPenId~=nil or state.touchId~=nil or
         state.mouseOutside then return false end
     if not finite(x) or not finite(y) or
-        not Workspace.contains(w,h,state.focusMode==true,x,y) then
+        not Workspace.contains(w,h,state.focusMode==true or
+            state.compactUi==true,x,y,state.compactUi==true and not state.focusMode) then
         return false
     end
     local v={zoom=state.zoom,rotation=state.rotation,
         panX=state.panX,panY=state.panY,
         width=state.doc.width,height=state.doc.height,
-        focusMode=state.focusMode==true}
+        focusMode=state.focusMode==true or state.compactUi==true,
+        compactUi=state.compactUi==true and not state.focusMode}
     local px,py=View.toCanvas(v,w,h,x,y)
     if px<0 or py<0 or px>=state.doc.width or py>=state.doc.height then
         return false
