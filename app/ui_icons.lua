@@ -99,6 +99,14 @@ glyphs.hidden={
     {op='polygon',mode='line',points={-7,0,-4,-3,0,-4,4,-3,7,0,4,3,0,4,-4,3}},
     {op='line',points={-6,6,6,-6}}
 }
+glyphs.up={
+    {op='polygon',mode='fill',points={-5,3,5,3,0,-4}},
+    {op='line',points={-5,5,5,5}}
+}
+glyphs.down={
+    {op='polygon',mode='fill',points={-5,-3,5,-3,0,4}},
+    {op='line',points={-5,-5,5,-5}}
+}
 function Icons.commands(id)
     return glyphs[id]
 end
