@@ -1116,8 +1116,8 @@ local function verifyCompactUi()
         love.mousepressed(b.x+b.w/2,b.y+b.h/2,1,false)
     end
     local clip=Workspace.bounds(w,h,true,true)
-    assert(clip.right==w-16 and clip.bottom==h-146,
-        'Canvas compacto deve evitar painel e barra inferior')
+    assert(clip.right==w-16 and clip.bottom==h-190,
+        'Canvas compacto deve evitar os ajustes e a barra inferior')
     assert(A.zoom==zoom and A.rotation==rotation and
         A.panX==panX and A.panY==panY,
         'Mudança de layout não pode transformar documento')
@@ -3263,8 +3263,11 @@ end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
+    box(p.x+5,p.y+7,p.w,p.h,'bg')
     box(p.x,p.y,p.w,p.h,'panel')
-    c('accent');love.graphics.rectangle('fill',p.x,p.y,3,p.h)
+    c('line');love.graphics.rectangle('line',p.x+.5,p.y+.5,
+        p.w-1,p.h-1,5,5)
+    c('accent');love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,2)
     text(kind=='tools' and 'Ferramentas' or
         kind=='layers' and 'Camadas raster' or
         'Ajustes',p.x+14,p.y+13,'body')
@@ -3362,6 +3365,8 @@ local function drawCompactPopup(w,h)
             local offset=require('utf8').offset(name,13)
             if offset then name=name:sub(1,offset-1)..'…' end
             text(i..' · '..name,p.x+57,y+9,'small')
+            text(('%.0f%%'):format(layer.opacity*100),
+                p.x+190,y+9,'small','muted')
             button(layer.visible and '◉' or '○',p.x+251,y+3,33,29,
                 function()
                     finishStroke();ls:setVisible(i,not layer.visible)
