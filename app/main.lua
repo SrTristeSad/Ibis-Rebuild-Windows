@@ -3353,6 +3353,9 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     if not A.compactUi then
+        box(12,69,690,49,'panel')
+        c('line')
+        love.graphics.rectangle('fill',12,117,690,1)
         button('Galeria',20,78,92,34,toGallery)
         for _,slot in ipairs(toolSlots) do toolButton(slot) end
         button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
@@ -3448,6 +3451,7 @@ local function drawEditor(w,h)
     love.graphics.rectangle('fill',panel,64,1,h-112)
     text(A.sideTab=='brush' and 'PROJETO E PINCEL' or
         'CAMADAS E PROJETO',panel+20,88,'small','muted')
+    box(panel+12,114,244,71,'card')
     button('? Ajuda',panel+172,82,76,31,function()
         finishStroke();A.toolHelp=true
     end)
@@ -3787,8 +3791,13 @@ local function drawEditor(w,h)
     end
     if A.compactUi and not A.focusMode then
         box(10,h-184,w-20,126,'panel')
+        c('accent')
+        love.graphics.rectangle('fill',10,h-184,3,126)
         c('line')
-        love.graphics.rectangle('fill',10,h-184,w-20,1)
+        love.graphics.rectangle('fill',13,h-184,w-23,1)
+        text('FERRAMENTA',28,h-162,'small','muted')
+        fitted(EditorTools.fromId(A.tool).label,28,h-144,'body',
+            'text',210)
         if A.tool=='brush' or A.tool=='erase' then
             drawCompactQuick('diameter',w,h,A.brushDiameter)
             drawCompactQuick('opacity',w,h,A.brushOpacity)
@@ -3827,6 +3836,11 @@ local function drawEditor(w,h)
             love.graphics.setFont(A.fonts.small)
             love.graphics.printf(label,slot.x,slot.y+32,
                 slot.w,'center')
+            if active then
+                c('accent')
+                love.graphics.rectangle('fill',slot.x+12,
+                    slot.y+slot.h-2,slot.w-24,2,1,1)
+            end
             if slot.id=='color' then
                 local r,g,b=Colors.channels(A.color)
                 love.graphics.setColor(r/255,g/255,b/255,1)
