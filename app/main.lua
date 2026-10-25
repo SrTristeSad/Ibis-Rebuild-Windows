@@ -28,6 +28,7 @@ local Compact=require('compact_layout')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
+local DesktopOpacity=require('desktop_layer_opacity')
 local LayerOpacitySteps=require('layer_opacity_steps')
 local LayerOrder=require('layer_order_controls')
 local LayerRowVisual=require('layer_row_visual')
@@ -37,7 +38,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
     '09-opacidade-camadas.png'}
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -363,7 +364,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -3938,19 +3939,30 @@ local function drawEditor(w,h)
                     LayerOpacitySteps.change(active.opacity,-1))
                 A.dirty=true;rebuildImage()
             end,false,not LayerOpacitySteps.canChange(active.opacity,-1))
-            text(('Opacidade %.0f%%'):format(active.opacity*100),panel+68,opacityY+8,'small')
+            local previewOpacity=A.desktopLayerOpacityDrag and
+                A.desktopLayerOpacityDrag.index==A.doc.active_layer and
+                A.desktopLayerOpacityDrag.value or active.opacity
+            text(('Opacidade %.0f%%'):format(previewOpacity*100),
+                panel+68,opacityY+8,'small')
             button('+',panel+206,opacityY,42,29,function()
                 finishStroke()
                 ls:setOpacity(A.doc.active_layer,
                     LayerOpacitySteps.change(active.opacity,1))
                 A.dirty=true;rebuildImage()
             end,false,not LayerOpacitySteps.canChange(active.opacity,1))
-            -- Passive opacity meter; editing remains on the existing buttons.
-            box(panel+20,Sidebar.virtualHeight(h)-58,228,4,'line')
+            -- Interactive desktop opacity rail; dragging previews only.
+            -- The actual layer property is committed once on mouse release.
+            local opacityRail=DesktopOpacity.rect(w,h)
+            box(opacityRail.x,opacityRail.y,opacityRail.w,
+                opacityRail.h,'line')
             c('accent')
-            love.graphics.rectangle('fill',panel+20,
-                Sidebar.virtualHeight(h)-58,
-                228*math.max(0,math.min(1,active.opacity)),4,2,2)
+            love.graphics.rectangle('fill',opacityRail.x,opacityRail.y,
+                math.max(1,opacityRail.w*previewOpacity),
+                opacityRail.h,2,2)
+            c('text')
+            love.graphics.circle('fill',
+                opacityRail.x+opacityRail.w*previewOpacity,
+                opacityRail.y+opacityRail.h/2,5,18)
         end
     else
         if A.tool=='fill' then
@@ -4901,6 +4913,20 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             return
         end
     end
+    if buttonNumber==1 and A.screen=='editor' and not A.modal and
+        not A.spaceHeld and not A.compactUi and not paneHidden() and
+        A.sideTab=='layers' and A.tool~='picker' and
+        A.tool~='shape' and A.tool~='select' then
+        local w,h=love.graphics.getDimensions()
+        if DesktopOpacity.hit(w,h,x,y,A.sidebarScroll) then
+            finishStroke()
+            local i=A.doc.active_layer
+            local initial=A.doc.layers[i].opacity
+            A.desktopLayerOpacityDrag=DesktopOpacity.draft(i,initial,
+                DesktopOpacity.value(w,h,x))
+            return
+        end
+    end
     if buttonNumber==1 and A.screen=='editor' and not A.modal
         and not A.spaceHeld then
         local panel=love.graphics.getWidth()-268
@@ -5008,6 +5034,24 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.desktopLayerOpacityDrag and b==1 then
+        local drag=A.desktopLayerOpacityDrag
+        A.desktopLayerOpacityDrag=nil
+        if A.screen=='editor' and A.layerSession and
+            drag.index<=#A.doc.layers then
+            drag.value=DesktopOpacity.value(
+                love.graphics.getWidth(),love.graphics.getHeight(),x)
+            if DesktopOpacity.changed(drag) then
+                finishStroke()
+                local changed=A.layerSession:setOpacity(drag.index,
+                    drag.value)
+                if changed then A.dirty=true;rebuildImage() end
+                status(('Opacidade da camada %d: %.0f%%'):format(
+                    drag.index,drag.value*100))
+            end
+        end
+        return
+    end
     if A.compactLayerOpacityDrag and b==1 then
         local drag=A.compactLayerOpacityDrag
         A.compactLayerOpacityDrag=nil
@@ -5069,6 +5113,11 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.desktopLayerOpacityDrag then
+        A.desktopLayerOpacityDrag.value=DesktopOpacity.value(
+            love.graphics.getWidth(),love.graphics.getHeight(),x)
+        return
+    end
     if A.compactLayerOpacityDrag then
         local p=Compact.popup(love.graphics.getWidth(),love.graphics.getHeight(),'layers')
         A.compactLayerOpacityDrag.value=LayerOpacity.value(p,x)
@@ -5202,7 +5251,7 @@ end
 function love.focus(focused)
     if not focused then
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
-        A.compactLayerOpacityDrag=nil
+        A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
