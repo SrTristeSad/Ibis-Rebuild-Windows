@@ -27,7 +27,8 @@ local Compact=require('compact_layout')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
-    '05-camadas.png','06-editor-desktop.png'}
+    '05-camadas.png','06-editor-desktop.png',
+    '07-editor-960x640.png'}
 local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
@@ -1750,6 +1751,15 @@ local function advanceShowcase()
         A.compactPanel=nil
         A.compactUi=false
         fit()
+    elseif sh.stage==7 then
+        assert(love.window.setMode(960,640,{
+            resizable=true,minwidth=960,minheight=640,vsync=0}),
+            'Minimum viewport unavailable for screenshot')
+        selectTool('brush')
+        A.sideTab='brush'
+        A.sidebarScroll=Sidebar.max(640)
+        fit()
+        status('Painel lateral 960x640 · rolagem independente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -1759,6 +1769,69 @@ local function advanceShowcase()
         A.showcase=nil
         love.event.quit(0)
     end
+end
+-- Stage 39: real 960x640 LÖVE resize, scrollbar, independent sliders
+-- and proof the canvas/history never change when navigating the sidebar.
+local function verifyAdaptiveDesktopSidebar()
+    local oldW,oldH=love.graphics.getDimensions()
+    local previousTool,previousTab=A.tool,A.sideTab
+    local previousStabilization=A.stabilization
+    local previousDirty=A.dirty
+    local before=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    local layers=#A.doc.layers
+    assert(not A.compactUi and not A.focusMode,
+        'Small sidebar regression needs desktop editor')
+    local changed=love.window.setMode(960,640,{
+        resizable=true,minwidth=960,minheight=640,vsync=0})
+    assert(changed,'Cannot create minimum Windows LÖVE viewport')
+    local w,h=love.graphics.getDimensions()
+    assert(w==960 and h==640,'Minimum viewport must be exact')
+    assert(selectTool('brush'),'Brush panel unavailable at 960x640')
+    A.sideTab='brush'
+    A.sidebarScroll=0
+    love.draw()
+    local panel=w-Sidebar.WIDTH
+    local slider=Sliders.rail('stabilization',panel)
+    assert(slider.y>h-48,'Regression setup: last slider already visible')
+    for _=1,4 do
+        love.draw()
+        love.mousepressed(w-11,h-62,1,false)
+    end
+    assert(A.sidebarScroll==160,'Sidebar bottom arrow did not reach end')
+    love.draw()
+    for _,b in ipairs(A.buttons) do
+        if b.x>=panel and b.x<w then
+            assert(b.y>=64 and b.y+b.h<=h-48,
+                'Sidebar button escaped clipped viewport')
+        end
+    end
+    local sliderY=slider.y-A.sidebarScroll+slider.h/2
+    assert(sliderY>=64 and sliderY<h-48,
+        'Stabilization slider still inaccessible at 640px height')
+    love.mousepressed(slider.x+slider.w,sliderY,1,false)
+    assert(A.sliderDrag=='stabilization' and A.stabilization==5,
+        'Scrolled slider click did not reach original value/hitbox')
+    love.mousereleased(slider.x+slider.w,sliderY,1,false)
+    assert(A.sliderDrag==nil,'Slider drag failed to release')
+    love.draw()
+    love.mousepressed(w-11,77,1,false)
+    assert(A.sidebarScroll==116,'Scroll up arrow did not work')
+    love.draw()
+    assert(Native.bytes(A.layerSession.composite)==before and
+        A.layerSession:historyStats().undo==history and
+        #A.doc.layers==layers and A.dirty==previousDirty,
+        'Sidebar navigation or parameter preview painted on canvas')
+    assert(love.window.setMode(oldW,oldH,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Failed to restore original Windows GUI size')
+    A.sidebarScroll=0
+    A.stabilization=previousStabilization
+    selectTool(previousTool);A.sideTab=previousTab
+    love.draw()
+    assert(love.graphics.getWidth()==oldW and
+        love.graphics.getHeight()==oldH,
+        'GUI resolution not restored after small viewport test')
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -3061,6 +3134,7 @@ function love.update(dt)
                 verifyColorBrushWindows()
                 verifyNativeBrushCatalogue()
                 verifyBrushLabLive()
+                verifyAdaptiveDesktopSidebar()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -3162,6 +3236,8 @@ function love.update(dt)
                     brush_lab_large_preview=true,brush_lab_live_native_cache=true,
                     brush_lab_diameter_drag=true,brush_lab_opacity_one_percent=true,
                     brush_lab_apply_cancel=true,brush_lab_no_raster_edits=true,
+                    sidebar_960x640=true,sidebar_scroll_hitbox=true,
+                    sidebar_slider_reachable=true,sidebar_raster_unchanged=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
