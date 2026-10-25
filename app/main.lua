@@ -30,6 +30,7 @@ local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
 local LayerOpacitySteps=require('layer_opacity_steps')
 local LayerOrder=require('layer_order_controls')
+local LayerRowVisual=require('layer_row_visual')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
@@ -3857,6 +3858,8 @@ local function drawEditor(w,h)
         local y=475
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
+            local visual=LayerRowVisual.presentation(layer.visible,
+                A.doc.active_layer==i)
             local rowY=y
             button(' ',panel+20,rowY,228,33,function()
                 if A.doc.active_layer~=i then
@@ -3871,8 +3874,9 @@ local function drawEditor(w,h)
                     light and .80 or .60,light and .82 or .63,1)
                 love.graphics.rectangle('fill',panel+24+tx*7,rowY+2+ty*7,7,7)
             end end
-            love.graphics.setColor(1,1,1,1)
+            love.graphics.setColor(1,1,1,visual.thumbnailAlpha)
             love.graphics.draw(layerThumb(i),panel+24.5,rowY+2.5)
+            love.graphics.setColor(1,1,1,1)
             c('line')
             love.graphics.rectangle('line',panel+24,rowY+2,29,29,2,2)
             if A.doc.active_layer==i then
@@ -3886,8 +3890,8 @@ local function drawEditor(w,h)
             local free=math.max(0,143-font:getWidth(prefix))
             local label=TextFit.truncate(layer.name,free,
                 function(value)return font:getWidth(value)end)
-            text(prefix..label,panel+62,rowY+8,'body','text')
-            button(layer.visible and 'Vis' or 'Oc.',
+            text(prefix..label,panel+62,rowY+8,'body',visual.textColor)
+            button(visual.indicator,
                 panel+210,rowY+4,35,25,function()
                     finishStroke()
                     local nextVisible=not A.doc.layers[i].visible
