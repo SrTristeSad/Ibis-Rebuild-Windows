@@ -19,6 +19,7 @@ local Menus=require('context_menus')
 local Presets=require('brush_presets')
 local Samples=require('brush_samples')
 local Lab=require('brush_lab')
+local BrushKeyboard=require('brush_keyboard')
 local Sliders=require('brush_sliders')
 local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
@@ -590,7 +591,7 @@ local function brushLabFromFocus()
     A.brushLabDraft=chosen and Lab.draft(chosen) or
         Lab.draft({style=A.brushStyle,diameter=A.brushDiameter,
             opacity=A.brushOpacity,stabilization=A.stabilization})
-    A.brushLabEdited=false;A.brushLabDrag=nil
+    A.brushLabEdited=false;A.brushLabDrag=nil;A.brushLabKey='diameter'
 end
 local function adjustBrushLab(kind,x)
     local rect=Presets.layout(love.graphics.getDimensions())
@@ -4292,7 +4293,9 @@ local function drawBrushLab(rect)
             tostring(value)..' px' or kind=='opacity' and
             ('%.0f%%'):format(value*100) or
             tostring(value)..'/5'
-        text(names[kind],rail.x,rail.y-20,'small','muted')
+        text((A.brushLabKey==kind and '> ' or '')..names[kind],
+            rail.x,rail.y-20,'small',
+            A.brushLabKey==kind and 'accent' or 'muted')
         love.graphics.setFont(A.fonts.small)
         local labelWidth=A.fonts.small:getWidth(valueString)
         text(valueString,rail.x+rail.w-labelWidth,rail.y-20,'small')
@@ -5232,6 +5235,17 @@ function love.keypressed(key)
     if A.screen=='editor' and A.brushLibrary then
         if key=='escape' then
             A.brushLibrary=false;A.brushLabDrag=nil
+        elseif BrushKeyboard.select(key) then
+            A.brushLabKey=BrushKeyboard.select(key)
+        elseif (key=='-' or key=='=' or key=='+' or
+            key=='kp-' or key=='kp+') and A.brushLabDraft then
+            local kind=A.brushLabKey or 'diameter'
+            local updated=BrushKeyboard.step(A.brushLabDraft,kind,key)
+            if updated then
+                A.brushLabEdited=A.brushLabEdited or
+                    updated[kind]~=A.brushLabDraft[kind]
+                A.brushLabDraft=updated
+            end
         elseif key=='tab' then
             local nextFilter=A.brushFilter=='all' and 'builtin' or
                 A.brushFilter=='builtin' and 'personal' or 'all'
