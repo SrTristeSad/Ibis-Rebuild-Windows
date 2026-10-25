@@ -3074,6 +3074,137 @@ local function drawBrushLibrary(w,h)
     button('Fechar · Esc',rect.x+rect.w-166,rect.y+480,146,37,
         function()A.brushLibrary=false end)
 end
+local function drawCompactPopup(w,h)
+    local kind=A.compactPanel
+    local p=Compact.popup(w,h,kind)
+    box(p.x,p.y,p.w,p.h,'panel')
+    c('accent');love.graphics.rectangle('fill',p.x,p.y,3,p.h)
+    text(kind=='tools' and 'Ferramentas' or
+        kind=='layers' and 'Camadas raster' or
+        'Ajustes',p.x+14,p.y+13,'body')
+    button('×',p.x+p.w-44,p.y+8,31,30,function()
+        A.compactPanel=nil end)
+    if kind=='tools' then
+        for i,tool in ipairs(EditorTools.items) do
+            local x=p.x+14+(i-1)%2*156
+            local y=p.y+52+math.floor((i-1)/2)*70
+            button(' ',x,y,148,62,function()
+                if selectTool(tool.id) then A.compactPanel=nil end
+            end,A.tool==tool.id)
+            c(A.tool==tool.id and 'accent' or 'text')
+            Icons.draw(tool.id,x+24,y+16,15)
+            text(tool.label,x+44,y+15,'small')
+            text(tool.key,x+121,y+39,'small','muted')
+        end
+        button('Ajuda · F1',p.x+14,p.y+p.h-57,p.w-28,34,
+            function()A.compactPanel=nil;A.toolHelp=true end)
+    elseif kind=='properties' then
+        local x,y=p.x+17,p.y+54
+        if A.tool=='fill' then
+            text('Tolerância: '..A.fillTolerance..'/255',x,y,'body')
+            button('−',x,y+32,60,34,function()
+                A.fillTolerance=math.max(0,A.fillTolerance-8) end)
+            button('+',x+73,y+32,60,34,function()
+                A.fillTolerance=math.min(255,A.fillTolerance+8) end)
+        else
+            text('Diâmetro: '..A.brushDiameter..' px',x,y,'body')
+            button('−',x,y+29,60,32,function()
+                finishStroke();A.brushDiameter=math.max(1,A.brushDiameter-2) end)
+            button('+',x+73,y+29,60,32,function()
+                finishStroke();A.brushDiameter=math.min(256,A.brushDiameter+2) end)
+            text(('Opacidade: %.0f%%'):format(A.brushOpacity*100),
+                x,y+83,'body')
+            button('−',x,y+109,60,32,function()
+                finishStroke();A.brushOpacity=math.max(.1,A.brushOpacity-.1) end)
+            button('+',x+73,y+109,60,32,function()
+                finishStroke();A.brushOpacity=math.min(1,A.brushOpacity+.1) end)
+            if A.tool=='brush' or A.tool=='erase' then
+                text('Estabilizar: '..A.stabilization..'/5',x,y+162,'body')
+                button('−',x,y+190,60,32,function()
+                    A.stabilization=math.max(0,A.stabilization-1) end)
+                button('+',x+73,y+190,60,32,function()
+                    A.stabilization=math.min(5,A.stabilization+1) end)
+            end
+            if A.tool=='brush' then
+                button('Rígido',x+146,y+28,98,32,function()
+                    finishStroke();A.brushStyle='hard'
+                end,A.brushStyle=='hard')
+                button('Suave',x+146,y+68,98,32,function()
+                    finishStroke();A.brushStyle='soft'
+                end,A.brushStyle=='soft')
+            end
+        end
+        button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
+            openBrushLibrary)
+    elseif kind=='layers' then
+        local ls=A.layerSession
+        local count=#A.doc.layers
+        local active=A.doc.active_layer
+        button('+',p.x+14,p.y+44,53,32,function()
+            finishStroke();ls:add();A.compactLayerStart=nil
+            A.dirty=true;rebuildImage()
+        end,false,count>=Store.MAX_LAYERS)
+        button('Duplicar',p.x+76,p.y+44,97,32,
+            duplicateActiveLayer,false,count>=Store.MAX_LAYERS)
+        button('Excluir',p.x+181,p.y+44,101,32,function()
+            finishStroke();ls:remove(A.doc.active_layer)
+            clearLayerThumbs();A.compactLayerStart=nil
+            A.dirty=true;rebuildImage()
+        end,false,count<=1)
+        local start,stop,maxStart=Thumbnails.window(count,active,
+            Compact.layerRows(p),A.compactLayerStart)
+        local y=p.y+87
+        for index=stop,start,-1 do
+            local i=index
+            local layer=A.doc.layers[i]
+            button(' ',p.x+13,y,231,35,function()
+                if i~=A.doc.active_layer then
+                    finishStroke();ls:select(i);A.dirty=true
+                end
+                A.compactLayerStart=start
+            end,active==i)
+            for ty=0,3 do for tx=0,3 do
+                local bright=(tx+ty)%2==0
+                love.graphics.setColor(bright and .8 or .59,
+                    bright and .81 or .61,bright and .82 or .63,1)
+                love.graphics.rectangle('fill',p.x+19+tx*7,
+                    y+3+ty*7,7,7)
+            end end
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(layerThumb(i),p.x+19,y+3)
+            local name=layer.name
+            local offset=require('utf8').offset(name,13)
+            if offset then name=name:sub(1,offset-1)..'…' end
+            text(i..' · '..name,p.x+57,y+9,'small')
+            button(layer.visible and '◉' or '○',p.x+251,y+3,33,29,
+                function()
+                    finishStroke();ls:setVisible(i,not layer.visible)
+                    A.dirty=true;rebuildImage()
+                end,layer.visible)
+            y=y+40
+        end
+        button('▲',p.x+13,p.y+p.h-87,34,28,function()
+            A.compactLayerStart=Thumbnails.scroll(start,maxStart,1)
+        end,false,start>=maxStart)
+        button('▼',p.x+54,p.y+p.h-87,34,28,function()
+            A.compactLayerStart=Thumbnails.scroll(start,maxStart,-1)
+        end,false,start<=1)
+        button('Nome',p.x+95,p.y+p.h-87,84,28,openLayerRename)
+        button('Mesclar',p.x+186,p.y+p.h-87,98,28,
+            mergeActiveLayerDown,false,active<=1)
+        local layer=A.doc.layers[A.doc.active_layer]
+        text(('Opacidade %.0f%%'):format(layer.opacity*100),
+            p.x+14,p.y+p.h-45,'small')
+        button('−',p.x+190,p.y+p.h-49,41,30,function()
+            ls:setOpacity(A.doc.active_layer,math.max(0,layer.opacity-.1))
+            A.dirty=true;rebuildImage()
+        end)
+        button('+',p.x+242,p.y+p.h-49,41,30,function()
+            ls:setOpacity(A.doc.active_layer,math.min(1,layer.opacity+.1))
+            A.dirty=true;rebuildImage()
+        end)
+    end
+end
 function love.draw()
     A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
     box(0,0,w,64,'panel')
@@ -3096,6 +3227,9 @@ function love.draw()
     elseif A.contextMenu and A.screen=='editor' then
         A.buttons={}
         drawContextMenu()
+    elseif A.compactUi and A.compactPanel and A.screen=='editor' then
+        A.buttons={}
+        drawCompactPopup(w,h)
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
