@@ -17,6 +17,7 @@ local TextFit=require('text_fit')
 local Visual=require('visual_hierarchy')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
+local BrushCard=require('brush_catalogue_card')
 local Samples=require('brush_samples')
 local Lab=require('brush_lab')
 local BrushKeyboard=require('brush_keyboard')
@@ -1041,6 +1042,28 @@ local function verifyBrushLibrary()
     love.mousepressed(panel+100,344,1,false)
     assert(A.brushLibrary,'Botão Biblioteca não abriu')
     love.draw()
+    -- A preview-only click must update the inspector but cannot apply,
+    -- paint, save a preset or close the catalogue.
+    local beforePreviewDiameter=A.brushDiameter
+    local beforePreviewStyle=A.brushStyle
+    local cardWidth=(Lab.CATALOGUE_WIDTH-56)/2
+    local previewButton=BrushCard.previewButton(rect.x+20,
+        rect.y+80+88,cardWidth)
+    love.mousepressed(previewButton.x+previewButton.w/2,
+        previewButton.y+previewButton.h/2,1,false)
+    assert(A.brushLibrary and A.brushFocus==3 and
+        A.brushLabDraft.diameter==24 and
+        A.brushLabDraft.style=='soft' and
+        A.brushLabEdited==false and
+        A.brushDiameter==beforePreviewDiameter and
+        A.brushStyle==beforePreviewStyle,
+        'Prévia no cartão aplicou o pincel em vez de só inspecionar')
+    love.draw()
+    assert(A.brushSampleCache.inspector.key==
+        Samples.key(A.brushLabDraft,A.color) and
+        Native.bytes(A.layerSession.composite)==originalPixels and
+        A.layerSession:historyStats().undo==originalHistory,
+        'Prévia de cartão alterou pixels/histórico ou não atualizou C++')
     -- Built-in #3 occupies the second row, first column.
     love.mousepressed(rect.x+34,rect.y+80+88+10,1,false)
     assert(not A.brushLibrary and A.brushStyle=='soft' and
@@ -4489,10 +4512,12 @@ end
 local function drawBrushLab(rect)
     local p=Lab.layout(rect)
     box(p.x,p.y,p.w,p.h,'card')
-    text('PRÉVIA',p.x+9,p.y+11,'small','muted')
     local draft=assert(A.brushLabDraft,'Nenhum pincel em prévia')
-    text(draft.style=='hard' and 'Rígido' or 'Suave',
-        p.x+9,p.y+29,'small','accent')
+    text(draft.style=='hard' and 'PRÉVIA · Rígido' or
+        'PRÉVIA · Suave',p.x+9,p.y+11,'small','muted')
+    fitted(BrushCard.inspectorName(A.brushFocus,
+        Presets.custom(A.brushes)),p.x+9,p.y+29,
+        'small','accent',p.w-18)
     local space=Lab.preview(rect)
     local tile=11
     for row=0,math.ceil(space.h/tile)-1 do
@@ -4548,13 +4573,17 @@ local function drawBrushLibrary(w,h)
     text('Biblioteca de pincéis',rect.x+20,rect.y+12,'title')
     text('Pincéis raster locais · básicos e pessoais',
         rect.x+20,rect.y+52,'small','muted')
+    local saved=Presets.custom(A.brushes)
+    local filled=0
+    for i=1,Presets.LIMIT do
+        if saved[i] then filled=filled+1 end
+    end
     button('Todos',rect.x+344,rect.y+47,94,30,function()
         switchBrushCategory('all') end,A.brushFilter=='all')
-    button('Básicos',rect.x+447,rect.y+47,111,30,function()
+    button('Básicos (4)',rect.x+447,rect.y+47,111,30,function()
         switchBrushCategory('builtin') end,A.brushFilter=='builtin')
-    button('Meus',rect.x+567,rect.y+47,110,30,function()
+    button('Meus ('..filled..')',rect.x+567,rect.y+47,110,30,function()
         switchBrushCategory('personal') end,A.brushFilter=='personal')
-    local saved=Presets.custom(A.brushes)
     local half=(Lab.CATALOGUE_WIDTH-56)/2
     for i=1,8 do
         local column=(i-1)%2
@@ -4587,6 +4616,16 @@ local function drawBrushLibrary(w,h)
             love.graphics.draw(image.image,place.x,place.y,0,
                 place.w/image.sample.width,
                 place.h/image.sample.height)
+            -- Separate preview-only action. Clicking the card elsewhere
+            -- still applies immediately, preserving the classic workflow.
+            local previewAction=BrushCard.previewButton(x,y,half)
+            button('Prévia',previewAction.x,previewAction.y,
+                previewAction.w,previewAction.h,function()
+                    A.brushFocus=i
+                    brushLabFromFocus()
+                    status('Prévia: '..preset.name..
+                        ' · Ajuste parâmetros e clique Aplicar ajustes')
+                end,A.brushFocus==i)
             if A.brushFocus==i then
                 c('accent');love.graphics.setLineWidth(2)
                 love.graphics.rectangle('line',
@@ -4599,10 +4638,8 @@ local function drawBrushLibrary(w,h)
             text('Salve o pincel atual abaixo',x+12,y+42,'small','muted')
         end
     end
-    local filled=0
-    for i=1,Presets.LIMIT do
-        if saved[i] then filled=filled+1 end
-    end
+    text('Prévia para examinar · Clique no cartão para aplicar',
+        rect.x+20,rect.y+434,'small','muted')
     drawBrushLab(rect)
     text(('AJUSTES SALVOS  %d / %d · Amostras C++'):format(
         filled,Presets.LIMIT),
