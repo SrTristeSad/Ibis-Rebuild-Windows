@@ -3023,9 +3023,11 @@ local function drawEditor(w,h)
                 (slot.id=='tools' and A.compactPanel=='tools') or
                 (slot.id=='layers' and A.compactPanel=='layers') or
                 (slot.id=='properties' and A.compactPanel=='properties')
-            button(slot.label,slot.x,slot.y,slot.w,slot.h,function()
+            button(slot.id=='brush' and
+                (A.tool=='erase' and 'Borracha' or 'Pincel') or
+                slot.label,slot.x,slot.y,slot.w,slot.h,function()
                 if slot.id=='brush' then
-                    selectTool(A.tool=='erase' and 'brush' or 'erase')
+                    selectTool(A.tool=='brush' and 'erase' or 'brush')
                 elseif slot.id=='tools' or slot.id=='layers' or
                     slot.id=='properties' then
                     toggleCompactPanel(slot.id)
