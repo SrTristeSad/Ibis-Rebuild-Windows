@@ -6,23 +6,24 @@ function W.panelWidth(focus)
     assert(type(focus)=='boolean','Modo de foco inválido')
     return focus and 0 or W.SIDEBAR
 end
-function W.center(w,h,focus)
+function W.center(w,h,focus,compact)
     assert(type(w)=='number' and w>=960 and type(h)=='number' and h>=640,
         'Dimensões de janela inválidas')
-    return (w-W.panelWidth(focus)-12)/2,(h+56)/2
+    return (w-W.panelWidth(focus)-12)/2,
+        compact and (h-22)/2 or (h+56)/2
 end
-function W.bounds(w,h,focus)
+function W.bounds(w,h,focus,compact)
     assert(type(w)=='number' and w>=960 and type(h)=='number' and h>=640,
         'Dimensões de janela inválidas')
     return {left=16,top=125,right=w-W.panelWidth(focus)-(focus and 16 or 12),
-        bottom=h-78}
+        bottom=h-(compact and 146 or 78)}
 end
-function W.contains(w,h,focus,x,y)
-    local a=W.bounds(w,h,focus)
+function W.contains(w,h,focus,x,y,compact)
+    local a=W.bounds(w,h,focus,compact)
     return x>=a.left and x<a.right and y>=a.top and y<a.bottom
 end
-function W.scissor(w,h,focus)
-    local a=W.bounds(w,h,focus)
+function W.scissor(w,h,focus,compact)
+    local a=W.bounds(w,h,focus,compact)
     -- Same clip origin as the legacy desktop editor.
     return a.left,a.top,a.right-a.left,a.bottom-a.top
 end
