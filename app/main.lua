@@ -1950,7 +1950,6 @@ local function verifyCompactLayerWheel()
     local previousStart=A.compactLayerStart
     local previousScroll=A.sidebarScroll
     local previousDirty=A.dirty
-    local previousZoom=A.zoom
     local selected=A.doc.active_layer
     local pixels=Native.bytes(A.layerSession.composite)
     local history=A.layerSession:historyStats().undo
@@ -1963,6 +1962,7 @@ local function verifyCompactLayerWheel()
     A.compactPanel='layers'
     A.compactLayerStart=1
     love.draw()
+    local zoomAtPopup=A.zoom
     local w,h=love.graphics.getDimensions()
     local popup=Compact.popup(w,h,'layers')
     local px,py=popup.x+60,popup.y+101
@@ -1984,7 +1984,7 @@ local function verifyCompactLayerWheel()
     assert(A.doc.active_layer==selected and
         A.layerSession:historyStats().undo==history and
         Native.bytes(A.layerSession.composite)==pixels and
-        A.dirty==previousDirty and A.zoom==previousZoom,
+        A.dirty==previousDirty and A.zoom==zoomAtPopup,
         'Wheel must never edit pixels, selection, zoom or history')
     A.compactPanel=nil
     toggleCompactUi()
