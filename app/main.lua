@@ -1042,6 +1042,28 @@ local function verifyBrushLibrary()
     love.mousepressed(panel+100,344,1,false)
     assert(A.brushLibrary,'Botão Biblioteca não abriu')
     love.draw()
+    -- A preview-only click must update the inspector but cannot apply,
+    -- paint, save a preset or close the catalogue.
+    local beforePreviewDiameter=A.brushDiameter
+    local beforePreviewStyle=A.brushStyle
+    local cardWidth=(Lab.CATALOGUE_WIDTH-56)/2
+    local previewButton=BrushCard.previewButton(rect.x+20,
+        rect.y+80+88,cardWidth)
+    love.mousepressed(previewButton.x+previewButton.w/2,
+        previewButton.y+previewButton.h/2,1,false)
+    assert(A.brushLibrary and A.brushFocus==3 and
+        A.brushLabDraft.diameter==24 and
+        A.brushLabDraft.style=='soft' and
+        A.brushLabEdited==false and
+        A.brushDiameter==beforePreviewDiameter and
+        A.brushStyle==beforePreviewStyle,
+        'Prévia no cartão aplicou o pincel em vez de só inspecionar')
+    love.draw()
+    assert(A.brushSampleCache.inspector.key==
+        Samples.key(A.brushLabDraft,A.color) and
+        Native.bytes(A.layerSession.composite)==originalPixels and
+        A.layerSession:historyStats().undo==originalHistory,
+        'Prévia de cartão alterou pixels/histórico ou não atualizou C++')
     -- Built-in #3 occupies the second row, first column.
     love.mousepressed(rect.x+34,rect.y+80+88+10,1,false)
     assert(not A.brushLibrary and A.brushStyle=='soft' and
