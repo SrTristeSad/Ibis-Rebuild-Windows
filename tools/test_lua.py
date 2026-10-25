@@ -58,7 +58,7 @@ def run_tests(runtime_path, output):
         assert order.get('passed') and order.get('assertions') == 10
         row_program = "return require('json').encode(require('tests.test_layer_row_visual').run())"
         row_visual = json.loads(state.execute(row_program))
-        assert row_visual.get('passed') and row_visual.get('assertions') == 11
+        assert row_visual.get('passed') and row_visual.get('assertions') == 16
         desktop_program = "return require('json').encode(require('tests.test_desktop_layer_opacity').run())"
         desktop = json.loads(state.execute(desktop_program))
         assert desktop.get('passed') and desktop.get('assertions') >= 300
