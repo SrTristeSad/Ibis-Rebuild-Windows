@@ -1206,6 +1206,81 @@ local function verifyCompactUi()
     selectTool(oldTool);A.sideTab=oldTab
     A.dirty=dirty
 end
+-- Stage 32: exercise quick rails through real LÖVE mouse events.
+-- The visuals must never mutate layers, pixels, dirty or undo history.
+local function verifyCompactVisualControls()
+    local w,h=love.graphics.getDimensions()
+    local previousTool,previousTab=A.tool,A.sideTab
+    local previousSize,previousOpacity=A.brushDiameter,A.brushOpacity
+    local previousDirty,previousPreview=A.dirty,A.previewEnabled
+    local previousZoom,previousRotation=A.zoom,A.rotation
+    local previousPanX,previousPanY=A.panX,A.panY
+    local pixels=Native.bytes(A.layerSession.composite)
+    local undo=A.layerSession:historyStats().undo
+    local layers=#A.doc.layers
+    assert(not A.compactUi,'Fixture visual precisa começar no desktop')
+    selectTool('brush')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(A.compactUi and not A.compactPanel,
+        'Botão do cabeçalho não abriu modo compacto novo')
+    local controls=Compact.quick(w,h)
+    love.draw()
+    love.mousepressed(controls.diameter.x,controls.diameter.y+7,1,false)
+    assert(A.quickDrag=='diameter' and A.brushDiameter==1 and
+        not A.drawing,'Barra de tamanho não capturou o mouse corretamente')
+    love.mousemoved(controls.diameter.x+80,
+        controls.diameter.y+7,80,0,false)
+    assert(A.brushDiameter>1 and A.brushDiameter<256,
+        'Deslizamento não atualizou diâmetro continuamente')
+    love.mousereleased(controls.diameter.x+controls.diameter.w+20,
+        controls.diameter.y+7,1,false)
+    assert(A.brushDiameter==256 and A.quickDrag==nil,
+        'Soltar fora da barra não limitou tamanho nem liberou o mouse')
+    love.draw()
+    love.mousepressed(controls.opacity.x+80,
+        controls.opacity.y+7,1,false)
+    assert(A.quickDrag=='opacity' and math.abs(A.brushOpacity-.55)<1e-8,
+        'Barra de opacidade não permite 55%')
+    love.mousemoved(controls.opacity.x-25,
+        controls.opacity.y+7,-105,0,false)
+    assert(A.brushOpacity==.1,'Opacidade deve limitar em 10%')
+    love.mousereleased(controls.opacity.x+controls.opacity.w+25,
+        controls.opacity.y+7,1,false)
+    assert(A.quickDrag==nil and A.brushOpacity==1,
+        'Arraste de opacidade deve terminar em 100%')
+    love.draw()
+    local bar=Compact.toolbar(w,h)
+    love.mousepressed(bar[2].x+bar[2].w/2,
+        bar[2].y+bar[2].h/2,1,false)
+    assert(A.compactPanel=='tools','Ícone Ferramentas deixou de funcionar')
+    love.draw()
+    love.mousepressed(controls.diameter.x,
+        controls.diameter.y+7,1,false)
+    assert(not A.compactPanel and not A.quickDrag and
+        A.brushDiameter==256,
+        'Clique fora do popup vazou para a barra rápida')
+    love.draw()
+    love.mousepressed(bar[5].x+bar[5].w/2,
+        bar[5].y+bar[5].h/2,1,false)
+    assert(A.focusMode,'Ícone Tela Cheia deixou de funcionar')
+    love.keypressed('tab')
+    assert(not A.focusMode and A.compactUi,
+        'Tab não restaurou a barra compacta')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==undo and
+        #A.doc.layers==layers and A.dirty==previousDirty,
+        'Ajuste visual alterou pixels, histórico, camadas ou dirty')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(not A.compactUi,'Troca de volta ao desktop falhou')
+    A.brushDiameter=previousSize;A.brushOpacity=previousOpacity
+    A.previewEnabled=previousPreview
+    selectTool(previousTool);A.sideTab=previousTab
+    assert(A.zoom==previousZoom and A.rotation==previousRotation and
+        A.panX==previousPanX and A.panY==previousPanY,
+        'Troca de estilo modificou navegação da tela')
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2451,6 +2526,7 @@ function love.update(dt)
                 verifyPrecisionSliders()
                 verifyBrushTipHover()
                 verifyCompactUi()
+                verifyCompactVisualControls()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2537,6 +2613,10 @@ function love.update(dt)
                     compact_return_desktop=true,
                     compact_brush_eraser_switch=true,
                     compact_fullscreen_toggle=true,
+                    compact_vector_toolbar=true,
+                    compact_quick_size=true,compact_quick_opacity=true,
+                    compact_quick_capture=true,compact_visual_isolation=true,
+                    compact_popup_hit_protection=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
