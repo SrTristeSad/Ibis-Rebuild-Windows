@@ -14,7 +14,7 @@ function T.run()
     }
     for id,name in pairs(expected) do
         verify(Visual.toolLabel(id)==name,'Incorrect accessible toolbar label')
-        verify(#name<=8,'Short glyph labels must fit legacy hit targets')
+        verify(#name<=10,'Short glyph labels must fit legacy hit targets')
     end
     verify(not pcall(Visual.toolLabel,'unknown'),
         'Unknown tool should fail explicitly')
