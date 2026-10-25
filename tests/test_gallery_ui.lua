@@ -21,10 +21,12 @@ function Test.run()
     Native.pixel(source,7,7,0x112233ff)
     local bytes=Native.bytes(source)
     local samples={}
+    local sampled=0
     Gallery.sample(bytes,8,8,8,8,function(r,g,b,a,x,y)
         samples[y*8+x]={r,g,b,a}
+        sampled=sampled+1
     end)
-    check(#samples==64,'RGBA sampler must produce every target pixel')
+    check(sampled==64,'RGBA sampler must produce every target pixel')
     check(samples[0][1]==255 and samples[0][2]==51 and
         samples[0][3]==0 and samples[0][4]==128,
         'Transparent RGBA thumb colors changed')
