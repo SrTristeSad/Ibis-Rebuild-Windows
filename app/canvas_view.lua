@@ -14,11 +14,12 @@ local function validate(v,w,h)
         finite(v.width) and finite(v.height) and
         v.width>0 and v.height>0 and finite(w) and finite(h) and
         (v.focusMode==nil or type(v.focusMode)=='boolean') and
+        (v.compactUi==nil or type(v.compactUi)=='boolean') and
         w>320 and h>100,'Estado de visualização inválido')
 end
 function View.center(v,w,h)
     validate(v,w,h)
-    local cx,cy=Workspace.center(w,h,v.focusMode==true)
+    local cx,cy=Workspace.center(w,h,v.focusMode==true,v.compactUi==true)
     return cx+v.panX,cy+v.panY
 end
 function View.toCanvas(v,w,h,mx,my)
@@ -78,7 +79,7 @@ end
 function View.fit(v,w,h)
     validate(v,w,h)
     local safeW=Workspace.fitWidth(w,v.focusMode==true)
-    local safeH=math.max(1,h-200)
+    local safeH=math.max(1,h-(v.compactUi and 262 or 200))
     v.zoom=math.max(View.MIN_ZOOM,math.min(View.MAX_ZOOM,
         math.min(safeW/v.width,safeH/v.height)*0.84))
     v.panX=0;v.panY=0;v.rotation=0
