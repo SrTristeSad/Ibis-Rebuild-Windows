@@ -21,6 +21,9 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
+local showcaseNames={'01-galeria.png','02-editor-compacto.png',
+    '03-biblioteca-pinceis.png','04-seletor-cores.png',
+    '05-camadas.png','06-editor-desktop.png'}
 local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
@@ -1701,6 +1704,52 @@ local function verifyBrushLabLive()
     releaseBrushSamples()
     selectTool(oldTool);A.sideTab=oldTab
 end
+-- Explicit CI-only visual capture mode. Every screenshot comes from the
+-- real LÖVE draw callback using the same independent native C++ raster.
+-- Never runs without --showcase-dir and does not touch normal user projects.
+local function advanceShowcase()
+    local sh=A.showcase
+    sh.stage=sh.stage+1
+    sh.frames=0;sh.pending=false;sh.captured=false
+    if sh.stage==2 then
+        local project=A.store:openProject(sh.projectId)
+        openDoc(project)
+        local session=A.layerSession
+        session:beginEdit()
+        session:softStroke(92,378,431,166,54,0x2391e8ff,.62,.25)
+        session:softStroke(93,240,425,358,46,0xe17caaff,.64,.25)
+        session:stroke(112,355,402,178,16,0x2734aaff,1)
+        session:stroke(96,185,395,318,11,0xffc15aff,1)
+        session:stroke(132,430,392,421,13,0x24bd90ff,1)
+        session:finishEdit()
+        A.dirty=true;rebuildImage()
+        selectTool('brush')
+        A.brushDiameter=24;A.brushOpacity=.70;A.brushStyle='soft'
+        A.color=0xe17caaff
+        A.compactUi=true
+    elseif sh.stage==3 then
+        openBrushLibrary()
+        A.brushFocus=3
+        brushLabFromFocus()
+    elseif sh.stage==4 then
+        A.brushLibrary=false
+        openCompactColor()
+    elseif sh.stage==5 then
+        A.compactPanel='layers'
+    elseif sh.stage==6 then
+        A.compactPanel=nil
+        A.compactUi=false
+        fit()
+    elseif sh.stage>#showcaseNames then
+        externalWrite(sh.directory..'/showcase-report.json',
+            JSON.encode({ok=true,real_love_render=true,
+                native_cpp=Native.available,
+                screenshots=showcaseNames,
+                android_1412_pixel_parity=false}))
+        A.showcase=nil
+        love.event.quit(0)
+    end
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -1755,6 +1804,7 @@ function love.load(args)
         if args[i]=='--data-dir' then options.data=args[i+1]
         elseif args[i]=='--report' then options.report=args[i+1]
         elseif args[i]=='--capture' then options.capture=args[i+1]
+        elseif args[i]=='--showcase-dir' then options.showcaseDir=args[i+1]
         elseif args[i]=='--lua-test' then options.luaTest=true
         elseif args[i]=='--self-test' then options.selfTest=true end
     end
@@ -1775,6 +1825,19 @@ function love.load(args)
     end
     A.colorHistory={}
     refreshGallery();status(Native.available and 'Motor C++ v1 carregado' or 'Galeria disponível · motor C++ ainda não compilado')
+    if options.showcaseDir then
+        assert(Native.available,'Visual showcase requires the real native C++ DLL')
+        assert(not options.selfTest and not options.luaTest,
+            'Showcase must not share the isolated test modes')
+        local blank=Native.buffer(512,512)
+        Native.clear(blank,0)
+        local demo=A.store:createProject('Demonstração de pincéis',
+            512,512,'',Native.bytes(blank))
+        refreshGallery()
+        A.showcase={directory=options.showcaseDir,projectId=demo.id,
+            stage=1,frames=0,pending=false,captured=false}
+        status('Captura real de UI · galeria, editor, pincéis, cores, camadas')
+    end
     if options.luaTest or options.selfTest then
         A.testReport={kind='stage1-executable-tests',native_loaded=Native.available,android_runtime_compared=false}
         local ok,err=pcall(function()
@@ -1800,6 +1863,22 @@ function love.errorhandler(message)
     return function()return 2 end
 end
 function love.update(dt)
+    if A.showcase then
+        local sh=A.showcase
+        if sh.error then
+            externalWrite(sh.directory..'/showcase-report.json',
+                JSON.encode({ok=false,error=sh.error,stage=sh.stage}))
+            A.showcase=nil
+            love.event.quit(2)
+        elseif sh.captured then
+            advanceShowcase()
+        else
+            sh.frames=sh.frames+1
+            if sh.frames>300 then
+                sh.error='Capture timed out at stage '..sh.stage
+            end
+        end
+    end
     if A.inkAttached and dispatchInkEvent then
         for _,event in ipairs(Ink.poll()) do dispatchInkEvent(event) end
     end
@@ -4164,6 +4243,18 @@ function love.draw()
     elseif A.compactUi and A.compactPanel and A.screen=='editor' then
         A.buttons={}
         drawCompactPopup(w,h)
+    end
+    if A.showcase and A.showcase.frames>=3 and
+        not A.showcase.pending then
+        local sh=A.showcase
+        sh.pending=true
+        local file=showcaseNames[sh.stage]
+        love.graphics.captureScreenshot(function(image)
+            local ok,err=pcall(externalWrite,sh.directory..'/'..file,
+                image:encode('png'):getString())
+            if ok then sh.captured=true
+            else sh.error=tostring(err) end
+        end)
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
