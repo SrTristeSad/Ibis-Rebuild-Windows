@@ -142,6 +142,9 @@ def run_tests(runtime_path, output):
             visual38_program="return require('json').encode(require('tests.test_visual_hierarchy').run())"
             stage38_visual=json.loads(native_state.execute(visual38_program))
             assert stage38_visual.get('passed') and stage38_visual.get('layout_safe') and stage38_visual.get('tool_labels_readable') and stage38_visual.get('native_preview_area')
+            layer_keys_program="return require('json').encode(require('tests.test_compact_layer_keys').run())"
+            layer_keys=json.loads(native_state.execute(layer_keys_program))
+            assert layer_keys.get('passed') and layer_keys.get('selection_bounds')
             sidebar_program="return require('json').encode(require('tests.test_sidebar_scroll').run())"
             small_sidebar=json.loads(native_state.execute(sidebar_program))
             assert small_sidebar.get('passed') and small_sidebar.get('small_960x640_safe') and small_sidebar.get('clipped_buttons_inert') and small_sidebar.get('virtual_sliders_reachable')
@@ -227,6 +230,7 @@ def run_tests(runtime_path, output):
         report['gallery_visual_polish'] = gallery_visual
         report['stage38_visual_hierarchy'] = stage38_visual
         report['stage39_adaptive_sidebar'] = small_sidebar
+        report['stage42_compact_layer_keys'] = layer_keys
         report['stage40_compact_brush_inspector'] = compact40
         report['stage41_layer_opacity'] = opacity41
         report['precision_brush_sliders'] = sliders
