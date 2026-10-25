@@ -50,6 +50,9 @@ def run_tests(runtime_path, output):
         keyboard_program = "return require('json').encode(require('tests.test_brush_keyboard').run())"
         keyboard = json.loads(state.execute(keyboard_program))
         assert keyboard.get('passed') and keyboard.get('assertions') >= 10
+        opacity_program = "return require('json').encode(require('tests.test_layer_opacity_steps').run())"
+        opacity_steps = json.loads(state.execute(opacity_program))
+        assert opacity_steps.get('passed') and opacity_steps.get('assertions') == 11
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():

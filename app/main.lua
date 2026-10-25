@@ -28,6 +28,7 @@ local Compact=require('compact_layout')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
+local LayerOpacitySteps=require('layer_opacity_steps')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
@@ -3912,14 +3913,18 @@ local function drawEditor(w,h)
                 ls:move(i,math.max(1,i-1));A.dirty=true;rebuildImage()
             end,false,A.doc.active_layer==1)
             button('−',panel+20,opacityY,42,29,function()
-                ls:setOpacity(A.doc.active_layer,math.max(0,active.opacity-.1))
+                finishStroke()
+                ls:setOpacity(A.doc.active_layer,
+                    LayerOpacitySteps.change(active.opacity,-1))
                 A.dirty=true;rebuildImage()
-            end)
+            end,false,not LayerOpacitySteps.canChange(active.opacity,-1))
             text(('Opacidade %.0f%%'):format(active.opacity*100),panel+68,opacityY+8,'small')
             button('+',panel+206,opacityY,42,29,function()
-                ls:setOpacity(A.doc.active_layer,math.min(1,active.opacity+.1))
+                finishStroke()
+                ls:setOpacity(A.doc.active_layer,
+                    LayerOpacitySteps.change(active.opacity,1))
                 A.dirty=true;rebuildImage()
-            end)
+            end,false,not LayerOpacitySteps.canChange(active.opacity,1))
             -- Passive opacity meter; editing remains on the existing buttons.
             box(panel+20,Sidebar.virtualHeight(h)-58,228,4,'line')
             c('accent')
