@@ -24,6 +24,7 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
+local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
 local dispatchInkEvent
@@ -4603,6 +4604,8 @@ local function drawCompactPopup(w,h)
         local ls=A.layerSession
         local count=#A.doc.layers
         local active=A.doc.active_layer
+        text('↑/↓ camadas · V mostrar/ocultar',
+            p.x+14,p.y+p.h-113,'small','muted')
         button('+',p.x+14,p.y+44,53,32,function()
             finishStroke();ls:add();A.compactLayerStart=nil
             A.dirty=true;rebuildImage()
@@ -5253,6 +5256,29 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='layers' and not A.compactLayerOpacityDrag then
+            local nextIndex=LayerKeys.target(key,A.doc.active_layer,
+                #A.doc.layers)
+            if nextIndex then
+                if nextIndex~=A.doc.active_layer then
+                    finishStroke()
+                    A.layerSession:select(nextIndex)
+                    A.compactLayerStart=nil
+                    A.dirty=true
+                    status('Camada selecionada: '..nextIndex)
+                end
+                return
+            elseif key=='v' then
+                finishStroke()
+                local index=A.doc.active_layer
+                A.layerSession:setVisible(index,
+                    not A.doc.layers[index].visible)
+                A.dirty=true
+                rebuildImage()
+                status('Visibilidade da camada '..index..' alternada')
+                return
+            end
+        end
         if key=='escape' then
             A.compactLayerOpacityDrag=nil
             A.compactPanel=nil;A.colorDrag=nil
