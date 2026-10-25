@@ -53,6 +53,9 @@ def run_tests(runtime_path, output):
         opacity_program = "return require('json').encode(require('tests.test_layer_opacity_steps').run())"
         opacity_steps = json.loads(state.execute(opacity_program))
         assert opacity_steps.get('passed') and opacity_steps.get('assertions') == 11
+        order_program = "return require('json').encode(require('tests.test_layer_order_controls').run())"
+        order = json.loads(state.execute(order_program))
+        assert order.get('passed') and order.get('assertions') == 10
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():
