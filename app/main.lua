@@ -30,7 +30,8 @@ local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
     '05-camadas.png','06-editor-desktop.png',
-    '07-editor-960x640.png','08-ajustes-pincel.png'}
+    '07-editor-960x640.png','08-ajustes-pincel.png',
+    '09-opacidade-camadas.png'}
 local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
@@ -1775,6 +1776,19 @@ local function advanceShowcase()
         selectTool('brush')
         fit()
         status('Ajustes compactos · prévia nativa de pincel C++')
+    elseif sh.stage==9 then
+        if #A.doc.layers==1 then
+            A.layerSession:add('Destaques')
+            A.layerSession:beginEdit()
+            A.layerSession:stroke(70,120,410,370,30,0xeaa346ff,1)
+            A.layerSession:finishEdit()
+            A.dirty=true;rebuildImage()
+        end
+        A.layerSession:setOpacity(A.doc.active_layer,.37)
+        A.dirty=true;rebuildImage()
+        A.compactPanel='layers'
+        A.compactLayerOpacityDrag=nil
+        status('Camadas · opacidade precisa de 37%')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -1916,6 +1930,79 @@ local function verifyCompactNativeInspector()
     A.brushOpacity=oldOpacity;A.stabilization=oldStabilization
     selectTool(oldTool);A.sideTab=oldTab
     releaseBrushSamples()
+end
+-- Stage 41: drag at 1% resolution, then confirm ONE undo entry,
+-- even after multiple pointer movements. Preview must not edit raster.
+local function verifyCompactLayerOpacity()
+    local w,h=love.graphics.getDimensions()
+    assert(not A.compactUi and not A.focusMode,
+        'Opacity GUI regression must begin in desktop mode')
+    local previousTool,previousTab=A.tool,A.sideTab
+    local previousDirty=A.dirty
+    local previousStart=A.compactLayerStart
+    local layerIndex=A.doc.active_layer
+    local initial=A.doc.layers[layerIndex].opacity
+    local bytes=Native.bytes(A.layerSession.composite)
+    local layers=#A.doc.layers
+    local oldHistory=A.layerSession:historyStats().undo
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(A.compactUi,'Compact mode unavailable')
+    local dock=Compact.toolbar(w,h)
+    love.draw()
+    love.mousepressed(dock[6].x+dock[6].w/2,
+        dock[6].y+dock[6].h/2,1,false)
+    assert(A.compactPanel=='layers','Compact layers popup failed')
+    local p=Compact.popup(w,h,'layers')
+    local rail=LayerOpacity.rect(p)
+    love.draw()
+    love.mousepressed(rail.x,rail.y+6,1,false)
+    assert(A.compactLayerOpacityDrag and
+        A.compactLayerOpacityDrag.index==layerIndex,
+        'Opacity pointer must own the selected layer')
+    love.mousemoved(rail.x+rail.w*.2,rail.y+6,18,0,false)
+    love.mousemoved(rail.x+rail.w*.8,rail.y+6,18,0,false)
+    love.mousemoved(rail.x+rail.w*.37,rail.y+6,-18,0,false)
+    love.draw()
+    assert(A.compactLayerOpacityDrag.value==.37 and
+        A.doc.layers[layerIndex].opacity==initial and
+        A.layerSession:historyStats().undo==oldHistory and
+        Native.bytes(A.layerSession.composite)==bytes,
+        'Draft preview wrote pixels, metadata or history before release')
+    love.mousereleased(rail.x+rail.w*.37,rail.y+6,1,false)
+    assert(not A.compactLayerOpacityDrag and
+        A.doc.layers[layerIndex].opacity==.37,
+        'Mouse release must commit exact 37%')
+    local entry=A.layerSession.undoStack[#A.layerSession.undoStack]
+    assert(entry and entry.kind=='property' and
+        entry.field=='opacity' and entry.before==initial and
+        entry.after==.37,
+        'Opacity drag must be one stable, undoable metadata edit')
+    assert(A.layerSession:undo() and
+        A.doc.layers[layerIndex].opacity==initial,
+        'Undo did not restore original layer opacity')
+    assert(Native.bytes(A.layerSession.composite)==bytes,
+        'Undo must exactly restore original C++ RGBA composite')
+    assert(A.layerSession:redo() and
+        A.doc.layers[layerIndex].opacity==.37,
+        'Redo did not reapply 37 percent')
+    assert(A.layerSession:undo() and
+        A.doc.layers[layerIndex].opacity==initial,
+        'Final cleanup did not restore original opacity')
+    rebuildImage()
+    love.keypressed('escape')
+    assert(not A.compactPanel and not A.compactLayerOpacityDrag,
+        'Escape must close layers popup and release slider')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(not A.compactUi,'Failed to restore desktop editor')
+    assert(Native.bytes(A.layerSession.composite)==bytes and
+        #A.doc.layers==layers,
+        'Opacity GUI test left a modified drawing or layer structure')
+    A.dirty=previousDirty
+    A.compactLayerStart=previousStart
+    selectTool(previousTool)
+    A.sideTab=previousTab
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -3220,6 +3307,7 @@ function love.update(dt)
                 verifyBrushLabLive()
                 verifyAdaptiveDesktopSidebar()
                 verifyCompactNativeInspector()
+                verifyCompactLayerOpacity()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -3326,6 +3414,10 @@ function love.update(dt)
                     compact_native_brush_preview=true,
                     compact_live_cache_invalidation=true,
                     compact_native_no_document_writes=true,
+                    compact_layer_opacity_one_percent=true,
+                    compact_layer_opacity_single_undo=true,
+                    compact_layer_opacity_undo_redo=true,
+                    compact_layer_draft_no_raster=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
