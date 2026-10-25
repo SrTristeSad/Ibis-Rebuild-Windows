@@ -93,6 +93,14 @@ function Presets.matches(preset,state)
         math.abs(state.brushOpacity-preset.opacity)<1e-6 and
         state.stabilization==preset.stabilization
 end
+function Presets.visible(filter,index)
+    assert(filter=='all' or filter=='builtin' or filter=='personal',
+        'Filtro de biblioteca inválido')
+    assert(validInteger(index,1,8),'Índice de pincel inválido')
+    return filter=='all' or
+        (filter=='builtin' and index<=4) or
+        (filter=='personal' and index>=5)
+end
 function Presets.layout(w,h)
     assert(type(w)=='number' and type(h)=='number' and
         w>=960 and h>=640,'Janela muito pequena')
