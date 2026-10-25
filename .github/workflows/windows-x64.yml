@@ -169,6 +169,9 @@ jobs:
           name: windows-diagnostics
           path: |
             build/preflight.json
+            build/showcase/showcase-report.json
+            build/showcase/verification.json
+            build/showcase/command/*.log
             build/latest-test.json
             build/toolchain-report.json
             build/commands/**/process.json
