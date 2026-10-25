@@ -65,6 +65,9 @@ def run_tests(runtime_path, output):
         wheel_program = "return require('json').encode(require('tests.test_layer_list_wheel').run())"
         wheel = json.loads(state.execute(wheel_program))
         assert wheel.get('passed') and wheel.get('assertions') == 37
+        compact_wheel_program = "return require('json').encode(require('tests.test_compact_layer_wheel').run())"
+        compact_wheel = json.loads(state.execute(compact_wheel_program))
+        assert compact_wheel.get('passed') and compact_wheel.get('assertions') == 37
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():
