@@ -41,7 +41,7 @@ function T.run()
             check(math.abs(Lab.fraction(kind,bounds[1]))<1e-8 and
                 math.abs(Lab.fraction(kind,bounds[2])-1)<1e-8,
                 'Slider thumb position must match parameter')
-            check(not Lab.hit(modal,rail.x+20,rail.y-45),
+            check(not Lab.hit(modal,rail.x+20,rail.y-23),
                 'Invisible area must not capture canvas/popup input')
             local previous=-math.huge
             for j=0,40 do
