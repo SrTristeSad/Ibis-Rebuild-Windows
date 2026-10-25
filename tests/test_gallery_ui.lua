@@ -57,7 +57,7 @@ function Test.run()
         return n*8
     end
     local title='Demonstração longa de pincéis'
-    check(TextFit.truncate(title,100,width)=='Demonstraç...',
+    check(TextFit.truncate(title,100,width)=='Demonstra...',
         'Title should truncate at a valid UTF-8 character boundary')
     check(TextFit.truncate(title,1000,width)==title,
         'Short title must remain unchanged')
