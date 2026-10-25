@@ -3890,9 +3890,10 @@ local function drawEditor(w,h)
             button(layer.visible and 'Vis' or 'Oc.',
                 panel+210,rowY+4,35,25,function()
                     finishStroke()
-                    ls:setVisible(i,not layer.visible)
+                    local nextVisible=not A.doc.layers[i].visible
+                    ls:setVisible(i,nextVisible)
                     A.dirty=true;rebuildImage()
-                    status(layer.visible and 'Camada visível'
+                    status(nextVisible and 'Camada visível'
                         or 'Camada oculta')
                 end,layer.visible)
             y=y+37
