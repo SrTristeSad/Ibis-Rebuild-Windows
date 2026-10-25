@@ -16,8 +16,9 @@ local Presets=require('brush_presets')
 local Sliders=require('brush_sliders')
 local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
+local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,compactPanel=nil,compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -130,9 +131,13 @@ local function rebuildImage()
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
     A.image=love.graphics.newImage(A.imageData);A.image:setFilter('nearest','nearest')
 end
+local function paneHidden()
+    return A.focusMode or A.compactUi
+end
 local function viewData()
     return {zoom=A.zoom,rotation=A.rotation,panX=A.panX,panY=A.panY,
-        width=A.doc.width,height=A.doc.height,focusMode=A.focusMode}
+        width=A.doc.width,height=A.doc.height,
+        focusMode=paneHidden(),compactUi=A.compactUi}
 end
 local function commitView(v)
     A.zoom=v.zoom;A.rotation=v.rotation;A.panX=v.panX;A.panY=v.panY
@@ -175,6 +180,8 @@ local function openDoc(doc)
     A.buffer=A.layerSession.composite
     releaseTipCache()
     A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false
+    A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
+    A.compactPanel=nil;A.compactLayerStart=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -240,10 +247,28 @@ local function toggleFocusMode()
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
+    A.compactPanel=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
     return A.focusMode
+end
+local function toggleCompactUi()
+    assert(A.screen=='editor' and A.doc,'Abra uma obra para trocar o layout')
+    finishStroke()
+    A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
+    A.panning=false;A.panButton=nil;A.sliderDrag=nil
+    A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
+    A.compactPanel=nil;A.compactLayerStart=nil
+    A.compactUi=not A.compactUi
+    status(A.compactUi and 'Interface compacta · barra inferior ativa' or
+        'Interface desktop · painel lateral restaurado')
+end
+local function toggleCompactPanel(kind)
+    assert(A.compactUi and A.screen=='editor','Painel compacto indisponível')
+    finishStroke()
+    A.shapePreview=nil;A.panning=false;A.panButton=nil
+    A.compactPanel=A.compactPanel==kind and nil or kind
 end
 local function undoDoc()
     A.shapePreview=nil
@@ -284,7 +309,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -299,7 +324,7 @@ local function exportPNG()
     return name
 end
 local function modal(kind)
-    A.contextMenu=nil
+    A.contextMenu=nil;A.compactPanel=nil
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
     A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
         kind=='color' and {Colors.format(A.color)} or {''}}
@@ -450,6 +475,7 @@ local function openContextMenu(kind,target,x,y)
         entries=entries,x=px,y=py,w=pw,h=ph,cursor=1}
 end
 local function openBrushLibrary()
+    A.compactPanel=nil
     assert(A.screen=='editor' and A.layerSession and not A.modal,
         'Abra uma obra para escolher um pincel')
     finishStroke()
@@ -2468,18 +2494,31 @@ local function drawBrushTip(w,h)
 end
 local function drawEditor(w,h)
     local panel=w-268
-    button('← Galeria',20,78,92,34,toGallery)
-    for _,slot in ipairs(toolSlots) do toolButton(slot) end
-    button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
-    button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
-        w-357,15,134,33,toggleFocusMode,A.focusMode)
+    if not A.compactUi then
+        button('← Galeria',20,78,92,34,toGallery)
+        for _,slot in ipairs(toolSlots) do toolButton(slot) end
+        button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
+        button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
+            w-357,15,134,33,toggleFocusMode,A.focusMode)
+    else
+        button('↶',20,78,43,34,undoDoc,false,not A.layerSession:canUndo())
+        button('↷',67,78,43,34,redoDoc,false,not A.layerSession:canRedo())
+        button('−',118,78,43,34,function()zoomCanvas(1/1.25)end)
+        button('+',165,78,43,34,function()zoomCanvas(1.25)end)
+        button('Encaixar',217,78,90,34,fit)
+        text('Desenho · '..A.doc.width..' × '..A.doc.height,
+            326,87,'small','muted')
+    end
+    button(A.compactUi and 'Layout desktop' or 'Layout compacto',
+        w-645,15,134,33,toggleCompactUi,A.compactUi)
     button(A.previewEnabled and 'Prévia: ligada' or 'Prévia: desligada',
         w-501,15,134,33,function()
             A.previewEnabled=not A.previewEnabled
         end,A.previewEnabled)
     local cx,cy=canvasTransform()
-    box(12,120,w-Workspace.panelWidth(A.focusMode)-20,h-178,'canvas')
-    love.graphics.setScissor(Workspace.scissor(w,h,A.focusMode))
+    box(12,120,w-Workspace.panelWidth(paneHidden())-20,
+        h-(A.compactUi and 239 or 178),'canvas')
+    love.graphics.setScissor(Workspace.scissor(w,h,paneHidden(),A.compactUi))
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
     local checker=math.max(8,math.ceil(math.max(dw,dh)/64))
@@ -2526,6 +2565,7 @@ local function drawEditor(w,h)
     love.graphics.setScissor()
     -- View-only controls remain outside the raster and layer history.
     local dockY=h-116
+    if not A.compactUi then
     button('−',20,dockY,36,30,function()zoomCanvas(1/1.25)end,
         false,A.zoom<=View.MIN_ZOOM)
     button('+',60,dockY,36,30,function()zoomCanvas(1.25)end,
@@ -2535,7 +2575,8 @@ local function drawEditor(w,h)
     button('0°',182,dockY,43,30,resetCanvasRotation)
     button('Encaixar',230,dockY,83,30,fit)
     text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
-    if not A.focusMode then
+    end
+    if not paneHidden() then
     box(panel,64,268,h-112,'panel')
     c('line')
     love.graphics.rectangle('fill',panel,64,1,h-112)
@@ -2837,7 +2878,8 @@ local function drawEditor(w,h)
     end
     end
     end -- right-side panel, hidden during focus mode
-    if A.focusMode and (A.tool=='brush' or A.tool=='erase') then
+    if A.focusMode and not A.compactUi and
+        (A.tool=='brush' or A.tool=='erase') then
         -- Keep the most-used drawing controls accessible without the pane.
         text('Tamanho',430,dockY+7,'small','muted')
         button('−',490,dockY,32,30,function()
@@ -2862,15 +2904,40 @@ local function drawEditor(w,h)
                 math.floor(A.brushOpacity*10+.5)/10+.1)
         end,false,A.brushOpacity>=.999)
     end
+    if not A.compactUi then
     text(('Zoom %.0f%% · ângulo %.0f° · Espaço + arrastar: mover · Ctrl +/−: zoom · Q/E: girar'):format(
         A.zoom*100,math.deg(A.rotation)),22,h-72,'small','muted')
-    if A.tool=='select' then
+    end
+    if A.tool=='select' and not A.compactUi then
         text(A.selection and 'Arraste dentro da borda para mover · Ctrl+D desmarca'
             or 'Arraste na tela para selecionar uma área retangular',22,h-94,'small','accent')
-    elseif A.tool=='shape' then
+    elseif A.tool=='shape' and not A.compactUi then
         text('Arraste para desenhar uma forma ou uma linha reta',22,h-94,'small','accent')
-    elseif A.tool=='picker' then
+    elseif A.tool=='picker' and not A.compactUi then
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
+    end
+    if A.compactUi then
+        box(10,h-125,w-20,67,'panel')
+        for _,slot in ipairs(Compact.toolbar(w,h)) do
+            local active=(slot.id=='brush' and
+                (A.tool=='brush' or A.tool=='erase')) or
+                (slot.id=='tools' and A.compactPanel=='tools') or
+                (slot.id=='layers' and A.compactPanel=='layers') or
+                (slot.id=='properties' and A.compactPanel=='properties')
+            button(slot.label,slot.x,slot.y,slot.w,slot.h,function()
+                if slot.id=='brush' then
+                    selectTool(A.tool=='erase' and 'brush' or 'erase')
+                elseif slot.id=='tools' or slot.id=='layers' or
+                    slot.id=='properties' then
+                    toggleCompactPanel(slot.id)
+                elseif slot.id=='color' then modal('color')
+                elseif slot.id=='fullscreen' then toggleFocusMode()
+                elseif slot.id=='back' then toGallery() end
+            end,active)
+        end
+        text(('Zoom %.0f%%  ·  %s  ·  %s'):format(A.zoom*100,
+            EditorTools.fromId(A.tool).label,A.doc.name),
+            20,h-149,'small','muted')
     end
 end
 local function drawModal(w,h)
