@@ -71,6 +71,34 @@ glyphs.back={
     {op='line',points={-5,-.5,.1,-5.5}},
     {op='line',points={-5,-.5,.1,4.5}}
 }
+-- Desktop/compact chrome glyphs rendered as vectors instead of missing
+-- Windows default-font Unicode symbols (which showed empty squares).
+glyphs.undo={
+    {op='line',points={-6,-4,1,-4,4,-2,5,1,3.5,4}},
+    {op='line',points={-6,-4,-2,-7}},
+    {op='line',points={-6,-4,-1,0}}
+}
+glyphs.redo={
+    {op='line',points={6,-4,-1,-4,-4,-2,-5,1,-3.5,4}},
+    {op='line',points={6,-4,2,-7}},
+    {op='line',points={6,-4,1,0}}
+}
+glyphs['rotate-left']={
+    {op='line',points={-5,-2,-5,-5,-2,-5}},
+    {op='line',points={-5,-5,0,-6,5,-3,6,1,3,5,-2,5}}
+}
+glyphs['rotate-right']={
+    {op='line',points={5,-2,5,-5,2,-5}},
+    {op='line',points={5,-5,0,-6,-5,-3,-6,1,-3,5,2,5}}
+}
+glyphs.visible={
+    {op='polygon',mode='line',points={-7,0,-4,-3,0,-4,4,-3,7,0,4,3,0,4,-4,3}},
+    {op='circle',mode='fill',x=0,y=0,r=2}
+}
+glyphs.hidden={
+    {op='polygon',mode='line',points={-7,0,-4,-3,0,-4,4,-3,7,0,4,3,0,4,-4,3}},
+    {op='line',points={-6,6,6,-6}}
+}
 function Icons.commands(id)
     return glyphs[id]
 end

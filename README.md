@@ -74,6 +74,8 @@ A etapa 35 apresenta o [laboratório de pincéis com prévia ampliada](docs/BRUS
 
 A etapa 36 disponibiliza [capturas reais do aplicativo Windows](docs/REAL_WINDOWS_SCREENSHOTS_STAGE36.md) feitas pelo LÖVE e pelo motor C++ durante o CI. Baixe o artefato `IbisRebuild-Real-Windows-Screenshots` da execução Windows para ver a galeria, editor compacto, biblioteca de pincéis, cores, camadas e editor desktop.
 
+A etapa 37 corrige [miniaturas reais da galeria e problemas de legibilidade](docs/GALLERY_POLISH_STAGE37.md): imagens vindas do composto RGBA C++, cache limitado, setas vetoriais de desfazer/refazer e textos UTF-8 com largura máxima. As capturas Windows do CI mostram o resultado da própria interface.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
