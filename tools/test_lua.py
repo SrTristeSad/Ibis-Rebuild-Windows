@@ -142,6 +142,9 @@ def run_tests(runtime_path, output):
             visual_program="return require('json').encode(require('tests.test_compact_visual').run())"
             visual=json.loads(native_state.execute(visual_program))
             assert visual.get('passed') and visual.get('vector_icons') and visual.get('safe_quick_hitboxes') and visual.get('canvas_isolation')
+            color_program="return require('json').encode(require('tests.test_color_brush_windows').run())"
+            color_windows=json.loads(native_state.execute(color_program))
+            assert color_windows.get('passed') and color_windows.get('hsb_rgb_roundtrip') and color_windows.get('palette_capacity') and color_windows.get('brush_filters')
             thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
             thumbs=json.loads(native_state.execute(thumbnail_program))
             assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
@@ -202,6 +205,7 @@ def run_tests(runtime_path, output):
         report['native_brush_tip_cursor'] = cursor
         report['compact_workspace_layout'] = compact
         report['compact_visual_controls'] = visual
+        report['color_brush_windows'] = color_windows
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result
