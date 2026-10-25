@@ -3902,8 +3902,14 @@ local function drawEditor(w,h)
             local actionY=Sidebar.virtualHeight(h)-131
             local opacityY=Sidebar.virtualHeight(h)-94
             button(active.visible and 'Ocultar' or 'Mostrar',panel+20,actionY,109,30,function()
-                ls:setVisible(A.doc.active_layer,not active.visible)
+                -- Match the visibility action in each thumbnail row:
+                -- commit an ongoing stroke before changing compositing.
+                finishStroke()
+                local index=A.doc.active_layer
+                local nextVisible=not A.doc.layers[index].visible
+                ls:setVisible(index,nextVisible)
                 A.dirty=true;rebuildImage()
+                status(nextVisible and 'Camada visível' or 'Camada oculta')
             end,active.visible)
             button('Acima',panel+139,actionY,54,30,function()
                 local i=A.doc.active_layer
