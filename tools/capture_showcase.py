@@ -24,7 +24,7 @@ PNG_MAGIC = b'\x89PNG\r\n\x1a\n'
 
 
 def capture(output, runtime_path=None):
-    output = pathlib.Path(output)
+    output = pathlib.Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     rt = runtime(runtime_path)
     executable = rt / 'lovec.exe'
@@ -55,10 +55,16 @@ def capture(output, runtime_path=None):
     verified = bool(process['ok'] and app.get('ok') and
                     app.get('real_love_render') and app.get('native_cpp') and
                     all(x['ok'] for x in items))
+    stdout_file = output / 'command' / 'stdout.log'
+    stderr_file = output / 'command' / 'stderr.log'
     result = {'ok': verified, 'capture_type': 'real_love_window',
               'native_cpp': bool(app.get('native_cpp')),
               'android_1412_pixel_parity': False, 'process': process,
-              'screenshots': items, 'app': app}
+              'screenshots': items, 'app': app,
+              'stdout_tail': stdout_file.read_text(encoding='utf-8', errors='replace')[-1400:]
+                  if stdout_file.exists() else '',
+              'stderr_tail': stderr_file.read_text(encoding='utf-8', errors='replace')[-1400:]
+                  if stderr_file.exists() else ''}
     (output / 'verification.json').write_text(
         json.dumps(result, indent=2), encoding='utf-8')
     return result
