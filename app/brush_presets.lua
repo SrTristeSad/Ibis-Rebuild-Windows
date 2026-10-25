@@ -136,7 +136,7 @@ end
 function Presets.layout(w,h)
     assert(type(w)=='number' and type(h)=='number' and
         w>=960 and h>=640,'Janela muito pequena')
-    local width=math.min(720,w-72)
+    local width=math.min(1040,w-72)
     local height=546
     return {x=math.floor((w-width)/2),y=math.floor((h-height)/2),
         w=width,h=height}
