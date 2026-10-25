@@ -78,6 +78,8 @@ A etapa 37 corrige [miniaturas reais da galeria e problemas de legibilidade](doc
 
 A etapa 38 refina [hierarquia visual, galeria e botões do editor Windows](docs/VISUAL_HIERARCHY_STAGE38.md), ampliando as miniaturas RGBA, medindo corretamente os títulos, organizando a barra compacta e agrupando a faixa de ferramentas desktop. O CI continua publicando capturas autênticas da interface.
 
+A etapa 39 oferece o [painel lateral desktop com rolagem independente](docs/ADAPTIVE_SIDEBAR_STAGE39.md) nas janelas de altura inferior a 800 px. Os botões e sliders ficam disponíveis até em 960 × 640, com clique e recorte corretos, roda do mouse e teclas PageUp/PageDown/Home/End. A bateria Windows gera também a sétima captura real, `07-editor-960x640.png`.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
