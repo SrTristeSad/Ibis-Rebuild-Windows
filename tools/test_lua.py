@@ -139,6 +139,9 @@ def run_tests(runtime_path, output):
             gallery_program="return require('json').encode(require('tests.test_gallery_ui').run())"
             gallery_visual=json.loads(native_state.execute(gallery_program))
             assert gallery_visual.get('passed') and gallery_visual.get('thumbnail_alpha') and gallery_visual.get('unicode_safe') and gallery_visual.get('vector_icons')
+            visual38_program="return require('json').encode(require('tests.test_visual_hierarchy').run())"
+            stage38_visual=json.loads(native_state.execute(visual38_program))
+            assert stage38_visual.get('passed') and stage38_visual.get('layout_safe') and stage38_visual.get('tool_labels_readable') and stage38_visual.get('native_preview_area')
             slider_program="return require('json').encode(require('tests.test_brush_sliders').run())"
             sliders=json.loads(native_state.execute(slider_program))
             assert sliders.get('passed') and sliders.get('one_percent_opacity') and sliders.get('panel_isolation')
@@ -213,6 +216,7 @@ def run_tests(runtime_path, output):
         report['native_brush_catalogue_samples'] = brush_samples
         report['native_brush_lab_inspector'] = brush_lab
         report['gallery_visual_polish'] = gallery_visual
+        report['stage38_visual_hierarchy'] = stage38_visual
         report['precision_brush_sliders'] = sliders
         report['native_brush_tip_cursor'] = cursor
         report['compact_workspace_layout'] = compact
