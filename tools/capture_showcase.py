@@ -21,6 +21,7 @@ NAMES = (
     '06-editor-desktop.png',
     '07-editor-960x640.png',
     '08-ajustes-pincel.png',
+    '09-opacidade-camadas.png',
 )
 PNG_MAGIC = b'\x89PNG\r\n\x1a\n'
 

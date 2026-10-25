@@ -82,6 +82,8 @@ A etapa 39 oferece o [painel lateral desktop com rolagem independente](docs/ADAP
 
 A etapa 40 adiciona [prévia C++ em tempo real aos ajustes compactos](docs/COMPACT_BRUSH_PREVIEW_STAGE40.md), atualizada por tamanho, opacidade, estilo e cor, sem gravar na obra. A janela compacta de camadas também recorta nomes longos corretamente. O CI publica a oitava captura real `08-ajustes-pincel.png`.
 
+A etapa 41 adiciona [opacidade precisa das camadas no popover compacto](docs/COMPACT_LAYER_OPACITY_STAGE41.md): controle 0–100% em passos de 1%, rascunho sem edições na obra durante o arraste e uma única ação desfeita/refeita por Ctrl+Z/Ctrl+Y ao soltar. O CI publica a nona captura real, `09-opacidade-camadas.png`.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |

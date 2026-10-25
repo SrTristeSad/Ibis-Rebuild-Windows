@@ -68,7 +68,7 @@ function Test.run()
     check(TextFit.truncate(title,24,width)=='...',
         'Narrow text must contain only an ASCII ellipsis')
     for _,name in ipairs({'undo','redo','rotate-left','rotate-right',
-        'visible','hidden'}) do
+        'visible','hidden','up','down'}) do
         local cmds=Icons.commands(name)
         check(type(cmds)=='table' and #cmds>=2,
             'Toolbar icon missing vector commands: '..name)
