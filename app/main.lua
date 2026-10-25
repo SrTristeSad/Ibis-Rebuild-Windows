@@ -28,6 +28,7 @@ local Compact=require('compact_layout')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
+local DesktopOpacity=require('desktop_layer_opacity')
 local LayerOpacitySteps=require('layer_opacity_steps')
 local LayerOrder=require('layer_order_controls')
 local LayerRowVisual=require('layer_row_visual')
@@ -37,7 +38,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
     '09-opacidade-camadas.png'}
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -233,7 +234,7 @@ local function openDoc(doc)
     A.buffer=A.layerSession.composite
     releaseTipCache()
     releaseBrushSamples()
-    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.desktopLayerOpacityDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
     A.compactPanel=nil;A.compactLayerStart=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
@@ -301,7 +302,7 @@ local function toggleFocusMode()
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
-    A.compactPanel=nil;A.colorDrag=nil
+    A.compactPanel=nil;A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -314,6 +315,7 @@ local function toggleCompactUi()
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
     A.compactPanel=nil;A.compactLayerStart=nil;A.colorDrag=nil
+    A.desktopLayerOpacityDrag=nil
     A.compactUi=not A.compactUi
     status(A.compactUi and 'Interface compacta · barra inferior ativa' or
         'Interface desktop · painel lateral restaurado')
@@ -363,7 +365,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -2009,6 +2011,73 @@ local function verifyCompactLayerOpacity()
     selectTool(previousTool)
     A.sideTab=previousTab
 end
+-- Real Windows GUI regression: the classic rail operates within the
+-- scrolled 960x640 panel and creates one property-undo step on release.
+local function verifyDesktopLayerOpacity()
+    local oldW,oldH=love.graphics.getDimensions()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldScroll,oldDirty=A.sidebarScroll,A.dirty
+    local index=A.doc.active_layer
+    local initial=A.doc.layers[index].opacity
+    local initialBytes=Native.bytes(A.layerSession.composite)
+    local oldUndo=A.layerSession:historyStats().undo
+    assert(not A.compactUi and not A.focusMode,
+        'Desktop opacity regression requires classic editor')
+    assert(love.window.setMode(960,640,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Cannot resize for desktop layer opacity test')
+    selectTool('brush')
+    A.sideTab='layers'
+    A.sidebarScroll=Sidebar.max(640)
+    love.draw()
+    local w,h=love.graphics.getDimensions()
+    local rail=DesktopOpacity.rect(w,h)
+    local y=rail.y-A.sidebarScroll+rail.h/2
+    local target=initial==.37 and .41 or .37
+    assert(DesktopOpacity.hit(w,h,rail.x+rail.w*.5,y,A.sidebarScroll),
+        'Opacity rail must be reachable in scrolled 960x640 panel')
+    love.mousepressed(rail.x,y,1,false)
+    assert(A.desktopLayerOpacityDrag and
+        A.desktopLayerOpacityDrag.index==index,
+        'Desktop rail must capture selected layer')
+    love.mousemoved(rail.x+rail.w*.81,y,20,0,false)
+    love.mousemoved(rail.x+rail.w*target,y,-15,0,false)
+    love.draw()
+    assert(A.desktopLayerOpacityDrag.value==target and
+        A.doc.layers[index].opacity==initial and
+        A.layerSession:historyStats().undo==oldUndo and
+        Native.bytes(A.layerSession.composite)==initialBytes,
+        'Preview drag cannot modify pixels or history')
+    love.mousereleased(rail.x+rail.w*target,y,1,false)
+    assert(not A.desktopLayerOpacityDrag and
+        A.doc.layers[index].opacity==target and
+        A.layerSession:historyStats().undo<=oldUndo+1,
+        'Release may create only one undo entry')
+    local entry=A.layerSession.undoStack[#A.layerSession.undoStack]
+    assert(entry and entry.kind=='property' and
+        entry.field=='opacity' and entry.before==initial and
+        entry.after==target,'Metadata undo entry must match drag')
+    assert(A.layerSession:undo() and
+        A.doc.layers[index].opacity==initial and
+        Native.bytes(A.layerSession.composite)==initialBytes,
+        'Opacity undo must exactly restore C++ composite')
+    assert(A.layerSession:redo() and
+        A.doc.layers[index].opacity==target,
+        'Opacity redo must reapply the chosen percentage')
+    assert(A.layerSession:undo() and
+        A.doc.layers[index].opacity==initial,
+        'Opacity regression cleanup must restore initial value')
+    rebuildImage()
+    assert(love.window.setMode(oldW,oldH,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Cannot restore viewport after desktop opacity test')
+    selectTool(oldTool);A.sideTab=oldTab
+    A.sidebarScroll=Sidebar.clamp(oldH,oldScroll or 0)
+    A.dirty=oldDirty
+    love.draw()
+    assert(Native.bytes(A.layerSession.composite)==initialBytes,
+        'Desktop opacity test changed the drawing')
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -3313,6 +3382,7 @@ function love.update(dt)
                 verifyAdaptiveDesktopSidebar()
                 verifyCompactNativeInspector()
                 verifyCompactLayerOpacity()
+                verifyDesktopLayerOpacity()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -3938,19 +4008,30 @@ local function drawEditor(w,h)
                     LayerOpacitySteps.change(active.opacity,-1))
                 A.dirty=true;rebuildImage()
             end,false,not LayerOpacitySteps.canChange(active.opacity,-1))
-            text(('Opacidade %.0f%%'):format(active.opacity*100),panel+68,opacityY+8,'small')
+            local previewOpacity=A.desktopLayerOpacityDrag and
+                A.desktopLayerOpacityDrag.index==A.doc.active_layer and
+                A.desktopLayerOpacityDrag.value or active.opacity
+            text(('Opacidade %.0f%%'):format(previewOpacity*100),
+                panel+68,opacityY+8,'small')
             button('+',panel+206,opacityY,42,29,function()
                 finishStroke()
                 ls:setOpacity(A.doc.active_layer,
                     LayerOpacitySteps.change(active.opacity,1))
                 A.dirty=true;rebuildImage()
             end,false,not LayerOpacitySteps.canChange(active.opacity,1))
-            -- Passive opacity meter; editing remains on the existing buttons.
-            box(panel+20,Sidebar.virtualHeight(h)-58,228,4,'line')
+            -- Interactive desktop opacity rail; dragging previews only.
+            -- The actual layer property is committed once on mouse release.
+            local opacityRail=DesktopOpacity.rect(w,h)
+            box(opacityRail.x,opacityRail.y,opacityRail.w,
+                opacityRail.h,'line')
             c('accent')
-            love.graphics.rectangle('fill',panel+20,
-                Sidebar.virtualHeight(h)-58,
-                228*math.max(0,math.min(1,active.opacity)),4,2,2)
+            love.graphics.rectangle('fill',opacityRail.x,opacityRail.y,
+                math.max(1,opacityRail.w*previewOpacity),
+                opacityRail.h,2,2)
+            c('text')
+            love.graphics.circle('fill',
+                opacityRail.x+opacityRail.w*previewOpacity,
+                opacityRail.y+opacityRail.h/2,5,18)
         end
     else
         if A.tool=='fill' then
@@ -4901,6 +4982,20 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             return
         end
     end
+    if buttonNumber==1 and A.screen=='editor' and not A.modal and
+        not A.spaceHeld and not A.compactUi and not paneHidden() and
+        A.sideTab=='layers' and A.tool~='picker' and
+        A.tool~='shape' and A.tool~='select' then
+        local w,h=love.graphics.getDimensions()
+        if DesktopOpacity.hit(w,h,x,y,A.sidebarScroll) then
+            finishStroke()
+            local i=A.doc.active_layer
+            local initial=A.doc.layers[i].opacity
+            A.desktopLayerOpacityDrag=DesktopOpacity.draft(i,initial,
+                DesktopOpacity.value(w,h,x))
+            return
+        end
+    end
     if buttonNumber==1 and A.screen=='editor' and not A.modal
         and not A.spaceHeld then
         local panel=love.graphics.getWidth()-268
@@ -5008,6 +5103,24 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.desktopLayerOpacityDrag and b==1 then
+        local drag=A.desktopLayerOpacityDrag
+        A.desktopLayerOpacityDrag=nil
+        if A.screen=='editor' and A.layerSession and
+            drag.index<=#A.doc.layers then
+            drag.value=DesktopOpacity.value(
+                love.graphics.getWidth(),love.graphics.getHeight(),x)
+            if DesktopOpacity.changed(drag) then
+                finishStroke()
+                local changed=A.layerSession:setOpacity(drag.index,
+                    drag.value)
+                if changed then A.dirty=true;rebuildImage() end
+                status(('Opacidade da camada %d: %.0f%%'):format(
+                    drag.index,drag.value*100))
+            end
+        end
+        return
+    end
     if A.compactLayerOpacityDrag and b==1 then
         local drag=A.compactLayerOpacityDrag
         A.compactLayerOpacityDrag=nil
@@ -5069,6 +5182,11 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.desktopLayerOpacityDrag then
+        A.desktopLayerOpacityDrag.value=DesktopOpacity.value(
+            love.graphics.getWidth(),love.graphics.getHeight(),x)
+        return
+    end
     if A.compactLayerOpacityDrag then
         local p=Compact.popup(love.graphics.getWidth(),love.graphics.getHeight(),'layers')
         A.compactLayerOpacityDrag.value=LayerOpacity.value(p,x)
@@ -5202,7 +5320,7 @@ end
 function love.focus(focused)
     if not focused then
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
-        A.compactLayerOpacityDrag=nil
+        A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
@@ -5253,6 +5371,13 @@ function love.textinput(t)
     if A.modal then local i=A.modal.focus;A.modal.values[i]=A.modal.values[i]..t end
 end
 function love.keypressed(key)
+    if A.desktopLayerOpacityDrag then
+        if key=='escape' then
+            A.desktopLayerOpacityDrag=nil
+            status('Ajuste de opacidade cancelado')
+        end
+        return
+    end
     if A.modal then
         if key=='escape'then A.modal=nil;love.keyboard.setTextInput(false)
         elseif key=='return'then guard(submitModal)()
@@ -5452,6 +5577,7 @@ function love.keyreleased(key)
     end
 end
 function love.resize()
+    A.desktopLayerOpacityDrag=nil
     A.sidebarScroll=Sidebar.clamp(love.graphics.getHeight(),
         A.sidebarScroll or 0)
     if A.doc then fit() end
