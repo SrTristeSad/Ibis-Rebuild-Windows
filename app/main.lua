@@ -279,7 +279,7 @@ selectTool=function(id)
         return false
     end
     finishStroke()
-    if A.tool~=id then A.shapePreview=nil end
+    if A.tool~=id then A.shapePreview=nil;A.sidebarScroll=0 end
     A.tool=id
     local tab=EditorTools.panelFor(id)
     if tab then A.sideTab=tab end
@@ -4853,8 +4853,18 @@ end
 function love.wheelmoved(x,y)
     if A.toolHelp or A.contextMenu or A.brushLibrary or A.compactPanel then return end
     if A.screen=='editor' and not A.modal then
-        local mx=love.mouse.getPosition()
-        if not paneHidden() and mx>=love.graphics.getWidth()-268 and
+        local mx,my=love.mouse.getPosition()
+        local width,height=love.graphics.getDimensions()
+        if not paneHidden() and
+            Sidebar.contains(width,height,mx,my) and
+            Sidebar.max(height)>0 then
+            if y~=0 then
+                A.sidebarScroll=Sidebar.clamp(height,
+                    (A.sidebarScroll or 0)-y*40)
+            end
+            return
+        end
+        if not paneHidden() and mx>=width-268 and
             A.sideTab=='layers' then
             local count=#A.doc.layers
             local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
@@ -4953,6 +4963,20 @@ function love.keypressed(key)
         end
         return
     end
+    if A.screen=='editor' and not paneHidden() and
+        (key=='pageup' or key=='pagedown' or
+            key=='home' or key=='end') then
+        local w,h=love.graphics.getDimensions()
+        local mx,my=love.mouse.getPosition()
+        if Sidebar.contains(w,h,mx,my) and Sidebar.max(h)>0 then
+            local delta=key=='pageup' and -180 or
+                key=='pagedown' and 180 or nil
+            A.sidebarScroll=Sidebar.clamp(h,
+                key=='home' and 0 or key=='end' and
+                    Sidebar.max(h) or (A.sidebarScroll or 0)+delta)
+            return
+        end
+    end
     if A.screen=='editor' and key=='b' and
         love.keyboard.isDown('lctrl','rctrl') then
         guard(openBrushLibrary)()
@@ -5030,7 +5054,11 @@ function love.keyreleased(key)
         end
     end
 end
-function love.resize()if A.doc then fit()end end
+function love.resize()
+    A.sidebarScroll=Sidebar.clamp(love.graphics.getHeight(),
+        A.sidebarScroll or 0)
+    if A.doc then fit() end
+end
 function love.quit()
     Ink.close()
     releaseTipCache()
