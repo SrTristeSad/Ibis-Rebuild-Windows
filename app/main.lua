@@ -1727,15 +1727,6 @@ local function advanceShowcase()
     if sh.stage==2 then
         local project=A.store:openProject(sh.projectId)
         openDoc(project)
-        local session=A.layerSession
-        session:beginEdit()
-        session:softStroke(92,378,431,166,54,0x2391e8ff,.62,.25)
-        session:softStroke(93,240,425,358,46,0xe17caaff,.64,.25)
-        session:stroke(112,355,402,178,16,0x2734aaff,1)
-        session:stroke(96,185,395,318,11,0xffc15aff,1)
-        session:stroke(132,430,392,421,13,0x24bd90ff,1)
-        session:finishEdit()
-        A.dirty=true;rebuildImage()
         selectTool('brush')
         A.brushDiameter=24;A.brushOpacity=.70;A.brushStyle='soft'
         A.color=0xe17caaff
@@ -1842,10 +1833,22 @@ function love.load(args)
         assert(Native.available,'Visual showcase requires the real native C++ DLL')
         assert(not options.selfTest and not options.luaTest,
             'Showcase must not share the isolated test modes')
-        local blank=Native.buffer(512,512)
-        Native.clear(blank,0)
+        -- Paint before the gallery capture so its thumbnail depicts the
+        -- actual project, not a generic placeholder or an empty canvas.
+        local sample=Native.buffer(512,512)
+        Native.clear(sample,0)
+        Native.featherStroke(sample,92,378,431,166,54,
+            0x2391e8ff,.62,.25)
+        Native.featherStroke(sample,93,240,425,358,46,
+            0xe17caaff,.64,.25)
+        Native.basicStroke(sample,112,355,402,178,16,
+            0x2734aaff,1)
+        Native.basicStroke(sample,96,185,395,318,11,
+            0xffc15aff,1)
+        Native.basicStroke(sample,132,430,392,421,13,
+            0x24bd90ff,1)
         local demo=A.store:createProject('Demonstração de pincéis',
-            512,512,'',Native.bytes(blank))
+            512,512,'',Native.bytes(sample))
         refreshGallery()
         A.showcase={directory=options.showcaseDir,projectId=demo.id,
             stage=1,frames=0,pending=false,captured=false}
@@ -3334,7 +3337,7 @@ end
 local function drawEditor(w,h)
     local panel=w-268
     if not A.compactUi then
-        button('← Galeria',20,78,92,34,toGallery)
+        button('Galeria',20,78,92,34,toGallery)
         for _,slot in ipairs(toolSlots) do toolButton(slot) end
         button('Ajustar',619,78,67,34,function()finishStroke();fit()end)
         button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
@@ -3343,8 +3346,10 @@ local function drawEditor(w,h)
         if A.focusMode then
             button('Mostrar barra · Tab',20,78,176,34,toggleFocusMode)
         else
-            button('↶',20,78,43,34,undoDoc,false,not A.layerSession:canUndo())
-            button('↷',67,78,43,34,redoDoc,false,not A.layerSession:canRedo())
+            iconButton('undo',20,78,43,34,undoDoc,false,
+                not A.layerSession:canUndo())
+            iconButton('redo',67,78,43,34,redoDoc,false,
+                not A.layerSession:canRedo())
             button('−',118,78,43,34,function()zoomCanvas(1/1.25)end)
             button('+',165,78,43,34,function()zoomCanvas(1.25)end)
             button('Encaixar',217,78,90,34,fit)
@@ -3413,8 +3418,10 @@ local function drawEditor(w,h)
         false,A.zoom<=View.MIN_ZOOM)
     button('+',60,dockY,36,30,function()zoomCanvas(1.25)end,
         false,A.zoom>=View.MAX_ZOOM)
-    button('↶',102,dockY,36,30,function()rotateCanvas(-math.pi/12)end)
-    button('↷',142,dockY,36,30,function()rotateCanvas(math.pi/12)end)
+    iconButton('rotate-left',102,dockY,36,30,
+        function()rotateCanvas(-math.pi/12)end)
+    iconButton('rotate-right',142,dockY,36,30,
+        function()rotateCanvas(math.pi/12)end)
     button('0°',182,dockY,43,30,resetCanvasRotation)
     button('Encaixar',230,dockY,83,30,fit)
     text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
@@ -3435,8 +3442,10 @@ local function drawEditor(w,h)
     button('Salvar · Ctrl+S',panel+20,186,228,38,saveDoc,A.dirty)
     button('Exportar PNG',panel+20,234,228,38,exportPNG)
     button('Renomear',panel+20,282,107,34,function()modal('rename');A.modal.values[1]=A.doc.name end)
-    button('↶',panel+134,282,52,34,undoDoc,false,not A.layerSession:canUndo())
-    button('↷',panel+196,282,52,34,redoDoc,false,not A.layerSession:canRedo())
+    iconButton('undo',panel+134,282,52,34,undoDoc,false,
+        not A.layerSession:canUndo())
+    iconButton('redo',panel+196,282,52,34,redoDoc,false,
+        not A.layerSession:canRedo())
     if A.sideTab=='layers' and A.tool~='picker' and A.tool~='shape' and
         A.tool~='select' then
         -- Existing action row: replace passive heading with useful command.
@@ -3500,10 +3509,10 @@ local function drawEditor(w,h)
         local rect=A.selection
         text(rect and ('Região: '..rect.w..' × '..rect.h..' px')
             or 'Arraste na tela para selecionar',panel+20,416,'small')
-        button('↶ 90°',panel+20,451,108,37,function()
+        button('Girar -90°',panel+20,451,108,37,function()
             applySelectionTransform(3,1)
         end,false,not rect or rect.h>A.doc.width or rect.w>A.doc.height)
-        button('90° ↷',panel+140,451,108,37,function()
+        button('Girar +90°',panel+140,451,108,37,function()
             applySelectionTransform(1,1)
         end,false,not rect or rect.h>A.doc.width or rect.w>A.doc.height)
         button('− 50%',panel+20,500,108,37,function()
@@ -4268,7 +4277,8 @@ local function drawCompactPopup(w,h)
             text(i..' · '..name,p.x+57,y+9,'small')
             text(('%.0f%%'):format(layer.opacity*100),
                 p.x+190,y+9,'small','muted')
-            button(layer.visible and '◉' or '○',p.x+251,y+3,33,29,
+            iconButton(layer.visible and 'visible' or 'hidden',
+                p.x+251,y+3,33,29,
                 function()
                     finishStroke();ls:setVisible(i,not layer.visible)
                     A.dirty=true;rebuildImage()
@@ -4313,7 +4323,8 @@ function love.draw()
     text(Native.available and 'Editor local' or 'Motor indisponível',
         w-191,24,'small',Native.available and 'accent' or 'warn')
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
-    box(0,h-48,w,48,'panel');text(A.message or '',20,h-33,'small','muted')
+    box(0,h-48,w,48,'panel')
+    fitted(A.message or '',20,h-33,'small','muted',w-260)
     if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
     if A.modal then A.buttons={};drawModal(w,h)
     elseif A.toolHelp and A.screen=='editor' then
