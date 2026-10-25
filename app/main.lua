@@ -15,12 +15,13 @@ local Icons=require('ui_icons')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
 local Samples=require('brush_samples')
+local Lab=require('brush_lab')
 local Sliders=require('brush_sliders')
 local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -552,6 +553,25 @@ local function openContextMenu(kind,target,x,y)
     A.contextMenu={kind=kind,target=target,title=title,
         entries=entries,x=px,y=py,w=pw,h=ph,cursor=1}
 end
+local function brushLabFromFocus()
+    local slot=A.brushFocus
+    local chosen
+    if slot then
+        chosen=slot<=4 and Presets.BUILTINS[slot] or
+            Presets.custom(A.brushes)[slot-4]
+    end
+    A.brushLabDraft=chosen and Lab.draft(chosen) or
+        Lab.draft({style=A.brushStyle,diameter=A.brushDiameter,
+            opacity=A.brushOpacity,stabilization=A.stabilization})
+    A.brushLabEdited=false;A.brushLabDrag=nil
+end
+local function adjustBrushLab(kind,x)
+    local rect=Presets.layout(love.graphics.getDimensions())
+    if not A.brushLabDraft then return end
+    local value=Lab.value(rect,kind,x)
+    A.brushLabDraft=Lab.adjust(A.brushLabDraft,kind,value)
+    A.brushLabEdited=true
+end
 local function openBrushLibrary()
     A.compactPanel=nil
     assert(A.screen=='editor' and A.layerSession and not A.modal,
@@ -561,12 +581,14 @@ local function openBrushLibrary()
     A.brushLibrary=true;A.brushFilter='all'
     local preferred=A.selectedBrushCustom and A.selectedBrushCustom+4 or 1
     A.brushFocus=Presets.focus('all',Presets.custom(A.brushes),preferred)
+    brushLabFromFocus()
     status('Biblioteca: setas navegam · Enter aplica · Tab muda categoria')
 end
 local function switchBrushCategory(filter)
     local saved=Presets.custom(A.brushes)
     A.brushFilter=filter
     A.brushFocus=Presets.focus(filter,saved,A.brushFocus)
+    brushLabFromFocus()
 end
 local function applyBrushPreset(preset)
     finishStroke()
@@ -577,8 +599,22 @@ local function applyBrushPreset(preset)
     A.brushOpacity=chosen.opacity
     A.stabilization=chosen.stabilization
     A.selectedBrushCustom=Presets.slot(preset)
-    A.brushLibrary=false
+    A.brushLabDrag=nil;A.brushLibrary=false
     status('Pincel: '..preset.name..' · configurações aplicadas')
+end
+local function applyBrushLab()
+    local draft=assert(A.brushLabDraft,'Ajuste de pincel indisponível')
+    local chosen=Lab.draft(draft)
+    finishStroke()
+    assert(selectTool('brush'),'Não é possível selecionar pincel')
+    A.brushStyle=chosen.style
+    A.brushDiameter=chosen.diameter
+    A.brushOpacity=chosen.opacity
+    A.stabilization=chosen.stabilization
+    A.selectedBrushCustom=nil
+    A.brushLabDrag=nil
+    A.brushLibrary=false
+    status('Ajustes temporários aplicados · Salvar pincel para guardar')
 end
 local function saveCustomBrush()
     finishStroke()
