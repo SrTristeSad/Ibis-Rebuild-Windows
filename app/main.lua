@@ -18,20 +18,31 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,compactPanel=nil,compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
+-- A denser gray and charcoal editing chrome, referencing the official tool
+-- and layer screenshots. The desktop palette remains untouched.
+local compactPalette={bg={.215,.222,.229},panel={.125,.133,.145},
+    card={.210,.220,.231},line={.345,.365,.380},
+    text={.95,.96,.97},muted={.70,.73,.76},
+    accent={.34,.69,1},selected={.14,.29,.43},
+    canvas={.25,.26,.27},warn={1,.72,.35}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
     {name='Vermelho',rgba=0xe53b44ff},{name='Verde',rgba=0x20ba84ff},
     {name='Azul',rgba=0x347ce9ff},{name='Branco',rgba=0xffffffff}
 }
-local function c(key,alpha) local v=palette[key];love.graphics.setColor(v[1],v[2],v[3],alpha or 1) end
+local function c(key,alpha)
+    local v=(A.compactUi and compactPalette or palette)[key]
+    love.graphics.setColor(v[1],v[2],v[3],alpha or 1)
+end
 local function text(value,x,y,font,key) c(key or 'text');love.graphics.setFont(A.fonts[font or 'body']);love.graphics.print(value,x,y) end
 local function box(x,y,w,h,key)
     c(key)
-    love.graphics.rectangle('fill',x,y,w,h,6,6)
+    love.graphics.rectangle('fill',x,y,w,h,A.compactUi and 4 or 6,
+        A.compactUi and 4 or 6)
 end
 local function status(s) A.message=s;A.messageTime=love.timer.getTime() end
 local function guard(fn)
@@ -246,7 +257,7 @@ local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
-    A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
+    A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
     A.compactPanel=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
@@ -257,7 +268,7 @@ local function toggleCompactUi()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para trocar o layout')
     finishStroke()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
-    A.panning=false;A.panButton=nil;A.sliderDrag=nil
+    A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
     A.compactPanel=nil;A.compactLayerStart=nil
     A.compactUi=not A.compactUi
@@ -309,7 +320,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactPanel=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -2640,7 +2651,7 @@ local function drawEditor(w,h)
         end,A.previewEnabled)
     local cx,cy=canvasTransform()
     box(12,120,w-Workspace.panelWidth(paneHidden())-20,
-        h-(A.compactUi and not A.focusMode and 239 or 178),'canvas')
+        h-(A.compactUi and not A.focusMode and 310 or 178),'canvas')
     love.graphics.setScissor(Workspace.scissor(w,h,paneHidden(),A.compactUi and not A.focusMode))
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
@@ -3331,7 +3342,7 @@ local function drawCompactPopup(w,h)
     end
 end
 function love.draw()
-    A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
+    A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear((A.compactUi and compactPalette or palette).bg)
     box(0,0,w,64,'panel')
     c('accent');love.graphics.rectangle('fill',0,0,4,64)
     text('Ibis Rebuild',24,13,'title')
