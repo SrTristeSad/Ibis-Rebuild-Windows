@@ -15,12 +15,13 @@ local Icons=require('ui_icons')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
 local Samples=require('brush_samples')
+local Lab=require('brush_lab')
 local Sliders=require('brush_sliders')
 local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -552,6 +553,25 @@ local function openContextMenu(kind,target,x,y)
     A.contextMenu={kind=kind,target=target,title=title,
         entries=entries,x=px,y=py,w=pw,h=ph,cursor=1}
 end
+local function brushLabFromFocus()
+    local slot=A.brushFocus
+    local chosen
+    if slot then
+        chosen=slot<=4 and Presets.BUILTINS[slot] or
+            Presets.custom(A.brushes)[slot-4]
+    end
+    A.brushLabDraft=chosen and Lab.draft(chosen) or
+        Lab.draft({style=A.brushStyle,diameter=A.brushDiameter,
+            opacity=A.brushOpacity,stabilization=A.stabilization})
+    A.brushLabEdited=false;A.brushLabDrag=nil
+end
+local function adjustBrushLab(kind,x)
+    local rect=Presets.layout(love.graphics.getDimensions())
+    if not A.brushLabDraft then return end
+    local value=Lab.value(rect,kind,x)
+    A.brushLabDraft=Lab.adjust(A.brushLabDraft,kind,value)
+    A.brushLabEdited=true
+end
 local function openBrushLibrary()
     A.compactPanel=nil
     assert(A.screen=='editor' and A.layerSession and not A.modal,
@@ -561,12 +581,14 @@ local function openBrushLibrary()
     A.brushLibrary=true;A.brushFilter='all'
     local preferred=A.selectedBrushCustom and A.selectedBrushCustom+4 or 1
     A.brushFocus=Presets.focus('all',Presets.custom(A.brushes),preferred)
+    brushLabFromFocus()
     status('Biblioteca: setas navegam · Enter aplica · Tab muda categoria')
 end
 local function switchBrushCategory(filter)
     local saved=Presets.custom(A.brushes)
     A.brushFilter=filter
     A.brushFocus=Presets.focus(filter,saved,A.brushFocus)
+    brushLabFromFocus()
 end
 local function applyBrushPreset(preset)
     finishStroke()
@@ -577,8 +599,22 @@ local function applyBrushPreset(preset)
     A.brushOpacity=chosen.opacity
     A.stabilization=chosen.stabilization
     A.selectedBrushCustom=Presets.slot(preset)
-    A.brushLibrary=false
+    A.brushLabDrag=nil;A.brushLibrary=false
     status('Pincel: '..preset.name..' · configurações aplicadas')
+end
+local function applyBrushLab()
+    local draft=assert(A.brushLabDraft,'Ajuste de pincel indisponível')
+    local chosen=Lab.draft(draft)
+    finishStroke()
+    assert(selectTool('brush'),'Não é possível selecionar pincel')
+    A.brushStyle=chosen.style
+    A.brushDiameter=chosen.diameter
+    A.brushOpacity=chosen.opacity
+    A.stabilization=chosen.stabilization
+    A.selectedBrushCustom=nil
+    A.brushLabDrag=nil
+    A.brushLibrary=false
+    status('Ajustes temporários aplicados · Salvar pincel para guardar')
 end
 local function saveCustomBrush()
     finishStroke()
@@ -1568,6 +1604,102 @@ local function verifyNativeBrushCatalogue()
     releaseBrushSamples()
     selectTool(previousTool)
     A.sideTab=previousTab
+end
+-- Stage 35 regression: edit a live C++ brush inspector with pointer drags,
+-- explicitly apply/cancel and prove no pixels or saved presets were touched.
+local function verifyBrushLabLive()
+    local w,h=love.graphics.getDimensions()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldSize,oldStyle=A.brushDiameter,A.brushStyle
+    local oldOpacity,oldStabilization=A.brushOpacity,A.stabilization
+    local oldSlot,oldDirty=A.selectedBrushCustom,A.dirty
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    local count=#A.doc.layers
+    local previousSaved=A.store:getBrushes()
+    assert(not A.compactUi,'Brush inspector regression starts in desktop')
+    selectTool('brush')
+    releaseBrushSamples()
+    openBrushLibrary()
+    A.brushFocus=1
+    brushLabFromFocus()
+    love.draw()
+    local rect=Presets.layout(w,h)
+    local panel=Lab.layout(rect)
+    local initial=assert(A.brushSampleCache.inspector,
+        'Large native RGBA preview must be rendered on opening')
+    assert(initial.key==Samples.key(A.brushLabDraft,A.color),
+        'Initial live preview does not match chosen preset')
+    local d=Lab.rail(rect,'diameter')
+    love.mousepressed(d.x,d.y+7,1,false)
+    assert(A.brushLabDrag=='diameter' and A.brushLabDraft.diameter==1,
+        'Brush inspector must capture its own size slider')
+    love.mousemoved(d.x+d.w/2,d.y+7,d.w/2,0,false)
+    love.mousereleased(d.x+d.w/2,d.y+7,1,false)
+    assert(A.brushLabDrag==nil and A.brushLabDraft.diameter==129,
+        'Live diameter draft must support exact midpoint')
+    local o=Lab.rail(rect,'opacity')
+    love.draw()
+    love.mousepressed(o.x+o.w/2,o.y+7,1,false)
+    assert(A.brushLabDraft.opacity==.55 and
+        A.brushLabDrag=='opacity','Opacity draft must support 55%')
+    love.mousereleased(o.x+o.w/2,o.y+7,1,false)
+    local stab=Lab.rail(rect,'stabilization')
+    love.draw()
+    love.mousepressed(stab.x+stab.w,stab.y+7,1,false)
+    love.mousereleased(stab.x+stab.w,stab.y+7,1,false)
+    assert(A.brushLabDraft.stabilization==5 and A.brushLabEdited,
+        'Stabilizer and draft-modified indicator failed')
+    love.draw()
+    local updated=assert(A.brushSampleCache.inspector)
+    assert(updated~=initial and
+        updated.key==Samples.key(A.brushLabDraft,A.color),
+        'Live C++ preview did not refresh after adjustments')
+    local expected=Samples.render(Native,A.brushLabDraft,A.color)
+    assert(Native.bytes(updated.sample.buffer)==
+        Native.bytes(expected.buffer),
+        'Large RGBA preview pixels diverged from native renderer')
+    love.mousepressed(5,220,1,false)
+    assert(A.brushLibrary and not A.drawing and
+        A.brushLabDraft.diameter==129,
+        'Click outside inspector leaked through into document')
+    local builtIn=Presets.BUILTINS[1]
+    assert(builtIn.diameter==3 and builtIn.opacity==1,
+        'Editing draft must not mutate built-in brush')
+    love.draw()
+    love.mousepressed(panel.x+panel.w/2,
+        panel.y+panel.h-20,1,false)
+    assert(not A.brushLibrary and A.brushDiameter==129 and
+        A.brushOpacity==.55 and A.stabilization==5 and
+        A.selectedBrushCustom==nil,
+        'Apply draft must update active brush without linking to saved slot')
+    openBrushLibrary()
+    love.draw()
+    local again=Lab.rail(rect,'diameter')
+    love.mousepressed(again.x,again.y+7,1,false)
+    love.mousereleased(again.x,again.y+7,1,false)
+    assert(A.brushLabDraft.diameter==1,
+        'Cancel test did not edit draft independently')
+    love.keypressed('escape')
+    assert(not A.brushLibrary and A.brushDiameter==129,
+        'Escape must discard unsaved draft adjustments')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history and
+        #A.doc.layers==count and A.dirty==oldDirty,
+        'Inspector touched document pixels/history/layers/dirty')
+    local now=A.store:getBrushes()
+    assert(#now==#previousSaved,
+        'Brush inspector changed stored library without save action')
+    for i=1,#previousSaved do
+        assert(now[i].id==previousSaved[i].id,
+            'Saved brush identifiers changed unexpectedly')
+    end
+    A.brushDiameter=oldSize;A.brushStyle=oldStyle
+    A.brushOpacity=oldOpacity;A.stabilization=oldStabilization
+    A.selectedBrushCustom=oldSlot
+    A.brushLabDrag=nil;A.brushLabDraft=nil
+    releaseBrushSamples()
+    selectTool(oldTool);A.sideTab=oldTab
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -2827,6 +2959,7 @@ function love.update(dt)
                 verifyCompactVisualControls()
                 verifyColorBrushWindows()
                 verifyNativeBrushCatalogue()
+                verifyBrushLabLive()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2925,6 +3058,9 @@ function love.update(dt)
                     native_catalogue_rgba_invalidation=true,
                     keyboard_brush_selection=true,brush_category_focus=true,
                     native_catalogue_no_raster_edits=true,
+                    brush_lab_large_preview=true,brush_lab_live_native_cache=true,
+                    brush_lab_diameter_drag=true,brush_lab_opacity_one_percent=true,
+                    brush_lab_apply_cancel=true,brush_lab_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -3612,6 +3748,58 @@ local function brushSampleImage(slot,preset)
 end
 -- Modal brush catalogue. Every preview uses native renderer parameters
 -- only as a schematic sample, never claims a pixel-perfect Android stroke.
+-- The larger live inspector uses the existing C++ preview renderer.
+-- It is a scratch image, never a document stroke.
+local function drawBrushLab(rect)
+    local p=Lab.layout(rect)
+    box(p.x,p.y,p.w,p.h,'card')
+    text('PRÉVIA',p.x+9,p.y+11,'small','muted')
+    local draft=assert(A.brushLabDraft,'Nenhum pincel em prévia')
+    text(draft.style=='hard' and 'Rígido' or 'Suave',
+        p.x+9,p.y+29,'small','accent')
+    local space=Lab.preview(rect)
+    local tile=11
+    for row=0,math.ceil(space.h/tile)-1 do
+        for col=0,math.ceil(space.w/tile)-1 do
+            local v=(row+col)%2==0 and .79 or .57
+            love.graphics.setColor(v,v,v,1)
+            love.graphics.rectangle('fill',space.x+col*tile,
+                space.y+row*tile,
+                math.min(tile,space.w-col*tile),
+                math.min(tile,space.h-row*tile))
+        end
+    end
+    local image=brushSampleImage('inspector',draft)
+    local fit=Lab.fit(image.sample.width,image.sample.height,space)
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(image.image,fit.x,fit.y,0,fit.sx,fit.sy)
+    local names={diameter='Tamanho',opacity='Opacidade',
+        stabilization='Estabil.'}
+    for _,kind in ipairs({'diameter','opacity','stabilization'}) do
+        local rail=Lab.rail(rect,kind)
+        local value=draft[kind]
+        local valueString=kind=='diameter' and
+            tostring(value)..' px' or kind=='opacity' and
+            ('%.0f%%'):format(value*100) or
+            tostring(value)..'/5'
+        text(names[kind],rail.x,rail.y-20,'small','muted')
+        love.graphics.setFont(A.fonts.small)
+        local labelWidth=A.fonts.small:getWidth(valueString)
+        text(valueString,rail.x+rail.w-labelWidth,rail.y-20,'small')
+        c('line');love.graphics.rectangle('fill',
+            rail.x,rail.y+4,rail.w,5,2,2)
+        c('accent')
+        local fraction=Lab.fraction(kind,value)
+        love.graphics.rectangle('fill',rail.x,rail.y+4,
+            math.max(1,rail.w*fraction),5,2,2)
+        c('text')
+        love.graphics.circle('fill',
+            rail.x+rail.w*fraction,rail.y+6.5,5,18)
+    end
+    button(A.brushLabEdited and 'Aplicar ajustes *' or
+        'Aplicar ajustes',p.x+8,p.y+p.h-36,p.w-16,31,
+        applyBrushLab)
+end
 local function drawBrushLibrary(w,h)
     local rect=Presets.layout(w,h)
     love.graphics.setColor(0,0,0,.78)
@@ -3629,7 +3817,7 @@ local function drawBrushLibrary(w,h)
     button('Meus',rect.x+567,rect.y+47,110,30,function()
         switchBrushCategory('personal') end,A.brushFilter=='personal')
     local saved=Presets.custom(A.brushes)
-    local half=(rect.w-56)/2
+    local half=(Lab.CATALOGUE_WIDTH-56)/2
     for i=1,8 do
         local column=(i-1)%2
         local line=math.floor((i-1)/2)
@@ -3677,7 +3865,8 @@ local function drawBrushLibrary(w,h)
     for i=1,Presets.LIMIT do
         if saved[i] then filled=filled+1 end
     end
-    text(('AJUSTES SALVOS  %d / %d · Amostras C++ (escala reduzida)'):format(
+    drawBrushLab(rect)
+    text(('AJUSTES SALVOS  %d / %d · Amostras C++'):format(
         filled,Presets.LIMIT),
         rect.x+20,rect.y+452,'small','muted')
     button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
@@ -4035,6 +4224,15 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
     if A.brushLibrary then
         if buttonNumber==1 then
+            local rect=Presets.layout(love.graphics.getDimensions())
+            local kind=Lab.hit(rect,x,y)
+            if kind then
+                A.brushLabDrag=kind
+                adjustBrushLab(kind,x)
+                return
+            end
+        end
+        if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
                 local b=A.buttons[i]
                 if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
@@ -4189,6 +4387,11 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.brushLabDrag and b==1 then
+        adjustBrushLab(A.brushLabDrag,x)
+        A.brushLabDrag=nil
+        return
+    end
     if A.colorDrag and b==1 then
         updateColorDrag(A.colorDrag,x,y)
         A.colorDrag=nil
@@ -4227,6 +4430,10 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.brushLabDrag then
+        adjustBrushLab(A.brushLabDrag,x)
+        return
+    end
     if A.colorDrag then
         updateColorDrag(A.colorDrag,x,y)
         return
@@ -4353,7 +4560,7 @@ function love.focus(focused)
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil
+        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
@@ -4400,7 +4607,7 @@ function love.keypressed(key)
     end
     if A.screen=='editor' and A.brushLibrary then
         if key=='escape' then
-            A.brushLibrary=false
+            A.brushLibrary=false;A.brushLabDrag=nil
         elseif key=='tab' then
             local nextFilter=A.brushFilter=='all' and 'builtin' or
                 A.brushFilter=='builtin' and 'personal' or 'all'
@@ -4411,6 +4618,7 @@ function love.keypressed(key)
                 key=='right' and 1 or key=='up' and -2 or 2)
             A.brushFocus=Presets.navigate(A.brushFilter,
                 Presets.custom(A.brushes),A.brushFocus,offset)
+            brushLabFromFocus()
         elseif key=='return' or key=='kpenter' then
             local idx=A.brushFocus
             if idx then

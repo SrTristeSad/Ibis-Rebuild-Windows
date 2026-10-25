@@ -70,6 +70,8 @@ A etapa 33 acrescenta [janela compacta de cores HSB/RGB/Paleta](docs/COLOR_BRUSH
 
 A etapa 34 melhora a [biblioteca de pincéis com amostras de traços C++ reais](docs/NATIVE_BRUSH_CATALOGUE_STAGE34.md), cache de texturas, reprodução de opacidade/cor RGBA, navegação por setas, alternância de categorias pelo Tab e confirmação por Enter. As amostras são redimensionadas apenas na visualização; não escrevem pixels no documento.
 
+A etapa 35 apresenta o [laboratório de pincéis com prévia ampliada](docs/BRUSH_LAB_STAGE35.md): painel lateral de ajustes temporários, renderizador RGBA nativo, tamanho/diâmetro de 1–256px, opacidade de 10–100% em passos de 1%, estabilização 0–5, prévia imediata e botão explícito para aplicar. A visualização não altera os dados do pincel nem a obra sem confirmação.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
