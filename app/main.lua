@@ -24,11 +24,12 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
+local Inspector=require('compact_inspector')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
     '05-camadas.png','06-editor-desktop.png',
-    '07-editor-960x640.png'}
+    '07-editor-960x640.png','08-ajustes-pincel.png'}
 local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
@@ -1760,6 +1761,19 @@ local function advanceShowcase()
         A.sidebarScroll=Sidebar.max(640)
         fit()
         status('Painel lateral 960x640 · rolagem independente')
+    elseif sh.stage==8 then
+        assert(love.window.setMode(1220,800,{
+            resizable=true,minwidth=960,minheight=640,vsync=0}),
+            'Could not restore 1220x800 for compact inspector preview')
+        A.compactUi=true
+        A.compactPanel='properties'
+        A.brushStyle='soft'
+        A.brushDiameter=44
+        A.brushOpacity=.55
+        A.color=0x34aaf7ff
+        selectTool('brush')
+        fit()
+        status('Ajustes compactos · prévia nativa de pincel C++')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -1832,6 +1846,75 @@ local function verifyAdaptiveDesktopSidebar()
     assert(love.graphics.getWidth()==oldW and
         love.graphics.getHeight()==oldH,
         'GUI resolution not restored after small viewport test')
+end
+-- Stage 40: actual compact properties popup and native C++ swatch.
+-- Exercise the same existing mouse buttons without any document edits.
+local function verifyCompactNativeInspector()
+    local w,h=love.graphics.getDimensions()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldStyle,oldDiameter=A.brushStyle,A.brushDiameter
+    local oldOpacity,oldStabilization=A.brushOpacity,A.stabilization
+    local oldDirty=A.dirty
+    local bytes=Native.bytes(A.layerSession.composite)
+    local undo=A.layerSession:historyStats().undo
+    local layers=#A.doc.layers
+    assert(not A.compactUi,'Compact inspector test begins in desktop mode')
+    selectTool('brush')
+    A.brushStyle='hard';A.brushDiameter=24;A.brushOpacity=.8
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(A.compactUi,'Compact toolbar toggle failed')
+    local dock=Compact.toolbar(w,h)
+    love.draw()
+    love.mousepressed(dock[3].x+dock[3].w/2,
+        dock[3].y+dock[3].h/2,1,false)
+    assert(A.compactPanel=='properties','Properties popup not opened')
+    local p=Compact.popup(w,h,'properties')
+    love.draw()
+    local first=assert(A.brushSampleCache and
+        A.brushSampleCache.compact_preview,
+        'Native brush swatch not rendered in compact inspector')
+    assert(first.key==Samples.key(Inspector.settings(A),A.color),
+        'Compact swatch does not reflect currently active C++ brush')
+    love.mousepressed(p.x+17+73+25,p.y+54+29+15,1,false)
+    assert(A.brushDiameter==26,'Compact diameter adjustment broke')
+    love.draw()
+    local second=assert(A.brushSampleCache.compact_preview)
+    assert(second.key~=first.key and
+        second.key==Samples.key(Inspector.settings(A),A.color),
+        'Diameter change did not invalidate C++ preview cache')
+    love.mousepressed(p.x+17+30,p.y+54+109+15,1,false)
+    assert(math.abs(A.brushOpacity-.7)<1e-8,
+        'Opacity popup action not applied to active brush')
+    love.draw()
+    local third=assert(A.brushSampleCache.compact_preview)
+    assert(third.key~=second.key,
+        'Opacity change failed to update preview cache')
+    love.mousepressed(p.x+17+146+42,p.y+54+68+16,1,false)
+    assert(A.brushStyle=='soft','Soft brush button stopped working')
+    love.draw()
+    local fourth=assert(A.brushSampleCache.compact_preview)
+    local reference=Samples.render(Native,Inspector.settings(A),A.color)
+    assert(fourth.key~=third.key and
+        Native.bytes(fourth.sample.buffer)==Native.bytes(reference.buffer),
+        'Native preview pixels do not match current brush style and color')
+    love.mousepressed(p.x+110,p.y+p.h-35,1,false)
+    assert(A.brushLibrary and not A.compactPanel,
+        'Brush library did not open from compact properties')
+    love.keypressed('escape')
+    assert(not A.brushLibrary and not A.drawing,
+        'Escape should dismiss brush library without a stroke')
+    assert(Native.bytes(A.layerSession.composite)==bytes and
+        A.layerSession:historyStats().undo==undo and
+        #A.doc.layers==layers and A.dirty==oldDirty,
+        'Live brush preview or popup adjustments edited the document')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(not A.compactUi,'Failed to return to desktop')
+    A.brushStyle=oldStyle;A.brushDiameter=oldDiameter
+    A.brushOpacity=oldOpacity;A.stabilization=oldStabilization
+    selectTool(oldTool);A.sideTab=oldTab
+    releaseBrushSamples()
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -3135,6 +3218,7 @@ function love.update(dt)
                 verifyNativeBrushCatalogue()
                 verifyBrushLabLive()
                 verifyAdaptiveDesktopSidebar()
+                verifyCompactNativeInspector()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -3238,6 +3322,9 @@ function love.update(dt)
                     brush_lab_apply_cancel=true,brush_lab_no_raster_edits=true,
                     sidebar_960x640=true,sidebar_scroll_hitbox=true,
                     sidebar_slider_reachable=true,sidebar_raster_unchanged=true,
+                    compact_native_brush_preview=true,
+                    compact_live_cache_invalidation=true,
+                    compact_native_no_document_writes=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -4327,6 +4414,29 @@ local function drawColorPopup(p)
             fn=function()chooseColor(value)end}
     end
 end
+-- Live preview is a native C++ raster on a separate scratch buffer.
+-- Its GPU image cache is shared with the stage-35 catalogue.
+local function drawCompactBrushPreview(p)
+    local rect=Inspector.preview(p)
+    local caption=Inspector.caption(p)
+    text('PRÉVIA C++',caption.x,caption.y,'small','muted')
+    for row=0,math.ceil(rect.h/9)-1 do
+        for col=0,math.ceil(rect.w/9)-1 do
+            local v=(row+col)%2==0 and .81 or .59
+            love.graphics.setColor(v,v,v,1)
+            love.graphics.rectangle('fill',rect.x+col*9,rect.y+row*9,
+                math.min(9,rect.w-col*9),
+                math.min(9,rect.h-row*9))
+        end
+    end
+    local state=Inspector.settings(A)
+    local swatch=brushSampleImage('compact_preview',state)
+    local fit=Inspector.fitted(swatch.sample.width,
+        swatch.sample.height,rect)
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(swatch.image,fit.x,fit.y,0,
+        fit.scale,fit.scale)
+end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
@@ -4389,6 +4499,7 @@ local function drawCompactPopup(w,h)
                 button('Suave',x+146,y+68,98,32,function()
                     finishStroke();A.brushStyle='soft'
                 end,A.brushStyle=='soft')
+                drawCompactBrushPreview(p)
             end
         end
         button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
@@ -4431,10 +4542,8 @@ local function drawCompactPopup(w,h)
             end end
             love.graphics.setColor(1,1,1,1)
             love.graphics.draw(layerThumb(i),p.x+19,y+3)
-            local name=layer.name
-            local offset=require('utf8').offset(name,13)
-            if offset then name=name:sub(1,offset-1)..'…' end
-            text(i..' · '..name,p.x+57,y+9,'small')
+            fitted(i..' · '..layer.name,p.x+57,y+9,
+                'small','text',Inspector.rowLabelWidth())
             text(('%.0f%%'):format(layer.opacity*100),
                 p.x+190,y+9,'small','muted')
             iconButton(layer.visible and 'visible' or 'hidden',

@@ -80,6 +80,8 @@ A etapa 38 refina [hierarquia visual, galeria e botões do editor Windows](docs/
 
 A etapa 39 oferece o [painel lateral desktop com rolagem independente](docs/ADAPTIVE_SIDEBAR_STAGE39.md) nas janelas de altura inferior a 800 px. Os botões e sliders ficam disponíveis até em 960 × 640, com clique e recorte corretos, roda do mouse e teclas PageUp/PageDown/Home/End. A bateria Windows gera também a sétima captura real, `07-editor-960x640.png`.
 
+A etapa 40 adiciona [prévia C++ em tempo real aos ajustes compactos](docs/COMPACT_BRUSH_PREVIEW_STAGE40.md), atualizada por tamanho, opacidade, estilo e cor, sem gravar na obra. A janela compacta de camadas também recorta nomes longos corretamente. O CI publica a oitava captura real `08-ajustes-pincel.png`.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
