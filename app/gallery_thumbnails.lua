@@ -27,7 +27,7 @@ function Thumb.sample(rgba,width,height,tw,th,pixel)
         positive(height) and #rgba==width*height*4,
         'Expected exact native RGBA bytes')
     assert(positive(tw) and positive(th) and tw<=176 and
-        th<=94 and type(pixel)=='function',
+        th<=126 and type(pixel)=='function',
         'Invalid thumbnail canvas')
     for y=0,th-1 do
         for x=0,tw-1 do
