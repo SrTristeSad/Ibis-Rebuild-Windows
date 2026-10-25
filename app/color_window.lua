@@ -107,6 +107,35 @@ function Picker.trackHit(rect,mode,x,y)
     end
     return nil
 end
+function Picker.svRect(rect)
+    assert(type(rect)=='table' and type(rect.x)=='number',
+        'Painel HSB inválido')
+    return {x=rect.x+23,y=rect.y+184,w=206,h=145}
+end
+function Picker.svAt(rect,x,y)
+    local r=Picker.svRect(rect)
+    assert(type(x)=='number' and x==x and
+        type(y)=='number' and y==y,'Ponteiro HSB inválido')
+    local s=math.floor(math.max(0,math.min(1,(x-r.x)/r.w))*100+.5)
+    local b=math.floor((1-math.max(0,math.min(1,(y-r.y)/r.h)))*100+.5)
+    return s,b
+end
+function Picker.hueRect(rect)
+    return {x=rect.x+260,y=rect.y+184,w=25,h=145}
+end
+function Picker.hueAt(rect,y)
+    local r=Picker.hueRect(rect)
+    assert(type(y)=='number' and y==y,'Ponteiro Hue inválido')
+    return math.floor(math.max(0,math.min(1,(y-r.y)/r.h))*360+.5)
+end
+function Picker.hsbAlphaRect(rect)
+    return {x=rect.x+85,y=rect.y+352,w=278,h=11}
+end
+function Picker.hsbAlphaValue(rect,x)
+    local r=Picker.hsbAlphaRect(rect)
+    assert(type(x)=='number' and x==x,'Ponteiro alfa inválido')
+    return math.floor(math.max(0,math.min(1,(x-r.x)/r.w))*255+.5)
+end
 function Picker.popup(w,h)
     assert(integer(w,960,10000) and integer(h,640,10000),
         'Janela insuficiente')
