@@ -4307,7 +4307,26 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.brushLibrary then
-        if key=='escape' then A.brushLibrary=false end
+        if key=='escape' then
+            A.brushLibrary=false
+        elseif key=='tab' then
+            local nextFilter=A.brushFilter=='all' and 'builtin' or
+                A.brushFilter=='builtin' and 'personal' or 'all'
+            switchBrushCategory(nextFilter)
+        elseif key=='left' or key=='right' or
+            key=='up' or key=='down' then
+            local offset=(key=='left' and -1 or
+                key=='right' and 1 or key=='up' and -2 or 2)
+            A.brushFocus=Presets.navigate(A.brushFilter,
+                Presets.custom(A.brushes),A.brushFocus,offset)
+        elseif key=='return' or key=='kpenter' then
+            local idx=A.brushFocus
+            if idx then
+                local chosen=idx<=4 and Presets.BUILTINS[idx] or
+                    Presets.custom(A.brushes)[idx-4]
+                if chosen then guard(applyBrushPreset)(chosen) end
+            end
+        end
         return
     end
     if A.screen=='editor' and A.compactPanel then
