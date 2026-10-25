@@ -4644,7 +4644,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactUi and A.compactPanel then
         if buttonNumber==1 and A.compactPanel=='layers' then
-            local p=Compact.popup(love.graphics.getDimensions())
+            local p=Compact.popup(love.graphics.getWidth(),love.graphics.getHeight(),'layers')
             -- Only this slider is in the lower panel; the +/- buttons stay
             -- untouched, and the canvas never receives this pointer.
             if LayerOpacity.hit(p,x,y) then
@@ -4889,7 +4889,7 @@ local function pointerReleased(x,y,b,pressure)
         A.compactLayerOpacityDrag=nil
         if A.screen=='editor' and A.compactPanel=='layers' and
             drag.index<=#A.doc.layers then
-            local p=Compact.popup(love.graphics.getDimensions())
+            local p=Compact.popup(love.graphics.getWidth(),love.graphics.getHeight(),'layers')
             drag.value=LayerOpacity.value(p,x)
             if LayerOpacity.changed(drag) then
                 finishStroke()
@@ -4946,7 +4946,7 @@ end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactLayerOpacityDrag then
-        local p=Compact.popup(love.graphics.getDimensions())
+        local p=Compact.popup(love.graphics.getWidth(),love.graphics.getHeight(),'layers')
         A.compactLayerOpacityDrag.value=LayerOpacity.value(p,x)
         return
     end
