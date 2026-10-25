@@ -24,6 +24,7 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
+local Inspector=require('compact_inspector')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
@@ -4327,6 +4328,29 @@ local function drawColorPopup(p)
             fn=function()chooseColor(value)end}
     end
 end
+-- Live preview is a native C++ raster on a separate scratch buffer.
+-- Its GPU image cache is shared with the stage-35 catalogue.
+local function drawCompactBrushPreview(p)
+    local rect=Inspector.preview(p)
+    local caption=Inspector.caption(p)
+    text('PRÉVIA C++',caption.x,caption.y,'small','muted')
+    for row=0,math.ceil(rect.h/9)-1 do
+        for col=0,math.ceil(rect.w/9)-1 do
+            local v=(row+col)%2==0 and .81 or .59
+            love.graphics.setColor(v,v,v,1)
+            love.graphics.rectangle('fill',rect.x+col*9,rect.y+row*9,
+                math.min(9,rect.w-col*9),
+                math.min(9,rect.h-row*9))
+        end
+    end
+    local state=Inspector.settings(A)
+    local swatch=brushSampleImage('compact_preview',state)
+    local fit=Inspector.fitted(swatch.sample.width,
+        swatch.sample.height,rect)
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(swatch.image,fit.x,fit.y,0,
+        fit.scale,fit.scale)
+end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
@@ -4389,6 +4413,7 @@ local function drawCompactPopup(w,h)
                 button('Suave',x+146,y+68,98,32,function()
                     finishStroke();A.brushStyle='soft'
                 end,A.brushStyle=='soft')
+                drawCompactBrushPreview(p)
             end
         end
         button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
@@ -4431,10 +4456,8 @@ local function drawCompactPopup(w,h)
             end end
             love.graphics.setColor(1,1,1,1)
             love.graphics.draw(layerThumb(i),p.x+19,y+3)
-            local name=layer.name
-            local offset=require('utf8').offset(name,13)
-            if offset then name=name:sub(1,offset-1)..'…' end
-            text(i..' · '..name,p.x+57,y+9,'small')
+            fitted(i..' · '..layer.name,p.x+57,y+9,
+                'small','text',Inspector.rowLabelWidth())
             text(('%.0f%%'):format(layer.opacity*100),
                 p.x+190,y+9,'small','muted')
             iconButton(layer.visible and 'visible' or 'hidden',
