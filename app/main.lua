@@ -32,6 +32,7 @@ local DesktopOpacity=require('desktop_layer_opacity')
 local LayerOpacitySteps=require('layer_opacity_steps')
 local LayerOrder=require('layer_order_controls')
 local LayerRowVisual=require('layer_row_visual')
+local LayerListWheel=require('layer_list_wheel')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
@@ -2078,6 +2079,59 @@ local function verifyDesktopLayerOpacity()
     assert(Native.bytes(A.layerSession.composite)==initialBytes,
         'Desktop opacity test changed the drawing')
 end
+-- Real LÖVE regression for independent layer-list wheel scrolling.
+-- Tests the minimum viewport without changing selected layers or raster.
+local function verifyLayerListWheel()
+    local oldW,oldH=love.graphics.getDimensions()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldScroll,oldStart=A.sidebarScroll,A.layerScroll
+    local oldDirty=A.dirty
+    local selected=A.doc.active_layer
+    local before=Native.bytes(A.layerSession.composite)
+    local undo=A.layerSession:historyStats().undo
+    assert(not A.compactUi and not A.focusMode and #A.doc.layers>1,
+        'Layer wheel regression requires multiple classic desktop layers')
+    assert(love.window.setMode(960,640,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Layer wheel test could not enter 960x640 viewport')
+    selectTool('brush')
+    A.sideTab='layers'
+    A.sidebarScroll=Sidebar.max(640)
+    A.layerScroll=1
+    love.draw()
+    local width,height=love.graphics.getDimensions()
+    local originalMousePosition=love.mouse.getPosition
+    local pointerX=width-Sidebar.WIDTH+110
+    local pointerY=LayerListWheel.TOP-A.sidebarScroll+16
+    love.mouse.getPosition=function()return pointerX,pointerY end
+    assert(LayerListWheel.hit(width,height,pointerX,pointerY,A.sidebarScroll),
+        'Layer list is not visible in 960x640')
+    love.wheelmoved(0,1)
+    assert(A.layerScroll==2 and A.sidebarScroll==160 and
+        A.doc.active_layer==selected,
+        'List wheel must change list start, not panel or selection')
+    love.draw()
+    love.wheelmoved(0,-1)
+    assert(A.layerScroll==1,'Reverse wheel did not restore list start')
+    pointerY=431-A.sidebarScroll+15
+    love.wheelmoved(0,1)
+    assert(A.sidebarScroll==120 and A.layerScroll==1 and
+        A.doc.active_layer==selected,
+        'Wheel over action controls must scroll only the outer panel')
+    love.mouse.getPosition=originalMousePosition
+    assert(Native.bytes(A.layerSession.composite)==before and
+        A.layerSession:historyStats().undo==undo and
+        A.dirty==oldDirty,
+        'List navigation must not modify canvas, undo or dirty flag')
+    assert(love.window.setMode(oldW,oldH,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Could not restore viewport after layer wheel regression')
+    selectTool(oldTool)
+    A.sideTab=oldTab
+    A.sidebarScroll=Sidebar.clamp(oldH,oldScroll or 0)
+    A.layerScroll=oldStart
+    love.draw()
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -3383,6 +3437,7 @@ function love.update(dt)
                 verifyCompactNativeInspector()
                 verifyCompactLayerOpacity()
                 verifyDesktopLayerOpacity()
+                verifyLayerListWheel()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -5334,25 +5389,26 @@ function love.wheelmoved(x,y)
     if A.screen=='editor' and not A.modal then
         local mx,my=love.mouse.getPosition()
         local width,height=love.graphics.getDimensions()
-        if not paneHidden() and
-            Sidebar.contains(width,height,mx,my) and
-            Sidebar.max(height)>0 then
+        -- Layer rows have their own scroll region; the outer sidebar
+        -- still scrolls everywhere else. Wheel navigation is view-only.
+        local insideSidebar=not paneHidden() and
+            Sidebar.contains(width,height,mx,my)
+        if insideSidebar and A.sideTab=='layers' and
+            A.tool~='picker' and A.tool~='shape' and
+            A.tool~='select' and
+            LayerListWheel.hit(width,height,mx,my,A.sidebarScroll) then
             if y~=0 then
-                A.sidebarScroll=Sidebar.clamp(height,
-                    (A.sidebarScroll or 0)-y*40)
+                A.layerScroll=LayerListWheel.scroll(#A.doc.layers,
+                    A.doc.active_layer,height,A.layerScroll,y)
             end
             return
         end
-        if not paneHidden() and mx>=width-268 and
-            A.sideTab=='layers' then
-            local count=#A.doc.layers
-            local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
-            if y~=0 and index~=A.doc.active_layer then
-                finishStroke();A.layerSession:select(index)
-                A.layerScroll=nil
-                A.dirty=true
+        if insideSidebar then
+            if y~=0 and Sidebar.max(height)>0 then
+                A.sidebarScroll=Sidebar.clamp(height,
+                    (A.sidebarScroll or 0)-y*40)
             end
-            return
+            return -- Never zoom or change selected layer over a panel.
         end
         if y==0 then return end
         local w,h=love.graphics.getDimensions()
