@@ -1119,6 +1119,24 @@ local function verifyCompactUi()
         'Ícone de borracha na paleta não ativou ferramenta')
     tap(1)
     assert(A.tool=='brush','Botão Pincel não retornou para pincel')
+    selectTool('inspect')
+    tap(1)
+    assert(A.tool=='brush',
+        'Pincel deve partir de outras ferramentas para pincel, não borracha')
+    tap(1)
+    assert(A.tool=='erase','Segundo toque no Pincel deve alternar para borracha')
+    tap(1)
+    assert(A.tool=='brush','Terceiro toque deve restaurar pincel')
+    tap(5)
+    assert(A.focusMode and A.compactUi,
+        'Botão Tela precisa esconder a barra compacta')
+    love.draw()
+    local expanded=Workspace.bounds(w,h,true,false)
+    assert(expanded.bottom==h-78,
+        'Tela cheia precisa ampliar a área de desenho inferior')
+    love.keypressed('tab')
+    assert(not A.focusMode and A.compactUi,
+        'Tab deve restaurar barra compacta depois da tela cheia')
     tap(3)
     assert(A.compactPanel=='properties','Ajustes não abriram')
     p=Compact.popup(w,h,'properties')
@@ -2506,6 +2524,8 @@ function love.update(dt)
                     compact_raster_layer_panel=true,compact_property_controls=true,
                     compact_color_modal=true,compact_raster_isolation=true,
                     compact_return_desktop=true,
+                    compact_brush_eraser_switch=true,
+                    compact_fullscreen_toggle=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
