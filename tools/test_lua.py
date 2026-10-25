@@ -74,6 +74,9 @@ def run_tests(runtime_path, output):
         grid_program = "return require('json').encode(require('tests.test_brush_category_grid').run())"
         grid = json.loads(state.execute(grid_program))
         assert grid.get('passed') and grid.get('assertions') == 278
+        compare_program = "return require('json').encode(require('tests.test_brush_inspector_compare').run())"
+        compare = json.loads(state.execute(compare_program))
+        assert compare.get('passed') and compare.get('assertions') >= 25
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():

@@ -60,6 +60,45 @@ end
 function Lab.draft(preset)
     return Presets.copy(preset)
 end
+-- Two separate native RGBA samples share the existing 160px preview:
+-- applied brush on top, draft below. Never paint into the document.
+function Lab.comparison(rect)
+    local p=Lab.preview(rect)
+    return {
+        current={x=p.x+4,y=p.y+21,w=p.w-8,h=52,
+            labelY=p.y+3},
+        draft={x=p.x+4,y=p.y+102,w=p.w-8,h=52,
+            labelY=p.y+84}
+    }
+end
+-- All edits are reversible local previews until the user clicks Aplicar.
+function Lab.differences(original,draft)
+    Presets.validate(original)
+    Presets.validate(draft)
+    local fields={'style','diameter','opacity','stabilization'}
+    local count=0
+    for _,key in ipairs(fields) do
+        if key=='opacity' and math.abs(original[key]-draft[key])>1e-6 or
+            key~='opacity' and original[key]~=draft[key] then
+            count=count+1
+        end
+    end
+    return count
+end
+function Lab.source(focus,saved,current)
+    assert(type(saved)=='table','Invalid saved brush collection')
+    local chosen
+    if focus~=nil then
+        assert(type(focus)=='number' and focus%1==0 and
+            focus>=1 and focus<=8,'Invalid focused brush')
+        chosen=focus<=4 and Presets.BUILTINS[focus] or saved[focus-4]
+    end
+    return Presets.copy(chosen or current)
+end
+function Lab.resetRect(rect)
+    local p=Lab.layout(rect)
+    return {x=p.x+8,y=p.y+p.h-36,w=49,h=31}
+end
 function Lab.fit(imageWidth,imageHeight,rect)
     assert(type(imageWidth)=='number' and imageWidth>0 and
         type(imageHeight)=='number' and imageHeight>0 and

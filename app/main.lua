@@ -589,24 +589,29 @@ local function openContextMenu(kind,target,x,y)
     A.contextMenu={kind=kind,target=target,title=title,
         entries=entries,x=px,y=py,w=pw,h=ph,cursor=1}
 end
+local function brushInUse()
+    return {style=A.brushStyle,diameter=A.brushDiameter,
+        opacity=A.brushOpacity,stabilization=A.stabilization}
+end
+local function brushLabSource()
+    return Lab.source(A.brushFocus,Presets.custom(A.brushes),
+        brushInUse())
+end
 local function brushLabFromFocus()
-    local slot=A.brushFocus
-    local chosen
-    if slot then
-        chosen=slot<=4 and Presets.BUILTINS[slot] or
-            Presets.custom(A.brushes)[slot-4]
-    end
-    A.brushLabDraft=chosen and Lab.draft(chosen) or
-        Lab.draft({style=A.brushStyle,diameter=A.brushDiameter,
-            opacity=A.brushOpacity,stabilization=A.stabilization})
+    A.brushLabDraft=brushLabSource()
     A.brushLabEdited=false;A.brushLabDrag=nil;A.brushLabKey='diameter'
+end
+local function resetBrushLab()
+    brushLabFromFocus()
+    status('Prévia restaurada · pincel em uso preservado')
 end
 local function adjustBrushLab(kind,x)
     local rect=Presets.layout(love.graphics.getDimensions())
     if not A.brushLabDraft then return end
     local value=Lab.value(rect,kind,x)
     A.brushLabDraft=Lab.adjust(A.brushLabDraft,kind,value)
-    A.brushLabEdited=true
+    A.brushLabEdited=Lab.differences(brushLabSource(),
+        A.brushLabDraft)>0
 end
 local function openBrushLibrary()
     A.compactPanel=nil
@@ -1726,6 +1731,13 @@ local function verifyBrushLabLive()
     assert(A.brushLabDraft.stabilization==5 and A.brushLabEdited,
         'Stabilizer and draft-modified indicator failed')
     love.draw()
+    local appliedPreview=assert(A.brushSampleCache.inspector_active,
+        'In-use C++ comparison sample must be rendered')
+    local inUse=brushInUse()
+    assert(appliedPreview.key==Samples.key(inUse,A.color) and
+        Native.bytes(appliedPreview.sample.buffer)==
+        Native.bytes(Samples.render(Native,inUse,A.color).buffer),
+        'In-use comparison differs from actual C++ brush parameters')
     local updated=assert(A.brushSampleCache.inspector)
     assert(updated~=initial and
         updated.key==Samples.key(A.brushLabDraft,A.color),
@@ -1753,8 +1765,27 @@ local function verifyBrushLabLive()
     local again=Lab.rail(rect,'diameter')
     love.mousepressed(again.x,again.y+7,1,false)
     love.mousereleased(again.x,again.y+7,1,false)
-    assert(A.brushLabDraft.diameter==1,
+    assert(A.brushLabDraft.diameter==1 and A.brushLabEdited,
         'Cancel test did not edit draft independently')
+    -- Restoring draft leaves the previously applied settings untouched.
+    love.draw()
+    local reset=Lab.resetRect(rect)
+    love.mousepressed(reset.x+reset.w/2,reset.y+reset.h/2,1,false)
+    assert(A.brushLibrary and A.brushLabDraft.diameter==3 and
+        A.brushLabDraft.opacity==1 and
+        A.brushLabEdited==false and A.brushDiameter==129,
+        'Repor must restore focused preset without changing applied brush')
+    love.draw()
+    assert(A.brushSampleCache.inspector.key==
+        Samples.key(A.brushLabDraft,A.color) and
+        Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history,
+        'Restored preview must redraw native sample without editing raster')
+    -- Edits can still be abandoned with Escape after a reset.
+    love.mousepressed(again.x,again.y+7,1,false)
+    love.mousereleased(again.x,again.y+7,1,false)
+    assert(A.brushLabDraft.diameter==1,
+        'Reset did not leave the inspector editable')
     love.keypressed('escape')
     assert(not A.brushLibrary and A.brushDiameter==129,
         'Escape must discard unsaved draft adjustments')
@@ -4547,9 +4578,21 @@ local function drawBrushLab(rect)
                 math.min(tile,space.h-row*tile))
         end
     end
+    local halves=Lab.comparison(rect)
+    local applied=brushSampleImage('inspector_active',brushInUse())
+    local currentFit=Lab.fit(applied.sample.width,
+        applied.sample.height,halves.current)
     local image=brushSampleImage('inspector',draft)
-    local fit=Lab.fit(image.sample.width,image.sample.height,space)
+    local fit=Lab.fit(image.sample.width,image.sample.height,
+        halves.draft)
+    text('EM USO',halves.current.x,halves.current.labelY,'small','muted')
+    local changes=Lab.differences(brushLabSource(),draft)
+    text(('PRÉVIA · %d alt.'):format(changes),
+        halves.draft.x,halves.draft.labelY,'small',
+        changes>0 and 'accent' or 'muted')
     love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(applied.image,currentFit.x,currentFit.y,
+        0,currentFit.sx,currentFit.sy)
     love.graphics.draw(image.image,fit.x,fit.y,0,fit.sx,fit.sy)
     local names={diameter='Tamanho',opacity='Opacidade',
         stabilization='Estabil.'}
@@ -4576,9 +4619,11 @@ local function drawBrushLab(rect)
         love.graphics.circle('fill',
             rail.x+rail.w*fraction,rail.y+6.5,5,18)
     end
-    button(A.brushLabEdited and 'Aplicar ajustes *' or
-        'Aplicar ajustes',p.x+8,p.y+p.h-36,p.w-16,31,
-        applyBrushLab)
+    local reset=Lab.resetRect(rect)
+    button('Repor',reset.x,reset.y,reset.w,reset.h,
+        resetBrushLab,false,changes==0)
+    button(changes>0 and 'Aplicar *' or 'Aplicar',
+        p.x+61,p.y+p.h-36,p.w-69,31,applyBrushLab)
 end
 local function drawBrushLibrary(w,h)
     local rect=Presets.layout(w,h)
