@@ -1092,12 +1092,29 @@ local function verifyBrushLibrary()
         'Salvar pessoal não persistiu no brushes.json')
     assert(A.selectedBrushCustom==1 and A.brushLibrary,
         'Salvar ajuste deve manter a biblioteca aberta')
+    -- "Meus" must show saved slot 1 in the first row (not row 3).
+    -- Its preview must remain non-destructive before the card is applied.
+    love.draw()
+    love.mousepressed(rect.x+609,rect.y+62,1,false)
+    assert(A.brushFilter=='personal' and A.brushFocus==5,
+        'Filtro pessoal não focou primeiro pincel salvo')
+    love.draw()
+    local personalCardWidth=(Lab.CATALOGUE_WIDTH-56)/2
+    local previewSlot=BrushCard.previewButton(rect.x+20,
+        rect.y+80,personalCardWidth)
+    love.mousepressed(previewSlot.x+previewSlot.w/2,
+        previewSlot.y+previewSlot.h/2,1,false)
+    assert(A.brushLibrary and A.brushFocus==5 and
+        A.brushLabDraft.diameter==24 and
+        A.doc.active_layer>=1 and
+        Native.bytes(A.layerSession.composite)==originalPixels,
+        'Prévia pessoal compactada alterou projeto ou aplicou pincel')
     A.brushDiameter=7
     love.draw()
-    love.mousepressed(rect.x+35,rect.y+80+2*88+10,1,false)
+    love.mousepressed(rect.x+35,rect.y+80+10,1,false)
     assert(not A.brushLibrary and A.brushDiameter==24 and
         A.selectedBrushCustom==1,
-        'Aplicar ajuste salvo não recuperou o pincel')
+        'Aplicar cartão pessoal na primeira linha falhou')
     openBrushLibrary()
     assert(A.brushLibrary,'Reabrir biblioteca falhou')
     love.draw()
@@ -4586,10 +4603,10 @@ local function drawBrushLibrary(w,h)
         switchBrushCategory('personal') end,A.brushFilter=='personal')
     local half=(Lab.CATALOGUE_WIDTH-56)/2
     for i=1,8 do
-        local column=(i-1)%2
-        local line=math.floor((i-1)/2)
-        local x=rect.x+20+column*(half+16)
-        local y=rect.y+80+line*88
+        local column,line=Presets.cardPosition(A.brushFilter,i)
+        -- Invisible slots have no geometry or UI actions in this category.
+        local x=column and rect.x+20+column*(half+16) or nil
+        local y=line and rect.y+80+line*88 or nil
         local preset=i<=4 and Presets.BUILTINS[i] or saved[i-4]
         if Presets.visible(A.brushFilter,i) and preset then
             local selected=Presets.matches(preset,A)
