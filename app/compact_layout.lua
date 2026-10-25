@@ -72,15 +72,15 @@ function UI.quickHit(w,h,x,y)
     return nil
 end
 function UI.popup(w,h,kind)
-    assert(kind=='tools' or kind=='layers' or kind=='properties',
-        'Janela compacta desconhecida')
+    assert(kind=='tools' or kind=='layers' or kind=='properties'
+        or kind=='color','Janela compacta desconhecida')
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela compacta inválida')
-    local width=kind=='tools' and 332 or 298
-    local height=kind=='tools' and 410 or
+    local width=kind=='color' and 404 or kind=='tools' and 332 or 298
+    local height=kind=='color' and 450 or kind=='tools' and 410 or
         kind=='layers' and math.min(440,h-260) or 354
-    return {x=kind=='layers' and w-width-20 or 20,y=134,
-        w=width,h=height}
+    return {x=(kind=='layers' or kind=='color') and w-width-20 or 20,
+        y=134,w=width,h=height}
 end
 function UI.contains(rect,x,y)
     return x>=rect.x and x<rect.x+rect.w and
