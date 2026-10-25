@@ -133,6 +133,16 @@ function Presets.navigate(filter,saved,current,delta)
     end
     return options[(pos-1+delta)%#options+1]
 end
+-- Position of a preset within the currently displayed two-column grid.
+-- In "Meus", the first personal slot starts at the top instead of leaving
+-- two empty rows reserved for the hidden built-in presets.
+-- This affects presentation only: IDs, positions in brushes.json and
+-- keyboard/navigation indices stay stable.
+function Presets.cardPosition(filter,index)
+    if not Presets.visible(filter,index) then return nil end
+    local shown=filter=='personal' and index-4 or index
+    return (shown-1)%2,math.floor((shown-1)/2)
+end
 function Presets.layout(w,h)
     assert(type(w)=='number' and type(h)=='number' and
         w>=960 and h>=640,'Janela muito pequena')
