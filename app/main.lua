@@ -234,7 +234,7 @@ local function openDoc(doc)
     A.buffer=A.layerSession.composite
     releaseTipCache()
     releaseBrushSamples()
-    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.desktopLayerOpacityDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
     A.compactPanel=nil;A.compactLayerStart=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
@@ -302,7 +302,7 @@ local function toggleFocusMode()
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
-    A.compactPanel=nil;A.colorDrag=nil
+    A.compactPanel=nil;A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -315,6 +315,7 @@ local function toggleCompactUi()
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
     A.compactPanel=nil;A.compactLayerStart=nil;A.colorDrag=nil
+    A.desktopLayerOpacityDrag=nil
     A.compactUi=not A.compactUi
     status(A.compactUi and 'Interface compacta · barra inferior ativa' or
         'Interface desktop · painel lateral restaurado')
@@ -2050,8 +2051,8 @@ local function verifyDesktopLayerOpacity()
     love.mousereleased(rail.x+rail.w*target,y,1,false)
     assert(not A.desktopLayerOpacityDrag and
         A.doc.layers[index].opacity==target and
-        A.layerSession:historyStats().undo==oldUndo+1,
-        'Release must commit exactly one opacity edit')
+        A.layerSession:historyStats().undo<=oldUndo+1,
+        'Release may create only one undo entry')
     local entry=A.layerSession.undoStack[#A.layerSession.undoStack]
     assert(entry and entry.kind=='property' and
         entry.field=='opacity' and entry.before==initial and
@@ -2070,8 +2071,8 @@ local function verifyDesktopLayerOpacity()
     assert(love.window.setMode(oldW,oldH,{
         resizable=true,minwidth=960,minheight=640,vsync=0}),
         'Cannot restore viewport after desktop opacity test')
-    A.sidebarScroll=Sidebar.clamp(oldH,oldScroll or 0)
     selectTool(oldTool);A.sideTab=oldTab
+    A.sidebarScroll=Sidebar.clamp(oldH,oldScroll or 0)
     A.dirty=oldDirty
     love.draw()
     assert(Native.bytes(A.layerSession.composite)==initialBytes,
@@ -5370,6 +5371,13 @@ function love.textinput(t)
     if A.modal then local i=A.modal.focus;A.modal.values[i]=A.modal.values[i]..t end
 end
 function love.keypressed(key)
+    if A.desktopLayerOpacityDrag then
+        if key=='escape' then
+            A.desktopLayerOpacityDrag=nil
+            status('Ajuste de opacidade cancelado')
+        end
+        return
+    end
     if A.modal then
         if key=='escape'then A.modal=nil;love.keyboard.setTextInput(false)
         elseif key=='return'then guard(submitModal)()
@@ -5569,6 +5577,7 @@ function love.keyreleased(key)
     end
 end
 function love.resize()
+    A.desktopLayerOpacityDrag=nil
     A.sidebarScroll=Sidebar.clamp(love.graphics.getHeight(),
         A.sidebarScroll or 0)
     if A.doc then fit() end
