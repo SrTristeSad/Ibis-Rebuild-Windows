@@ -101,6 +101,38 @@ function Presets.visible(filter,index)
         (filter=='builtin' and index<=4) or
         (filter=='personal' and index>=5)
 end
+-- Navigating categories never creates a new preset nor rewrites brushes.json.
+-- Only four built-ins and occupied personal slots are selectable.
+function Presets.available(filter,saved)
+    assert(type(saved)=='table','Saved brush slots must be a table')
+    local result={}
+    for i=1,8 do
+        if Presets.visible(filter,i) and
+            (i<=4 or saved[i-4]~=nil) then
+            result[#result+1]=i
+        end
+    end
+    return result
+end
+function Presets.focus(filter,saved,index)
+    local options=Presets.available(filter,saved)
+    if #options==0 then return nil end
+    for _,i in ipairs(options) do
+        if i==index then return i end
+    end
+    return options[1]
+end
+function Presets.navigate(filter,saved,current,delta)
+    assert(type(delta)=='number' and delta%1==0 and
+        delta>=-8 and delta<=8,'Invalid brush navigation step')
+    local options=Presets.available(filter,saved)
+    if #options==0 then return nil end
+    local pos=1
+    for i,index in ipairs(options) do
+        if index==current then pos=i;break end
+    end
+    return options[(pos-1+delta)%#options+1]
+end
 function Presets.layout(w,h)
     assert(type(w)=='number' and type(h)=='number' and
         w>=960 and h>=640,'Janela muito pequena')
