@@ -4586,10 +4586,10 @@ local function drawBrushLibrary(w,h)
         switchBrushCategory('personal') end,A.brushFilter=='personal')
     local half=(Lab.CATALOGUE_WIDTH-56)/2
     for i=1,8 do
-        local column=(i-1)%2
-        local line=math.floor((i-1)/2)
-        local x=rect.x+20+column*(half+16)
-        local y=rect.y+80+line*88
+        local column,line=Presets.cardPosition(A.brushFilter,i)
+        -- Invisible slots have no geometry or UI actions in this category.
+        local x=column and rect.x+20+column*(half+16) or nil
+        local y=line and rect.y+80+line*88 or nil
         local preset=i<=4 and Presets.BUILTINS[i] or saved[i-4]
         if Presets.visible(A.brushFilter,i) and preset then
             local selected=Presets.matches(preset,A)
