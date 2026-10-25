@@ -76,6 +76,8 @@ A etapa 36 disponibiliza [capturas reais do aplicativo Windows](docs/REAL_WINDOW
 
 A etapa 37 corrige [miniaturas reais da galeria e problemas de legibilidade](docs/GALLERY_POLISH_STAGE37.md): imagens vindas do composto RGBA C++, cache limitado, setas vetoriais de desfazer/refazer e textos UTF-8 com largura máxima. As capturas Windows do CI mostram o resultado da própria interface.
 
+A etapa 38 refina [hierarquia visual, galeria e botões do editor Windows](docs/VISUAL_HIERARCHY_STAGE38.md), ampliando as miniaturas RGBA, medindo corretamente os títulos, organizando a barra compacta e agrupando a faixa de ferramentas desktop. O CI continua publicando capturas autênticas da interface.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
