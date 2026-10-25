@@ -62,6 +62,9 @@ def run_tests(runtime_path, output):
         desktop_program = "return require('json').encode(require('tests.test_desktop_layer_opacity').run())"
         desktop = json.loads(state.execute(desktop_program))
         assert desktop.get('passed') and desktop.get('assertions') >= 300
+        wheel_program = "return require('json').encode(require('tests.test_layer_list_wheel').run())"
+        wheel = json.loads(state.execute(wheel_program))
+        assert wheel.get('passed') and wheel.get('assertions') == 37
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():
