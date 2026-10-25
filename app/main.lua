@@ -4604,8 +4604,6 @@ local function drawCompactPopup(w,h)
         local ls=A.layerSession
         local count=#A.doc.layers
         local active=A.doc.active_layer
-        text('↑/↓ camadas · V mostrar/ocultar',
-            p.x+14,p.y+p.h-113,'small','muted')
         button('+',p.x+14,p.y+44,53,32,function()
             finishStroke();ls:add();A.compactLayerStart=nil
             A.dirty=true;rebuildImage()
