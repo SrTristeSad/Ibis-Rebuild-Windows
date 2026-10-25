@@ -2010,6 +2010,73 @@ local function verifyCompactLayerOpacity()
     selectTool(previousTool)
     A.sideTab=previousTab
 end
+-- Real Windows GUI regression: the classic rail operates within the
+-- scrolled 960x640 panel and creates one property-undo step on release.
+local function verifyDesktopLayerOpacity()
+    local oldW,oldH=love.graphics.getDimensions()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldScroll,oldDirty=A.sidebarScroll,A.dirty
+    local index=A.doc.active_layer
+    local initial=A.doc.layers[index].opacity
+    local initialBytes=Native.bytes(A.layerSession.composite)
+    local oldUndo=A.layerSession:historyStats().undo
+    assert(not A.compactUi and not A.focusMode,
+        'Desktop opacity regression requires classic editor')
+    assert(love.window.setMode(960,640,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Cannot resize for desktop layer opacity test')
+    selectTool('brush')
+    A.sideTab='layers'
+    A.sidebarScroll=Sidebar.max(640)
+    love.draw()
+    local w,h=love.graphics.getDimensions()
+    local rail=DesktopOpacity.rect(w,h)
+    local y=rail.y-A.sidebarScroll+rail.h/2
+    local target=initial==.37 and .41 or .37
+    assert(DesktopOpacity.hit(w,h,rail.x+rail.w*.5,y,A.sidebarScroll),
+        'Opacity rail must be reachable in scrolled 960x640 panel')
+    love.mousepressed(rail.x,y,1,false)
+    assert(A.desktopLayerOpacityDrag and
+        A.desktopLayerOpacityDrag.index==index,
+        'Desktop rail must capture selected layer')
+    love.mousemoved(rail.x+rail.w*.81,y,20,0,false)
+    love.mousemoved(rail.x+rail.w*target,y,-15,0,false)
+    love.draw()
+    assert(A.desktopLayerOpacityDrag.value==target and
+        A.doc.layers[index].opacity==initial and
+        A.layerSession:historyStats().undo==oldUndo and
+        Native.bytes(A.layerSession.composite)==initialBytes,
+        'Preview drag cannot modify pixels or history')
+    love.mousereleased(rail.x+rail.w*target,y,1,false)
+    assert(not A.desktopLayerOpacityDrag and
+        A.doc.layers[index].opacity==target and
+        A.layerSession:historyStats().undo==oldUndo+1,
+        'Release must commit exactly one opacity edit')
+    local entry=A.layerSession.undoStack[#A.layerSession.undoStack]
+    assert(entry and entry.kind=='property' and
+        entry.field=='opacity' and entry.before==initial and
+        entry.after==target,'Metadata undo entry must match drag')
+    assert(A.layerSession:undo() and
+        A.doc.layers[index].opacity==initial and
+        Native.bytes(A.layerSession.composite)==initialBytes,
+        'Opacity undo must exactly restore C++ composite')
+    assert(A.layerSession:redo() and
+        A.doc.layers[index].opacity==target,
+        'Opacity redo must reapply the chosen percentage')
+    assert(A.layerSession:undo() and
+        A.doc.layers[index].opacity==initial,
+        'Opacity regression cleanup must restore initial value')
+    rebuildImage()
+    assert(love.window.setMode(oldW,oldH,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Cannot restore viewport after desktop opacity test')
+    A.sidebarScroll=Sidebar.clamp(oldH,oldScroll or 0)
+    selectTool(oldTool);A.sideTab=oldTab
+    A.dirty=oldDirty
+    love.draw()
+    assert(Native.bytes(A.layerSession.composite)==initialBytes,
+        'Desktop opacity test changed the drawing')
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -3314,6 +3381,7 @@ function love.update(dt)
                 verifyAdaptiveDesktopSidebar()
                 verifyCompactNativeInspector()
                 verifyCompactLayerOpacity()
+                verifyDesktopLayerOpacity()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
