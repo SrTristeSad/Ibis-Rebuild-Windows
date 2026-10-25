@@ -1343,6 +1343,128 @@ local function verifyCompactVisualControls()
         A.panX==previousPanX and A.panY==previousPanY,
         'Troca de estilo modificou navegação da tela')
 end
+-- Stage 33: real mouse/event checks for color workflow, persistent
+-- palette and categorized brush window; native document stays unchanged.
+local function verifyColorBrushWindows()
+    local w,h=love.graphics.getDimensions()
+    local prev=A.color
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldSize,oldStyle=A.brushDiameter,A.brushStyle
+    local oldOpacity,oldStab=A.brushOpacity,A.stabilization
+    local oldSelected=A.selectedBrushCustom
+    local oldHistory=A.colorHistory
+    local oldSaved=A.savedColors
+    local oldPrefs=A.preferences
+    local oldDirty=A.dirty
+    local bytes=Native.bytes(A.layerSession.composite)
+    local steps=A.layerSession:historyStats().undo
+    local layers=#A.doc.layers
+    assert(not A.compactUi,'Color tests start in original desktop mode')
+    selectTool('brush')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(A.compactUi,'Compact panel needed for color button')
+    local bar=Compact.toolbar(w,h)
+    local function colorButton()
+        love.draw()
+        love.mousepressed(bar[4].x+bar[4].w/2,
+            bar[4].y+bar[4].h/2,1,false)
+    end
+    colorButton()
+    assert(A.compactPanel=='color' and A.colorMode=='hsb' and
+        A.previousColor==prev,'Compact Color did not open HSB with previous')
+    local p=Compact.popup(w,h,'color')
+    local hue=ColorPanel.hueRect(p)
+    love.draw()
+    love.mousepressed(hue.x+9,hue.y+40,1,false)
+    assert(A.colorDrag=='hue' and not A.drawing,
+        'Hue slider did not capture pointer')
+    love.mousemoved(hue.x+9,hue.y+110,0,70,false)
+    love.mousereleased(hue.x+9,hue.y+110,1,false)
+    assert(A.colorDrag==nil and A.color~=prev,
+        'Hue drag did not edit live RGBA')
+    local sv=ColorPanel.svRect(p)
+    love.draw()
+    love.mousepressed(sv.x+sv.w,sv.y,1,false)
+    love.mousereleased(sv.x+sv.w,sv.y,1,false)
+    local _,saturation,brightness=ColorPanel.hsb(A.color)
+    assert(saturation>99 and brightness>99,
+        'HSB square did not apply saturation/brightness')
+    love.draw()
+    love.mousepressed(p.x+185,p.y+143,1,false)
+    assert(A.colorMode=='rgb','RGB tab did not open')
+    local rail=ColorPanel.track(p,'rgb','R')
+    love.draw()
+    love.mousepressed(rail.x,rail.y+5,1,false)
+    assert(A.colorDrag=='rgb-R','RGB slider did not capture pointer')
+    love.mousemoved(rail.x+rail.w/2,rail.y+5,132,0,false)
+    love.mousereleased(rail.x+rail.w/2,rail.y+5,1,false)
+    local r=Colors.channels(A.color)
+    assert(r==128,'RGB red channel did not map midpoint to 128')
+    love.draw()
+    love.mousepressed(p.x+310,p.y+143,1,false)
+    assert(A.colorMode=='palette','Paleta tab did not open')
+    local newColor=0x8ac331a9
+    chooseColor(newColor)
+    if #A.savedColors<ColorPanel.PALETTE_LIMIT then
+        local originalCount=#A.savedColors
+        love.draw()
+        love.mousepressed(p.x+285,p.y+326,1,false)
+        assert(#A.savedColors==originalCount+1 and
+            A.store:getPreferences().colorPalette and
+            #A.store:getPreferences().colorPalette==#A.savedColors,
+            'Save palette did not persist to preferences.json')
+        chooseColor(0x440099ff)
+        local index=#A.savedColors
+        love.draw()
+        love.mousepressed(p.x+22+((index-1)%6)*61+15,
+            p.y+211+math.floor((index-1)/6)*46+15,1,false)
+        assert(A.color==newColor,
+            'Saved swatch did not restore its RGBA alpha')
+    end
+    local beforeHex=A.color
+    love.draw()
+    love.mousepressed(p.x+68,p.y+142,1,false)
+    assert(A.colorMode=='hsb','HSB tab did not restore')
+    love.draw()
+    love.mousepressed(p.x+260,p.y+83,1,false)
+    assert(A.modal and A.modal.kind=='color',
+        'RGBA hexadecimal modal no longer accessible')
+    love.keypressed('escape')
+    assert(not A.modal and A.screen=='editor' and
+        A.color==beforeHex,'Canceling hex modal unexpectedly changed color')
+    openBrushLibrary()
+    local pos=Presets.layout(w,h)
+    love.draw()
+    love.mousepressed(pos.x+610,pos.y+61,1,false)
+    assert(A.brushFilter=='personal' and A.brushLibrary,
+        'My Brushes tab failed')
+    love.draw()
+    love.mousepressed(pos.x+490,pos.y+61,1,false)
+    assert(A.brushFilter=='builtin','Built-in Brushes tab failed')
+    love.draw()
+    love.mousepressed(pos.x+385,pos.y+61,1,false)
+    assert(A.brushFilter=='all','All brushes tab failed')
+    love.draw()
+    love.mousepressed(pos.x+34,pos.y+91,1,false)
+    assert(not A.brushLibrary and A.tool=='brush' and
+        A.brushDiameter==Presets.BUILTINS[1].diameter,
+        'Filter did not preserve actual brush preset selection')
+    assert(Native.bytes(A.layerSession.composite)==bytes and
+        A.layerSession:historyStats().undo==steps and
+        #A.doc.layers==layers and A.dirty==oldDirty,
+        'Color/brush windows modified native pixels/history/dirty')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(not A.compactUi,'Layout did not return to desktop')
+    A.color=prev;A.brushDiameter=oldSize;A.brushStyle=oldStyle
+    A.brushOpacity=oldOpacity;A.stabilization=oldStab
+    A.selectedBrushCustom=oldSelected
+    A.colorHistory=oldHistory
+    A.store:setPreferences(oldPrefs)
+    A.preferences=oldPrefs;A.savedColors=oldSaved
+    selectTool(oldTool);A.sideTab=oldTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2599,6 +2721,7 @@ function love.update(dt)
                 verifyBrushTipHover()
                 verifyCompactUi()
                 verifyCompactVisualControls()
+                verifyColorBrushWindows()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2689,6 +2812,10 @@ function love.update(dt)
                     compact_quick_size=true,compact_quick_opacity=true,
                     compact_quick_capture=true,compact_visual_isolation=true,
                     compact_popup_hit_protection=true,
+                    color_window_hsb_drag=true,color_window_rgb_drag=true,
+                    color_window_palette_save=true,color_hex_modal_available=true,
+                    brush_library_filter_tabs=true,
+                    color_brush_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
