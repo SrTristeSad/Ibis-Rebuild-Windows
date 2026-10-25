@@ -105,6 +105,24 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: python tools/test.py --suite ui --runtime "$env:LOVE_RUNTIME"
 
+      - name: Capture authentic Windows UI screenshots
+        shell: pwsh
+        env:
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: python tools/capture_showcase.py --runtime "$env:LOVE_RUNTIME" --output build/showcase
+
+      - name: Publish actual UI screenshots for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: IbisRebuild-Real-Windows-Screenshots
+          path: |
+            build/showcase/*.png
+            build/showcase/showcase-report.json
+            build/showcase/verification.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Package source-only Windows smoke-test build after passing all tests
         shell: pwsh
         run: |
