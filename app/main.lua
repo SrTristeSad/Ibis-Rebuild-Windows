@@ -3407,6 +3407,127 @@ local function drawBrushLibrary(w,h)
     button('Fechar · Esc',rect.x+rect.w-166,rect.y+480,146,37,
         function()A.brushLibrary=false end)
 end
+local function drawColorTile(color,x,y,w,h)
+    local r,g,b,a=Colors.channels(color)
+    local d=math.max(6,math.min(12,math.floor(h/3)))
+    for j=0,math.ceil(h/d)-1 do
+        for i=0,math.ceil(w/d)-1 do
+            local light=(i+j)%2==0
+            local v=light and .83 or .56
+            love.graphics.setColor(v,v,v,1)
+            love.graphics.rectangle('fill',x+i*d,y+j*d,
+                math.min(d,w-i*d),math.min(d,h-j*d))
+        end
+    end
+    love.graphics.setColor(r/255,g/255,b/255,a/255)
+    love.graphics.rectangle('fill',x,y,w,h,2,2)
+    c('line')
+    love.graphics.rectangle('line',x,y,w,h,2,2)
+end
+local function drawColorPopup(p)
+    local x,y=p.x,p.y
+    text('Atual',x+22,y+49,'small','muted')
+    text('Anterior',x+130,y+49,'small','muted')
+    drawColorTile(A.color,x+21,y+66,97,40)
+    drawColorTile(A.previousColor or A.color,x+129,y+66,97,40)
+    button(Colors.format(A.color),x+237,y+66,151,40,
+        function()modal('color')end)
+    button('HSB',x+22,y+127,112,32,function()
+        A.colorMode='hsb' end,A.colorMode=='hsb')
+    button('RGB',x+143,y+127,112,32,function()
+        A.colorMode='rgb' end,A.colorMode=='rgb')
+    button('Paleta',x+264,y+127,124,32,function()
+        A.colorMode='palette' end,A.colorMode=='palette')
+    if A.colorMode=='hsb' then
+        local hue,sat,bright,alpha=ColorPanel.hsb(A.color)
+        local square=ColorPanel.svRect(p)
+        local count=14
+        for row=0,count-1 do
+            for col=0,count-1 do
+                local value=ColorPanel.fromHSB(hue,col/(count-1)*100,
+                    (1-row/(count-1))*100,255)
+                local r,g,b=Colors.channels(value)
+                love.graphics.setColor(r/255,g/255,b/255,1)
+                love.graphics.rectangle('fill',
+                    square.x+col*square.w/count,
+                    square.y+row*square.h/count,
+                    math.ceil(square.w/count)+.2,
+                    math.ceil(square.h/count)+.2)
+            end
+        end
+        local selectX=square.x+square.w*sat/100
+        local selectY=square.y+square.h*(1-bright/100)
+        c('text');love.graphics.setLineWidth(2)
+        love.graphics.circle('line',selectX,selectY,5,18)
+        local hueRect=ColorPanel.hueRect(p)
+        for i=0,35 do
+            local value=ColorPanel.fromHSB(i*10,100,100,255)
+            local r,g,b=Colors.channels(value)
+            love.graphics.setColor(r/255,g/255,b/255,1)
+            love.graphics.rectangle('fill',hueRect.x,
+                hueRect.y+i*hueRect.h/36,hueRect.w,
+                math.ceil(hueRect.h/36)+.1)
+        end
+        c('text');love.graphics.setLineWidth(2)
+        local yy=hueRect.y+hueRect.h*hue/360
+        love.graphics.rectangle('line',hueRect.x-2,yy-2,
+            hueRect.w+4,4,1,1)
+        text(('H %.0f°'):format(hue),x+299,y+195,'small')
+        text(('S %.0f%%'):format(sat),x+299,y+226,'small')
+        text(('B %.0f%%'):format(bright),x+299,y+257,'small')
+        text(('A %d'):format(alpha),x+299,y+288,'small')
+        local rail=ColorPanel.hsbAlphaRect(p)
+        c('line');love.graphics.rectangle('fill',rail.x,rail.y+3,
+            rail.w,5,2,2)
+        c('accent');love.graphics.rectangle('fill',rail.x,rail.y+3,
+            rail.w*alpha/255,5,2,2)
+        c('text')
+        love.graphics.circle('fill',rail.x+rail.w*alpha/255,
+            rail.y+5,5,18)
+        text('Alfa',x+23,y+350,'small','muted')
+    elseif A.colorMode=='rgb' then
+        local r,g,b,a=Colors.channels(A.color)
+        local values={R=r,G=g,B=b,A=a}
+        for _,key in ipairs({'R','G','B','A'}) do
+            local rail=ColorPanel.track(p,'rgb',key)
+            local fraction=values[key]/255
+            text(key..'  '..values[key],x+21,rail.y-3,'small')
+            c('line');love.graphics.rectangle('fill',
+                rail.x,rail.y+3,rail.w,5,2,2)
+            c('accent');love.graphics.rectangle('fill',
+                rail.x,rail.y+3,rail.w*fraction,5,2,2)
+            c('text');love.graphics.circle('fill',
+                rail.x+rail.w*fraction,rail.y+5,5,18)
+        end
+        text('Canais 0 a 255 · precisão de 1 unidade',
+            x+21,y+368,'small','muted')
+    else
+        text('Cores da paleta local',x+22,y+183,'small','muted')
+        for i,value in ipairs(A.savedColors) do
+            local col=(i-1)%6
+            local row=math.floor((i-1)/6)
+            local px=x+22+col*61
+            local py=y+211+row*46
+            drawColorTile(value,px,py,49,32)
+            A.buttons[#A.buttons+1]={x=px,y=py,w=49,h=32,
+                fn=function()chooseColor(value)end}
+        end
+        text(('Salvas: %d / %d'):format(#A.savedColors,
+            ColorPanel.PALETTE_LIMIT),x+22,y+316,'small','muted')
+        button('Guardar cor atual',x+204,y+310,184,32,
+            savePaletteColor,false,
+            #A.savedColors>=ColorPanel.PALETTE_LIMIT)
+    end
+    text('Cores recentes',x+22,y+392,'small','muted')
+    for i,value in ipairs(A.colorHistory) do
+        if i>10 then break end
+        local px=x+22+(i-1)*37
+        local py=y+411
+        drawColorTile(value,px,py,30,22)
+        A.buttons[#A.buttons+1]={x=px,y=py,w=30,h=22,
+            fn=function()chooseColor(value)end}
+    end
+end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
@@ -3473,6 +3594,8 @@ local function drawCompactPopup(w,h)
         end
         button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
             openBrushLibrary)
+    elseif kind=='color' then
+        drawColorPopup(p)
     elseif kind=='layers' then
         local ls=A.layerSession
         local count=#A.doc.layers
