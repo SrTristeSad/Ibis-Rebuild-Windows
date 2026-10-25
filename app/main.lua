@@ -4624,7 +4624,7 @@ local function drawBrushLibrary(w,h)
                     A.brushFocus=i
                     brushLabFromFocus()
                     status('Prévia: '..preset.name..
-                        ' · Aplicar ajustes ou Enter para confirmar')
+                        ' · Ajuste parâmetros e clique Aplicar ajustes')
                 end,A.brushFocus==i)
             if A.brushFocus==i then
                 c('accent');love.graphics.setLineWidth(2)
