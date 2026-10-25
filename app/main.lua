@@ -1092,12 +1092,29 @@ local function verifyBrushLibrary()
         'Salvar pessoal não persistiu no brushes.json')
     assert(A.selectedBrushCustom==1 and A.brushLibrary,
         'Salvar ajuste deve manter a biblioteca aberta')
+    -- "Meus" must show saved slot 1 in the first row (not row 3).
+    -- Its preview must remain non-destructive before the card is applied.
+    love.draw()
+    love.mousepressed(rect.x+609,rect.y+62,1,false)
+    assert(A.brushFilter=='personal' and A.brushFocus==5,
+        'Filtro pessoal não focou primeiro pincel salvo')
+    love.draw()
+    local personalCardWidth=(Lab.CATALOGUE_WIDTH-56)/2
+    local previewSlot=BrushCard.previewButton(rect.x+20,
+        rect.y+80,personalCardWidth)
+    love.mousepressed(previewSlot.x+previewSlot.w/2,
+        previewSlot.y+previewSlot.h/2,1,false)
+    assert(A.brushLibrary and A.brushFocus==5 and
+        A.brushLabDraft.diameter==24 and
+        A.doc.active_layer>=1 and
+        Native.bytes(A.layerSession.composite)==originalPixels,
+        'Prévia pessoal compactada alterou projeto ou aplicou pincel')
     A.brushDiameter=7
     love.draw()
-    love.mousepressed(rect.x+35,rect.y+80+2*88+10,1,false)
+    love.mousepressed(rect.x+35,rect.y+80+10,1,false)
     assert(not A.brushLibrary and A.brushDiameter==24 and
         A.selectedBrushCustom==1,
-        'Aplicar ajuste salvo não recuperou o pincel')
+        'Aplicar cartão pessoal na primeira linha falhou')
     openBrushLibrary()
     assert(A.brushLibrary,'Reabrir biblioteca falhou')
     love.draw()
