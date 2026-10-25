@@ -66,6 +66,8 @@ A etapa 31 introduz [layout compacto inspirado na barra principal oficial do ibi
 
 A etapa 32 melhora o [acabamento da interface compacta com referências oficiais](docs/COMPACT_VISUAL_STAGE32.md): barra inferior com ícones vetoriais, amostra RGBA da cor selecionada, tema charcoal/cinza, indicação de opacidade nas camadas e barras rápidas de espessura (1–256 px) e opacidade (10–100%, passo de 1%). O canvas bloqueia interações de pintura na região dos controles; não se declara identidade visual 1:1 com a versão Android 14.1.2.
 
+A etapa 33 acrescenta [janela compacta de cores HSB/RGB/Paleta](docs/COLOR_BRUSH_WINDOWS_STAGE33.md), com cor atual/anterior, edição alfa/hexadecimal, até 12 cores pessoais persistidas, histórico de sessão e filtros Todos/Básicos/Meus na biblioteca raster existente. As ferramentas continuam independentes do raster Android e usam o formato RGBA e o motor C++ já testados.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
