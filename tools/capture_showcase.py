@@ -19,6 +19,7 @@ NAMES = (
     '04-seletor-cores.png',
     '05-camadas.png',
     '06-editor-desktop.png',
+    '07-editor-960x640.png',
 )
 PNG_MAGIC = b'\x89PNG\r\n\x1a\n'
 
@@ -49,7 +50,8 @@ def capture(output, runtime_path=None):
         ok = len(data) > 1500 and data.startswith(PNG_MAGIC) and \
             data[12:16] == b'IHDR'
         dimensions = struct.unpack('>II', data[16:24]) if ok else (0, 0)
-        ok = ok and dimensions == (1220, 800)
+        expected_dimensions = (960, 640) if name == '07-editor-960x640.png' else (1220, 800)
+        ok = ok and dimensions == expected_dimensions
         items.append({'name': name, 'ok': bool(ok),
                       'bytes': len(data), 'dimensions': dimensions})
     verified = bool(process['ok'] and app.get('ok') and
