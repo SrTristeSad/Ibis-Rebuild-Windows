@@ -3877,11 +3877,14 @@ local function drawEditor(w,h)
                 c('accent')
                 love.graphics.rectangle('fill',panel+19,rowY+5,3,27,1,1)
             end
-            local label=layer.name
-            local utf8=require('utf8')
-            local cut=utf8.offset(label,12)
-            if cut then label=label:sub(1,cut-1)..'…' end
-            text(i..'  '..label,panel+62,rowY+8,'body','text')
+            -- Keep the full layer number visible and fit UTF-8 names
+            -- to the actual free pixels before the visibility button.
+            local prefix=tostring(i)..'  '
+            local font=A.fonts.body
+            local free=math.max(0,143-font:getWidth(prefix))
+            local label=TextFit.truncate(layer.name,free,
+                function(value)return font:getWidth(value)end)
+            text(prefix..label,panel+62,rowY+8,'body','text')
             button(layer.visible and 'Vis' or 'Oc.',
                 panel+210,rowY+4,35,25,function()
                     finishStroke()
