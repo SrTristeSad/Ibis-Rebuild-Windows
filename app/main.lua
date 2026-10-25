@@ -1482,6 +1482,93 @@ local function verifyColorBrushWindows()
     A.preferences=oldPrefs;A.savedColors=oldSaved
     selectTool(oldTool);A.sideTab=oldTab
 end
+-- GUI regression for native brush-catalogue RGBA swatches, caching and
+-- category/keyboard input. Kept outside nativeSelfTest to avoid local limit.
+local function verifyNativeBrushCatalogue()
+    local w,h=love.graphics.getDimensions()
+    local rect=Presets.layout(w,h)
+    local previousTool=A.tool
+    local previousTab=A.sideTab
+    local previousBrushes=A.brushes
+    local previousColor=A.color
+    local previousStyle=A.brushStyle
+    local previousDiameter=A.brushDiameter
+    local previousOpacity=A.brushOpacity
+    local previousStabilization=A.stabilization
+    local previousSlot=A.selectedBrushCustom
+    local previousDirty=A.dirty
+    local originalPixels=Native.bytes(A.layerSession.composite)
+    local originalHistory=A.layerSession:historyStats().undo
+    local originalLayers=#A.doc.layers
+    selectTool('brush')
+    releaseBrushSamples()
+    openBrushLibrary()
+    love.draw()
+    local cached=assert(A.brushSampleCache and A.brushSampleCache[3],
+        'Brush window did not render native C++ swatches')
+    local expected=Samples.render(Native,Presets.BUILTINS[3],A.color)
+    assert(Native.bytes(cached.sample.buffer)==Native.bytes(expected.buffer),
+        'Marker preview does not use native feather renderer')
+    local first=assert(A.brushSampleCache[1])
+    love.draw()
+    assert(A.brushSampleCache[1]==first and A.brushSampleCache[3]==cached,
+        'Brush window allocates new preview textures every frame')
+    A.color=0x40c9aaff
+    love.draw()
+    assert(A.brushSampleCache[1]~=first and
+        A.brushSampleCache[3]~=cached and
+        A.brushSampleCache[3].key==Samples.key(
+            Presets.BUILTINS[3],A.color),
+        'Preview cache did not invalidate when RGBA color changed')
+    local originalPresets=A.brushes
+    local private=Presets.save({},Presets.BUILTINS[3])
+    A.brushes=private
+    love.draw()
+    love.mousepressed(rect.x+609,rect.y+62,1,false)
+    assert(A.brushFilter=='personal' and A.brushFocus==5,
+        'Personal tab should focus only populated custom slots')
+    love.keypressed('right')
+    assert(A.brushFocus==5,
+        'Keyboard navigation should skip unpopulated personal slots')
+    love.draw()
+    assert(A.brushSampleCache[5] and
+        Native.bytes(A.brushSampleCache[5].sample.buffer)==
+        Native.bytes(Samples.render(Native,private[1],A.color).buffer),
+        'Custom stroke sample does not represent saved renderer settings')
+    love.keypressed('return')
+    assert(not A.brushLibrary and A.tool=='brush' and
+        A.brushDiameter==24 and A.brushStyle=='soft' and
+        A.selectedBrushCustom==1,
+        'Enter did not apply keyboard-focused personal brush')
+    A.brushes=originalPresets
+    openBrushLibrary()
+    love.keypressed('tab')
+    assert(A.brushFilter=='builtin' and A.brushFocus and
+        A.brushFocus<=4,'Tab must switch to built-in brushes')
+    love.keypressed('right')
+    assert(A.brushFocus==2,'Right arrow did not focus next built-in')
+    love.keypressed('down')
+    assert(A.brushFocus==4,'Down arrow did not follow two-column grid')
+    love.keypressed('kpenter')
+    assert(not A.brushLibrary and A.brushDiameter==48 and
+        A.brushStyle=='soft' and math.abs(A.brushOpacity-.3)<1e-6,
+        'Keypad Enter failed to apply focused preset')
+    openBrushLibrary()
+    love.keypressed('escape')
+    assert(not A.brushLibrary,'Esc must close brush library')
+    assert(Native.bytes(A.layerSession.composite)==originalPixels and
+        A.layerSession:historyStats().undo==originalHistory and
+        #A.doc.layers==originalLayers and A.dirty==previousDirty,
+        'Native sample creation or keyboard input edited the document')
+    A.brushes=previousBrushes;A.color=previousColor
+    A.brushStyle=previousStyle;A.brushDiameter=previousDiameter
+    A.brushOpacity=previousOpacity;A.stabilization=previousStabilization
+    A.selectedBrushCustom=previousSlot
+    A.brushFocus=nil
+    releaseBrushSamples()
+    selectTool(previousTool)
+    A.sideTab=previousTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2739,6 +2826,7 @@ function love.update(dt)
                 verifyCompactUi()
                 verifyCompactVisualControls()
                 verifyColorBrushWindows()
+                verifyNativeBrushCatalogue()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2833,6 +2921,10 @@ function love.update(dt)
                     color_window_palette_save=true,color_hex_modal_available=true,
                     brush_library_filter_tabs=true,
                     color_brush_no_raster_edits=true,
+                    native_catalogue_swatch=true,native_catalogue_texture_cache=true,
+                    native_catalogue_rgba_invalidation=true,
+                    keyboard_brush_selection=true,brush_category_focus=true,
+                    native_catalogue_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
