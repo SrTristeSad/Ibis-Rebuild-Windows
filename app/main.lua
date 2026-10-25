@@ -309,7 +309,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -3235,6 +3235,18 @@ end
 local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.compactUi and A.compactPanel then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        A.compactPanel=nil
+        return -- Closing a palette must not paint behind it.
+    end
     if A.toolHelp then
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
@@ -3270,12 +3282,12 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         return -- Outside click dismisses; never leaks to the canvas.
     end
     if A.screen=='editor' and not A.modal and buttonNumber==2 then
-        local toolId=Menus.toolAt(toolSlots,x,y)
+        local toolId=not A.compactUi and Menus.toolAt(toolSlots,x,y) or nil
         if toolId then
             openContextMenu('tool',toolId,x,y)
             return
         end
-        if not A.focusMode and A.sideTab=='layers' and A.tool~='shape'
+        if not paneHidden() and A.sideTab=='layers' and A.tool~='shape'
             and A.tool~='select' and A.tool~='picker' then
             local count=#A.doc.layers
             local rows=Thumbnails.rows(love.graphics.getHeight())
@@ -3292,7 +3304,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     if buttonNumber==1 and A.screen=='editor' and not A.modal
         and not A.spaceHeld then
         local panel=love.graphics.getWidth()-268
-        local kind=Sliders.kindAt(A.tool,A.sideTab,A.focusMode,panel,x,y)
+        local kind=Sliders.kindAt(A.tool,A.sideTab,paneHidden(),panel,x,y)
         if kind then
             finishStroke()
             A.shapePreview=nil
@@ -3307,7 +3319,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         (buttonNumber==2 or buttonNumber==3 or
         (buttonNumber==1 and A.spaceHeld)) then
         if Workspace.contains(love.graphics.getWidth(),
-            love.graphics.getHeight(),A.focusMode,x,y) then
+            love.graphics.getHeight(),paneHidden(),x,y,A.compactUi) then
             finishStroke()
             A.panning=true;A.panButton=buttonNumber
             return
@@ -3316,7 +3328,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and Workspace.contains(
-            love.graphics.getWidth(),love.graphics.getHeight(),A.focusMode,x,y) then
+            love.graphics.getWidth(),love.graphics.getHeight(),paneHidden(),x,y,A.compactUi) then
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=pressure,time=math.floor(love.timer.getTime()*1000)}})
@@ -3534,17 +3546,17 @@ function love.focus(focused)
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
+        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.wheelmoved(x,y)
-    if A.toolHelp or A.contextMenu or A.brushLibrary then return end
+    if A.toolHelp or A.contextMenu or A.brushLibrary or A.compactPanel then return end
     if A.screen=='editor' and not A.modal then
         local mx=love.mouse.getPosition()
-        if not A.focusMode and mx>=love.graphics.getWidth()-268 and
+        if not paneHidden() and mx>=love.graphics.getWidth()-268 and
             A.sideTab=='layers' then
             local count=#A.doc.layers
             local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
@@ -3558,7 +3570,7 @@ function love.wheelmoved(x,y)
         if y==0 then return end
         local w,h=love.graphics.getDimensions()
         local my=select(2,love.mouse.getPosition())
-        if not Workspace.contains(w,h,A.focusMode,mx,my) then
+        if not Workspace.contains(w,h,paneHidden(),mx,my,A.compactUi) then
             mx,my=View.center(viewData(),w,h)
         end
         if love.keyboard.isDown('lshift','rshift') then
@@ -3581,6 +3593,14 @@ function love.keypressed(key)
     end
     if A.screen=='editor' and A.brushLibrary then
         if key=='escape' then A.brushLibrary=false end
+        return
+    end
+    if A.screen=='editor' and A.compactPanel then
+        if key=='escape' then A.compactPanel=nil
+        elseif EditorTools.fromKey(key) then
+            selectTool(EditorTools.fromKey(key).id)
+            A.compactPanel=nil
+        end
         return
     end
     if A.screen=='editor' and A.toolHelp then
