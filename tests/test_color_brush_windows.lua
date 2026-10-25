@@ -43,9 +43,10 @@ function T.run()
     check(cyan==0x00FFFFBE,'HSB Cyan alpha conversion wrong')
     local magenta=Model.withHSB(0xFFFF00FF,'H',300)
     check(magenta==0xFF00FFFF,'Hue update failed')
-    check(Model.withHSB(0xFF000077,'S',0)==0xFFFFFFFF*0+0xFF000077 or
-          Model.hsb(Model.withHSB(0xFF000077,'S',0))>=0,
-          'HSB neutral edit should be bounded')
+    local neutral=Model.withHSB(0xFF000077,'S',0)
+    local nh,ns,nb,na=Model.hsb(neutral)
+    check(ns==0 and na==0x77 and nh==0,
+        'HSB neutral edit must eliminate saturation and preserve alpha')
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local w,h=size[1],size[2]
         local rect=Layout.popup(w,h,'color')
