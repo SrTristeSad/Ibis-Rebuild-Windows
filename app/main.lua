@@ -14,6 +14,7 @@ local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
 local GalleryThumb=require('gallery_thumbnails')
 local TextFit=require('text_fit')
+local Visual=require('visual_hierarchy')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
 local Samples=require('brush_samples')
@@ -66,7 +67,10 @@ local function button(label,x,y,w,h,fn,active,disabled)
     love.graphics.rectangle('line',x+.5,y+.5,w-1,h-1,6,6)
     c(disabled and 'muted' or 'text')
     love.graphics.setFont(A.fonts.body)
-    love.graphics.printf(label,x,y+(h-A.fonts.body:getHeight())/2,w,'center')
+    local printable=TextFit.truncate(label,Visual.clampTextWidth(w),
+        function(value)return A.fonts.body:getWidth(value)end)
+    love.graphics.printf(printable,x,y+(h-A.fonts.body:getHeight())/2,
+        w,'center')
     if not disabled then
         A.buttons[#A.buttons+1]={x=x,y=y,w=w,h=h,fn=guard(fn)}
     end
@@ -96,10 +100,10 @@ local function toolButton(slot)
     local selected=A.tool==item.id
     button('',x,78,w,34,function()selectTool(item.id)end,selected)
     c(selected and 'accent' or 'text')
-    Icons.draw(item.id,x+w/2,88,15)
+    Icons.draw(item.id,x+w/2,88,16)
     c(selected and 'text' or 'muted')
     love.graphics.setFont(A.fonts.small)
-    love.graphics.printf(item.label,x,98,w,'center')
+    love.graphics.printf(Visual.toolLabel(item.id),x,98,w,'center')
     if selected then
         c('accent')
         love.graphics.rectangle('fill',x+8,109,w-16,2,1,1)
@@ -3192,7 +3196,7 @@ local function galleryPreview(doc)
     local ok,item=pcall(function()
         local saved=A.store:openProject(doc.id)
         local session=Layers.open(A.store,saved)
-        local width,height=GalleryThumb.size(saved.width,saved.height,176,74)
+        local width,height=GalleryThumb.size(saved.width,saved.height,176,126)
         local data=love.image.newImageData(width,height,'rgba8')
         GalleryThumb.sample(Native.bytes(session.composite),
             saved.width,saved.height,width,height,function(r,g,b,a,x,y)
@@ -3227,21 +3231,29 @@ local function drawGallery(w,h)
     button('Nova pasta',w-168,113,126,42,function()modal('folder')end)
     button('Raiz',44,206,70,32,function()setFolder('')end,A.folder=='')
     if A.folder~='' then text('/ '..A.folder,127,213,'small','muted') end
-    local colw=230;local cols=math.max(1,math.floor((w-88)/colw));local index=0
+    local index=0
     local function card(label,sub,folder,fn,project)
-        local x=44+(index%cols)*colw;local y=266+math.floor(index/cols)*172;index=index+1
-        if y+150>h-66 then return end
-        box(x,y,212,148,'card')
+        index=index+1
+        local r=Visual.galleryCard(w,h,index)
+        if not r.visible then return end
+        local x,y=r.x,r.y
+        local mx,my=love.mouse.getPosition()
+        local hovered=mx>=x and mx<x+r.w and my>=y and my<y+r.h
+        box(x,y,r.w,r.h,hovered and 'line' or 'card')
         if folder then
-            c('accent');love.graphics.rectangle('fill',x+20,y+26,48,33,5,5);love.graphics.rectangle('fill',x+20,y+18,23,14,3,3)
+            box(r.preview.x,r.preview.y,r.preview.w,r.preview.h,'bg')
+            c('accent')
+            love.graphics.rectangle('fill',x+75,y+75,67,43,6,6)
+            love.graphics.rectangle('fill',x+75,y+60,31,20,4,4)
         else
             c('bg')
-            love.graphics.rectangle('fill',x+18,y+16,176,74,3,3)
+            love.graphics.rectangle('fill',r.preview.x,r.preview.y,
+                r.preview.w,r.preview.h,3,3)
             local preview=project and galleryPreview(project)
             if preview then
                 local pw,ph=preview:getDimensions()
-                local left=x+18+(176-pw)/2
-                local top=y+16+(74-ph)/2
+                local left=r.preview.x+(r.preview.w-pw)/2
+                local top=r.preview.y+(r.preview.h-ph)/2
                 local tile=8
                 for row=0,math.ceil(ph/tile)-1 do
                     for col=0,math.ceil(pw/tile)-1 do
@@ -3257,12 +3269,16 @@ local function drawGallery(w,h)
                 love.graphics.draw(preview,left,top)
             else
                 c('muted')
-                love.graphics.rectangle('line',x+80,y+31,52,42,3,3)
+                love.graphics.rectangle('line',x+83,y+52,46,46,3,3)
             end
         end
-        fitted(label,x+18,y+102,'body','text',176)
-        text(sub,x+18,y+124,'small','muted')
-        A.buttons[#A.buttons+1]={x=x,y=y,w=212,h=148,fn=guard(fn)}
+        fitted(label,r.titleX,r.titleY,'body','text',176)
+        text(sub,r.metaX,r.metaY,'small','muted')
+        if hovered then
+            c('accent')
+            love.graphics.rectangle('fill',x,y+2,3,r.h-4,2,2)
+        end
+        A.buttons[#A.buttons+1]={x=x,y=y,w=r.w,h=r.h,fn=guard(fn)}
     end
     for _,folder in ipairs(A.folders) do card(folder.name,'Pasta',true,function()setFolder(folder.id)end) end
     for _,doc in ipairs(A.projects) do
@@ -3430,7 +3446,8 @@ local function drawEditor(w,h)
     box(panel,64,268,h-112,'panel')
     c('line')
     love.graphics.rectangle('fill',panel,64,1,h-112)
-    text('CAMADAS E PROJETO',panel+20,88,'small','muted')
+    text(A.sideTab=='brush' and 'PROJETO E PINCEL' or
+        'CAMADAS E PROJETO',panel+20,88,'small','muted')
     button('? Ajuda',panel+172,82,76,31,function()
         finishStroke();A.toolHelp=true
     end)
@@ -4315,8 +4332,10 @@ function love.draw()
     c('accent');love.graphics.rectangle('fill',0,0,4,64)
     text('Ibis Rebuild',24,13,'title')
     if A.screen=='gallery' or w>=1120 then
-        text(A.screen=='editor' and 'Área de desenho' or 'Minha galeria',
-            232,24,'body','muted')
+        local name=A.screen=='editor' and A.doc and A.doc.name
+            or 'Minha galeria'
+        fitted(name,232,24,'body','muted',
+            A.screen=='editor' and Visual.headerNameWidth(w) or 320)
     end
     c(Native.available and 'accent' or 'warn')
     love.graphics.circle('fill',w-201,31,3.2,14)
