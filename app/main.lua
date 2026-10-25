@@ -4124,6 +4124,15 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
     if A.brushLibrary then
         if buttonNumber==1 then
+            local rect=Presets.layout(love.graphics.getDimensions())
+            local kind=Lab.hit(rect,x,y)
+            if kind then
+                A.brushLabDrag=kind
+                adjustBrushLab(kind,x)
+                return
+            end
+        end
+        if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
                 local b=A.buttons[i]
                 if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then
@@ -4278,6 +4287,11 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.brushLabDrag and b==1 then
+        adjustBrushLab(A.brushLabDrag,x)
+        A.brushLabDrag=nil
+        return
+    end
     if A.colorDrag and b==1 then
         updateColorDrag(A.colorDrag,x,y)
         A.colorDrag=nil
@@ -4316,6 +4330,10 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.brushLabDrag then
+        adjustBrushLab(A.brushLabDrag,x)
+        return
+    end
     if A.colorDrag then
         updateColorDrag(A.colorDrag,x,y)
         return
@@ -4442,7 +4460,7 @@ function love.focus(focused)
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil
+        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
@@ -4489,7 +4507,7 @@ function love.keypressed(key)
     end
     if A.screen=='editor' and A.brushLibrary then
         if key=='escape' then
-            A.brushLibrary=false
+            A.brushLibrary=false;A.brushLabDrag=nil
         elseif key=='tab' then
             local nextFilter=A.brushFilter=='all' and 'builtin' or
                 A.brushFilter=='builtin' and 'personal' or 'all'
@@ -4500,6 +4518,7 @@ function love.keypressed(key)
                 key=='right' and 1 or key=='up' and -2 or 2)
             A.brushFocus=Presets.navigate(A.brushFilter,
                 Presets.custom(A.brushes),A.brushFocus,offset)
+            brushLabFromFocus()
         elseif key=='return' or key=='kpenter' then
             local idx=A.brushFocus
             if idx then
