@@ -136,6 +136,9 @@ def run_tests(runtime_path, output):
             cursor_program="return require('json').encode(require('tests.test_brush_cursor').run())"
             cursor=json.loads(native_state.execute(cursor_program))
             assert cursor.get('passed') and cursor.get('native_pixel_equal') and cursor.get('scratch_only')
+            compact_program="return require('json').encode(require('tests.test_compact_layout').run())"
+            compact=json.loads(native_state.execute(compact_program))
+            assert compact.get('passed') and compact.get('official_toolbar_order') and compact.get('canvas_and_toolbar_separated')
             thumbnail_program="return require('json').encode(require('tests.test_layer_thumbnails').run())"
             thumbs=json.loads(native_state.execute(thumbnail_program))
             assert thumbs.get('passed') and thumbs.get('rgba_sampled') and thumbs.get('paged_layer_windows')
@@ -194,6 +197,7 @@ def run_tests(runtime_path, output):
         report['brush_library'] = brush_presets
         report['precision_brush_sliders'] = sliders
         report['native_brush_tip_cursor'] = cursor
+        report['compact_workspace_layout'] = compact
         report['native_layer_thumbnails'] = thumbs
         report['layer_metadata_properties'] = properties
         report['layer_duplicate'] = duplicate_result
