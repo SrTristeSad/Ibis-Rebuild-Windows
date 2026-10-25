@@ -1083,6 +1083,100 @@ local function verifyBrushTipHover()
     A.hoverX=nil;A.hoverY=nil
     selectTool(savedTool)
 end
+-- Full GUI regression for mobile-inspired mode using real click dispatch,
+-- independent of the large legacy test function's LuaJIT local budget.
+local function verifyCompactUi()
+    local w,h=love.graphics.getDimensions()
+    local pixels=Native.bytes(A.layerSession.composite)
+    local layerCount=#A.doc.layers
+    local dirty=A.dirty
+    local zoom,rotation,panX,panY=A.zoom,A.rotation,A.panX,A.panY
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldSize,oldOpacity=A.brushDiameter,A.brushOpacity
+    assert(not A.compactUi,'Legacy self-test must begin with desktop UI')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(A.compactUi and not A.compactPanel,
+        'Layout compacto não ligou no cabeçalho')
+    local dock=Compact.toolbar(w,h)
+    local function tap(slot)
+        love.draw()
+        local b=dock[slot]
+        love.mousepressed(b.x+b.w/2,b.y+b.h/2,1,false)
+    end
+    local clip=Workspace.bounds(w,h,true,true)
+    assert(clip.right==w-16 and clip.bottom==h-146,
+        'Canvas compacto deve evitar painel e barra inferior')
+    assert(A.zoom==zoom and A.rotation==rotation and
+        A.panX==panX and A.panY==panY,
+        'Mudança de layout não pode transformar documento')
+    tap(2)
+    assert(A.compactPanel=='tools','Botão Ferramentas não abriu a paleta')
+    local p=Compact.popup(w,h,'tools')
+    love.draw()
+    love.mousepressed(p.x+14+156+32,p.y+52+70+25,1,false)
+    assert(not A.compactPanel and A.tool=='erase',
+        'Ícone de borracha na paleta não ativou ferramenta')
+    tap(1)
+    assert(A.tool=='brush','Botão Pincel não retornou para pincel')
+    tap(3)
+    assert(A.compactPanel=='properties','Ajustes não abriram')
+    p=Compact.popup(w,h,'properties')
+    love.draw()
+    love.mousepressed(p.x+17+73+25,p.y+54+29+15,1,false)
+    assert(A.brushDiameter==math.min(256,oldSize+2),
+        'Ajuste compacto de diâmetro não chamou o motor existente')
+    A.brushDiameter=oldSize
+    love.keypressed('escape')
+    assert(not A.compactPanel and A.screen=='editor',
+        'Esc no popover não deve voltar para galeria')
+    tap(4)
+    assert(A.modal and A.modal.kind=='color',
+        'Botão Cor não abriu editor hexadecimal')
+    love.keypressed('escape')
+    assert(not A.modal and A.screen=='editor',
+        'Fechar cor não deve sair do editor')
+    tap(6)
+    assert(A.compactPanel=='layers','Janela de camadas não abriu')
+    p=Compact.popup(w,h,'layers')
+    love.draw()
+    assert(#A.buttons>0,'A janela de camadas não tem ações clicáveis')
+    -- Dismissal must never penetrate to a painting stroke.
+    love.mousepressed(450,240,1,false)
+    assert(not A.compactPanel and not A.drawing,
+        'Clique fora de camadas iniciou ação no canvas')
+    tap(6)
+    if #A.doc.layers<Store.MAX_LAYERS then
+        love.draw()
+        love.mousepressed(p.x+39,p.y+59,1,false)
+        assert(#A.doc.layers==layerCount+1,
+            'Adicionar camada na janela compacta falhou')
+        undoDoc()
+        assert(#A.doc.layers==layerCount,
+            'Ctrl+Z equivalente não restaurou estrutura compacta')
+    end
+    A.compactPanel=nil
+    tap(2)
+    assert(A.compactPanel=='tools','Paleta não reabriu')
+    love.draw()
+    local close=Compact.popup(w,h,'tools')
+    love.mousepressed(close.x+close.w-29,close.y+22,1,false)
+    assert(not A.compactPanel,'Botão X não fechou paleta')
+    -- Preserve raster and cached image while toggling workspace back.
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        #A.doc.layers==layerCount,
+        'Ações desfeitas da barra compacta modificaram a obra')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(not A.compactUi and A.compactPanel==nil,
+        'Retorno para a interface desktop falhou')
+    assert(A.zoom==zoom and A.rotation==rotation and
+        A.panX==panX and A.panY==panY,
+        'Trocar layout de volta mudou zoom ou rotação')
+    A.brushDiameter=oldSize;A.brushOpacity=oldOpacity
+    selectTool(oldTool);A.sideTab=oldTab
+    A.dirty=dirty
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2327,6 +2421,7 @@ function love.update(dt)
                 verifyBrushLibrary()
                 verifyPrecisionSliders()
                 verifyBrushTipHover()
+                verifyCompactUi()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2407,6 +2502,10 @@ function love.update(dt)
                     native_tip_opacity_refresh=true,native_eraser_mask=true,
                     native_tip_toggle=true,native_tip_modal_isolation=true,
                     native_tip_no_raster_edits=true,
+                    compact_bottom_toolbar=true,compact_tool_palette=true,
+                    compact_raster_layer_panel=true,compact_property_controls=true,
+                    compact_color_modal=true,compact_raster_isolation=true,
+                    compact_return_desktop=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
