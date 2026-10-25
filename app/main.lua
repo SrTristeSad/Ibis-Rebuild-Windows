@@ -259,7 +259,7 @@ local function toggleFocusMode()
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
-    A.compactPanel=nil
+    A.compactPanel=nil;A.colorDrag=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -271,7 +271,7 @@ local function toggleCompactUi()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
-    A.compactPanel=nil;A.compactLayerStart=nil
+    A.compactPanel=nil;A.compactLayerStart=nil;A.colorDrag=nil
     A.compactUi=not A.compactUi
     status(A.compactUi and 'Interface compacta · barra inferior ativa' or
         'Interface desktop · painel lateral restaurado')
@@ -321,7 +321,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactPanel=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -1217,11 +1217,16 @@ local function verifyCompactUi()
     assert(not A.compactPanel and A.screen=='editor',
         'Esc no popover não deve voltar para galeria')
     tap(4)
+    assert(A.compactPanel=='color',
+        'Botão Cor não abriu a janela compacta de cor')
+    p=Compact.popup(w,h,'color')
+    love.draw()
+    love.mousepressed(p.x+270,p.y+88,1,false)
     assert(A.modal and A.modal.kind=='color',
-        'Botão Cor não abriu editor hexadecimal')
+        'Código hexadecimal não abriu o editor existente')
     love.keypressed('escape')
     assert(not A.modal and A.screen=='editor',
-        'Fechar cor não deve sair do editor')
+        'Fechar cor hexadecimal não deve sair do editor')
     tap(6)
     assert(A.compactPanel=='layers','Janela de camadas não abriu')
     p=Compact.popup(w,h,'layers')
@@ -3700,6 +3705,36 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactUi and A.compactPanel then
+        if buttonNumber==1 and A.compactPanel=='color' and
+            A.colorMode~='palette' then
+            local w,h=love.graphics.getDimensions()
+            local p=Compact.popup(w,h,'color')
+            local kind
+            if A.colorMode=='rgb' then
+                local channel=ColorPanel.trackHit(p,'rgb',x,y)
+                if channel then kind='rgb-'..channel end
+            else
+                local square=ColorPanel.svRect(p)
+                local hue=ColorPanel.hueRect(p)
+                local alpha=ColorPanel.hsbAlphaRect(p)
+                if x>=square.x and x<=square.x+square.w and
+                    y>=square.y and y<=square.y+square.h then
+                    kind='sv'
+                elseif x>=hue.x-3 and x<=hue.x+hue.w+3 and
+                    y>=hue.y-3 and y<=hue.y+hue.h+3 then
+                    kind='hue'
+                elseif x>=alpha.x-3 and x<=alpha.x+alpha.w+3 and
+                    y>=alpha.y-5 and y<=alpha.y+alpha.h+5 then
+                    kind='alpha'
+                end
+            end
+            if kind then
+                A.colorHistory=ColorPanel.history(A.colorHistory,A.color)
+                A.colorDrag=kind
+                updateColorDrag(kind,x,y)
+                return
+            end
+        end
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
                 local b=A.buttons[i]
@@ -3708,7 +3743,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 end
             end
         end
-        A.compactPanel=nil
+        A.compactPanel=nil;A.colorDrag=nil
         return -- Closing a palette must not paint behind it.
     end
     if A.toolHelp then
@@ -3878,6 +3913,12 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.colorDrag and b==1 then
+        updateColorDrag(A.colorDrag,x,y)
+        A.colorDrag=nil
+        A.colorHistory=ColorPanel.history(A.colorHistory,A.color)
+        return
+    end
     if A.quickDrag and b==1 then
         applyQuickControl(A.quickDrag,x)
         A.quickDrag=nil
@@ -3910,6 +3951,10 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.colorDrag then
+        updateColorDrag(A.colorDrag,x,y)
+        return
+    end
     if A.quickDrag then
         applyQuickControl(A.quickDrag,x)
         return
@@ -4082,7 +4127,7 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
-        if key=='escape' then A.compactPanel=nil
+        if key=='escape' then A.compactPanel=nil;A.colorDrag=nil
         elseif EditorTools.fromKey(key) then
             selectTool(EditorTools.fromKey(key).id)
             A.compactPanel=nil
