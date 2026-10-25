@@ -1605,6 +1605,102 @@ local function verifyNativeBrushCatalogue()
     selectTool(previousTool)
     A.sideTab=previousTab
 end
+-- Stage 35 regression: edit a live C++ brush inspector with pointer drags,
+-- explicitly apply/cancel and prove no pixels or saved presets were touched.
+local function verifyBrushLabLive()
+    local w,h=love.graphics.getDimensions()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldSize,oldStyle=A.brushDiameter,A.brushStyle
+    local oldOpacity,oldStabilization=A.brushOpacity,A.stabilization
+    local oldSlot,oldDirty=A.selectedBrushCustom,A.dirty
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    local count=#A.doc.layers
+    local previousSaved=A.store:getBrushes()
+    assert(not A.compactUi,'Brush inspector regression starts in desktop')
+    selectTool('brush')
+    releaseBrushSamples()
+    openBrushLibrary()
+    A.brushFocus=1
+    brushLabFromFocus()
+    love.draw()
+    local rect=Presets.layout(w,h)
+    local panel=Lab.layout(rect)
+    local initial=assert(A.brushSampleCache.inspector,
+        'Large native RGBA preview must be rendered on opening')
+    assert(initial.key==Samples.key(A.brushLabDraft,A.color),
+        'Initial live preview does not match chosen preset')
+    local d=Lab.rail(rect,'diameter')
+    love.mousepressed(d.x,d.y+7,1,false)
+    assert(A.brushLabDrag=='diameter' and A.brushLabDraft.diameter==1,
+        'Brush inspector must capture its own size slider')
+    love.mousemoved(d.x+d.w/2,d.y+7,d.w/2,0,false)
+    love.mousereleased(d.x+d.w/2,d.y+7,1,false)
+    assert(A.brushLabDrag==nil and A.brushLabDraft.diameter==129,
+        'Live diameter draft must support exact midpoint')
+    local o=Lab.rail(rect,'opacity')
+    love.draw()
+    love.mousepressed(o.x+o.w/2,o.y+7,1,false)
+    assert(A.brushLabDraft.opacity==.55 and
+        A.brushLabDrag=='opacity','Opacity draft must support 55%')
+    love.mousereleased(o.x+o.w/2,o.y+7,1,false)
+    local stab=Lab.rail(rect,'stabilization')
+    love.draw()
+    love.mousepressed(stab.x+stab.w,stab.y+7,1,false)
+    love.mousereleased(stab.x+stab.w,stab.y+7,1,false)
+    assert(A.brushLabDraft.stabilization==5 and A.brushLabEdited,
+        'Stabilizer and draft-modified indicator failed')
+    love.draw()
+    local updated=assert(A.brushSampleCache.inspector)
+    assert(updated~=initial and
+        updated.key==Samples.key(A.brushLabDraft,A.color),
+        'Live C++ preview did not refresh after adjustments')
+    local expected=Samples.render(Native,A.brushLabDraft,A.color)
+    assert(Native.bytes(updated.sample.buffer)==
+        Native.bytes(expected.buffer),
+        'Large RGBA preview pixels diverged from native renderer')
+    love.mousepressed(5,220,1,false)
+    assert(A.brushLibrary and not A.drawing and
+        A.brushLabDraft.diameter==129,
+        'Click outside inspector leaked through into document')
+    local builtIn=Presets.BUILTINS[1]
+    assert(builtIn.diameter==3 and builtIn.opacity==1,
+        'Editing draft must not mutate built-in brush')
+    love.draw()
+    love.mousepressed(panel.x+panel.w/2,
+        panel.y+panel.h-20,1,false)
+    assert(not A.brushLibrary and A.brushDiameter==129 and
+        A.brushOpacity==.55 and A.stabilization==5 and
+        A.selectedBrushCustom==nil,
+        'Apply draft must update active brush without linking to saved slot')
+    openBrushLibrary()
+    love.draw()
+    local again=Lab.rail(rect,'diameter')
+    love.mousepressed(again.x,again.y+7,1,false)
+    love.mousereleased(again.x,again.y+7,1,false)
+    assert(A.brushLabDraft.diameter==1,
+        'Cancel test did not edit draft independently')
+    love.keypressed('escape')
+    assert(not A.brushLibrary and A.brushDiameter==129,
+        'Escape must discard unsaved draft adjustments')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==history and
+        #A.doc.layers==count and A.dirty==oldDirty,
+        'Inspector touched document pixels/history/layers/dirty')
+    local now=A.store:getBrushes()
+    assert(#now==#previousSaved,
+        'Brush inspector changed stored library without save action')
+    for i=1,#previousSaved do
+        assert(now[i].id==previousSaved[i].id,
+            'Saved brush identifiers changed unexpectedly')
+    end
+    A.brushDiameter=oldSize;A.brushStyle=oldStyle
+    A.brushOpacity=oldOpacity;A.stabilization=oldStabilization
+    A.selectedBrushCustom=oldSlot
+    A.brushLabDrag=nil;A.brushLabDraft=nil
+    releaseBrushSamples()
+    selectTool(oldTool);A.sideTab=oldTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -2863,6 +2959,7 @@ function love.update(dt)
                 verifyCompactVisualControls()
                 verifyColorBrushWindows()
                 verifyNativeBrushCatalogue()
+                verifyBrushLabLive()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2961,6 +3058,9 @@ function love.update(dt)
                     native_catalogue_rgba_invalidation=true,
                     keyboard_brush_selection=true,brush_category_focus=true,
                     native_catalogue_no_raster_edits=true,
+                    brush_lab_large_preview=true,brush_lab_live_native_cache=true,
+                    brush_lab_diameter_drag=true,brush_lab_opacity_one_percent=true,
+                    brush_lab_apply_cancel=true,brush_lab_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
