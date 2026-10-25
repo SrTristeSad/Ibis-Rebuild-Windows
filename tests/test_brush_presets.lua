@@ -61,6 +61,31 @@ function T.run(root)
         'Saving after deletion must reuse first free slot')
     items=refill
     check(#items==1+P.LIMIT,'Refill must preserve external data')
+    -- Every category starts at the first row while retaining permanent
+    -- preset indices and allowing empty personal slots after deletions.
+    for i=1,8 do
+        local col,row=P.cardPosition('all',i)
+        check(col==(i-1)%2 and row==math.floor((i-1)/2),
+            'All-category card position remains unchanged')
+        if i<=4 then
+            local builtinCol,builtinRow=P.cardPosition('builtin',i)
+            check(builtinCol==(i-1)%2 and
+                builtinRow==math.floor((i-1)/2),
+                'Built-in grid remains unchanged')
+            check(P.cardPosition('personal',i)==nil,
+                'Hidden built-in cannot have a personal-card hitbox')
+        else
+            local personalCol,personalRow=P.cardPosition('personal',i)
+            check(personalCol==(i-5)%2 and
+                personalRow==math.floor((i-5)/2),
+                'Personal presets must begin in first row')
+            check(P.cardPosition('builtin',i)==nil,
+                'Hidden personal preset cannot have a built-in hitbox')
+        end
+    end
+    check(not pcall(P.cardPosition,'personal',9) and
+        not pcall(P.cardPosition,'invalid',5),
+        'Invalid indices and filters must be rejected')
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local r=P.layout(size[1],size[2])
         check(r.x>=0 and r.y>=0 and r.x+r.w<=size[1] and
