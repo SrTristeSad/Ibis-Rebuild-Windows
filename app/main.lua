@@ -32,6 +32,7 @@ local DesktopOpacity=require('desktop_layer_opacity')
 local LayerOpacitySteps=require('layer_opacity_steps')
 local LayerOrder=require('layer_order_controls')
 local LayerRowVisual=require('layer_row_visual')
+local CompactLayerWheel=require('compact_layer_wheel')
 local LayerListWheel=require('layer_list_wheel')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
@@ -1941,6 +1942,61 @@ local function verifyCompactNativeInspector()
 end
 -- Stage 41: drag at 1% resolution, then confirm ONE undo entry,
 -- even after multiple pointer movements. Preview must not edit raster.
+-- Stage 41: actual compact panel wheel navigation at minimum Windows size.
+-- Check the list moves while project pixels, selection, zoom and undo do not.
+local function verifyCompactLayerWheel()
+    local previousW,previousH=love.graphics.getDimensions()
+    local previousTool,previousTab=A.tool,A.sideTab
+    local previousStart=A.compactLayerStart
+    local previousScroll=A.sidebarScroll
+    local previousDirty=A.dirty
+    local selected=A.doc.active_layer
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    assert(not A.compactUi and not A.focusMode and
+        A.screen=='editor','Compact wheel test needs desktop editor')
+    assert(love.window.setMode(960,640,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Cannot enter 960x640 for compact layer wheel test')
+    toggleCompactUi()
+    A.compactPanel='layers'
+    A.compactLayerStart=1
+    love.draw()
+    local zoomAtPopup=A.zoom
+    local w,h=love.graphics.getDimensions()
+    local popup=Compact.popup(w,h,'layers')
+    local px,py=popup.x+60,popup.y+101
+    assert(CompactLayerWheel.hit(w,h,px,py,#A.doc.layers),
+        'Layer wheel row must be reachable in minimum popup')
+    local originalMouse=love.mouse.getPosition
+    love.mouse.getPosition=function()return px,py end
+    love.wheelmoved(0,1)
+    love.mouse.getPosition=originalMouse
+    local _,_,maximum=Thumbnails.window(#A.doc.layers,
+        A.doc.active_layer,Compact.layerRows(popup),1)
+    assert(A.compactLayerStart==math.min(2,maximum),
+        'Wheel must move only the compact list')
+    love.draw()
+    love.mouse.getPosition=function()return px,py end
+    love.wheelmoved(0,-1)
+    love.mouse.getPosition=originalMouse
+    assert(A.compactLayerStart==1,'Reverse wheel must restore first row')
+    assert(A.doc.active_layer==selected and
+        A.layerSession:historyStats().undo==history and
+        Native.bytes(A.layerSession.composite)==pixels and
+        A.dirty==previousDirty and A.zoom==zoomAtPopup,
+        'Wheel must never edit pixels, selection, zoom or history')
+    A.compactPanel=nil
+    toggleCompactUi()
+    assert(love.window.setMode(previousW,previousH,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Failed to restore desktop resolution after wheel test')
+    selectTool(previousTool)
+    A.sideTab=previousTab
+    A.sidebarScroll=Sidebar.clamp(previousH,previousScroll or 0)
+    A.compactLayerStart=previousStart
+    love.draw()
+end
 local function verifyCompactLayerOpacity()
     local w,h=love.graphics.getDimensions()
     assert(not A.compactUi and not A.focusMode,
@@ -3437,6 +3493,7 @@ function love.update(dt)
                 verifyCompactNativeInspector()
                 verifyCompactLayerOpacity()
                 verifyDesktopLayerOpacity()
+                verifyCompactLayerWheel()
                 verifyLayerListWheel()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
@@ -4792,6 +4849,8 @@ local function drawCompactPopup(w,h)
         for index=stop,start,-1 do
             local i=index
             local layer=A.doc.layers[i]
+            local visual=LayerRowVisual.presentation(layer.visible,
+                active==i,layer.opacity)
             button(' ',p.x+13,y,231,35,function()
                 if i~=A.doc.active_layer then
                     finishStroke();ls:select(i);A.dirty=true
@@ -4805,13 +4864,18 @@ local function drawCompactPopup(w,h)
                 love.graphics.rectangle('fill',p.x+19+tx*7,
                     y+3+ty*7,7,7)
             end end
-            love.graphics.setColor(1,1,1,1)
+            love.graphics.setColor(1,1,1,visual.thumbnailAlpha)
             love.graphics.draw(layerThumb(i),p.x+19,y+3)
+            love.graphics.setColor(1,1,1,1)
+            if visual.selected then
+                c('accent')
+                love.graphics.rectangle('fill',p.x+13,y+5,3,25,1,1)
+            end
             fitted(i..' · '..layer.name,p.x+57,y+9,
-                'small','text',Inspector.rowLabelWidth())
+                'small',visual.textColor,Inspector.rowLabelWidth())
             text(('%.0f%%'):format(layer.opacity*100),
-                p.x+190,y+9,'small','muted')
-            iconButton(layer.visible and 'visible' or 'hidden',
+                p.x+190,y+9,'small',visual.textColor)
+            iconButton(visual.eyeIcon,
                 p.x+251,y+3,33,29,
                 function()
                     finishStroke();ls:setVisible(i,not layer.visible)
@@ -4846,13 +4910,17 @@ local function drawCompactPopup(w,h)
             track.x+track.w*LayerOpacity.fraction(shown),
             track.y+6.5,5,16)
         button('−',p.x+190,p.y+p.h-49,41,30,function()
-            ls:setOpacity(A.doc.active_layer,math.max(0,layer.opacity-.1))
+            finishStroke()
+            ls:setOpacity(A.doc.active_layer,
+                LayerOpacitySteps.change(A.doc.layers[A.doc.active_layer].opacity,-1))
             A.dirty=true;rebuildImage()
-        end)
+        end,false,not LayerOpacitySteps.canChange(layer.opacity,-1))
         button('+',p.x+242,p.y+p.h-49,41,30,function()
-            ls:setOpacity(A.doc.active_layer,math.min(1,layer.opacity+.1))
+            finishStroke()
+            ls:setOpacity(A.doc.active_layer,
+                LayerOpacitySteps.change(A.doc.layers[A.doc.active_layer].opacity,1))
             A.dirty=true;rebuildImage()
-        end)
+        end,false,not LayerOpacitySteps.canChange(layer.opacity,1))
     end
 end
 function love.draw()
@@ -5389,6 +5457,17 @@ function love.focus(focused)
     end
 end
 function love.wheelmoved(x,y)
+    if A.screen=='editor' and A.compactUi and
+        A.compactPanel=='layers' and not A.modal and
+        not A.toolHelp and not A.contextMenu and not A.brushLibrary then
+        local w,h=love.graphics.getDimensions()
+        local mx,my=love.mouse.getPosition()
+        if y~=0 and CompactLayerWheel.hit(w,h,mx,my,#A.doc.layers) then
+            A.compactLayerStart=CompactLayerWheel.scroll(#A.doc.layers,
+                A.doc.active_layer,w,h,A.compactLayerStart,y)
+        end
+        return -- Never zoom or change the selection behind the popup.
+    end
     if A.toolHelp or A.contextMenu or A.brushLibrary or A.compactPanel then return end
     if A.screen=='editor' and not A.modal then
         local mx,my=love.mouse.getPosition()
