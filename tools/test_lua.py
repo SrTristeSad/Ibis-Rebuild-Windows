@@ -145,6 +145,9 @@ def run_tests(runtime_path, output):
             sidebar_program="return require('json').encode(require('tests.test_sidebar_scroll').run())"
             small_sidebar=json.loads(native_state.execute(sidebar_program))
             assert small_sidebar.get('passed') and small_sidebar.get('small_960x640_safe') and small_sidebar.get('clipped_buttons_inert') and small_sidebar.get('virtual_sliders_reachable')
+            compact40_program="return require('json').encode(require('tests.test_compact_inspector').run())"
+            compact40=json.loads(native_state.execute(compact40_program))
+            assert compact40.get('passed') and compact40.get('native_rgba_exact') and compact40.get('preview_in_bounds') and compact40.get('layer_name_not_overlapping')
             slider_program="return require('json').encode(require('tests.test_brush_sliders').run())"
             sliders=json.loads(native_state.execute(slider_program))
             assert sliders.get('passed') and sliders.get('one_percent_opacity') and sliders.get('panel_isolation')
@@ -221,6 +224,7 @@ def run_tests(runtime_path, output):
         report['gallery_visual_polish'] = gallery_visual
         report['stage38_visual_hierarchy'] = stage38_visual
         report['stage39_adaptive_sidebar'] = small_sidebar
+        report['stage40_compact_brush_inspector'] = compact40
         report['precision_brush_sliders'] = sliders
         report['native_brush_tip_cursor'] = cursor
         report['compact_workspace_layout'] = compact
