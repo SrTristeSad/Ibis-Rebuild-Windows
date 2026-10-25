@@ -548,7 +548,7 @@ local function openBrushLibrary()
         'Abra uma obra para escolher um pincel')
     finishStroke()
     A.contextMenu=nil;A.toolHelp=false
-    A.brushLibrary=true
+    A.brushLibrary=true;A.brushFilter='all'
     status('Biblioteca: opções de pincel próprio · Esc fecha')
 end
 local function applyBrushPreset(preset)
@@ -3366,8 +3366,14 @@ local function drawBrushLibrary(w,h)
     c('accent')
     love.graphics.rectangle('fill',rect.x,rect.y,4,rect.h)
     text('Biblioteca de pincéis',rect.x+20,rect.y+12,'title')
-    text('Predefinições raster · não reproduzem os pincéis Android',
-        rect.x+20,rect.y+49,'small','muted')
+    text('Pincéis raster locais · básicos e pessoais',
+        rect.x+20,rect.y+52,'small','muted')
+    button('Todos',rect.x+344,rect.y+47,94,30,function()
+        A.brushFilter='all' end,A.brushFilter=='all')
+    button('Básicos',rect.x+447,rect.y+47,111,30,function()
+        A.brushFilter='builtin' end,A.brushFilter=='builtin')
+    button('Meus',rect.x+567,rect.y+47,110,30,function()
+        A.brushFilter='personal' end,A.brushFilter=='personal')
     local saved=Presets.custom(A.brushes)
     local half=(rect.w-56)/2
     for i=1,8 do
@@ -3376,7 +3382,7 @@ local function drawBrushLibrary(w,h)
         local x=rect.x+20+column*(half+16)
         local y=rect.y+80+line*88
         local preset=i<=4 and Presets.BUILTINS[i] or saved[i-4]
-        if preset then
+        if Presets.visible(A.brushFilter,i) and preset then
             local selected=Presets.matches(preset,A)
             button('',x,y,half,80,function()
                 applyBrushPreset(preset)
@@ -3392,7 +3398,7 @@ local function drawBrushLibrary(w,h)
                 preset.diameter/3)))
             love.graphics.line(x+25,y+61,x+half-25,y+61)
             love.graphics.setLineWidth(1)
-        else
+        elseif Presets.visible(A.brushFilter,i) then
             box(x,y,half,80,'card')
             text('Espaço pessoal '..(i-4),x+12,y+16,'body','muted')
             text('Salve o pincel atual abaixo',x+12,y+42,'small','muted')
