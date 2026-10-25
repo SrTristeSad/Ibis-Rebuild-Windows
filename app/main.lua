@@ -137,7 +137,7 @@ end
 local function viewData()
     return {zoom=A.zoom,rotation=A.rotation,panX=A.panX,panY=A.panY,
         width=A.doc.width,height=A.doc.height,
-        focusMode=paneHidden(),compactUi=A.compactUi}
+        focusMode=paneHidden(),compactUi=A.compactUi and not A.focusMode}
 end
 local function commitView(v)
     A.zoom=v.zoom;A.rotation=v.rotation;A.panX=v.panX;A.panY=v.panY
@@ -2600,13 +2600,17 @@ local function drawEditor(w,h)
         button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
             w-357,15,134,33,toggleFocusMode,A.focusMode)
     else
-        button('↶',20,78,43,34,undoDoc,false,not A.layerSession:canUndo())
-        button('↷',67,78,43,34,redoDoc,false,not A.layerSession:canRedo())
-        button('−',118,78,43,34,function()zoomCanvas(1/1.25)end)
-        button('+',165,78,43,34,function()zoomCanvas(1.25)end)
-        button('Encaixar',217,78,90,34,fit)
-        text('Desenho · '..A.doc.width..' × '..A.doc.height,
-            326,87,'small','muted')
+        if A.focusMode then
+            button('Mostrar barra · Tab',20,78,176,34,toggleFocusMode)
+        else
+            button('↶',20,78,43,34,undoDoc,false,not A.layerSession:canUndo())
+            button('↷',67,78,43,34,redoDoc,false,not A.layerSession:canRedo())
+            button('−',118,78,43,34,function()zoomCanvas(1/1.25)end)
+            button('+',165,78,43,34,function()zoomCanvas(1.25)end)
+            button('Encaixar',217,78,90,34,fit)
+            text('Desenho · '..A.doc.width..' × '..A.doc.height,
+                326,87,'small','muted')
+        end
     end
     button(A.compactUi and 'Layout desktop' or 'Layout compacto',
         w-645,15,134,33,toggleCompactUi,A.compactUi)
@@ -2616,8 +2620,8 @@ local function drawEditor(w,h)
         end,A.previewEnabled)
     local cx,cy=canvasTransform()
     box(12,120,w-Workspace.panelWidth(paneHidden())-20,
-        h-(A.compactUi and 239 or 178),'canvas')
-    love.graphics.setScissor(Workspace.scissor(w,h,paneHidden(),A.compactUi))
+        h-(A.compactUi and not A.focusMode and 239 or 178),'canvas')
+    love.graphics.setScissor(Workspace.scissor(w,h,paneHidden(),A.compactUi and not A.focusMode))
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
     local checker=math.max(8,math.ceil(math.max(dw,dh)/64))
@@ -3015,7 +3019,7 @@ local function drawEditor(w,h)
     elseif A.tool=='picker' and not A.compactUi then
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
-    if A.compactUi then
+    if A.compactUi and not A.focusMode then
         box(10,h-125,w-20,67,'panel')
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and
@@ -3311,8 +3315,10 @@ function love.draw()
     box(0,0,w,64,'panel')
     c('accent');love.graphics.rectangle('fill',0,0,4,64)
     text('Ibis Rebuild',24,13,'title')
-    text(A.screen=='editor' and 'Área de desenho' or 'Minha galeria',
-        232,24,'body','muted')
+    if A.screen=='gallery' or w>=1120 then
+        text(A.screen=='editor' and 'Área de desenho' or 'Minha galeria',
+            232,24,'body','muted')
+    end
     text(Native.available and '●  Editor local' or '●  Motor indisponível',
         w-202,24,'small',Native.available and 'accent' or 'warn')
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
@@ -3420,7 +3426,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         (buttonNumber==2 or buttonNumber==3 or
         (buttonNumber==1 and A.spaceHeld)) then
         if Workspace.contains(love.graphics.getWidth(),
-            love.graphics.getHeight(),paneHidden(),x,y,A.compactUi) then
+            love.graphics.getHeight(),paneHidden(),x,y,A.compactUi and not A.focusMode) then
             finishStroke()
             A.panning=true;A.panButton=buttonNumber
             return
@@ -3429,7 +3435,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
         if A.screen=='editor' and not A.modal and Workspace.contains(
-            love.graphics.getWidth(),love.graphics.getHeight(),paneHidden(),x,y,A.compactUi) then
+            love.graphics.getWidth(),love.graphics.getHeight(),paneHidden(),x,y,A.compactUi and not A.focusMode) then
             guard(function()
                 local px,py=canvasPoint(x,y)
                 A.lastPacket=Native.pack({{id=1,info=0,x=px,y=py,pressure=pressure,time=math.floor(love.timer.getTime()*1000)}})
@@ -3671,7 +3677,7 @@ function love.wheelmoved(x,y)
         if y==0 then return end
         local w,h=love.graphics.getDimensions()
         local my=select(2,love.mouse.getPosition())
-        if not Workspace.contains(w,h,paneHidden(),mx,my,A.compactUi) then
+        if not Workspace.contains(w,h,paneHidden(),mx,my,A.compactUi and not A.focusMode) then
             mx,my=View.center(viewData(),w,h)
         end
         if love.keyboard.isDown('lshift','rshift') then
