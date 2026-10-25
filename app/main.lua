@@ -32,6 +32,7 @@ local DesktopOpacity=require('desktop_layer_opacity')
 local LayerOpacitySteps=require('layer_opacity_steps')
 local LayerOrder=require('layer_order_controls')
 local LayerRowVisual=require('layer_row_visual')
+local LayerListWheel=require('layer_list_wheel')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
@@ -5334,25 +5335,26 @@ function love.wheelmoved(x,y)
     if A.screen=='editor' and not A.modal then
         local mx,my=love.mouse.getPosition()
         local width,height=love.graphics.getDimensions()
-        if not paneHidden() and
-            Sidebar.contains(width,height,mx,my) and
-            Sidebar.max(height)>0 then
+        -- Layer rows have their own scroll region; the outer sidebar
+        -- still scrolls everywhere else. Wheel navigation is view-only.
+        local insideSidebar=not paneHidden() and
+            Sidebar.contains(width,height,mx,my)
+        if insideSidebar and A.sideTab=='layers' and
+            A.tool~='picker' and A.tool~='shape' and
+            A.tool~='select' and
+            LayerListWheel.hit(width,height,mx,my,A.sidebarScroll) then
             if y~=0 then
-                A.sidebarScroll=Sidebar.clamp(height,
-                    (A.sidebarScroll or 0)-y*40)
+                A.layerScroll=LayerListWheel.scroll(#A.doc.layers,
+                    A.doc.active_layer,height,A.layerScroll,y)
             end
             return
         end
-        if not paneHidden() and mx>=width-268 and
-            A.sideTab=='layers' then
-            local count=#A.doc.layers
-            local index=math.max(1,math.min(count,A.doc.active_layer+(y>0 and 1 or -1)))
-            if y~=0 and index~=A.doc.active_layer then
-                finishStroke();A.layerSession:select(index)
-                A.layerScroll=nil
-                A.dirty=true
+        if insideSidebar then
+            if y~=0 and Sidebar.max(height)>0 then
+                A.sidebarScroll=Sidebar.clamp(height,
+                    (A.sidebarScroll or 0)-y*40)
             end
-            return
+            return -- Never zoom or change selected layer over a panel.
         end
         if y==0 then return end
         local w,h=love.graphics.getDimensions()
