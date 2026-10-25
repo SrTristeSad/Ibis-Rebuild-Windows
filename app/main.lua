@@ -29,6 +29,7 @@ local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
 local LayerOpacitySteps=require('layer_opacity_steps')
+local LayerOrder=require('layer_order_controls')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
@@ -3906,12 +3907,20 @@ local function drawEditor(w,h)
             end,active.visible)
             button('Acima',panel+139,actionY,54,30,function()
                 local i=A.doc.active_layer
-                ls:move(i,math.min(count,i+1));A.dirty=true;rebuildImage()
-            end,false,A.doc.active_layer==count)
+                local target=LayerOrder.target(i,count,1)
+                if target then
+                    finishStroke()
+                    ls:move(i,target);A.dirty=true;rebuildImage()
+                end
+            end,false,not LayerOrder.target(A.doc.active_layer,count,1))
             button('Abaixo',panel+196,actionY,52,30,function()
                 local i=A.doc.active_layer
-                ls:move(i,math.max(1,i-1));A.dirty=true;rebuildImage()
-            end,false,A.doc.active_layer==1)
+                local target=LayerOrder.target(i,count,-1)
+                if target then
+                    finishStroke()
+                    ls:move(i,target);A.dirty=true;rebuildImage()
+                end
+            end,false,not LayerOrder.target(A.doc.active_layer,count,-1))
             button('−',panel+20,opacityY,42,29,function()
                 finishStroke()
                 ls:setOpacity(A.doc.active_layer,
