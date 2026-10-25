@@ -3500,6 +3500,24 @@ local function drawContextMenu()
         end,i==m.cursor,not entry.enabled)
     end
 end
+-- Each card owns one lazily-created GPU image whose RGBA pixels were
+-- produced by the real C++ renderer, not a LÖVE approximation.
+local function brushSampleImage(slot,preset)
+    local settingsKey=Samples.key(preset,A.color)
+    A.brushSampleCache=A.brushSampleCache or {}
+    local item=A.brushSampleCache[slot]
+    if item and item.key==settingsKey then return item end
+    if item and item.image then item.image:release() end
+    local sample=Samples.render(Native,preset,A.color)
+    local data=love.image.newImageData(sample.width,sample.height,
+        'rgba8',Native.bytes(sample.buffer))
+    local image=love.graphics.newImage(data)
+    data:release()
+    image:setFilter('linear','linear')
+    item={key=settingsKey,image=image,sample=sample}
+    A.brushSampleCache[slot]=item
+    return item
+end
 -- Modal brush catalogue. Every preview uses native renderer parameters
 -- only as a schematic sample, never claims a pixel-perfect Android stroke.
 local function drawBrushLibrary(w,h)
@@ -3513,11 +3531,11 @@ local function drawBrushLibrary(w,h)
     text('Pincéis raster locais · básicos e pessoais',
         rect.x+20,rect.y+52,'small','muted')
     button('Todos',rect.x+344,rect.y+47,94,30,function()
-        A.brushFilter='all' end,A.brushFilter=='all')
+        switchBrushCategory('all') end,A.brushFilter=='all')
     button('Básicos',rect.x+447,rect.y+47,111,30,function()
-        A.brushFilter='builtin' end,A.brushFilter=='builtin')
+        switchBrushCategory('builtin') end,A.brushFilter=='builtin')
     button('Meus',rect.x+567,rect.y+47,110,30,function()
-        A.brushFilter='personal' end,A.brushFilter=='personal')
+        switchBrushCategory('personal') end,A.brushFilter=='personal')
     local saved=Presets.custom(A.brushes)
     local half=(rect.w-56)/2
     for i=1,8 do
@@ -3536,12 +3554,27 @@ local function drawBrushLibrary(w,h)
                 preset.diameter,preset.style=='hard' and 'rígido' or 'suave',
                 preset.opacity*100,preset.stabilization),
                 x+12,y+28,'small','muted')
-            local r,g,b=Colors.channels(A.color)
-            love.graphics.setColor(r/255,g/255,b/255,preset.opacity)
-            love.graphics.setLineWidth(math.min(14,math.max(2,
-                preset.diameter/3)))
-            love.graphics.line(x+25,y+61,x+half-25,y+61)
-            love.graphics.setLineWidth(1)
+            local place=Samples.cardRect(x,y,half)
+            -- Checkerboard makes partial transparency legible.
+            for row=0,1 do for col=0,11 do
+                local bright=(row+col)%2==0
+                local t=bright and .79 or .58
+                love.graphics.setColor(t,t,t,1)
+                love.graphics.rectangle('fill',
+                    place.x+col*place.w/12,place.y+row*place.h/2,
+                    place.w/12+.25,place.h/2+.25)
+            end end
+            local image=brushSampleImage(i,preset)
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(image.image,place.x,place.y,0,
+                place.w/image.sample.width,
+                place.h/image.sample.height)
+            if A.brushFocus==i then
+                c('accent');love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',
+                    x+2,y+2,half-4,76,4,4)
+                love.graphics.setLineWidth(1)
+            end
         elseif Presets.visible(A.brushFilter,i) then
             box(x,y,half,80,'card')
             text('Espaço pessoal '..(i-4),x+12,y+16,'body','muted')
@@ -3552,7 +3585,8 @@ local function drawBrushLibrary(w,h)
     for i=1,Presets.LIMIT do
         if saved[i] then filled=filled+1 end
     end
-    text(('AJUSTES SALVOS  %d / %d'):format(filled,Presets.LIMIT),
+    text(('AJUSTES SALVOS  %d / %d · Amostras C++ (escala reduzida)'):format(
+        filled,Presets.LIMIT),
         rect.x+20,rect.y+452,'small','muted')
     button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
         saveCustomBrush,false,filled>=Presets.LIMIT)
