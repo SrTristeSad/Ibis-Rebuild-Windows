@@ -16,6 +16,21 @@ function T.run()
             'Visual text treatment')
     end
     check(not pcall(Row.presentation,1,false),'Reject non-boolean visible')
+    local selected=Row.presentation(true,true,.37)
+    check(selected.eyeIcon=='visible' and
+        selected.detail=='Opac. 37% · ativa',
+        'Active layer shows one-percent opacity and selection state')
+    check(Row.presentation(false,false,0).eyeIcon=='hidden' and
+        Row.presentation(false,false,0).detail=='Opac. 0%',
+        'Hidden layer shows closed eye and zero opacity')
+    check(Row.presentation(true,false,1).detail=='Opac. 100%',
+        'Full opacity label is bounded')
+    check(Row.presentation(true,false,.995).detail=='Opac. 100%',
+        'One-percent rounding must be deterministic')
+    check(not pcall(Row.presentation,true,true,1.1) and
+        not pcall(Row.presentation,true,false,-.01) and
+        not pcall(Row.presentation,true,false,0/0),
+        'Invalid layer opacity rejected')
     return {suite='layer-row-visual',passed=true,assertions=count}
 end
 return T

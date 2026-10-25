@@ -3984,7 +3984,7 @@ local function drawEditor(w,h)
         for i=stop,start,-1 do
             local layer=A.doc.layers[i]
             local visual=LayerRowVisual.presentation(layer.visible,
-                A.doc.active_layer==i)
+                A.doc.active_layer==i,layer.opacity)
             local rowY=y
             button(' ',panel+20,rowY,228,33,function()
                 if A.doc.active_layer~=i then
@@ -4015,8 +4015,12 @@ local function drawEditor(w,h)
             local free=math.max(0,143-font:getWidth(prefix))
             local label=TextFit.truncate(layer.name,free,
                 function(value)return font:getWidth(value)end)
-            text(prefix..label,panel+62,rowY+8,'body',visual.textColor)
-            button(visual.indicator,
+            -- Two readable lines: layer name and actual layer opacity.
+            -- Keep the existing hitboxes and icon-based visibility action.
+            text(prefix..label,panel+62,rowY+2,'body',visual.textColor)
+            fitted(visual.detail,panel+62,rowY+20,'small',
+                visual.textColor,143)
+            iconButton(visual.eyeIcon,
                 panel+210,rowY+4,35,25,function()
                     finishStroke()
                     local nextVisible=not A.doc.layers[i].visible
