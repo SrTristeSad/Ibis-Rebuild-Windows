@@ -83,11 +83,11 @@ glyphs.redo={
     {op='line',points={6,-4,2,-7}},
     {op='line',points={6,-4,1,0}}
 }
-glyphs.rotate-left={
+glyphs['rotate-left']={
     {op='line',points={-5,-2,-5,-5,-2,-5}},
     {op='line',points={-5,-5,0,-6,5,-3,6,1,3,5,-2,5}}
 }
-glyphs.rotate-right={
+glyphs['rotate-right']={
     {op='line',points={5,-2,5,-5,2,-5}},
     {op='line',points={5,-5,0,-6,-5,-3,-6,1,-3,5,2,5}}
 }
