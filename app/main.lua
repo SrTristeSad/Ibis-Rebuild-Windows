@@ -18,20 +18,31 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,compactPanel=nil,compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
+-- A denser gray and charcoal editing chrome, referencing the official tool
+-- and layer screenshots. The desktop palette remains untouched.
+local compactPalette={bg={.215,.222,.229},panel={.125,.133,.145},
+    card={.210,.220,.231},line={.345,.365,.380},
+    text={.95,.96,.97},muted={.70,.73,.76},
+    accent={.34,.69,1},selected={.14,.29,.43},
+    canvas={.25,.26,.27},warn={1,.72,.35}}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
     {name='Vermelho',rgba=0xe53b44ff},{name='Verde',rgba=0x20ba84ff},
     {name='Azul',rgba=0x347ce9ff},{name='Branco',rgba=0xffffffff}
 }
-local function c(key,alpha) local v=palette[key];love.graphics.setColor(v[1],v[2],v[3],alpha or 1) end
+local function c(key,alpha)
+    local v=(A.compactUi and compactPalette or palette)[key]
+    love.graphics.setColor(v[1],v[2],v[3],alpha or 1)
+end
 local function text(value,x,y,font,key) c(key or 'text');love.graphics.setFont(A.fonts[font or 'body']);love.graphics.print(value,x,y) end
 local function box(x,y,w,h,key)
     c(key)
-    love.graphics.rectangle('fill',x,y,w,h,6,6)
+    love.graphics.rectangle('fill',x,y,w,h,A.compactUi and 4 or 6,
+        A.compactUi and 4 or 6)
 end
 local function status(s) A.message=s;A.messageTime=love.timer.getTime() end
 local function guard(fn)
@@ -246,7 +257,7 @@ local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
-    A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil
+    A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
     A.compactPanel=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
@@ -257,7 +268,7 @@ local function toggleCompactUi()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para trocar o layout')
     finishStroke()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
-    A.panning=false;A.panButton=nil;A.sliderDrag=nil
+    A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
     A.compactPanel=nil;A.compactLayerStart=nil
     A.compactUi=not A.compactUi
@@ -309,7 +320,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.compactPanel=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactPanel=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -1105,8 +1116,8 @@ local function verifyCompactUi()
         love.mousepressed(b.x+b.w/2,b.y+b.h/2,1,false)
     end
     local clip=Workspace.bounds(w,h,true,true)
-    assert(clip.right==w-16 and clip.bottom==h-146,
-        'Canvas compacto deve evitar painel e barra inferior')
+    assert(clip.right==w-16 and clip.bottom==h-190,
+        'Canvas compacto deve evitar os ajustes e a barra inferior')
     assert(A.zoom==zoom and A.rotation==rotation and
         A.panX==panX and A.panY==panY,
         'Mudança de layout não pode transformar documento')
@@ -1194,6 +1205,81 @@ local function verifyCompactUi()
     A.brushDiameter=oldSize;A.brushOpacity=oldOpacity
     selectTool(oldTool);A.sideTab=oldTab
     A.dirty=dirty
+end
+-- Stage 32: exercise quick rails through real LÖVE mouse events.
+-- The visuals must never mutate layers, pixels, dirty or undo history.
+local function verifyCompactVisualControls()
+    local w,h=love.graphics.getDimensions()
+    local previousTool,previousTab=A.tool,A.sideTab
+    local previousSize,previousOpacity=A.brushDiameter,A.brushOpacity
+    local previousDirty,previousPreview=A.dirty,A.previewEnabled
+    local previousZoom,previousRotation=A.zoom,A.rotation
+    local previousPanX,previousPanY=A.panX,A.panY
+    local pixels=Native.bytes(A.layerSession.composite)
+    local undo=A.layerSession:historyStats().undo
+    local layers=#A.doc.layers
+    assert(not A.compactUi,'Fixture visual precisa começar no desktop')
+    selectTool('brush')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(A.compactUi and not A.compactPanel,
+        'Botão do cabeçalho não abriu modo compacto novo')
+    local controls=Compact.quick(w,h)
+    love.draw()
+    love.mousepressed(controls.diameter.x,controls.diameter.y+7,1,false)
+    assert(A.quickDrag=='diameter' and A.brushDiameter==1 and
+        not A.drawing,'Barra de tamanho não capturou o mouse corretamente')
+    love.mousemoved(controls.diameter.x+80,
+        controls.diameter.y+7,80,0,false)
+    assert(A.brushDiameter>1 and A.brushDiameter<256,
+        'Deslizamento não atualizou diâmetro continuamente')
+    love.mousereleased(controls.diameter.x+controls.diameter.w+20,
+        controls.diameter.y+7,1,false)
+    assert(A.brushDiameter==256 and A.quickDrag==nil,
+        'Soltar fora da barra não limitou tamanho nem liberou o mouse')
+    love.draw()
+    love.mousepressed(controls.opacity.x+80,
+        controls.opacity.y+7,1,false)
+    assert(A.quickDrag=='opacity' and math.abs(A.brushOpacity-.55)<1e-8,
+        'Barra de opacidade não permite 55%')
+    love.mousemoved(controls.opacity.x-25,
+        controls.opacity.y+7,-105,0,false)
+    assert(A.brushOpacity==.1,'Opacidade deve limitar em 10%')
+    love.mousereleased(controls.opacity.x+controls.opacity.w+25,
+        controls.opacity.y+7,1,false)
+    assert(A.quickDrag==nil and A.brushOpacity==1,
+        'Arraste de opacidade deve terminar em 100%')
+    love.draw()
+    local bar=Compact.toolbar(w,h)
+    love.mousepressed(bar[2].x+bar[2].w/2,
+        bar[2].y+bar[2].h/2,1,false)
+    assert(A.compactPanel=='tools','Ícone Ferramentas deixou de funcionar')
+    love.draw()
+    love.mousepressed(controls.diameter.x,
+        controls.diameter.y+7,1,false)
+    assert(not A.compactPanel and not A.quickDrag and
+        A.brushDiameter==256,
+        'Clique fora do popup vazou para a barra rápida')
+    love.draw()
+    love.mousepressed(bar[5].x+bar[5].w/2,
+        bar[5].y+bar[5].h/2,1,false)
+    assert(A.focusMode,'Ícone Tela Cheia deixou de funcionar')
+    love.keypressed('tab')
+    assert(not A.focusMode and A.compactUi,
+        'Tab não restaurou a barra compacta')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==undo and
+        #A.doc.layers==layers and A.dirty==previousDirty,
+        'Ajuste visual alterou pixels, histórico, camadas ou dirty')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(not A.compactUi,'Troca de volta ao desktop falhou')
+    A.brushDiameter=previousSize;A.brushOpacity=previousOpacity
+    A.previewEnabled=previousPreview
+    selectTool(previousTool);A.sideTab=previousTab
+    assert(A.zoom==previousZoom and A.rotation==previousRotation and
+        A.panX==previousPanX and A.panY==previousPanY,
+        'Troca de estilo modificou navegação da tela')
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -2440,6 +2526,7 @@ function love.update(dt)
                 verifyPrecisionSliders()
                 verifyBrushTipHover()
                 verifyCompactUi()
+                verifyCompactVisualControls()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2526,6 +2613,10 @@ function love.update(dt)
                     compact_return_desktop=true,
                     compact_brush_eraser_switch=true,
                     compact_fullscreen_toggle=true,
+                    compact_vector_toolbar=true,
+                    compact_quick_size=true,compact_quick_opacity=true,
+                    compact_quick_capture=true,compact_visual_isolation=true,
+                    compact_popup_hit_protection=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -2611,6 +2702,31 @@ local function drawBrushTip(w,h)
     love.graphics.setColor(1,1,1,.86)
     love.graphics.circle('line',x,y,2,12)
 end
+-- Fast sizing is only editor state: no native raster edit or undo entry.
+local function applyQuickControl(kind,x)
+    local w,h=love.graphics.getDimensions()
+    local nextValue=Compact.quickValue(kind,w,h,x)
+    if kind=='diameter' then A.brushDiameter=nextValue
+    elseif kind=='opacity' then A.brushOpacity=nextValue
+    else error('Controle rápido inválido') end
+    return nextValue
+end
+local function drawCompactQuick(kind,w,h,value)
+    local d=Compact.quick(w,h)[kind]
+    local factor=Compact.quickFraction(kind,value)
+    local label=kind=='diameter' and 'Tamanho' or 'Opac.'
+    local valueLabel=kind=='diameter' and ('%d px'):format(value) or
+        ('%.0f%%'):format(value*100)
+    text(label,d.labelX,d.y-2,'small','muted')
+    text(valueLabel,d.valueX,d.y-2,'small','text')
+    c('line')
+    love.graphics.rectangle('fill',d.x,d.y+5,d.w,4,2,2)
+    c('accent')
+    love.graphics.rectangle('fill',d.x,d.y+5,
+        math.max(1,d.w*factor),4,2,2)
+    c('text')
+    love.graphics.circle('fill',d.x+d.w*factor,d.y+7,6,18)
+end
 local function drawEditor(w,h)
     local panel=w-268
     if not A.compactUi then
@@ -2640,7 +2756,7 @@ local function drawEditor(w,h)
         end,A.previewEnabled)
     local cx,cy=canvasTransform()
     box(12,120,w-Workspace.panelWidth(paneHidden())-20,
-        h-(A.compactUi and not A.focusMode and 239 or 178),'canvas')
+        h-(A.compactUi and not A.focusMode and 310 or 178),'canvas')
     love.graphics.setScissor(Workspace.scissor(w,h,paneHidden(),A.compactUi and not A.focusMode))
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
@@ -3040,16 +3156,30 @@ local function drawEditor(w,h)
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
     if A.compactUi and not A.focusMode then
-        box(10,h-125,w-20,67,'panel')
+        box(10,h-184,w-20,126,'panel')
+        c('line')
+        love.graphics.rectangle('fill',10,h-184,w-20,1)
+        if A.tool=='brush' or A.tool=='erase' then
+            drawCompactQuick('diameter',w,h,A.brushDiameter)
+            drawCompactQuick('opacity',w,h,A.brushOpacity)
+        else
+            text(('Zoom %.0f%% · %s'):format(A.zoom*100,
+                EditorTools.fromId(A.tool).label),
+                (w-350)/2,h-161,'small','muted')
+        end
+        c('line')
+        love.graphics.rectangle('fill',w/2-310,h-126,620,1)
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and
                 (A.tool=='brush' or A.tool=='erase')) or
                 (slot.id=='tools' and A.compactPanel=='tools') or
                 (slot.id=='layers' and A.compactPanel=='layers') or
                 (slot.id=='properties' and A.compactPanel=='properties')
-            button(slot.id=='brush' and
+            local label=slot.id=='brush' and
                 (A.tool=='erase' and 'Borracha' or 'Pincel') or
-                slot.label,slot.x,slot.y,slot.w,slot.h,function()
+                (slot.id=='tools' and 'Ferram.' or
+                slot.id=='fullscreen' and 'Tela' or slot.label)
+            button('',slot.x,slot.y,slot.w,slot.h,function()
                 if slot.id=='brush' then
                     selectTool(A.tool=='brush' and 'erase' or 'brush')
                 elseif slot.id=='tools' or slot.id=='layers' or
@@ -3059,10 +3189,21 @@ local function drawEditor(w,h)
                 elseif slot.id=='fullscreen' then toggleFocusMode()
                 elseif slot.id=='back' then toGallery() end
             end,active)
+            c(active and 'accent' or 'text')
+            Icons.draw(slot.id=='brush' and
+                (A.tool=='erase' and 'erase' or 'brush') or slot.id,
+                slot.x+slot.w/2,slot.y+17,21)
+            c('text')
+            love.graphics.setFont(A.fonts.small)
+            love.graphics.printf(label,slot.x,slot.y+32,
+                slot.w,'center')
+            if slot.id=='color' then
+                local r,g,b=Colors.channels(A.color)
+                love.graphics.setColor(r/255,g/255,b/255,1)
+                love.graphics.rectangle('fill',
+                    slot.x+slot.w-16,slot.y+4,9,9,2,2)
+            end
         end
-        text(('Zoom %.0f%%  ·  %s  ·  %s'):format(A.zoom*100,
-            EditorTools.fromId(A.tool).label,A.doc.name),
-            20,h-149,'small','muted')
     end
 end
 local function drawModal(w,h)
@@ -3202,8 +3343,11 @@ end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
+    box(p.x+5,p.y+7,p.w,p.h,'bg')
     box(p.x,p.y,p.w,p.h,'panel')
-    c('accent');love.graphics.rectangle('fill',p.x,p.y,3,p.h)
+    c('line');love.graphics.rectangle('line',p.x+.5,p.y+.5,
+        p.w-1,p.h-1,5,5)
+    c('accent');love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,2)
     text(kind=='tools' and 'Ferramentas' or
         kind=='layers' and 'Camadas raster' or
         'Ajustes',p.x+14,p.y+13,'body')
@@ -3301,6 +3445,8 @@ local function drawCompactPopup(w,h)
             local offset=require('utf8').offset(name,13)
             if offset then name=name:sub(1,offset-1)..'…' end
             text(i..' · '..name,p.x+57,y+9,'small')
+            text(('%.0f%%'):format(layer.opacity*100),
+                p.x+190,y+9,'small','muted')
             button(layer.visible and '◉' or '○',p.x+251,y+3,33,29,
                 function()
                     finishStroke();ls:setVisible(i,not layer.visible)
@@ -3331,7 +3477,7 @@ local function drawCompactPopup(w,h)
     end
 end
 function love.draw()
-    A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear(palette.bg)
+    A.buttons={};local w,h=love.graphics.getDimensions();c('bg');love.graphics.clear((A.compactUi and compactPalette or palette).bg)
     box(0,0,w,64,'panel')
     c('accent');love.graphics.rectangle('fill',0,0,4,64)
     text('Ibis Rebuild',24,13,'title')
@@ -3426,6 +3572,19 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 openContextMenu('layer',index,x,y)
                 return
             end
+        end
+    end
+    if buttonNumber==1 and A.screen=='editor' and
+        A.compactUi and not A.focusMode and
+        (A.tool=='brush' or A.tool=='erase') and
+        not A.modal and not A.spaceHeld then
+        local w,h=love.graphics.getDimensions()
+        local kind=Compact.quickHit(w,h,x,y)
+        if kind then
+            finishStroke()
+            A.quickDrag=kind
+            applyQuickControl(kind,x)
+            return
         end
     end
     if buttonNumber==1 and A.screen=='editor' and not A.modal
@@ -3528,6 +3687,11 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.quickDrag and b==1 then
+        applyQuickControl(A.quickDrag,x)
+        A.quickDrag=nil
+        return
+    end
     if A.sliderDrag and b==1 then
         applyParameterSlider(A.sliderDrag,x)
         A.sliderDrag=nil
@@ -3555,6 +3719,10 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.quickDrag then
+        applyQuickControl(A.quickDrag,x)
+        return
+    end
     if A.sliderDrag then
         applyParameterSlider(A.sliderDrag,x)
         return

@@ -64,6 +64,8 @@ A etapa 30 apresenta uma [prévia não destrutiva da ponta do pincel/borracha](d
 
 A etapa 31 introduz [layout compacto inspirado na barra principal oficial do ibisPaint](docs/COMPACT_ANDROID_STAGE31.md). A barra inferior dá acesso ao seletor de ferramentas, propriedades, cor, janela flutuante de camadas e retorno à galeria, enquanto um botão no cabeçalho restaura o layout desktop antigo. A tela mantém as operações nativas e não reivindica equivalência visual 1:1.
 
+A etapa 32 melhora o [acabamento da interface compacta com referências oficiais](docs/COMPACT_VISUAL_STAGE32.md): barra inferior com ícones vetoriais, amostra RGBA da cor selecionada, tema charcoal/cinza, indicação de opacidade nas camadas e barras rápidas de espessura (1–256 px) e opacidade (10–100%, passo de 1%). O canvas bloqueia interações de pintura na região dos controles; não se declara identidade visual 1:1 com a versão Android 14.1.2.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
