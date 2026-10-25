@@ -1942,6 +1942,61 @@ local function verifyCompactNativeInspector()
 end
 -- Stage 41: drag at 1% resolution, then confirm ONE undo entry,
 -- even after multiple pointer movements. Preview must not edit raster.
+-- Stage 41: actual compact panel wheel navigation at minimum Windows size.
+-- Check the list moves while project pixels, selection, zoom and undo do not.
+local function verifyCompactLayerWheel()
+    local previousW,previousH=love.graphics.getDimensions()
+    local previousTool,previousTab=A.tool,A.sideTab
+    local previousStart=A.compactLayerStart
+    local previousScroll=A.sidebarScroll
+    local previousDirty=A.dirty
+    local previousZoom=A.zoom
+    local selected=A.doc.active_layer
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    assert(not A.compactUi and not A.focusMode and
+        A.screen=='editor','Compact wheel test needs desktop editor')
+    assert(love.window.setMode(960,640,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Cannot enter 960x640 for compact layer wheel test')
+    toggleCompactUi()
+    A.compactPanel='layers'
+    A.compactLayerStart=1
+    love.draw()
+    local w,h=love.graphics.getDimensions()
+    local popup=Compact.popup(w,h,'layers')
+    local px,py=popup.x+60,popup.y+101
+    assert(CompactLayerWheel.hit(w,h,px,py,#A.doc.layers),
+        'Layer wheel row must be reachable in minimum popup')
+    local originalMouse=love.mouse.getPosition
+    love.mouse.getPosition=function()return px,py end
+    love.wheelmoved(0,1)
+    love.mouse.getPosition=originalMouse
+    local _,_,maximum=Thumbnails.window(#A.doc.layers,
+        A.doc.active_layer,Compact.layerRows(popup),1)
+    assert(A.compactLayerStart==math.min(2,maximum),
+        'Wheel must move only the compact list')
+    love.draw()
+    love.mouse.getPosition=function()return px,py end
+    love.wheelmoved(0,-1)
+    love.mouse.getPosition=originalMouse
+    assert(A.compactLayerStart==1,'Reverse wheel must restore first row')
+    assert(A.doc.active_layer==selected and
+        A.layerSession:historyStats().undo==history and
+        Native.bytes(A.layerSession.composite)==pixels and
+        A.dirty==previousDirty and A.zoom==previousZoom,
+        'Wheel must never edit pixels, selection, zoom or history')
+    A.compactPanel=nil
+    toggleCompactUi()
+    assert(love.window.setMode(previousW,previousH,{
+        resizable=true,minwidth=960,minheight=640,vsync=0}),
+        'Failed to restore desktop resolution after wheel test')
+    selectTool(previousTool)
+    A.sideTab=previousTab
+    A.sidebarScroll=Sidebar.clamp(previousH,previousScroll or 0)
+    A.compactLayerStart=previousStart
+    love.draw()
+end
 local function verifyCompactLayerOpacity()
     local w,h=love.graphics.getDimensions()
     assert(not A.compactUi and not A.focusMode,
@@ -3438,6 +3493,7 @@ function love.update(dt)
                 verifyCompactNativeInspector()
                 verifyCompactLayerOpacity()
                 verifyDesktopLayerOpacity()
+                verifyCompactLayerWheel()
                 verifyLayerListWheel()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
