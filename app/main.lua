@@ -2622,6 +2622,31 @@ local function drawBrushTip(w,h)
     love.graphics.setColor(1,1,1,.86)
     love.graphics.circle('line',x,y,2,12)
 end
+-- Fast sizing is only editor state: no native raster edit or undo entry.
+local function applyQuickControl(kind,x)
+    local w,h=love.graphics.getDimensions()
+    local nextValue=Compact.quickValue(kind,w,h,x)
+    if kind=='diameter' then A.brushDiameter=nextValue
+    elseif kind=='opacity' then A.brushOpacity=nextValue
+    else error('Controle rápido inválido') end
+    return nextValue
+end
+local function drawCompactQuick(kind,w,h,value)
+    local d=Compact.quick(w,h)[kind]
+    local factor=Compact.quickFraction(kind,value)
+    local label=kind=='diameter' and 'Tamanho' or 'Opac.'
+    local valueLabel=kind=='diameter' and ('%d px'):format(value) or
+        ('%.0f%%'):format(value*100)
+    text(label,d.labelX,d.y-2,'small','muted')
+    text(valueLabel,d.valueX,d.y-2,'small','text')
+    c('line')
+    love.graphics.rectangle('fill',d.x,d.y+5,d.w,4,2,2)
+    c('accent')
+    love.graphics.rectangle('fill',d.x,d.y+5,
+        math.max(1,d.w*factor),4,2,2)
+    c('text')
+    love.graphics.circle('fill',d.x+d.w*factor,d.y+7,6,18)
+end
 local function drawEditor(w,h)
     local panel=w-268
     if not A.compactUi then
@@ -3051,16 +3076,30 @@ local function drawEditor(w,h)
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
     if A.compactUi and not A.focusMode then
-        box(10,h-125,w-20,67,'panel')
+        box(10,h-184,w-20,126,'panel')
+        c('line')
+        love.graphics.rectangle('fill',10,h-184,w-20,1)
+        if A.tool=='brush' or A.tool=='erase' then
+            drawCompactQuick('diameter',w,h,A.brushDiameter)
+            drawCompactQuick('opacity',w,h,A.brushOpacity)
+        else
+            text(('Zoom %.0f%% · %s'):format(A.zoom*100,
+                EditorTools.fromId(A.tool).label),
+                (w-350)/2,h-161,'small','muted')
+        end
+        c('line')
+        love.graphics.rectangle('fill',w/2-310,h-126,620,1)
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and
                 (A.tool=='brush' or A.tool=='erase')) or
                 (slot.id=='tools' and A.compactPanel=='tools') or
                 (slot.id=='layers' and A.compactPanel=='layers') or
                 (slot.id=='properties' and A.compactPanel=='properties')
-            button(slot.id=='brush' and
+            local label=slot.id=='brush' and
                 (A.tool=='erase' and 'Borracha' or 'Pincel') or
-                slot.label,slot.x,slot.y,slot.w,slot.h,function()
+                (slot.id=='tools' and 'Ferram.' or
+                slot.id=='fullscreen' and 'Tela' or slot.label)
+            button('',slot.x,slot.y,slot.w,slot.h,function()
                 if slot.id=='brush' then
                     selectTool(A.tool=='brush' and 'erase' or 'brush')
                 elseif slot.id=='tools' or slot.id=='layers' or
@@ -3070,10 +3109,21 @@ local function drawEditor(w,h)
                 elseif slot.id=='fullscreen' then toggleFocusMode()
                 elseif slot.id=='back' then toGallery() end
             end,active)
+            c(active and 'accent' or 'text')
+            Icons.draw(slot.id=='brush' and
+                (A.tool=='erase' and 'erase' or 'brush') or slot.id,
+                slot.x+slot.w/2,slot.y+17,21)
+            c('text')
+            love.graphics.setFont(A.fonts.small)
+            love.graphics.printf(label,slot.x,slot.y+32,
+                slot.w,'center')
+            if slot.id=='color' then
+                local r,g,b=Colors.channels(A.color)
+                love.graphics.setColor(r/255,g/255,b/255,1)
+                love.graphics.rectangle('fill',
+                    slot.x+slot.w-16,slot.y+4,9,9,2,2)
+            end
         end
-        text(('Zoom %.0f%%  ·  %s  ·  %s'):format(A.zoom*100,
-            EditorTools.fromId(A.tool).label,A.doc.name),
-            20,h-149,'small','muted')
     end
 end
 local function drawModal(w,h)
@@ -3439,6 +3489,19 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             end
         end
     end
+    if buttonNumber==1 and A.screen=='editor' and
+        A.compactUi and not A.focusMode and
+        (A.tool=='brush' or A.tool=='erase') and
+        not A.modal and not A.spaceHeld then
+        local w,h=love.graphics.getDimensions()
+        local kind=Compact.quickHit(w,h,x,y)
+        if kind then
+            finishStroke()
+            A.quickDrag=kind
+            applyQuickControl(kind,x)
+            return
+        end
+    end
     if buttonNumber==1 and A.screen=='editor' and not A.modal
         and not A.spaceHeld then
         local panel=love.graphics.getWidth()-268
@@ -3539,6 +3602,11 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.quickDrag and b==1 then
+        applyQuickControl(A.quickDrag,x)
+        A.quickDrag=nil
+        return
+    end
     if A.sliderDrag and b==1 then
         applyParameterSlider(A.sliderDrag,x)
         A.sliderDrag=nil
@@ -3566,6 +3634,10 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.quickDrag then
+        applyQuickControl(A.quickDrag,x)
+        return
+    end
     if A.sliderDrag then
         applyParameterSlider(A.sliderDrag,x)
         return
