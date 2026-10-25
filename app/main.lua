@@ -14,12 +14,13 @@ local Thumbnails=require('layer_thumbnails')
 local Icons=require('ui_icons')
 local Menus=require('context_menus')
 local Presets=require('brush_presets')
+local Samples=require('brush_samples')
 local Sliders=require('brush_sliders')
 local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -92,6 +93,14 @@ local function releaseTipCache()
         A.tipCache.image:release()
     end
     A.tipCache=nil
+end
+local function releaseBrushSamples()
+    if A.brushSampleCache then
+        for _,entry in pairs(A.brushSampleCache) do
+            if entry.image then entry.image:release() end
+        end
+    end
+    A.brushSampleCache={}
 end
 local function externalWrite(path,bytes)
     path=path:gsub('\\','/');local dir,name=path:match('^(.*)/([^/]+)$');assert(dir and name,'Caminho absoluto necessário')
@@ -191,6 +200,7 @@ local function openDoc(doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
     releaseTipCache()
+    releaseBrushSamples()
     A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
     A.compactPanel=nil;A.compactLayerStart=nil
@@ -549,7 +559,14 @@ local function openBrushLibrary()
     finishStroke()
     A.contextMenu=nil;A.toolHelp=false
     A.brushLibrary=true;A.brushFilter='all'
-    status('Biblioteca: opções de pincel próprio · Esc fecha')
+    local preferred=A.selectedBrushCustom and A.selectedBrushCustom+4 or 1
+    A.brushFocus=Presets.focus('all',Presets.custom(A.brushes),preferred)
+    status('Biblioteca: setas navegam · Enter aplica · Tab muda categoria')
+end
+local function switchBrushCategory(filter)
+    local saved=Presets.custom(A.brushes)
+    A.brushFilter=filter
+    A.brushFocus=Presets.focus(filter,saved,A.brushFocus)
 end
 local function applyBrushPreset(preset)
     finishStroke()
@@ -1464,6 +1481,93 @@ local function verifyColorBrushWindows()
     A.store:setPreferences(oldPrefs)
     A.preferences=oldPrefs;A.savedColors=oldSaved
     selectTool(oldTool);A.sideTab=oldTab
+end
+-- GUI regression for native brush-catalogue RGBA swatches, caching and
+-- category/keyboard input. Kept outside nativeSelfTest to avoid local limit.
+local function verifyNativeBrushCatalogue()
+    local w,h=love.graphics.getDimensions()
+    local rect=Presets.layout(w,h)
+    local previousTool=A.tool
+    local previousTab=A.sideTab
+    local previousBrushes=A.brushes
+    local previousColor=A.color
+    local previousStyle=A.brushStyle
+    local previousDiameter=A.brushDiameter
+    local previousOpacity=A.brushOpacity
+    local previousStabilization=A.stabilization
+    local previousSlot=A.selectedBrushCustom
+    local previousDirty=A.dirty
+    local originalPixels=Native.bytes(A.layerSession.composite)
+    local originalHistory=A.layerSession:historyStats().undo
+    local originalLayers=#A.doc.layers
+    selectTool('brush')
+    releaseBrushSamples()
+    openBrushLibrary()
+    love.draw()
+    local cached=assert(A.brushSampleCache and A.brushSampleCache[3],
+        'Brush window did not render native C++ swatches')
+    local expected=Samples.render(Native,Presets.BUILTINS[3],A.color)
+    assert(Native.bytes(cached.sample.buffer)==Native.bytes(expected.buffer),
+        'Marker preview does not use native feather renderer')
+    local first=assert(A.brushSampleCache[1])
+    love.draw()
+    assert(A.brushSampleCache[1]==first and A.brushSampleCache[3]==cached,
+        'Brush window allocates new preview textures every frame')
+    A.color=0x40c9aaff
+    love.draw()
+    assert(A.brushSampleCache[1]~=first and
+        A.brushSampleCache[3]~=cached and
+        A.brushSampleCache[3].key==Samples.key(
+            Presets.BUILTINS[3],A.color),
+        'Preview cache did not invalidate when RGBA color changed')
+    local originalPresets=A.brushes
+    local private=Presets.save({},Presets.BUILTINS[3])
+    A.brushes=private
+    love.draw()
+    love.mousepressed(rect.x+609,rect.y+62,1,false)
+    assert(A.brushFilter=='personal' and A.brushFocus==5,
+        'Personal tab should focus only populated custom slots')
+    love.keypressed('right')
+    assert(A.brushFocus==5,
+        'Keyboard navigation should skip unpopulated personal slots')
+    love.draw()
+    assert(A.brushSampleCache[5] and
+        Native.bytes(A.brushSampleCache[5].sample.buffer)==
+        Native.bytes(Samples.render(Native,private[1],A.color).buffer),
+        'Custom stroke sample does not represent saved renderer settings')
+    love.keypressed('return')
+    assert(not A.brushLibrary and A.tool=='brush' and
+        A.brushDiameter==24 and A.brushStyle=='soft' and
+        A.selectedBrushCustom==1,
+        'Enter did not apply keyboard-focused personal brush')
+    A.brushes=originalPresets
+    openBrushLibrary()
+    love.keypressed('tab')
+    assert(A.brushFilter=='builtin' and A.brushFocus and
+        A.brushFocus<=4,'Tab must switch to built-in brushes')
+    love.keypressed('right')
+    assert(A.brushFocus==2,'Right arrow did not focus next built-in')
+    love.keypressed('down')
+    assert(A.brushFocus==4,'Down arrow did not follow two-column grid')
+    love.keypressed('kpenter')
+    assert(not A.brushLibrary and A.brushDiameter==48 and
+        A.brushStyle=='soft' and math.abs(A.brushOpacity-.3)<1e-6,
+        'Keypad Enter failed to apply focused preset')
+    openBrushLibrary()
+    love.keypressed('escape')
+    assert(not A.brushLibrary,'Esc must close brush library')
+    assert(Native.bytes(A.layerSession.composite)==originalPixels and
+        A.layerSession:historyStats().undo==originalHistory and
+        #A.doc.layers==originalLayers and A.dirty==previousDirty,
+        'Native sample creation or keyboard input edited the document')
+    A.brushes=previousBrushes;A.color=previousColor
+    A.brushStyle=previousStyle;A.brushDiameter=previousDiameter
+    A.brushOpacity=previousOpacity;A.stabilization=previousStabilization
+    A.selectedBrushCustom=previousSlot
+    A.brushFocus=nil
+    releaseBrushSamples()
+    selectTool(previousTool)
+    A.sideTab=previousTab
 end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
@@ -2722,6 +2826,7 @@ function love.update(dt)
                 verifyCompactUi()
                 verifyCompactVisualControls()
                 verifyColorBrushWindows()
+                verifyNativeBrushCatalogue()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2816,6 +2921,10 @@ function love.update(dt)
                     color_window_palette_save=true,color_hex_modal_available=true,
                     brush_library_filter_tabs=true,
                     color_brush_no_raster_edits=true,
+                    native_catalogue_swatch=true,native_catalogue_texture_cache=true,
+                    native_catalogue_rgba_invalidation=true,
+                    keyboard_brush_selection=true,brush_category_focus=true,
+                    native_catalogue_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -3483,6 +3592,24 @@ local function drawContextMenu()
         end,i==m.cursor,not entry.enabled)
     end
 end
+-- Each card owns one lazily-created GPU image whose RGBA pixels were
+-- produced by the real C++ renderer, not a LÖVE approximation.
+local function brushSampleImage(slot,preset)
+    local settingsKey=Samples.key(preset,A.color)
+    A.brushSampleCache=A.brushSampleCache or {}
+    local item=A.brushSampleCache[slot]
+    if item and item.key==settingsKey then return item end
+    if item and item.image then item.image:release() end
+    local sample=Samples.render(Native,preset,A.color)
+    local data=love.image.newImageData(sample.width,sample.height,
+        'rgba8',Native.bytes(sample.buffer))
+    local image=love.graphics.newImage(data)
+    data:release()
+    image:setFilter('linear','linear')
+    item={key=settingsKey,image=image,sample=sample}
+    A.brushSampleCache[slot]=item
+    return item
+end
 -- Modal brush catalogue. Every preview uses native renderer parameters
 -- only as a schematic sample, never claims a pixel-perfect Android stroke.
 local function drawBrushLibrary(w,h)
@@ -3496,11 +3623,11 @@ local function drawBrushLibrary(w,h)
     text('Pincéis raster locais · básicos e pessoais',
         rect.x+20,rect.y+52,'small','muted')
     button('Todos',rect.x+344,rect.y+47,94,30,function()
-        A.brushFilter='all' end,A.brushFilter=='all')
+        switchBrushCategory('all') end,A.brushFilter=='all')
     button('Básicos',rect.x+447,rect.y+47,111,30,function()
-        A.brushFilter='builtin' end,A.brushFilter=='builtin')
+        switchBrushCategory('builtin') end,A.brushFilter=='builtin')
     button('Meus',rect.x+567,rect.y+47,110,30,function()
-        A.brushFilter='personal' end,A.brushFilter=='personal')
+        switchBrushCategory('personal') end,A.brushFilter=='personal')
     local saved=Presets.custom(A.brushes)
     local half=(rect.w-56)/2
     for i=1,8 do
@@ -3519,12 +3646,27 @@ local function drawBrushLibrary(w,h)
                 preset.diameter,preset.style=='hard' and 'rígido' or 'suave',
                 preset.opacity*100,preset.stabilization),
                 x+12,y+28,'small','muted')
-            local r,g,b=Colors.channels(A.color)
-            love.graphics.setColor(r/255,g/255,b/255,preset.opacity)
-            love.graphics.setLineWidth(math.min(14,math.max(2,
-                preset.diameter/3)))
-            love.graphics.line(x+25,y+61,x+half-25,y+61)
-            love.graphics.setLineWidth(1)
+            local place=Samples.cardRect(x,y,half)
+            -- Checkerboard makes partial transparency legible.
+            for row=0,1 do for col=0,11 do
+                local bright=(row+col)%2==0
+                local t=bright and .79 or .58
+                love.graphics.setColor(t,t,t,1)
+                love.graphics.rectangle('fill',
+                    place.x+col*place.w/12,place.y+row*place.h/2,
+                    place.w/12+.25,place.h/2+.25)
+            end end
+            local image=brushSampleImage(i,preset)
+            love.graphics.setColor(1,1,1,1)
+            love.graphics.draw(image.image,place.x,place.y,0,
+                place.w/image.sample.width,
+                place.h/image.sample.height)
+            if A.brushFocus==i then
+                c('accent');love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',
+                    x+2,y+2,half-4,76,4,4)
+                love.graphics.setLineWidth(1)
+            end
         elseif Presets.visible(A.brushFilter,i) then
             box(x,y,half,80,'card')
             text('Espaço pessoal '..(i-4),x+12,y+16,'body','muted')
@@ -3535,7 +3677,8 @@ local function drawBrushLibrary(w,h)
     for i=1,Presets.LIMIT do
         if saved[i] then filled=filled+1 end
     end
-    text(('AJUSTES SALVOS  %d / %d'):format(filled,Presets.LIMIT),
+    text(('AJUSTES SALVOS  %d / %d · Amostras C++ (escala reduzida)'):format(
+        filled,Presets.LIMIT),
         rect.x+20,rect.y+452,'small','muted')
     button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
         saveCustomBrush,false,filled>=Presets.LIMIT)
@@ -4256,7 +4399,26 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.brushLibrary then
-        if key=='escape' then A.brushLibrary=false end
+        if key=='escape' then
+            A.brushLibrary=false
+        elseif key=='tab' then
+            local nextFilter=A.brushFilter=='all' and 'builtin' or
+                A.brushFilter=='builtin' and 'personal' or 'all'
+            switchBrushCategory(nextFilter)
+        elseif key=='left' or key=='right' or
+            key=='up' or key=='down' then
+            local offset=(key=='left' and -1 or
+                key=='right' and 1 or key=='up' and -2 or 2)
+            A.brushFocus=Presets.navigate(A.brushFilter,
+                Presets.custom(A.brushes),A.brushFocus,offset)
+        elseif key=='return' or key=='kpenter' then
+            local idx=A.brushFocus
+            if idx then
+                local chosen=idx<=4 and Presets.BUILTINS[idx] or
+                    Presets.custom(A.brushes)[idx-4]
+                if chosen then guard(applyBrushPreset)(chosen) end
+            end
+        end
         return
     end
     if A.screen=='editor' and A.compactPanel then
@@ -4380,6 +4542,7 @@ function love.resize()if A.doc then fit()end end
 function love.quit()
     Ink.close()
     releaseTipCache()
+    releaseBrushSamples()
     clearLayerThumbs()
     if A.store then
         if A.doc and A.dirty then local ok,err=pcall(saveDoc);if not ok then status('Falha ao salvar; fechamento cancelado: '..tostring(err));return true end end

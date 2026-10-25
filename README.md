@@ -68,6 +68,8 @@ A etapa 32 melhora o [acabamento da interface compacta com referências oficiais
 
 A etapa 33 acrescenta [janela compacta de cores HSB/RGB/Paleta](docs/COLOR_BRUSH_WINDOWS_STAGE33.md), com cor atual/anterior, edição alfa/hexadecimal, até 12 cores pessoais persistidas, histórico de sessão e filtros Todos/Básicos/Meus na biblioteca raster existente. As ferramentas continuam independentes do raster Android e usam o formato RGBA e o motor C++ já testados.
 
+A etapa 34 melhora a [biblioteca de pincéis com amostras de traços C++ reais](docs/NATIVE_BRUSH_CATALOGUE_STAGE34.md), cache de texturas, reprodução de opacidade/cor RGBA, navegação por setas, alternância de categorias pelo Tab e confirmação por Enter. As amostras são redimensionadas apenas na visualização; não escrevem pixels no documento.
+
 A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpipe **somente no runner**. Um pacote portátil de teste é criado após aprovação das suítes e exclui as DLLs Mesa. A execução no computador do usuário ainda deve ser verificada separadamente.
 
 | Recurso | Estado |
