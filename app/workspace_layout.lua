@@ -16,7 +16,7 @@ function W.bounds(w,h,focus,compact)
     assert(type(w)=='number' and w>=960 and type(h)=='number' and h>=640,
         'Dimensões de janela inválidas')
     return {left=16,top=125,right=w-W.panelWidth(focus)-(focus and 16 or 12),
-        bottom=h-(compact and 146 or 78)}
+        bottom=h-(compact and 190 or 78)}
 end
 function W.contains(w,h,focus,x,y,compact)
     local a=W.bounds(w,h,focus,compact)
