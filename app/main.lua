@@ -4,6 +4,7 @@ local Layers=require('layers')
 local FS=require('fs')
 local JSON=require('json')
 local Colors=require('colors')
+local ColorPanel=require('color_window')
 local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
 local Ink=require('windows_ink')
@@ -18,7 +19,7 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Compact=require('compact_layout')
 local dispatchInkEvent
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -258,7 +259,7 @@ local function toggleFocusMode()
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
-    A.compactPanel=nil
+    A.compactPanel=nil;A.colorDrag=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -270,7 +271,7 @@ local function toggleCompactUi()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
-    A.compactPanel=nil;A.compactLayerStart=nil
+    A.compactPanel=nil;A.compactLayerStart=nil;A.colorDrag=nil
     A.compactUi=not A.compactUi
     status(A.compactUi and 'Interface compacta · barra inferior ativa' or
         'Interface desktop · painel lateral restaurado')
@@ -320,7 +321,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactPanel=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -333,6 +334,62 @@ local function exportPNG()
     local encoded=data:encode('png');A.store.fs:writeAtomic('exports/'..name,encoded:getString());data:release()
     status('PNG exportado: exports/'..name)
     return name
+end
+local function chooseColor(value)
+    Colors.channels(value)
+    if A.color~=value then
+        A.colorHistory=ColorPanel.history(A.colorHistory or {},A.color)
+        A.color=value
+    end
+    A.colorHistory=ColorPanel.history(A.colorHistory or {},value)
+end
+local function savePaletteColor()
+    local new,added=ColorPanel.saved(A.savedColors,A.color)
+    if not added then
+        status('Cor já existe na paleta');return false
+    end
+    local prefs={}
+    for key,value in pairs(A.preferences or {}) do prefs[key]=value end
+    prefs.colorPalette=JSON.array(new)
+    A.store:setPreferences(prefs)
+    A.preferences=prefs;A.savedColors=new
+    status('Cor salva na paleta local')
+    return true
+end
+local function openCompactColor()
+    assert(A.screen=='editor' and A.compactUi and
+        not A.focusMode,'Abra o editor compacto')
+    finishStroke()
+    A.compactPanel='color'
+    A.previousColor=A.color
+    A.colorMode='hsb'
+    A.colorDrag=nil
+    A.colorHistory=ColorPanel.history(A.colorHistory or {},A.color)
+end
+local function updateColorDrag(kind,x,y)
+    local w,h=love.graphics.getDimensions()
+    local p=Compact.popup(w,h,'color')
+    local r,g,b,a=Colors.channels(A.color)
+    if kind=='sv' then
+        local sat,bright=ColorPanel.svAt(p,x,y)
+        local hue=ColorPanel.hsb(A.color)
+        A.color=ColorPanel.fromHSB(hue,sat,bright,a)
+    elseif kind=='hue' then
+        local _,sat,bright=ColorPanel.hsb(A.color)
+        A.color=ColorPanel.fromHSB(ColorPanel.hueAt(p,y),sat,bright,a)
+    elseif kind=='alpha' then
+        A.color=ColorPanel.rgba(r,g,b,
+            ColorPanel.hsbAlphaValue(p,x))
+    else
+        local mode,channel=kind:match('^(%a+)%-(%u)$')
+        assert(mode=='rgb' or mode=='hsb','Ajuste inválido')
+        local value=ColorPanel.trackValue(p,mode,channel,x)
+        if mode=='rgb' then
+            A.color=ColorPanel.withRGB(A.color,channel,value)
+        else
+            A.color=ColorPanel.withHSB(A.color,channel,value)
+        end
+    end
 end
 local function modal(kind)
     A.contextMenu=nil;A.compactPanel=nil
@@ -491,7 +548,7 @@ local function openBrushLibrary()
         'Abra uma obra para escolher um pincel')
     finishStroke()
     A.contextMenu=nil;A.toolHelp=false
-    A.brushLibrary=true
+    A.brushLibrary=true;A.brushFilter='all'
     status('Biblioteca: opções de pincel próprio · Esc fecha')
 end
 local function applyBrushPreset(preset)
@@ -580,7 +637,7 @@ local function submitModal()
     elseif m.kind=='color' then
         local value,err=Colors.parseHex(m.values[1])
         assert(value,err)
-        A.color=value;A.modal=nil
+        chooseColor(value);A.modal=nil
         status('Cor personalizada aplicada: '..Colors.format(value))
     end
     love.keyboard.setTextInput(A.modal~=nil)
@@ -1160,11 +1217,16 @@ local function verifyCompactUi()
     assert(not A.compactPanel and A.screen=='editor',
         'Esc no popover não deve voltar para galeria')
     tap(4)
+    assert(A.compactPanel=='color',
+        'Botão Cor não abriu a janela compacta de cor')
+    p=Compact.popup(w,h,'color')
+    love.draw()
+    love.mousepressed(p.x+270,p.y+88,1,false)
     assert(A.modal and A.modal.kind=='color',
-        'Botão Cor não abriu editor hexadecimal')
+        'Código hexadecimal não abriu o editor existente')
     love.keypressed('escape')
     assert(not A.modal and A.screen=='editor',
-        'Fechar cor não deve sair do editor')
+        'Fechar cor hexadecimal não deve sair do editor')
     tap(6)
     assert(A.compactPanel=='layers','Janela de camadas não abriu')
     p=Compact.popup(w,h,'layers')
@@ -1281,6 +1343,128 @@ local function verifyCompactVisualControls()
         A.panX==previousPanX and A.panY==previousPanY,
         'Troca de estilo modificou navegação da tela')
 end
+-- Stage 33: real mouse/event checks for color workflow, persistent
+-- palette and categorized brush window; native document stays unchanged.
+local function verifyColorBrushWindows()
+    local w,h=love.graphics.getDimensions()
+    local prev=A.color
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldSize,oldStyle=A.brushDiameter,A.brushStyle
+    local oldOpacity,oldStab=A.brushOpacity,A.stabilization
+    local oldSelected=A.selectedBrushCustom
+    local oldHistory=A.colorHistory
+    local oldSaved=A.savedColors
+    local oldPrefs=A.preferences
+    local oldDirty=A.dirty
+    local bytes=Native.bytes(A.layerSession.composite)
+    local steps=A.layerSession:historyStats().undo
+    local layers=#A.doc.layers
+    assert(not A.compactUi,'Color tests start in original desktop mode')
+    selectTool('brush')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(A.compactUi,'Compact panel needed for color button')
+    local bar=Compact.toolbar(w,h)
+    local function colorButton()
+        love.draw()
+        love.mousepressed(bar[4].x+bar[4].w/2,
+            bar[4].y+bar[4].h/2,1,false)
+    end
+    colorButton()
+    assert(A.compactPanel=='color' and A.colorMode=='hsb' and
+        A.previousColor==prev,'Compact Color did not open HSB with previous')
+    local p=Compact.popup(w,h,'color')
+    local hue=ColorPanel.hueRect(p)
+    love.draw()
+    love.mousepressed(hue.x+9,hue.y+40,1,false)
+    assert(A.colorDrag=='hue' and not A.drawing,
+        'Hue slider did not capture pointer')
+    love.mousemoved(hue.x+9,hue.y+110,0,70,false)
+    love.mousereleased(hue.x+9,hue.y+110,1,false)
+    assert(A.colorDrag==nil and A.color~=prev,
+        'Hue drag did not edit live RGBA')
+    local sv=ColorPanel.svRect(p)
+    love.draw()
+    love.mousepressed(sv.x+sv.w,sv.y,1,false)
+    love.mousereleased(sv.x+sv.w,sv.y,1,false)
+    local _,saturation,brightness=ColorPanel.hsb(A.color)
+    assert(saturation>99 and brightness>99,
+        'HSB square did not apply saturation/brightness')
+    love.draw()
+    love.mousepressed(p.x+185,p.y+143,1,false)
+    assert(A.colorMode=='rgb','RGB tab did not open')
+    local rail=ColorPanel.track(p,'rgb','R')
+    love.draw()
+    love.mousepressed(rail.x,rail.y+5,1,false)
+    assert(A.colorDrag=='rgb-R','RGB slider did not capture pointer')
+    love.mousemoved(rail.x+rail.w/2,rail.y+5,132,0,false)
+    love.mousereleased(rail.x+rail.w/2,rail.y+5,1,false)
+    local r=Colors.channels(A.color)
+    assert(r==128,'RGB red channel did not map midpoint to 128')
+    love.draw()
+    love.mousepressed(p.x+310,p.y+143,1,false)
+    assert(A.colorMode=='palette','Paleta tab did not open')
+    local newColor=0x8ac331a9
+    chooseColor(newColor)
+    if #A.savedColors<ColorPanel.PALETTE_LIMIT then
+        local originalCount=#A.savedColors
+        love.draw()
+        love.mousepressed(p.x+285,p.y+326,1,false)
+        assert(#A.savedColors==originalCount+1 and
+            A.store:getPreferences().colorPalette and
+            #A.store:getPreferences().colorPalette==#A.savedColors,
+            'Save palette did not persist to preferences.json')
+        chooseColor(0x440099ff)
+        local index=#A.savedColors
+        love.draw()
+        love.mousepressed(p.x+22+((index-1)%6)*61+15,
+            p.y+211+math.floor((index-1)/6)*46+15,1,false)
+        assert(A.color==newColor,
+            'Saved swatch did not restore its RGBA alpha')
+    end
+    local beforeHex=A.color
+    love.draw()
+    love.mousepressed(p.x+68,p.y+142,1,false)
+    assert(A.colorMode=='hsb','HSB tab did not restore')
+    love.draw()
+    love.mousepressed(p.x+260,p.y+83,1,false)
+    assert(A.modal and A.modal.kind=='color',
+        'RGBA hexadecimal modal no longer accessible')
+    love.keypressed('escape')
+    assert(not A.modal and A.screen=='editor' and
+        A.color==beforeHex,'Canceling hex modal unexpectedly changed color')
+    openBrushLibrary()
+    local pos=Presets.layout(w,h)
+    love.draw()
+    love.mousepressed(pos.x+610,pos.y+61,1,false)
+    assert(A.brushFilter=='personal' and A.brushLibrary,
+        'My Brushes tab failed')
+    love.draw()
+    love.mousepressed(pos.x+490,pos.y+61,1,false)
+    assert(A.brushFilter=='builtin','Built-in Brushes tab failed')
+    love.draw()
+    love.mousepressed(pos.x+385,pos.y+61,1,false)
+    assert(A.brushFilter=='all','All brushes tab failed')
+    love.draw()
+    love.mousepressed(pos.x+34,pos.y+91,1,false)
+    assert(not A.brushLibrary and A.tool=='brush' and
+        A.brushDiameter==Presets.BUILTINS[1].diameter,
+        'Filter did not preserve actual brush preset selection')
+    assert(Native.bytes(A.layerSession.composite)==bytes and
+        A.layerSession:historyStats().undo==steps and
+        #A.doc.layers==layers and A.dirty==oldDirty,
+        'Color/brush windows modified native pixels/history/dirty')
+    love.draw()
+    love.mousepressed(w-595,30,1,false)
+    assert(not A.compactUi,'Layout did not return to desktop')
+    A.color=prev;A.brushDiameter=oldSize;A.brushStyle=oldStyle
+    A.brushOpacity=oldOpacity;A.stabilization=oldStab
+    A.selectedBrushCustom=oldSelected
+    A.colorHistory=oldHistory
+    A.store:setPreferences(oldPrefs)
+    A.preferences=oldPrefs;A.savedColors=oldSaved
+    selectTool(oldTool);A.sideTab=oldTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -1344,6 +1528,16 @@ function love.load(args)
     A.inkAttached=Ink.init(Native)
     A.root=options.data or (base..'/user-data');A.store=Store.open(A.root)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
+    A.savedColors={}
+    if type(A.preferences.colorPalette)=='table' then
+        for _,v in ipairs(A.preferences.colorPalette) do
+            if #A.savedColors>=ColorPanel.PALETTE_LIMIT then break end
+            if pcall(Colors.channels,v) then
+                A.savedColors[#A.savedColors+1]=v
+            end
+        end
+    end
+    A.colorHistory={}
     refreshGallery();status(Native.available and 'Motor C++ v1 carregado' or 'Galeria disponível · motor C++ ainda não compilado')
     if options.luaTest or options.selfTest then
         A.testReport={kind='stage1-executable-tests',native_loaded=Native.available,android_runtime_compared=false}
@@ -2527,6 +2721,7 @@ function love.update(dt)
                 verifyBrushTipHover()
                 verifyCompactUi()
                 verifyCompactVisualControls()
+                verifyColorBrushWindows()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -2617,6 +2812,10 @@ function love.update(dt)
                     compact_quick_size=true,compact_quick_opacity=true,
                     compact_quick_capture=true,compact_visual_isolation=true,
                     compact_popup_hit_protection=true,
+                    color_window_hsb_drag=true,color_window_rgb_drag=true,
+                    color_window_palette_save=true,color_hex_modal_available=true,
+                    brush_library_filter_tabs=true,
+                    color_brush_no_raster_edits=true,
                     persisted_from_real_editor=true}
             end)
             if not ok then
@@ -3185,7 +3384,7 @@ local function drawEditor(w,h)
                 elseif slot.id=='tools' or slot.id=='layers' or
                     slot.id=='properties' then
                     toggleCompactPanel(slot.id)
-                elseif slot.id=='color' then modal('color')
+                elseif slot.id=='color' then openCompactColor()
                 elseif slot.id=='fullscreen' then toggleFocusMode()
                 elseif slot.id=='back' then toGallery() end
             end,active)
@@ -3294,8 +3493,14 @@ local function drawBrushLibrary(w,h)
     c('accent')
     love.graphics.rectangle('fill',rect.x,rect.y,4,rect.h)
     text('Biblioteca de pincéis',rect.x+20,rect.y+12,'title')
-    text('Predefinições raster · não reproduzem os pincéis Android',
-        rect.x+20,rect.y+49,'small','muted')
+    text('Pincéis raster locais · básicos e pessoais',
+        rect.x+20,rect.y+52,'small','muted')
+    button('Todos',rect.x+344,rect.y+47,94,30,function()
+        A.brushFilter='all' end,A.brushFilter=='all')
+    button('Básicos',rect.x+447,rect.y+47,111,30,function()
+        A.brushFilter='builtin' end,A.brushFilter=='builtin')
+    button('Meus',rect.x+567,rect.y+47,110,30,function()
+        A.brushFilter='personal' end,A.brushFilter=='personal')
     local saved=Presets.custom(A.brushes)
     local half=(rect.w-56)/2
     for i=1,8 do
@@ -3304,7 +3509,7 @@ local function drawBrushLibrary(w,h)
         local x=rect.x+20+column*(half+16)
         local y=rect.y+80+line*88
         local preset=i<=4 and Presets.BUILTINS[i] or saved[i-4]
-        if preset then
+        if Presets.visible(A.brushFilter,i) and preset then
             local selected=Presets.matches(preset,A)
             button('',x,y,half,80,function()
                 applyBrushPreset(preset)
@@ -3320,7 +3525,7 @@ local function drawBrushLibrary(w,h)
                 preset.diameter/3)))
             love.graphics.line(x+25,y+61,x+half-25,y+61)
             love.graphics.setLineWidth(1)
-        else
+        elseif Presets.visible(A.brushFilter,i) then
             box(x,y,half,80,'card')
             text('Espaço pessoal '..(i-4),x+12,y+16,'body','muted')
             text('Salve o pincel atual abaixo',x+12,y+42,'small','muted')
@@ -3340,6 +3545,127 @@ local function drawBrushLibrary(w,h)
     button('Fechar · Esc',rect.x+rect.w-166,rect.y+480,146,37,
         function()A.brushLibrary=false end)
 end
+local function drawColorTile(color,x,y,w,h)
+    local r,g,b,a=Colors.channels(color)
+    local d=math.max(6,math.min(12,math.floor(h/3)))
+    for j=0,math.ceil(h/d)-1 do
+        for i=0,math.ceil(w/d)-1 do
+            local light=(i+j)%2==0
+            local v=light and .83 or .56
+            love.graphics.setColor(v,v,v,1)
+            love.graphics.rectangle('fill',x+i*d,y+j*d,
+                math.min(d,w-i*d),math.min(d,h-j*d))
+        end
+    end
+    love.graphics.setColor(r/255,g/255,b/255,a/255)
+    love.graphics.rectangle('fill',x,y,w,h,2,2)
+    c('line')
+    love.graphics.rectangle('line',x,y,w,h,2,2)
+end
+local function drawColorPopup(p)
+    local x,y=p.x,p.y
+    text('Atual',x+22,y+49,'small','muted')
+    text('Anterior',x+130,y+49,'small','muted')
+    drawColorTile(A.color,x+21,y+66,97,40)
+    drawColorTile(A.previousColor or A.color,x+129,y+66,97,40)
+    button(Colors.format(A.color),x+237,y+66,151,40,
+        function()modal('color')end)
+    button('HSB',x+22,y+127,112,32,function()
+        A.colorMode='hsb' end,A.colorMode=='hsb')
+    button('RGB',x+143,y+127,112,32,function()
+        A.colorMode='rgb' end,A.colorMode=='rgb')
+    button('Paleta',x+264,y+127,124,32,function()
+        A.colorMode='palette' end,A.colorMode=='palette')
+    if A.colorMode=='hsb' then
+        local hue,sat,bright,alpha=ColorPanel.hsb(A.color)
+        local square=ColorPanel.svRect(p)
+        local count=14
+        for row=0,count-1 do
+            for col=0,count-1 do
+                local value=ColorPanel.fromHSB(hue,col/(count-1)*100,
+                    (1-row/(count-1))*100,255)
+                local r,g,b=Colors.channels(value)
+                love.graphics.setColor(r/255,g/255,b/255,1)
+                love.graphics.rectangle('fill',
+                    square.x+col*square.w/count,
+                    square.y+row*square.h/count,
+                    math.ceil(square.w/count)+.2,
+                    math.ceil(square.h/count)+.2)
+            end
+        end
+        local selectX=square.x+square.w*sat/100
+        local selectY=square.y+square.h*(1-bright/100)
+        c('text');love.graphics.setLineWidth(2)
+        love.graphics.circle('line',selectX,selectY,5,18)
+        local hueRect=ColorPanel.hueRect(p)
+        for i=0,35 do
+            local value=ColorPanel.fromHSB(i*10,100,100,255)
+            local r,g,b=Colors.channels(value)
+            love.graphics.setColor(r/255,g/255,b/255,1)
+            love.graphics.rectangle('fill',hueRect.x,
+                hueRect.y+i*hueRect.h/36,hueRect.w,
+                math.ceil(hueRect.h/36)+.1)
+        end
+        c('text');love.graphics.setLineWidth(2)
+        local yy=hueRect.y+hueRect.h*hue/360
+        love.graphics.rectangle('line',hueRect.x-2,yy-2,
+            hueRect.w+4,4,1,1)
+        text(('H %.0f°'):format(hue),x+299,y+195,'small')
+        text(('S %.0f%%'):format(sat),x+299,y+226,'small')
+        text(('B %.0f%%'):format(bright),x+299,y+257,'small')
+        text(('A %d'):format(alpha),x+299,y+288,'small')
+        local rail=ColorPanel.hsbAlphaRect(p)
+        c('line');love.graphics.rectangle('fill',rail.x,rail.y+3,
+            rail.w,5,2,2)
+        c('accent');love.graphics.rectangle('fill',rail.x,rail.y+3,
+            rail.w*alpha/255,5,2,2)
+        c('text')
+        love.graphics.circle('fill',rail.x+rail.w*alpha/255,
+            rail.y+5,5,18)
+        text('Alfa',x+23,y+350,'small','muted')
+    elseif A.colorMode=='rgb' then
+        local r,g,b,a=Colors.channels(A.color)
+        local values={R=r,G=g,B=b,A=a}
+        for _,key in ipairs({'R','G','B','A'}) do
+            local rail=ColorPanel.track(p,'rgb',key)
+            local fraction=values[key]/255
+            text(key..'  '..values[key],x+21,rail.y-3,'small')
+            c('line');love.graphics.rectangle('fill',
+                rail.x,rail.y+3,rail.w,5,2,2)
+            c('accent');love.graphics.rectangle('fill',
+                rail.x,rail.y+3,rail.w*fraction,5,2,2)
+            c('text');love.graphics.circle('fill',
+                rail.x+rail.w*fraction,rail.y+5,5,18)
+        end
+        text('Canais 0 a 255 · precisão de 1 unidade',
+            x+21,y+368,'small','muted')
+    else
+        text('Cores da paleta local',x+22,y+183,'small','muted')
+        for i,value in ipairs(A.savedColors) do
+            local col=(i-1)%6
+            local row=math.floor((i-1)/6)
+            local px=x+22+col*61
+            local py=y+211+row*46
+            drawColorTile(value,px,py,49,32)
+            A.buttons[#A.buttons+1]={x=px,y=py,w=49,h=32,
+                fn=function()chooseColor(value)end}
+        end
+        text(('Salvas: %d / %d'):format(#A.savedColors,
+            ColorPanel.PALETTE_LIMIT),x+22,y+316,'small','muted')
+        button('Guardar cor atual',x+204,y+310,184,32,
+            savePaletteColor,false,
+            #A.savedColors>=ColorPanel.PALETTE_LIMIT)
+    end
+    text('Cores recentes',x+22,y+392,'small','muted')
+    for i,value in ipairs(A.colorHistory) do
+        if i>10 then break end
+        local px=x+22+(i-1)*37
+        local py=y+411
+        drawColorTile(value,px,py,30,22)
+        A.buttons[#A.buttons+1]={x=px,y=py,w=30,h=22,
+            fn=function()chooseColor(value)end}
+    end
+end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
@@ -3350,6 +3676,7 @@ local function drawCompactPopup(w,h)
     c('accent');love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,2)
     text(kind=='tools' and 'Ferramentas' or
         kind=='layers' and 'Camadas raster' or
+        kind=='color' and 'Cores · RGBA' or
         'Ajustes',p.x+14,p.y+13,'body')
     button('×',p.x+p.w-44,p.y+8,31,30,function()
         A.compactPanel=nil end)
@@ -3405,6 +3732,8 @@ local function drawCompactPopup(w,h)
         end
         button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
             openBrushLibrary)
+    elseif kind=='color' then
+        drawColorPopup(p)
     elseif kind=='layers' then
         local ls=A.layerSession
         local count=#A.doc.layers
@@ -3509,6 +3838,36 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     pressure=Pressure.normalize(pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactUi and A.compactPanel then
+        if buttonNumber==1 and A.compactPanel=='color' and
+            A.colorMode~='palette' then
+            local w,h=love.graphics.getDimensions()
+            local p=Compact.popup(w,h,'color')
+            local kind
+            if A.colorMode=='rgb' then
+                local channel=ColorPanel.trackHit(p,'rgb',x,y)
+                if channel then kind='rgb-'..channel end
+            else
+                local square=ColorPanel.svRect(p)
+                local hue=ColorPanel.hueRect(p)
+                local alpha=ColorPanel.hsbAlphaRect(p)
+                if x>=square.x and x<=square.x+square.w and
+                    y>=square.y and y<=square.y+square.h then
+                    kind='sv'
+                elseif x>=hue.x-3 and x<=hue.x+hue.w+3 and
+                    y>=hue.y-3 and y<=hue.y+hue.h+3 then
+                    kind='hue'
+                elseif x>=alpha.x-3 and x<=alpha.x+alpha.w+3 and
+                    y>=alpha.y-5 and y<=alpha.y+alpha.h+5 then
+                    kind='alpha'
+                end
+            end
+            if kind then
+                A.colorHistory=ColorPanel.history(A.colorHistory,A.color)
+                A.colorDrag=kind
+                updateColorDrag(kind,x,y)
+                return
+            end
+        end
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
                 local b=A.buttons[i]
@@ -3517,7 +3876,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 end
             end
         end
-        A.compactPanel=nil
+        A.compactPanel=nil;A.colorDrag=nil
         return -- Closing a palette must not paint behind it.
     end
     if A.toolHelp then
@@ -3687,6 +4046,12 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.colorDrag and b==1 then
+        updateColorDrag(A.colorDrag,x,y)
+        A.colorDrag=nil
+        A.colorHistory=ColorPanel.history(A.colorHistory,A.color)
+        return
+    end
     if A.quickDrag and b==1 then
         applyQuickControl(A.quickDrag,x)
         A.quickDrag=nil
@@ -3719,6 +4084,10 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.colorDrag then
+        updateColorDrag(A.colorDrag,x,y)
+        return
+    end
     if A.quickDrag then
         applyQuickControl(A.quickDrag,x)
         return
@@ -3891,7 +4260,7 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
-        if key=='escape' then A.compactPanel=nil
+        if key=='escape' then A.compactPanel=nil;A.colorDrag=nil
         elseif EditorTools.fromKey(key) then
             selectTool(EditorTools.fromKey(key).id)
             A.compactPanel=nil
