@@ -22,12 +22,13 @@ local Lab=require('brush_lab')
 local Sliders=require('brush_sliders')
 local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
+local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
 local dispatchInkEvent
 local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
     '05-camadas.png','06-editor-desktop.png'}
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -59,6 +60,7 @@ local function guard(fn)
 end
 local function button(label,x,y,w,h,fn,active,disabled)
     local mx,my=love.mouse.getPosition()
+    if A.sidebarDrawing then my=my+(A.sidebarScroll or 0) end
     local hover=not disabled and mx>=x and mx<=x+w and my>=y and my<=y+h
     box(x,y,w,h,disabled and 'panel' or active and 'selected'
         or hover and 'line' or 'card')
@@ -222,7 +224,7 @@ local function openDoc(doc)
     A.buffer=A.layerSession.composite
     releaseTipCache()
     releaseBrushSamples()
-    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false
+    A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
     A.compactPanel=nil;A.compactLayerStart=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
@@ -3446,9 +3448,17 @@ local function drawEditor(w,h)
     text(('Zoom %.0f%%'):format(A.zoom*100),324,dockY+7,'small','muted')
     end
     if not paneHidden() then
+    local scrollMax=Sidebar.max(h)
+    A.sidebarScroll=Sidebar.clamp(h,A.sidebarScroll or 0)
+    local sideOffset=A.sidebarScroll
+    local sidebarButtonStart=#A.buttons
     box(panel,64,268,h-112,'panel')
     c('line')
     love.graphics.rectangle('fill',panel,64,1,h-112)
+    love.graphics.setScissor(panel,64,268,h-112)
+    love.graphics.push()
+    love.graphics.translate(0,-sideOffset)
+    A.sidebarDrawing=true
     text(A.sideTab=='brush' and 'PROJETO E PINCEL' or
         'CAMADAS E PROJETO',panel+20,88,'small','muted')
     box(panel+12,114,244,71,'card')
@@ -3557,7 +3567,7 @@ local function drawEditor(w,h)
         text(('RASTERS %d/%d'):format(count,Store.MAX_LAYERS),
             panel+20,407,'small','muted')
         button('Nome',panel+87,398,78,27,openLayerRename)
-        local rows=Thumbnails.rows(h)
+        local rows=Thumbnails.rows(Sidebar.virtualHeight(h))
         local start,stop,maxStart=Thumbnails.window(count,
             A.doc.active_layer,rows,A.layerScroll)
         button('▲',panel+172,398,35,27,function()
@@ -3626,8 +3636,8 @@ local function drawEditor(w,h)
         end
         local active=A.doc.layers[A.doc.active_layer]
         do
-            local actionY=h-131
-            local opacityY=h-94
+            local actionY=Sidebar.virtualHeight(h)-131
+            local opacityY=Sidebar.virtualHeight(h)-94
             button(active.visible and 'Ocultar' or 'Mostrar',panel+20,actionY,109,30,function()
                 ls:setVisible(A.doc.active_layer,not active.visible)
                 A.dirty=true;rebuildImage()
@@ -3650,9 +3660,10 @@ local function drawEditor(w,h)
                 A.dirty=true;rebuildImage()
             end)
             -- Passive opacity meter; editing remains on the existing buttons.
-            box(panel+20,h-58,228,4,'line')
+            box(panel+20,Sidebar.virtualHeight(h)-58,228,4,'line')
             c('accent')
-            love.graphics.rectangle('fill',panel+20,h-58,
+            love.graphics.rectangle('fill',panel+20,
+                Sidebar.virtualHeight(h)-58,
                 228*math.max(0,math.min(1,active.opacity)),4,2,2)
         end
     else
@@ -3749,6 +3760,48 @@ local function drawEditor(w,h)
                 or 'Rasterização Android desconhecida',panel+20,705,'small','muted')
         end
     end
+    end
+    -- Restore exact screen-space hit boxes and clip partially hidden
+    -- controls. This prevents clicking off-screen sidebar actions.
+    A.sidebarDrawing=false
+    love.graphics.pop()
+    love.graphics.setScissor()
+    for i=#A.buttons,sidebarButtonStart+1,-1 do
+        local b=A.buttons[i]
+        local visible=Sidebar.visible(h,sideOffset,b.y,b.h)
+        if not visible then
+            table.remove(A.buttons,i)
+        else
+            b.y=visible.y;b.h=visible.h
+        end
+    end
+    if scrollMax>0 then
+        local bar=Sidebar.thumb(w,h,sideOffset)
+        c('line')
+        love.graphics.rectangle('fill',bar.x+1,bar.trackTop,
+            3,bar.trackHeight,2,2)
+        c('accent')
+        love.graphics.rectangle('fill',bar.x,bar.y,bar.w,bar.h,2,2)
+        -- Accessible fixed-position controls, outside the translated clip.
+        for _,item in ipairs({
+            {y=67,delta=-44,up=true},
+            {y=h-72,delta=44,up=false}
+        }) do
+            box(w-18,item.y,15,20,'card')
+            c('muted')
+            local midX=w-10.5
+            local y=item.y+10
+            if item.up then
+                love.graphics.polygon('fill',midX-4,y+3,midX+4,y+3,midX,y-3)
+            else
+                love.graphics.polygon('fill',midX-4,y-3,midX+4,y-3,midX,y+3)
+            end
+            local delta=item.delta
+            A.buttons[#A.buttons+1]={x=w-18,y=item.y,w=15,h=20,
+                fn=guard(function()
+                    A.sidebarScroll=Sidebar.clamp(h,A.sidebarScroll+delta)
+                end)}
+        end
     end
     end -- right-side panel, hidden during focus mode
     if A.focusMode and not A.compactUi and
@@ -4483,10 +4536,14 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         if not paneHidden() and A.sideTab=='layers' and A.tool~='shape'
             and A.tool~='select' and A.tool~='picker' then
             local count=#A.doc.layers
-            local rows=Thumbnails.rows(love.graphics.getHeight())
+            local height=love.graphics.getHeight()
+            local rows=Thumbnails.rows(Sidebar.virtualHeight(height))
             local start,stop=Thumbnails.window(count,
                 A.doc.active_layer,rows,A.layerScroll)
-            local index=Menus.layerAt(x,y,
+            local clickY=Sidebar.contains(love.graphics.getWidth(),
+                height,x,y) and
+                Sidebar.pointerY(y,A.sidebarScroll or 0) or -999
+            local index=Menus.layerAt(x,clickY,
                 love.graphics.getWidth()-268,start,stop)
             if index then
                 openContextMenu('layer',index,x,y)
@@ -4510,7 +4567,14 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     if buttonNumber==1 and A.screen=='editor' and not A.modal
         and not A.spaceHeld then
         local panel=love.graphics.getWidth()-268
-        local kind=Sliders.kindAt(A.tool,A.sideTab,paneHidden(),panel,x,y)
+        local inSidebar=not paneHidden() and
+            Sidebar.contains(love.graphics.getWidth(),
+                love.graphics.getHeight(),x,y)
+        local hitY=inSidebar and Sidebar.pointerY(y,A.sidebarScroll or 0)
+            or y
+        local kind=Sliders.kindAt(A.tool,A.sideTab,paneHidden(),
+            panel,x,hitY)
+        if kind and not inSidebar then kind=nil end
         if kind then
             finishStroke()
             A.shapePreview=nil
