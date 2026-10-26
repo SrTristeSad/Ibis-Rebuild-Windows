@@ -2313,28 +2313,28 @@ local function verifyPressureInfluenceControls()
     selectTool('brush')
     A.sideTab='brush'
     local panel=love.graphics.getWidth()-268
-    local function click(x)
+    local function click(x,y)
         love.draw()
-        love.mousepressed(x,388,1,false)
+        love.mousepressed(x,y,1,false)
     end
-    click(panel+70)
+    click(panel+159,471)
     assert(not A.pressureSize and A.pressureOpacity,
         'Size button must disable only size response')
-    click(panel+180)
+    click(panel+175,637)
     assert(not A.pressureSize and not A.pressureOpacity,
         'Opacity button must disable only alpha response')
-    click(panel+70)
+    click(panel+159,471)
     assert(A.pressureSize and not A.pressureOpacity,
         'Size-only brush response must be selectable')
-    click(panel+180)
+    click(panel+175,637)
     assert(A.pressureSize and A.pressureOpacity,
         'Default two-channel response must be restorable')
     selectTool('erase')
     A.sideTab='brush'
-    click(panel+180)
+    click(panel+175,637)
     assert(A.pressureSize and not A.pressureOpacity,
         'Eraser must expose independent alpha response')
-    click(panel+180)
+    click(panel+175,637)
     assert(A.pressureSize and A.pressureOpacity,
         'Eraser opacity response must be restorable')
     assert(Native.bytes(A.layerSession.composite)==pixels and
@@ -4322,21 +4322,11 @@ local function drawEditor(w,h)
                 A.fillTolerance=math.min(255,A.fillTolerance+8)end,
                 false,A.fillTolerance==255)
         else
-            -- Channel selection affects input pressure, never existing pixels.
-            button(A.pressureSize and 'Tamanho: ON' or 'Tamanho: OFF',
-                panel+20,374,108,29,function()
-                    finishStroke()
-                    A.pressureSize=not A.pressureSize
-                    status('Pressão no tamanho: '..
-                        (A.pressureSize and 'ativa' or 'desligada'))
-                end,A.pressureSize)
-            button(A.pressureOpacity and 'Alfa: ON' or 'Alfa: OFF',
-                panel+140,374,108,29,function()
-                    finishStroke()
-                    A.pressureOpacity=not A.pressureOpacity
-                    status('Pressão na opacidade: '..
-                        (A.pressureOpacity and 'ativa' or 'desligada'))
-                end,A.pressureOpacity)
+            -- Keep the Camadas/Pincel tabs at y=366 unobstructed.
+            -- Each parameter controls its own pressure channel below.
+            if A.sideTab=='brush' then
+                text('P = resposta à pressão',panel+20,401,'small','muted')
+            end
             if A.tool=='brush' then
                 button(A.penTiltEnabled and 'Ink: ativa'
                     or 'Ink: desligada',
@@ -4355,7 +4345,14 @@ local function drawEditor(w,h)
                 end,A.pressureCurve~='linear')
             button('−',panel+20,456,46,32,function()
                 A.brushDiameter=math.max(1,A.brushDiameter-2)end)
-            text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
+            text(('Tam. %.0f px'):format(A.brushDiameter),panel+75,464,'small')
+            button(A.pressureSize and 'P ON' or 'P OFF',
+                panel+138,456,40,32,function()
+                    finishStroke()
+                    A.pressureSize=not A.pressureSize
+                    status('Pressão no tamanho: '..
+                        (A.pressureSize and 'ativa' or 'desligada'))
+                end,A.pressureSize)
             drawParameterSlider('diameter',panel,A.brushDiameter)
             button('+',panel+182,456,46,32,function()
                 A.brushDiameter=math.min(256,A.brushDiameter+2)end)
@@ -4390,8 +4387,15 @@ local function drawEditor(w,h)
                 A.brushOpacity=math.max(.1,
                     math.floor(A.brushOpacity*10+0.5)/10-.1)
             end,false,A.brushOpacity<=.101)
-            text(('Opacidade %.0f%%'):format(A.brushOpacity*100+0.01),
+            text(('Alfa %.0f%%'):format(A.brushOpacity*100+0.01),
                 panel+69,630,'small','muted')
+            button(A.pressureOpacity and 'P ON' or 'P OFF',
+                panel+151,622,48,30,function()
+                    finishStroke()
+                    A.pressureOpacity=not A.pressureOpacity
+                    status('Pressão na opacidade: '..
+                        (A.pressureOpacity and 'ativa' or 'desligada'))
+                end,A.pressureOpacity)
             drawParameterSlider('opacity',panel,A.brushOpacity)
             button('+',panel+206,622,42,30,function()
                 finishStroke()
