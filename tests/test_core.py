@@ -881,7 +881,7 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(result[center+3], 204)
         self.assertEqual(paint((15.5, 15.5), (15.5, 15.5), .2), 0)
         self.assertEqual(result[center+3], 204)
-        self.assertEqual(result[center:center+3], bytes.fromhex('3b8fdb'))
+        self.assertEqual(bytes(result[center:center+3]), bytes.fromhex('3b8fdb'))
 
         baseline = (U8 * size)()
         target = (U8 * size)()
