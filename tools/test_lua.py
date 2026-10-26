@@ -160,6 +160,11 @@ def run_tests(runtime_path, output):
                                 +json.dumps(continuous_root)+"))")
             continuous=json.loads(native_state.execute(continuous_program))
             assert continuous.get('passed') and continuous.get('gradient') and continuous.get('undo_redo') and continuous.get('rbd2_roundtrip')
+            accumulated_root=(output / ('whole-stroke-coverage-' + str(time.time_ns()))).as_posix()
+            accumulated_program=("return require('json').encode(require('tests.test_stroke_accumulation').run("
+                                +json.dumps(accumulated_root)+"))")
+            accumulated=json.loads(native_state.execute(accumulated_program))
+            assert accumulated.get('passed') and accumulated.get('no_darkening') and accumulated.get('undo_redo') and accumulated.get('rbd2_roundtrip')
             path_root=(output / ('curved-spatial-path-' + str(time.time_ns()))).as_posix()
             path_program=("return require('json').encode(require('tests.test_stroke_path').runNative("
                           +json.dumps(path_root)+"))")
