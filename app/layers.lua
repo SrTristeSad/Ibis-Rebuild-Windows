@@ -419,6 +419,14 @@ function Layers:stroke(x0,y0,x1,y1,diameter,color,opacity)
     Native.basicStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,opacity or 1)
     self:recompose()
 end
+-- Continuous pressure is a native one-pass segment; undo remains per stroke.
+function Layers:pressureStroke(x0,y0,x1,y1,diameter0,diameter1,
+    color,opacity0,opacity1,hardness,tiltX,tiltY,style)
+    Native.pressureStroke(self:activeBuffer(),x0,y0,x1,y1,
+        diameter0,diameter1,color,opacity0,opacity1,
+        hardness,tiltX,tiltY,style)
+    self:recompose()
+end
 function Layers:softStroke(x0,y0,x1,y1,diameter,color,opacity,hardness)
     Native.featherStroke(self:activeBuffer(),x0,y0,x1,y1,diameter,color,
         opacity or 1,hardness or 0.25)
