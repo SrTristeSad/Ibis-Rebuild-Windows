@@ -152,6 +152,11 @@ def run_tests(runtime_path, output):
                                        +json.dumps(influence_root)+"))")
             influence_native=json.loads(native_state.execute(influence_native_program))
             assert influence_native.get('passed') and influence_native.get('raster_modes') and influence_native.get('rbd2_roundtrip')
+            continuous_root=(output / ('continuous-pressure-' + str(time.time_ns()))).as_posix()
+            continuous_program=("return require('json').encode(require('tests.test_continuous_pressure').run("
+                                +json.dumps(continuous_root)+"))")
+            continuous=json.loads(native_state.execute(continuous_program))
+            assert continuous.get('passed') and continuous.get('gradient') and continuous.get('undo_redo') and continuous.get('rbd2_roundtrip')
             tilt_root=(output / ('tilt-brush-' + str(time.time_ns()))).as_posix()
             tilt_program=("return require('json').encode(require('tests.test_tilt_brush').run("
                           +json.dumps(tilt_root)+"))")
