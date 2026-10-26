@@ -101,6 +101,10 @@ class KernelTests(unittest.TestCase):
                 F32, F32, U32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
+            'rb_clear_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
+                U32, U32, U32, U32]),
+            'rb_compose_normal_rect': (I32, [C.POINTER(U8), U64,
+                C.POINTER(U8), U64, U32, U32, F32, U32, U32, U32, U32]),
             'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
                 I32, I32, U32, U32, I32, I32, C.POINTER(U8), U64]),
             'rb_transform_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
@@ -850,6 +854,58 @@ class KernelTests(unittest.TestCase):
             self.assertEqual(bytes(invalid),original)
 
 
+
+
+    def test_partial_compositor_rgba_exact_and_atomic_bounds(self):
+        width,height=37,19
+        count=width*height*4
+        rand=random.Random(482)
+        first=bytes(rand.randrange(256) for _ in range(count))
+        second=bytes(rand.randrange(256) for _ in range(count))
+        for opacity in (0.,.17,.7,1.):
+            for rect in ((0,0,width,height),(3,2,1,1),
+                         (7,5,17,9),(width-1,height-1,1,1)):
+                x,y,w,h=rect
+                full=(U8*count)(*first)
+                partial=(U8*count)(*first)
+                src=(U8*count)(*second)
+                self.assertEqual(self.lib.rb_compose_normal(
+                    full,count,src,count,width,height,opacity),0)
+                self.assertEqual(self.lib.rb_compose_normal_rect(
+                    partial,count,src,count,width,height,opacity,*rect),0)
+                for yy in range(height):
+                    for xx in range(width):
+                        idx=(yy*width+xx)*4
+                        expected=bytes(full[idx:idx+4]) if (
+                            x<=xx<x+w and y<=yy<y+h) else first[idx:idx+4]
+                        self.assertEqual(bytes(partial[idx:idx+4]),expected,
+                            (opacity,rect,xx,yy))
+                cleared=(U8*count)(*first)
+                self.assertEqual(self.lib.rb_clear_rect_rgba(
+                    cleared,count,width,height,*rect),0)
+                for yy in range(height):
+                    for xx in range(width):
+                        idx=(yy*width+xx)*4
+                        expected=b'\\0'*4 if x<=xx<x+w and y<=yy<y+h else first[idx:idx+4]
+                        self.assertEqual(bytes(cleared[idx:idx+4]),expected)
+        destination=(U8*count)(*first)
+        src=(U8*count)(*second)
+        snapshot=bytes(destination)
+        for rect in ((0,0,0,1),(0,0,1,0),(width,0,1,1),
+                     (0,height,1,1),(width-1,0,2,1),(1,1,width,1)):
+            self.assertEqual(self.lib.rb_clear_rect_rgba(
+                destination,count,width,height,*rect),-1)
+            self.assertEqual(self.lib.rb_compose_normal_rect(
+                destination,count,src,count,width,height,.6,*rect),-1)
+            self.assertEqual(bytes(destination),snapshot,
+                'Invalid region operation modified RGBA data')
+        self.assertEqual(self.lib.rb_compose_normal_rect(
+            destination,count,src,count-1,width,height,.6,1,1,1,1),-1)
+        self.assertEqual(self.lib.rb_compose_normal_rect(
+            destination,count,destination,count,width,height,.6,1,1,1,1),-1)
+        self.assertEqual(self.lib.rb_compose_normal_rect(
+            destination,count,src,count,width,height,float('nan'),1,1,1,1),-1)
+        self.assertEqual(bytes(destination),snapshot)
 
     def test_whole_stroke_alpha_union_and_baseline(self):
         width = height = 36

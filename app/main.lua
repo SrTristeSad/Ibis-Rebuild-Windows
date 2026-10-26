@@ -2828,9 +2828,15 @@ function love.update(dt)
                 local sx,sy=point(3,3)
                 local tx,ty=point(4,3)
                 local historyBeforeBrush=A.layerSession:historyStats().undo
+                local persistentImage=A.image
+                local uploadsBefore=A.partialCanvasUpdates or 0
                 love.draw();love.mousepressed(sx,sy,1)
                 love.mousemoved(tx,ty,tx-sx,ty-sy)
                 love.mousereleased(tx,ty,1)
+                assert(A.image==persistentImage,
+                    'Traço curto recriou a textura inteira em vez de replacePixels')
+                assert((A.partialCanvasUpdates or 0)>uploadsBefore,
+                    'Pintura não enviou atualizações de retângulos para GPU')
                 local brushCenter=Native.readPixel(A.layerSession:activeBuffer(),4,3)
                 local brushEdge=Native.readPixel(A.layerSession:activeBuffer(),7,3)
                 assert(brushCenter%256>brushEdge%256 and brushEdge%256>0
