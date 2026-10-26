@@ -43,6 +43,18 @@ function Layers:recompose()
     end
     return self.composite
 end
+-- Rebuild just the dirty pixels from every visible layer, preserving exact
+-- normal source-over order and RGBA rounding of the full compositor.
+function Layers:recomposeRect(rect)
+    Native.clearRect(self.composite,rect)
+    for i,layer in ipairs(self.doc.layers) do
+        if layer.visible and layer.opacity>0 then
+            Native.compositeRect(self.composite,self.buffers[i],
+                layer.opacity,rect)
+        end
+    end
+    return self.composite
+end
 function Layers:clearHistory()
     if self.pending then self:finishEdit() end
     self.undoStack={}

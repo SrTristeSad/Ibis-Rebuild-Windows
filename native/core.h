@@ -80,6 +80,15 @@ RB_API rb_i32 rb_draw_basic_stroke(rb_u8* dst, rb_u64 capacity,
 RB_API rb_i32 rb_compose_normal(rb_u8* dst, rb_u64 dst_capacity,
     const rb_u8* src, rb_u64 src_capacity,
     rb_u32 width, rb_u32 height, float opacity);
+/* Stage 48 rectangle operations: disjoint RGBA planes, in-bounds ROI.
+   Clear and composite change only the rectangle. No new ABI version. */
+RB_API rb_i32 rb_clear_rect_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_u32 x, rb_u32 y,
+    rb_u32 rw, rb_u32 rh);
+RB_API rb_i32 rb_compose_normal_rect(rb_u8* dst, rb_u64 dst_capacity,
+    const rb_u8* src, rb_u64 src_capacity,
+    rb_u32 width, rb_u32 height, float opacity,
+    rb_u32 x, rb_u32 y, rb_u32 rw, rb_u32 rh);
 
 
 /* Desktop hard-round eraser: destination-out alpha, NOT Android equivalence.

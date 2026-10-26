@@ -6,6 +6,7 @@ local JSON=require('json')
 local Colors=require('colors')
 local ColorPanel=require('color_window')
 local Stabilizer=require('stroke_stabilizer')
+local DirtyRegion=require('dirty_region')
 local StrokePath=require('stroke_path')
 local Pressure=require('touch_pressure')
 local PressureCurves=require('pressure_curves')
@@ -190,6 +191,23 @@ local function rebuildImage()
     if A.imageData then A.imageData:release() end
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
     A.image=love.graphics.newImage(A.imageData);A.image:setFilter('nearest','nearest')
+    A.imageData:release();A.imageData=nil
+end
+-- Upload only a dirty subtexture, keeping the existing GPU Image alive.
+-- Non-brush mutations continue to use rebuildImage() for full sync.
+local function updateImageRegion(rect)
+    if not rect then return false end
+    A.layerSession:recomposeRect(rect)
+    local patch=love.image.newImageData(rect.w,rect.h,'rgba8',
+        Native.regionBytes(A.buffer,rect))
+    A.image:replacePixels(patch,nil,1,rect.x,rect.y)
+    patch:release()
+    local layer=A.doc.layers[A.doc.active_layer]
+    A.layerThumbDirty=A.layerThumbDirty or {}
+    A.layerThumbDirty[layer.id]=true
+    A.partialCanvasUpdates=(A.partialCanvasUpdates or 0)+1
+    A.dirty=true
+    return true
 end
 local function paneHidden()
     return A.focusMode or A.compactUi
@@ -271,9 +289,15 @@ local function paintBrushSegment(x,y,pressure,defer)
     A.layerSession:pressureStroke(previousX,previousY,x,y,
         diameter0,diameter1,A.color,opacity0,opacity1,
         A.brushStyle=='soft' and 0.25 or 1,
-        isTilt and A.inkTiltX or 0,isTilt and A.inkTiltY or 0,style,defer)
+        isTilt and A.inkTiltX or 0,isTilt and A.inkTiltY or 0,style,true)
     A.lastStrokeX=x;A.lastStrokeY=y
-    if not defer then A.dirty=true;rebuildImage() end
+    local rect=DirtyRegion.segment(A.doc.width,A.doc.height,
+        previousX,previousY,x,y,diameter0,diameter1)
+    if defer then
+        A.pendingBrushRect=DirtyRegion.union(A.pendingBrushRect,rect)
+    else
+        updateImageRegion(rect)
+    end
 end
 -- Batch the C++ raster calls from one input packet into one composition/upload.
 local function paintBrushPath(x,y,pressure,closing)
@@ -288,9 +312,9 @@ local function paintBrushPath(x,y,pressure,closing)
         count=A.strokePath:sample(x,y,pressure,emit)
     end
     if count>0 then
-        A.layerSession:recompose()
-        A.dirty=true;rebuildImage()
+        updateImageRegion(A.pendingBrushRect)
     end
+    A.pendingBrushRect=nil
 end
 local function finishStroke(finalX,finalY,pressure)
     if A.drawing and A.stabilizer then
@@ -303,7 +327,7 @@ local function finishStroke(finalX,finalY,pressure)
         paintBrushPath(x,y,pressure,true)
     end
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
-    A.drawing=false;A.stabilizer=nil;A.strokePath=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
+    A.drawing=false;A.stabilizer=nil;A.strokePath=nil;A.pendingBrushRect=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
 selectTool=function(id)
     local item=EditorTools.fromId(id)
@@ -5449,12 +5473,15 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                         diameter,diameter,A.color,opacity,opacity,
                         A.brushStyle=='soft' and 0.25 or 1,
                         isTilt and A.inkTiltX or 0,
-                        isTilt and A.inkTiltY or 0,style)
+                        isTilt and A.inkTiltY or 0,style,true)
+                    updateImageRegion(DirtyRegion.segment(
+                        A.doc.width,A.doc.height,px,py,px,py,
+                        diameter,diameter))
                     A.lastPressure=pressure
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.stabilizer=Stabilizer.new(A.stabilization,px,py)
                     A.strokePath=StrokePath.new(px,py,pressure)
-                    A.dirty=true;rebuildImage()
+                    A.pendingBrushRect=nil
                     status(A.tool=='erase' and 'Borracha C++ · apaga a camada ativa'
                         or 'Pincel C++ · histórico por pincelada · Ctrl+Z')
                 end

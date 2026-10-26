@@ -255,6 +255,58 @@ rb_i32 rb_compose_normal(rb_u8* dst, rb_u64 dst_capacity,
 }
 
 
+/* Partial normal composition. Identical math/rounding to rb_compose_normal;
+   only the clipped rectangle is processed, with atomic validation. */
+rb_i32 rb_clear_rect_rgba(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, rb_u32 x, rb_u32 y,
+    rb_u32 rw, rb_u32 rh) {
+    if (!plane(dst,capacity,width,height) || !rw || !rh ||
+        x>=width || y>=height || rw>width-x || rh>height-y) return -1;
+    volatile rb_u8* write=dst;
+    for (rb_u32 yy=y;yy<y+rh;++yy) {
+        const rb_u64 start=(static_cast<rb_u64>(yy)*width+x)*4u;
+        for (rb_u32 i=0;i<rw*4u;++i) write[start+i]=0;
+    }
+    return 0;
+}
+rb_i32 rb_compose_normal_rect(rb_u8* dst, rb_u64 dst_capacity,
+    const rb_u8* src, rb_u64 src_capacity,
+    rb_u32 width, rb_u32 height, float opacity,
+    rb_u32 x, rb_u32 y, rb_u32 rw, rb_u32 rh) {
+    if (!plane(dst,dst_capacity,width,height) ||
+        !plane(src,src_capacity,width,height) ||
+        !(opacity>=0.0f && opacity<=1.0f) ||
+        !rw || !rh || x>=width || y>=height ||
+        rw>width-x || rh>height-y) return -1;
+    const rb_u64 bytes=static_cast<rb_u64>(width)*height*4u;
+    Range d,s;
+    if (!range(dst,bytes,1,d) || !range(src,bytes,1,s) ||
+        !disjoint(d,s)) return -1;
+    if (opacity==0.0f) return 0;
+    for (rb_u32 yy=y;yy<y+rh;++yy) {
+        const rb_u64 start=(static_cast<rb_u64>(yy)*width+x)*4u;
+        const rb_u64 stop=start+static_cast<rb_u64>(rw)*4u;
+        for (rb_u64 i=start;i<stop;i+=4u) {
+            const float sa=(static_cast<float>(src[i+3])/255.0f)*opacity;
+            if (sa==0.0f) continue;
+            const float da=static_cast<float>(dst[i+3])/255.0f;
+            const float remaining=da*(1.0f-sa);
+            const float oa=sa+remaining;
+            if (oa==0.0f) continue;
+            const float inv=1.0f/oa;
+            for (rb_u32 k=0;k<3u;++k) {
+                float c=(static_cast<float>(src[i+k])*sa+
+                    static_cast<float>(dst[i+k])*remaining)*inv;
+                if (c>255.0f)c=255.0f;
+                if (c<0.0f)c=0.0f;
+                dst[i+k]=static_cast<rb_u8>(c+0.5f);
+            }
+            dst[i+3]=static_cast<rb_u8>(oa*255.0f+0.5f);
+        }
+    }
+    return 0;
+}
+
 /* Desktop-only round eraser. This is destination-out rather than an Android
    recovered eraser. Coverage is a hard-edged continuous capsule; each pixel
    is affected at most once per invocation. No heap, callbacks or I/O. */
