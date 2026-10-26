@@ -886,7 +886,7 @@ class KernelTests(unittest.TestCase):
                 for yy in range(height):
                     for xx in range(width):
                         idx=(yy*width+xx)*4
-                        expected=b'\\0'*4 if x<=xx<x+w and y<=yy<y+h else first[idx:idx+4]
+                        expected=b'\0'*4 if x<=xx<x+w and y<=yy<y+h else first[idx:idx+4]
                         self.assertEqual(bytes(cleared[idx:idx+4]),expected)
         destination=(U8*count)(*first)
         src=(U8*count)(*second)
