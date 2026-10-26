@@ -2296,6 +2296,57 @@ local function verifyPressureCurveControls()
     selectTool(previousTool)
     A.sideTab=previousTab
 end
+-- Stage 44: real Windows GUI regression of independent pressure switches.
+-- View-only setting changes must not create raster or undo transactions.
+local function verifyPressureInfluenceControls()
+    assert(A.screen=='editor' and not A.compactUi and
+        not A.focusMode,'Pressure channel test needs desktop editor')
+    finishStroke()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldSize,oldOpacity=A.pressureSize,A.pressureOpacity
+    local oldScroll,oldDirty=A.sidebarScroll,A.dirty
+    local pixels=Native.bytes(A.layerSession.composite)
+    local undo=A.layerSession:historyStats().undo
+    A.pressureSize=true
+    A.pressureOpacity=true
+    A.sidebarScroll=0
+    selectTool('brush')
+    A.sideTab='brush'
+    local panel=love.graphics.getWidth()-268
+    local function click(x)
+        love.draw()
+        love.mousepressed(x,388,1,false)
+    end
+    click(panel+70)
+    assert(not A.pressureSize and A.pressureOpacity,
+        'Size button must disable only size response')
+    click(panel+180)
+    assert(not A.pressureSize and not A.pressureOpacity,
+        'Opacity button must disable only alpha response')
+    click(panel+70)
+    assert(A.pressureSize and not A.pressureOpacity,
+        'Size-only brush response must be selectable')
+    click(panel+180)
+    assert(A.pressureSize and A.pressureOpacity,
+        'Default two-channel response must be restorable')
+    selectTool('erase')
+    A.sideTab='brush'
+    click(panel+180)
+    assert(A.pressureSize and not A.pressureOpacity,
+        'Eraser must expose independent alpha response')
+    click(panel+180)
+    assert(A.pressureSize and A.pressureOpacity,
+        'Eraser opacity response must be restorable')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==undo and
+        A.dirty==oldDirty,
+        'Switching pressure channels must not paint or change history')
+    A.pressureSize=oldSize
+    A.pressureOpacity=oldOpacity
+    selectTool(oldTool)
+    A.sideTab=oldTab
+    A.sidebarScroll=Sidebar.clamp(love.graphics.getHeight(),oldScroll or 0)
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -3604,6 +3655,7 @@ function love.update(dt)
                 verifyCompactLayerWheel()
                 verifyLayerListWheel()
                 verifyPressureCurveControls()
+                verifyPressureInfluenceControls()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
