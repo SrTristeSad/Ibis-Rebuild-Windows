@@ -180,6 +180,17 @@ RB_API rb_i32 rb_draw_tilt_stroke(rb_u8* dst, rb_u64 capacity,
     float tilt_x, float tilt_y);
 
 
+/* Single-pass variable-pressure segment. 0 hard, 1 feather, 2 erase,
+   3 tilt. Each pixel is composited once and input must be finite and bounded.
+   Identical endpoint pressures delegate to previous native primitives;
+   additive ABI v1 function; no changes to document format. */
+RB_API rb_i32 rb_draw_pressure_stroke(rb_u8* dst, rb_u64 capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter0, float diameter1, rb_u32 rgba,
+    float opacity0, float opacity1, float hardness,
+    float tilt_x, float tilt_y, rb_u32 style);
+
+
 /* In-place flip of caller-owned RGBA8 raster.
    axis=0 horizontal; axis=1 vertical. No heap allocation.
    Invalid arguments return -1 before changing any pixel. */

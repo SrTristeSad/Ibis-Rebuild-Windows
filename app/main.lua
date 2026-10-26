@@ -251,24 +251,26 @@ end
 local function paintBrushSegment(x,y,pressure)
     if not A.drawing then return end
     local previousX,previousY=A.lastStrokeX,A.lastStrokeY
-    A.lastPressure=Pressure.normalize(pressure or A.lastPressure)
+    local startPressure=A.lastPressure
+    local endPressure=Pressure.normalize(pressure or startPressure)
+    A.lastPressure=endPressure
     if x==previousX and y==previousY then return end
-    local diameter,opacity=PressureInfluence.resolve(
-        A.brushDiameter,A.brushOpacity,A.lastPressure,A.pressureCurve,
+    -- Native single-pass segment interpolates from the last sample to the
+    -- current sample, preserving old RGBA bytes for constant pressure.
+    local diameter0,opacity0=PressureInfluence.resolve(
+        A.brushDiameter,A.brushOpacity,startPressure,A.pressureCurve,
         A.pressureSize,A.pressureOpacity)
-    if A.tool=='erase' then
-        A.layerSession:erase(previousX,previousY,x,y,diameter,opacity)
-    elseif A.inkPenId~=nil and A.penTiltEnabled and
-        (A.inkTiltX~=0 or A.inkTiltY~=0) then
-        A.layerSession:tiltStroke(previousX,previousY,x,y,diameter,A.color,
-            opacity,A.brushStyle=='soft' and 0.25 or 1,
-            A.inkTiltX,A.inkTiltY)
-    elseif A.brushStyle=='soft' then
-        A.layerSession:softStroke(previousX,previousY,x,y,diameter,
-            A.color,opacity,0.25)
-    else
-        A.layerSession:stroke(previousX,previousY,x,y,diameter,A.color,opacity)
-    end
+    local diameter1,opacity1=PressureInfluence.resolve(
+        A.brushDiameter,A.brushOpacity,endPressure,A.pressureCurve,
+        A.pressureSize,A.pressureOpacity)
+    local isTilt=A.tool=='brush' and A.inkPenId~=nil and
+        A.penTiltEnabled and (A.inkTiltX~=0 or A.inkTiltY~=0)
+    local style=A.tool=='erase' and 2 or
+        isTilt and 3 or A.brushStyle=='soft' and 1 or 0
+    A.layerSession:pressureStroke(previousX,previousY,x,y,
+        diameter0,diameter1,A.color,opacity0,opacity1,
+        A.brushStyle=='soft' and 0.25 or 1,
+        isTilt and A.inkTiltX or 0,isTilt and A.inkTiltY or 0,style)
     A.lastStrokeX=x;A.lastStrokeY=y
     A.dirty=true;rebuildImage()
 end

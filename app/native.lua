@@ -15,6 +15,7 @@ int32_t rb_get_pixel(const uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,u
 int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float);
 int32_t rb_draw_feather_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float,float);
 int32_t rb_draw_tilt_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float,float,float,float);
+int32_t rb_draw_pressure_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float,uint32_t,float,float,float,float,float,uint32_t);
 int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float);
 int32_t rb_move_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint8_t*,uint64_t);
 int32_t rb_transform_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint8_t*,uint64_t);
@@ -113,6 +114,15 @@ function N.tiltStroke(buffer,x0,y0,x1,y1,diameter,rgba,opacity,hardness,tiltX,ti
         buffer.width,buffer.height,x0,y0,x1,y1,diameter,rgba,
         opacity,hardness,tiltX,tiltY)
     assert(result==0,'Pincel inclinado C++ inválido: '..tonumber(result))
+end
+-- Variable-pressure stroke: all pixel writes take place in native C++.
+function N.pressureStroke(buffer,x0,y0,x1,y1,diameter0,diameter1,
+    rgba,opacity0,opacity1,hardness,tiltX,tiltY,style)
+    ready()
+    local result=N.lib.rb_draw_pressure_stroke(buffer.bytes,buffer.size,
+        buffer.width,buffer.height,x0,y0,x1,y1,diameter0,diameter1,
+        rgba,opacity0,opacity1,hardness,tiltX,tiltY,style)
+    assert(result==0,'Falha no traço C++ com pressão interpolada: '..tonumber(result))
 end
 function N.flip(buffer,axis)
     ready()
