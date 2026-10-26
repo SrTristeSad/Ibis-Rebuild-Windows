@@ -8,6 +8,7 @@ local ColorPanel=require('color_window')
 local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
 local PressureCurves=require('pressure_curves')
+local PressureInfluence=require('pressure_influence')
 local Ink=require('windows_ink')
 local View=require('canvas_view')
 local EditorTools=require('editor_tools')
@@ -42,7 +43,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
     '09-opacidade-camadas.png'}
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -252,9 +253,9 @@ local function paintBrushSegment(x,y,pressure)
     local previousX,previousY=A.lastStrokeX,A.lastStrokeY
     A.lastPressure=Pressure.normalize(pressure or A.lastPressure)
     if x==previousX and y==previousY then return end
-    local mappedPressure=PressureCurves.apply(A.lastPressure,A.pressureCurve)
-    local diameter=Pressure.diameter(A.brushDiameter,mappedPressure)
-    local opacity=Pressure.opacity(A.brushOpacity,mappedPressure)
+    local diameter,opacity=PressureInfluence.resolve(
+        A.brushDiameter,A.brushOpacity,A.lastPressure,A.pressureCurve,
+        A.pressureSize,A.pressureOpacity)
     if A.tool=='erase' then
         A.layerSession:erase(previousX,previousY,x,y,diameter,opacity)
     elseif A.inkPenId~=nil and A.penTiltEnabled and
@@ -2295,6 +2296,57 @@ local function verifyPressureCurveControls()
     selectTool(previousTool)
     A.sideTab=previousTab
 end
+-- Stage 44: real Windows GUI regression of independent pressure switches.
+-- View-only setting changes must not create raster or undo transactions.
+local function verifyPressureInfluenceControls()
+    assert(A.screen=='editor' and not A.compactUi and
+        not A.focusMode,'Pressure channel test needs desktop editor')
+    finishStroke()
+    local oldTool,oldTab=A.tool,A.sideTab
+    local oldSize,oldOpacity=A.pressureSize,A.pressureOpacity
+    local oldScroll,oldDirty=A.sidebarScroll,A.dirty
+    local pixels=Native.bytes(A.layerSession.composite)
+    local undo=A.layerSession:historyStats().undo
+    A.pressureSize=true
+    A.pressureOpacity=true
+    A.sidebarScroll=0
+    selectTool('brush')
+    A.sideTab='brush'
+    local panel=love.graphics.getWidth()-268
+    local function click(x,y)
+        love.draw()
+        love.mousepressed(x,y,1,false)
+    end
+    click(panel+159,471)
+    assert(not A.pressureSize and A.pressureOpacity,
+        'Size button must disable only size response')
+    click(panel+175,637)
+    assert(not A.pressureSize and not A.pressureOpacity,
+        'Opacity button must disable only alpha response')
+    click(panel+159,471)
+    assert(A.pressureSize and not A.pressureOpacity,
+        'Size-only brush response must be selectable')
+    click(panel+175,637)
+    assert(A.pressureSize and A.pressureOpacity,
+        'Default two-channel response must be restorable')
+    selectTool('erase')
+    A.sideTab='brush'
+    click(panel+175,637)
+    assert(A.pressureSize and not A.pressureOpacity,
+        'Eraser must expose independent alpha response')
+    click(panel+175,637)
+    assert(A.pressureSize and A.pressureOpacity,
+        'Eraser opacity response must be restorable')
+    assert(Native.bytes(A.layerSession.composite)==pixels and
+        A.layerSession:historyStats().undo==undo and
+        A.dirty==oldDirty,
+        'Switching pressure channels must not paint or change history')
+    A.pressureSize=oldSize
+    A.pressureOpacity=oldOpacity
+    selectTool(oldTool)
+    A.sideTab=oldTab
+    A.sidebarScroll=Sidebar.clamp(love.graphics.getHeight(),oldScroll or 0)
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -3603,6 +3655,7 @@ function love.update(dt)
                 verifyCompactLayerWheel()
                 verifyLayerListWheel()
                 verifyPressureCurveControls()
+                verifyPressureInfluenceControls()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
@@ -4269,6 +4322,11 @@ local function drawEditor(w,h)
                 A.fillTolerance=math.min(255,A.fillTolerance+8)end,
                 false,A.fillTolerance==255)
         else
+            -- Keep the Camadas/Pincel tabs at y=366 unobstructed.
+            -- Each parameter controls its own pressure channel below.
+            if A.sideTab=='brush' then
+                text('P = resposta à pressão',panel+20,401,'small','muted')
+            end
             if A.tool=='brush' then
                 button(A.penTiltEnabled and 'Ink: ativa'
                     or 'Ink: desligada',
@@ -4287,7 +4345,14 @@ local function drawEditor(w,h)
                 end,A.pressureCurve~='linear')
             button('−',panel+20,456,46,32,function()
                 A.brushDiameter=math.max(1,A.brushDiameter-2)end)
-            text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
+            text(('Tam. %.0f px'):format(A.brushDiameter),panel+75,464,'small')
+            button(A.pressureSize and 'P ON' or 'P OFF',
+                panel+138,456,40,32,function()
+                    finishStroke()
+                    A.pressureSize=not A.pressureSize
+                    status('Pressão no tamanho: '..
+                        (A.pressureSize and 'ativa' or 'desligada'))
+                end,A.pressureSize)
             drawParameterSlider('diameter',panel,A.brushDiameter)
             button('+',panel+182,456,46,32,function()
                 A.brushDiameter=math.min(256,A.brushDiameter+2)end)
@@ -4322,8 +4387,15 @@ local function drawEditor(w,h)
                 A.brushOpacity=math.max(.1,
                     math.floor(A.brushOpacity*10+0.5)/10-.1)
             end,false,A.brushOpacity<=.101)
-            text(('Opacidade %.0f%%'):format(A.brushOpacity*100+0.01),
+            text(('Alfa %.0f%%'):format(A.brushOpacity*100+0.01),
                 panel+69,630,'small','muted')
+            button(A.pressureOpacity and 'P ON' or 'P OFF',
+                panel+151,622,48,30,function()
+                    finishStroke()
+                    A.pressureOpacity=not A.pressureOpacity
+                    status('Pressão na opacidade: '..
+                        (A.pressureOpacity and 'ativa' or 'desligada'))
+                end,A.pressureOpacity)
             drawParameterSlider('opacity',panel,A.brushOpacity)
             button('+',panel+206,622,42,30,function()
                 finishStroke()
@@ -5345,9 +5417,9 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
-                    local mappedPressure=PressureCurves.apply(pressure,A.pressureCurve)
-                    local diameter=Pressure.diameter(A.brushDiameter,mappedPressure)
-                    local opacity=Pressure.opacity(A.brushOpacity,mappedPressure)
+                    local diameter,opacity=PressureInfluence.resolve(
+                        A.brushDiameter,A.brushOpacity,pressure,A.pressureCurve,
+                        A.pressureSize,A.pressureOpacity)
                     if A.tool=='erase' then
                         A.layerSession:erase(px,py,px,py,diameter,opacity)
                     elseif A.inkPenId~=nil and A.penTiltEnabled and
