@@ -83,6 +83,9 @@ def run_tests(runtime_path, output):
         influence_program = "return require('json').encode(require('tests.test_pressure_influence').run())"
         influence = json.loads(state.execute(influence_program))
         assert influence.get('passed') and influence.get('assertions') >= 3000
+        path_program = "return require('json').encode(require('tests.test_stroke_path').run())"
+        spatial_path = json.loads(state.execute(path_program))
+        assert spatial_path.get('passed') and spatial_path.get('adaptive') and spatial_path.get('exact_release')
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():
@@ -157,6 +160,11 @@ def run_tests(runtime_path, output):
                                 +json.dumps(continuous_root)+"))")
             continuous=json.loads(native_state.execute(continuous_program))
             assert continuous.get('passed') and continuous.get('gradient') and continuous.get('undo_redo') and continuous.get('rbd2_roundtrip')
+            path_root=(output / ('curved-spatial-path-' + str(time.time_ns()))).as_posix()
+            path_program=("return require('json').encode(require('tests.test_stroke_path').runNative("
+                          +json.dumps(path_root)+"))")
+            spatial_native=json.loads(native_state.execute(path_program))
+            assert spatial_native.get('passed') and spatial_native.get('exact_release') and spatial_native.get('rbd2_roundtrip')
             tilt_root=(output / ('tilt-brush-' + str(time.time_ns()))).as_posix()
             tilt_program=("return require('json').encode(require('tests.test_tilt_brush').run("
                           +json.dumps(tilt_root)+"))")

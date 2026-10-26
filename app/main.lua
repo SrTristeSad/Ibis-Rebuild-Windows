@@ -6,6 +6,7 @@ local JSON=require('json')
 local Colors=require('colors')
 local ColorPanel=require('color_window')
 local Stabilizer=require('stroke_stabilizer')
+local StrokePath=require('stroke_path')
 local Pressure=require('touch_pressure')
 local PressureCurves=require('pressure_curves')
 local PressureInfluence=require('pressure_influence')
@@ -248,7 +249,7 @@ local function openDoc(doc)
     status('Projeto raster aberto · camadas próprias RBD2 disponíveis')
 end
 -- All stroke styles use the same compositing and transaction boundary.
-local function paintBrushSegment(x,y,pressure)
+local function paintBrushSegment(x,y,pressure,defer)
     if not A.drawing then return end
     local previousX,previousY=A.lastStrokeX,A.lastStrokeY
     local startPressure=A.lastPressure
@@ -270,22 +271,39 @@ local function paintBrushSegment(x,y,pressure)
     A.layerSession:pressureStroke(previousX,previousY,x,y,
         diameter0,diameter1,A.color,opacity0,opacity1,
         A.brushStyle=='soft' and 0.25 or 1,
-        isTilt and A.inkTiltX or 0,isTilt and A.inkTiltY or 0,style)
+        isTilt and A.inkTiltX or 0,isTilt and A.inkTiltY or 0,style,defer)
     A.lastStrokeX=x;A.lastStrokeY=y
-    A.dirty=true;rebuildImage()
+    if not defer then A.dirty=true;rebuildImage() end
+end
+-- Batch the C++ raster calls from one input packet into one composition/upload.
+local function paintBrushPath(x,y,pressure,closing)
+    if not A.drawing or not A.strokePath then return end
+    local emit=function(px,py,p)
+        paintBrushSegment(px,py,p,true)
+    end
+    local count
+    if closing then
+        count=A.strokePath:finish(x,y,pressure,emit)
+    else
+        count=A.strokePath:sample(x,y,pressure,emit)
+    end
+    if count>0 then
+        A.layerSession:recompose()
+        A.dirty=true;rebuildImage()
+    end
 end
 local function finishStroke(finalX,finalY,pressure)
     if A.drawing and A.stabilizer then
         if finalX and finalY then
             local x,y=A.stabilizer:sample(finalX,finalY)
-            paintBrushSegment(x,y,pressure)
+            paintBrushPath(x,y,pressure)
         end
-        -- Final endpoint correction avoids dropped last pixel when smoothing.
+        -- Closing the spatial path includes the unsmoothed release endpoint.
         local x,y=A.stabilizer:finish()
-        paintBrushSegment(x,y,pressure)
+        paintBrushPath(x,y,pressure,true)
     end
     if A.layerSession and A.layerSession.pending then A.layerSession:finishEdit() end
-    A.drawing=false;A.stabilizer=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
+    A.drawing=false;A.stabilizer=nil;A.strokePath=nil;A.lastStrokeX=nil;A.lastStrokeY=nil
 end
 selectTool=function(id)
     local item=EditorTools.fromId(id)
@@ -5438,6 +5456,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     A.lastPressure=pressure
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.stabilizer=Stabilizer.new(A.stabilization,px,py)
+                    A.strokePath=StrokePath.new(px,py,pressure)
                     A.dirty=true;rebuildImage()
                     status(A.tool=='erase' and 'Borracha C++ · apaga a camada ativa'
                         or 'Pincel C++ · histórico por pincelada · Ctrl+Z')
@@ -5586,7 +5605,7 @@ local function pointerMoved(x,y,dx,dy,pressure)
             px=math.max(-16384,math.min(16384,px))
             py=math.max(-16384,math.min(16384,py))
             local sx,sy=A.stabilizer:sample(px,py)
-            paintBrushSegment(sx,sy,pressure)
+            paintBrushPath(sx,sy,pressure)
         end)()
     end
 end
