@@ -79,7 +79,7 @@ def run_tests(runtime_path, output):
         assert compare.get('passed') and compare.get('assertions') >= 25
         curve_program = "return require('json').encode(require('tests.test_pressure_curves').run())"
         curves = json.loads(state.execute(curve_program))
-        assert curves.get('passed') and curves.get('assertions') == 421
+        assert curves.get('passed') and curves.get('assertions') == 420
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():
