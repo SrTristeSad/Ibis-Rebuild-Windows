@@ -15,7 +15,7 @@ function T.run(root)
     assert(Native.available,'C++ renderer required')
     local store=Store.open(root)
     local doc=store:createProject('Atualização parcial',96,72,'',
-        string.rep('\\0',96*72*4))
+        string.rep('\0',96*72*4))
     local session=Layers.open(store,store:openProject(doc.id))
     session:stroke(6.5,6.5,74.5,60.5,15,0xca253aca,.8)
     session:add('Camada superior')
