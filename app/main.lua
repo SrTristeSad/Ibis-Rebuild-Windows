@@ -2261,6 +2261,40 @@ local function verifyLayerListWheel()
     A.layerScroll=oldStart
     love.draw()
 end
+-- Stage 43: real Windows classic-sidebar controls for pressure response.
+-- Cycling is configuration-only, and must never modify raster/history.
+local function verifyPressureCurveControls()
+    assert(A.screen=='editor' and not A.compactUi and
+        not A.focusMode,'Pressure curve controls require classic editor')
+    local w=love.graphics.getWidth()
+    local previousTool,previousTab=A.tool,A.sideTab
+    local previousCurve,previousDirty=A.pressureCurve,A.dirty
+    local pixels=Native.bytes(A.layerSession.composite)
+    local history=A.layerSession:historyStats().undo
+    finishStroke()
+    A.pressureCurve='linear'
+    selectTool('brush')
+    A.sideTab='brush'
+    for _,expected in ipairs({'soft','firm','linear'}) do
+        love.draw()
+        love.mousepressed(w-268+185,430,1,false)
+        assert(A.pressureCurve==expected,
+            'Brush pressure response button failed to advance')
+    end
+    selectTool('erase')
+    A.sideTab='brush'
+    love.draw()
+    love.mousepressed(w-268+185,430,1,false)
+    assert(A.pressureCurve=='soft',
+        'Eraser must offer the same pressure response selector')
+    assert(A.dirty==previousDirty and
+        A.layerSession:historyStats().undo==history and
+        Native.bytes(A.layerSession.composite)==pixels,
+        'Changing pressure response must not edit pixels/history')
+    A.pressureCurve=previousCurve
+    selectTool(previousTool)
+    A.sideTab=previousTab
+end
 local function nativeSelfTest()
     assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
@@ -3568,6 +3602,7 @@ function love.update(dt)
                 verifyDesktopLayerOpacity()
                 verifyCompactLayerWheel()
                 verifyLayerListWheel()
+                verifyPressureCurveControls()
                 A.testReport.ui={layer_add_button=true,layer_delete_button=true,
                     eraser_toolbar=true,undo_button=true,redo_button=true,
                     rectangle_select=true,rectangle_drag=true,selection_undo_redo=true,
