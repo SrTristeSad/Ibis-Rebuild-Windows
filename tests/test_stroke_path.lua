@@ -24,6 +24,16 @@ function T.run()
         'Finished path accepted more packets')
     check(not pcall(function()line:finish(nil,nil,nil,collect)end),
         'Finished path accepted another release')
+    local tiny=Path.new(3.5,3.5,.35)
+    local tinyPoints={}
+    local function tinyEmit(x,y,p)
+        tinyPoints[#tinyPoints+1]={x=x,y=y,p=p}
+    end
+    check(tiny:sample(4.5,3.5,.35,tinyEmit)==1,
+        'Short first motion should be one original C++ stroke')
+    check(tiny:finish(4.5,3.5,.35,tinyEmit)==0 and
+        #tinyPoints==1 and near(tinyPoints[1].x,4.5),
+        'Short brush must not accumulate alpha at duplicated release')
     local bend=Path.new(0,0,.1)
     local bent={}
     local function record(x,y,p) bent[#bent+1]={x=x,y=y,p=p} end
