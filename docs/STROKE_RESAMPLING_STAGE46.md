@@ -15,7 +15,10 @@ Android 14.1.2. Esta etapa não afirma equivalência 1:1 com o produto original.
 - A rasterização permanece no motor C++ da etapa 45. Os subsegmentos de um
   evento atualizam a composição e a imagem uma só vez ao final do pacote.
   Um gesto continua criando uma única operação de desfazer/refazer.
-- O primeiro toque mantém a ponta exata, mesmo sem deslocamento. O estado
+- O primeiro toque mantém a ponta exata, mesmo sem deslocamento. Movimentos
+  iniciais de até 3 pixels são pintados diretamente, sem subdivisão
+  duplicada, para preservar a opacidade histórica de pequenos arrastos.
+  O estado
   temporário da curva não altera RBD2 nem o formato persistido.
 - O desenho é incremental, portanto não há reconstrução de todo o traço
   a cada pacote. Em transições de direção muito fortes ainda pode existir
