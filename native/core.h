@@ -184,6 +184,20 @@ RB_API rb_i32 rb_draw_tilt_stroke(rb_u8* dst, rb_u64 capacity,
    3 tilt. Each pixel is composited once and input must be finite and bounded.
    Identical endpoint pressures delegate to previous native primitives;
    additive ABI v1 function; no changes to document format. */
+/* A whole gesture has ONE coverage accumulator (one byte per canvas
+   pixel) and an immutable RGBA baseline. Coverage is the strongest stroke
+   contribution at each pixel, not the sum of intersecting subsegments.
+   This prevents artificial darkening of translucent strokes or excess
+   destination-out erasure at junctions. All three memory ranges MUST be
+   disjoint; failures are atomic. The caller owns the baseline and mask. */
+RB_API rb_i32 rb_draw_accumulated_stroke(rb_u8* dst, rb_u64 capacity,
+    const rb_u8* baseline, rb_u64 baseline_capacity,
+    rb_u8* coverage, rb_u64 coverage_capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter0, float diameter1, rb_u32 rgba,
+    float opacity0, float opacity1, float hardness,
+    float tilt_x, float tilt_y, rb_u32 style);
+
 RB_API rb_i32 rb_draw_pressure_stroke(rb_u8* dst, rb_u64 capacity,
     rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
     float diameter0, float diameter1, rb_u32 rgba,

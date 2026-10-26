@@ -16,6 +16,7 @@ int32_t rb_draw_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,flo
 int32_t rb_draw_feather_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float,float);
 int32_t rb_draw_tilt_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,uint32_t,float,float,float,float);
 int32_t rb_draw_pressure_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float,uint32_t,float,float,float,float,float,uint32_t);
+int32_t rb_draw_accumulated_stroke(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float,uint32_t,float,float,float,float,float,uint32_t);
 int32_t rb_erase_basic_stroke(uint8_t*,uint64_t,uint32_t,uint32_t,float,float,float,float,float,float);
 int32_t rb_move_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint8_t*,uint64_t);
 int32_t rb_transform_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint8_t*,uint64_t);
@@ -123,6 +124,27 @@ function N.pressureStroke(buffer,x0,y0,x1,y1,diameter0,diameter1,
         buffer.width,buffer.height,x0,y0,x1,y1,diameter0,diameter1,
         rgba,opacity0,opacity1,hardness,tiltX,tiltY,style)
     assert(result==0,'Falha no traço C++ com pressão interpolada: '..tonumber(result))
+end
+-- A gesture keeps only one byte of union-opacity per canvas pixel.
+-- Baseline is the history snapshot string, retained for the entire stroke.
+function N.strokeCoverage(buffer)
+    ready()
+    return {bytes=ffi.new('uint8_t[?]',buffer.width*buffer.height),
+        size=buffer.width*buffer.height,
+        width=buffer.width,height=buffer.height}
+end
+function N.accumulatedStroke(buffer,baseline,mask,x0,y0,x1,y1,
+    diameter0,diameter1,rgba,opacity0,opacity1,hardness,tiltX,tiltY,style)
+    ready()
+    assert(type(baseline)=='string' and #baseline==buffer.size and
+        mask and mask.width==buffer.width and
+        mask.height==buffer.height,'Acumulador da pincelada inválido')
+    local source=ffi.cast('const uint8_t*',baseline)
+    local result=N.lib.rb_draw_accumulated_stroke(
+        buffer.bytes,buffer.size,source,#baseline,mask.bytes,mask.size,
+        buffer.width,buffer.height,x0,y0,x1,y1,diameter0,diameter1,
+        rgba,opacity0,opacity1,hardness,tiltX,tiltY,style)
+    assert(result==0,'Falha na composição nativa da pincelada: '..tonumber(result))
 end
 function N.flip(buffer,axis)
     ready()

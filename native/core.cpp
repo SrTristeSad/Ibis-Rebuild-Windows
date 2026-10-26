@@ -889,6 +889,149 @@ rb_i32 rb_draw_pressure_stroke(rb_u8* dst, rb_u64 capacity,
 }
 
 
+/* Stage 47: per-gesture maximum opacity coverage, composited against
+   the immutable pre-stroke snapshot. No heap allocation or full-plane
+   iteration; each packet visits only the segment's bounded raster ROI. */
+rb_i32 rb_draw_accumulated_stroke(rb_u8* dst, rb_u64 capacity,
+    const rb_u8* baseline, rb_u64 baseline_capacity,
+    rb_u8* coverage, rb_u64 coverage_capacity,
+    rb_u32 width, rb_u32 height, float x0, float y0, float x1, float y1,
+    float diameter0, float diameter1, rb_u32 rgba,
+    float opacity0, float opacity1, float hardness,
+    float tilt_x, float tilt_y, rb_u32 style) {
+    if (!plane(dst,capacity,width,height) ||
+        !plane(baseline,baseline_capacity,width,height) ||
+        !coverage ||
+        coverage_capacity<static_cast<rb_u64>(width)*height ||
+        !(diameter0>=1.0f && diameter0<=256.0f) ||
+        !(diameter1>=1.0f && diameter1<=256.0f) ||
+        !(opacity0>=0.0f && opacity0<=1.0f) ||
+        !(opacity1>=0.0f && opacity1<=1.0f) ||
+        !(hardness>=0.0f && hardness<=1.0f) ||
+        !(tilt_x>=-90.0f && tilt_x<=90.0f) ||
+        !(tilt_y>=-90.0f && tilt_y<=90.0f) ||
+        !(x0>=-16384.0f && x0<=16384.0f) ||
+        !(y0>=-16384.0f && y0<=16384.0f) ||
+        !(x1>=-16384.0f && x1<=16384.0f) ||
+        !(y1>=-16384.0f && y1<=16384.0f) ||
+        style>3u) return -1;
+    const rb_u64 pixel_count=static_cast<rb_u64>(width)*height;
+    const rb_u64 plane_bytes=pixel_count*4u;
+    Range rd,rb,rm;
+    if (!range(dst,plane_bytes,1,rd) ||
+        !range(baseline,plane_bytes,1,rb) ||
+        !range(coverage,pixel_count,1,rm) ||
+        !disjoint(rd,rb) || !disjoint(rd,rm) || !disjoint(rb,rm))
+        return -1;
+    const bool oriented=style==3u && (tilt_x!=0.0f || tilt_y!=0.0f);
+    const float maxD=diameter0>diameter1?diameter0:diameter1;
+    const float absX=tilt_x<0?-tilt_x:tilt_x;
+    const float absY=tilt_y<0?-tilt_y:tilt_y;
+    const float strength=oriented?(absX>absY?absX:absY)/90.0f:0.0f;
+    const float majorScale=1.0f+0.75f*strength;
+    const float minorScale=1.0f-0.15f*strength;
+    const float border=maxD*0.5f*majorScale+1.0f;
+    const float minX=(x0<x1?x0:x1)-border;
+    const float minY=(y0<y1?y0:y1)-border;
+    const float maxX=(x0>x1?x0:x1)+border;
+    const float maxY=(y0>y1?y0:y1)+border;
+    if (maxX<0.0f || maxY<0.0f ||
+        minX>=static_cast<float>(width) ||
+        minY>=static_cast<float>(height)) return 0;
+    rb_i32 left=static_cast<rb_i32>(minX);
+    rb_i32 top=static_cast<rb_i32>(minY);
+    rb_i32 right=static_cast<rb_i32>(maxX);
+    rb_i32 bottom=static_cast<rb_i32>(maxY);
+    if (left<0)left=0;
+    if (top<0)top=0;
+    if (right>=static_cast<rb_i32>(width))right=static_cast<rb_i32>(width)-1;
+    if (bottom>=static_cast<rb_i32>(height))bottom=static_cast<rb_i32>(height)-1;
+    const float dx=x1-x0,dy=y1-y0,seg2=dx*dx+dy*dy;
+    const float tilt2=tilt_x*tilt_x+tilt_y*tilt_y;
+    const float alongScale=oriented?1.0f/(tilt2*majorScale*majorScale):0.0f;
+    const float acrossScale=oriented?1.0f/(tilt2*minorScale*minorScale):0.0f;
+    const float segAlong=dx*tilt_x+dy*tilt_y;
+    const float segAcross=dy*tilt_x-dx*tilt_y;
+    const float metric2=segAlong*segAlong*alongScale+
+        segAcross*segAcross*acrossScale;
+    const float colorAlpha=static_cast<float>(rgba&255u)/255.0f;
+    const float src[3]={
+        static_cast<float>((rgba>>24)&255u),
+        static_cast<float>((rgba>>16)&255u),
+        static_cast<float>((rgba>>8)&255u)
+    };
+    for (rb_i32 y=top;y<=bottom;++y) {
+        for (rb_i32 x=left;x<=right;++x) {
+            const float px=static_cast<float>(x)+0.5f-x0;
+            const float py=static_cast<float>(y)+0.5f-y0;
+            float t=0.0f;
+            if (oriented && metric2>0.0f) {
+                const float along=px*tilt_x+py*tilt_y;
+                const float across=py*tilt_x-px*tilt_y;
+                t=(along*segAlong*alongScale+
+                    across*segAcross*acrossScale)/metric2;
+            } else if (seg2>0.0f) {
+                t=(px*dx+py*dy)/seg2;
+            }
+            if (t<0.0f)t=0.0f;
+            if (t>1.0f)t=1.0f;
+            const float diameter=diameter0+(diameter1-diameter0)*t;
+            const float radius2=diameter*diameter*0.25f;
+            const float ex=px-t*dx,ey=py-t*dy;
+            float distance2=ex*ex+ey*ey;
+            if (oriented) {
+                const float along=ex*tilt_x+ey*tilt_y;
+                const float across=ey*tilt_x-ex*tilt_y;
+                distance2=along*along*alongScale+
+                    across*across*acrossScale;
+            }
+            const bool hard=style==0u || style==2u || hardness==1.0f;
+            if (hard ? distance2>radius2 : distance2>=radius2)continue;
+            float coverage=1.0f;
+            if (!hard) {
+                const float inner2=radius2*hardness*hardness;
+                if (distance2>inner2)
+                    coverage=(radius2-distance2)/(radius2-inner2);
+            }
+            const float alpha=(opacity0+(opacity1-opacity0)*t)*
+                coverage*(style==2u?1.0f:colorAlpha);
+            if (alpha<=0.0f)continue;
+            const rb_u64 index=static_cast<rb_u64>(y)*width+x;
+            const rb_u8 weight=static_cast<rb_u8>(alpha*255.0f+0.5f);
+            if (weight<=coverage[index]) continue;
+            coverage[index]=weight;
+            const float new_alpha=static_cast<float>(weight)/255.0f;
+            const rb_u8* original=baseline+index*4u;
+            rb_u8* pixel=dst+index*4u;
+            if (style==2u) {
+                const rb_u8 a=static_cast<rb_u8>(
+                    static_cast<float>(original[3])*(1.0f-new_alpha)+0.5f);
+                pixel[3]=a;
+                if (!a) pixel[0]=pixel[1]=pixel[2]=0;
+                else for (rb_u32 channel=0;channel<3u;++channel)
+                    pixel[channel]=original[channel];
+                continue;
+            }
+            const float da=static_cast<float>(original[3])/255.0f;
+            const float remain=da*(1.0f-new_alpha);
+            const float outA=new_alpha+remain;
+            if (outA<=0.0f)continue;
+            const float inv=1.0f/outA;
+            for (rb_u32 channel=0;channel<3u;++channel) {
+                float c=(src[channel]*new_alpha+
+                    static_cast<float>(original[channel])*remain)*inv;
+                if (c<0.0f)c=0.0f;
+                if (c>255.0f)c=255.0f;
+                pixel[channel]=static_cast<rb_u8>(c+0.5f);
+            }
+            pixel[3]=static_cast<rb_u8>(outA*255.0f+0.5f);
+        }
+    }
+    return 0;
+}
+
+
+
 /* Reversible, allocation-free flip of a native RGBA8 raster. */
 rb_i32 rb_flip_rgba(rb_u8* dst,rb_u64 capacity,
     rb_u32 width,rb_u32 height,rb_u32 axis) {
