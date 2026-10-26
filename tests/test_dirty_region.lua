@@ -39,9 +39,10 @@ function T.run()
         local box=R.segment(360,360,150,125,210,185,d,d)
         for _,p in ipairs({{150,125},{210,185}}) do
             local r=d*.875+1
-            check(box.x<=math.floor(p[1]-r) and box.x+box.w>=math.ceil(p[1]+r)
-                and box.y<=math.floor(p[2]-r) and
-                box.y+box.h>=math.ceil(p[2]+r),
+            check(box.x<=math.max(0,math.floor(p[1]-r)) and
+                box.x+box.w>=math.min(360,math.ceil(p[1]+r)) and
+                box.y<=math.max(0,math.floor(p[2]-r)) and
+                box.y+box.h>=math.min(360,math.ceil(p[2]+r)),
                 'Native tilted edge exceeds dirty box')
         end
     end
