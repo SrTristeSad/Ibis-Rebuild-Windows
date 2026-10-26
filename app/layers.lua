@@ -201,6 +201,11 @@ function Layers:beginEdit()
     local layer=self.doc.layers[self.doc.active_layer]
     self.pending={id=layer.id,before=Native.bytes(self:activeBuffer())}
 end
+function Layers:beginStrokeAccum()
+    assert(self.pending and not self.pending.coverage,
+        'Inicie uma edição antes da composição por pincelada')
+    self.pending.coverage=Native.strokeCoverage(self:activeBuffer())
+end
 function Layers:finishEdit()
     local pending=self.pending
     if not pending then return false end
@@ -422,9 +427,16 @@ end
 -- Continuous pressure is a native one-pass segment; undo remains per stroke.
 function Layers:pressureStroke(x0,y0,x1,y1,diameter0,diameter1,
     color,opacity0,opacity1,hardness,tiltX,tiltY,style,defer)
-    Native.pressureStroke(self:activeBuffer(),x0,y0,x1,y1,
-        diameter0,diameter1,color,opacity0,opacity1,
-        hardness,tiltX,tiltY,style)
+    if self.pending and self.pending.coverage then
+        Native.accumulatedStroke(self:activeBuffer(),
+            self.pending.before,self.pending.coverage,
+            x0,y0,x1,y1,diameter0,diameter1,color,
+            opacity0,opacity1,hardness,tiltX,tiltY,style)
+    else
+        Native.pressureStroke(self:activeBuffer(),x0,y0,x1,y1,
+            diameter0,diameter1,color,opacity0,opacity1,
+            hardness,tiltX,tiltY,style)
+    end
     if not defer then self:recompose() end
 end
 function Layers:softStroke(x0,y0,x1,y1,diameter,color,opacity,hardness)

@@ -94,6 +94,11 @@ class KernelTests(unittest.TestCase):
             'rb_draw_pressure_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, F32, U32, F32, F32, F32,
                 F32, F32, U32]),
+            'rb_draw_accumulated_stroke': (I32, [
+                C.POINTER(U8), U64, C.POINTER(U8), U64,
+                C.POINTER(U8), U64, U32, U32,
+                F32, F32, F32, F32, F32, F32, U32, F32, F32, F32,
+                F32, F32, U32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
             'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
@@ -845,6 +850,104 @@ class KernelTests(unittest.TestCase):
             self.assertEqual(bytes(invalid),original)
 
 
+
+    def test_whole_stroke_alpha_union_and_baseline(self):
+        width = height = 36
+        pixels = width * height
+        size = pixels * 4
+        color = 0x3b8fdbff
+        source = (U8 * size)()
+        result = (U8 * size)()
+        mask = (U8 * pixels)()
+        draw = self.lib.rb_draw_accumulated_stroke
+        def paint(a, b, opacity, style=0):
+            return draw(result, size, source, size, mask, pixels,
+                        width, height, *a, *b, 9., 9., color,
+                        opacity, opacity, .25, 0., 0., style)
+        center = (15 * width + 15) * 4
+        self.assertEqual(paint((15.5, 15.5), (15.5, 15.5), .4), 0)
+        first = bytes(result)
+        self.assertIn(result[center+3], (102, 103))
+        self.assertEqual(mask[15*width+15], result[center+3])
+        self.assertEqual(paint((14.5, 15.5), (18.5, 15.5), .4), 0)
+        self.assertEqual(result[center+3], first[center+3],
+            'Overlapping coverage must not darken the initial dot')
+        self.assertNotEqual(bytes(result), first,
+            'A new path may paint pixels outside the first dab')
+        self.assertEqual(paint((15.5, 12.5), (15.5, 17.5), .4), 0)
+        self.assertEqual(result[center+3], first[center+3],
+            'Intersecting segments must preserve maximum local coverage')
+        self.assertEqual(paint((15.5, 15.5), (15.5, 15.5), .8), 0)
+        self.assertEqual(result[center+3], 204)
+        self.assertEqual(paint((15.5, 15.5), (15.5, 15.5), .2), 0)
+        self.assertEqual(result[center+3], 204)
+        self.assertEqual(bytes(result[center:center+3]), bytes.fromhex('3b8fdb'))
+
+        baseline = (U8 * size)()
+        target = (U8 * size)()
+        erasure = (U8 * pixels)()
+        initial = bytes.fromhex('1656a0c8')
+        for pos in range(0, size, 4):
+            baseline[pos:pos+4] = initial
+            target[pos:pos+4] = initial
+        args = (target, size, baseline, size, erasure, pixels,
+                width, height, 10.5, 10.5, 25.5, 25.5,
+                9., 9., color, .55, .55, 1., 0., 0., 2)
+        self.assertEqual(draw(*args), 0)
+        affected = (18*width+18)*4
+        a = target[affected+3]
+        self.assertLess(a, 200)
+        self.assertGreater(a, 0)
+        self.assertEqual(bytes(target[affected:affected+3]), initial[:3])
+        self.assertEqual(draw(*args), 0)
+        self.assertEqual(target[affected+3], a,
+            'Repeated eraser segment must not erase the pixel twice')
+        self.assertEqual(draw(target, size, baseline, size, erasure, pixels,
+            width, height, 10.5,10.5,25.5,25.5,
+            9.,9.,color,.95,.95,1.,0.,0.,2),0)
+        self.assertLess(target[affected+3],a)
+        self.assertEqual(bytes(baseline[:4]), initial)
+
+        before, previous_mask = bytes(target), bytes(erasure)
+        bad = list(args)
+        bad[1] = size - 1
+        self.assertEqual(draw(*bad), -1)
+        self.assertEqual(bytes(target), before)
+        self.assertEqual(bytes(erasure), previous_mask)
+        bad = list(args)
+        bad[4] = target
+        self.assertEqual(draw(*bad), -1)
+        bad = list(args)
+        bad[8] = float('nan')
+        self.assertEqual(draw(*bad), -1)
+        self.assertEqual(bytes(target), before)
+        self.assertEqual(bytes(erasure), previous_mask)
+
+    def test_whole_stroke_soft_and_pressure_gradient(self):
+        w,h = 80,40
+        size=w*h*4
+        for style in (0,1,2,3):
+            base=(U8*size)()
+            if style==2:
+                self.lib.rb_clear(base,size,w,h,0x778899ff)
+            canvas=(U8*size)(*base)
+            coverage=(U8*(w*h))()
+            draw=self.lib.rb_draw_accumulated_stroke
+            args=(canvas,size,base,size,coverage,w*h,w,h,
+                5.5,19.5,65.5,19.5,2.,18.,0x8b3a66ff,
+                .2,.7,.25,55.,15.,style)
+            self.assertEqual(draw(*args),0)
+            at=lambda x,y:(y*w+x)*4+3
+            low=canvas[at(8,19)]
+            high=canvas[at(60,19)]
+            if style!=2:
+                self.assertGreater(high,low)
+            else:
+                self.assertLess(high,low)
+            previous=bytes(canvas)
+            self.assertEqual(draw(*args),0)
+            self.assertEqual(bytes(canvas),previous,
+                'Repeated pressure-gradient stroke re-composited a pixel')
     def test_tilt_zero_matches_old_hard_and_soft_brush(self):
         tilt=self.lib.rb_draw_tilt_stroke
         hard=self.lib.rb_draw_basic_stroke

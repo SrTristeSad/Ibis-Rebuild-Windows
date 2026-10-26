@@ -5437,22 +5437,19 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
+                    A.layerSession:beginStrokeAccum()
                     local diameter,opacity=PressureInfluence.resolve(
                         A.brushDiameter,A.brushOpacity,pressure,A.pressureCurve,
                         A.pressureSize,A.pressureOpacity)
-                    if A.tool=='erase' then
-                        A.layerSession:erase(px,py,px,py,diameter,opacity)
-                    elseif A.inkPenId~=nil and A.penTiltEnabled and
-                        (A.inkTiltX~=0 or A.inkTiltY~=0) then
-                        A.layerSession:tiltStroke(px,py,px,py,diameter,A.color,
-                            opacity,A.brushStyle=='soft' and 0.25 or 1,
-                            A.inkTiltX,A.inkTiltY)
-                    elseif A.brushStyle=='soft' then
-                        A.layerSession:softStroke(px,py,px,py,diameter,
-                            A.color,opacity,0.25)
-                    else
-                        A.layerSession:stroke(px,py,px,py,diameter,A.color,opacity)
-                    end
+                    local isTilt=A.tool=='brush' and A.inkPenId~=nil and
+                        A.penTiltEnabled and (A.inkTiltX~=0 or A.inkTiltY~=0)
+                    local style=A.tool=='erase' and 2 or
+                        isTilt and 3 or A.brushStyle=='soft' and 1 or 0
+                    A.layerSession:pressureStroke(px,py,px,py,
+                        diameter,diameter,A.color,opacity,opacity,
+                        A.brushStyle=='soft' and 0.25 or 1,
+                        isTilt and A.inkTiltX or 0,
+                        isTilt and A.inkTiltY or 0,style)
                     A.lastPressure=pressure
                     A.drawing=true;A.lastStrokeX=px;A.lastStrokeY=py
                     A.stabilizer=Stabilizer.new(A.stabilization,px,py)
