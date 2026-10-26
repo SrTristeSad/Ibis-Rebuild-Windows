@@ -91,6 +91,9 @@ class KernelTests(unittest.TestCase):
                 F32, F32, F32, F32, F32, U32, F32, F32]),
             'rb_draw_tilt_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
                 F32, F32, F32, F32, F32, U32, F32, F32, F32, F32]),
+            'rb_draw_pressure_stroke': (I32, [C.POINTER(U8), U64, U32, U32,
+                F32, F32, F32, F32, F32, F32, U32, F32, F32, F32,
+                F32, F32, U32]),
             'rb_compose_normal': (I32, [C.POINTER(U8), U64, C.POINTER(U8), U64,
                 U32, U32, F32]),
             'rb_move_rect_rgba': (I32, [C.POINTER(U8), U64, U32, U32,
@@ -778,6 +781,69 @@ class KernelTests(unittest.TestCase):
         self.assertGreater(line[at(12,8)+3],0)
         self.assertGreater(line[at(21,8)+3],0)
         self.assertEqual(line[at(12,14)+3],0)
+
+    def test_variable_pressure_single_pass_gradient_and_compatibility(self):
+        draw=self.lib.rb_draw_pressure_stroke
+        width,height=82,31
+        size=width*height*4
+        color=0x6ca5e3ff
+        def pixel(plane,x,y):
+            return bytes(plane[(y*width+x)*4:(y*width+x+1)*4])
+        for style in range(4):
+            canvas=(U8*size)()
+            if style==2:
+                self.assertEqual(self.lib.rb_clear(canvas,size,width,height,
+                    0x54aaccff),0)
+            self.assertEqual(draw(canvas,size,width,height,8.5,15.5,
+                72.5,15.5,3.0,15.0,color,.2,.9,.25,45.,20.,style),0)
+            # Thin/transparent beginning transitions continuously toward
+            # the thick/high-opacity endpoint: no independent subsegments.
+            left=pixel(canvas,10,15)[3]
+            middle=pixel(canvas,41,15)[3]
+            right=pixel(canvas,70,15)[3]
+            if style!=2:
+                self.assertTrue(0<left<middle<right<=255,
+                    (style,left,middle,right))
+                self.assertEqual(pixel(canvas,10,19)[3],0,
+                    'Thin start must not use the endpoint diameter')
+            else:
+                self.assertTrue(0<=right<middle<left<255,
+                    (style,left,middle,right))
+            legacy=(U8*size)()
+            same=(U8*size)()
+            if style==2:
+                self.lib.rb_clear(legacy,size,width,height,0x54aaccff)
+                self.lib.rb_clear(same,size,width,height,0x54aaccff)
+            old={
+                0:lambda p:self.lib.rb_draw_basic_stroke(p,size,width,height,
+                    5.5,13.5,65.5,13.5,9.,color,.45),
+                1:lambda p:self.lib.rb_draw_feather_stroke(p,size,width,height,
+                    5.5,13.5,65.5,13.5,9.,color,.45,.25),
+                2:lambda p:self.lib.rb_erase_basic_stroke(p,size,width,height,
+                    5.5,13.5,65.5,13.5,9.,.45),
+                3:lambda p:self.lib.rb_draw_tilt_stroke(p,size,width,height,
+                    5.5,13.5,65.5,13.5,9.,color,.45,.25,45.,20.)
+            }
+            self.assertEqual(old[style](legacy),0)
+            self.assertEqual(draw(same,size,width,height,5.5,13.5,65.5,13.5,
+                9.,9.,color,.45,.45,.25,45.,20.,style),0)
+            self.assertEqual(bytes(legacy),bytes(same),
+                'Constant pressure must match older C++ raster byte-for-byte')
+        # Reject bad inputs atomically without touching RGBA bytes.
+        invalid=(U8*size)(*([0x37]*size))
+        original=bytes(invalid)
+        for d0,d1,o0,o1,x1,tilt,style in (
+            (0.,5.,.5,.5,10.,0.,0),
+            (4.,257.,.5,.5,10.,0.,0),
+            (4.,5.,-1.,.5,10.,0.,0),
+            (4.,5.,.5,2.,10.,0.,0),
+            (4.,5.,.5,.5,math.nan,0.,0),
+            (4.,5.,.5,.5,10.,91.,3),
+            (4.,5.,.5,.5,10.,0.,4)):
+            self.assertEqual(draw(invalid,size,width,height,
+                5.5,15.5,x1,15.5,d0,d1,color,o0,o1,.25,tilt,0.,style),-1)
+            self.assertEqual(bytes(invalid),original)
+
 
     def test_tilt_zero_matches_old_hard_and_soft_brush(self):
         tilt=self.lib.rb_draw_tilt_stroke
