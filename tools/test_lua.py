@@ -77,6 +77,9 @@ def run_tests(runtime_path, output):
         compare_program = "return require('json').encode(require('tests.test_brush_inspector_compare').run())"
         compare = json.loads(state.execute(compare_program))
         assert compare.get('passed') and compare.get('assertions') >= 25
+        curve_program = "return require('json').encode(require('tests.test_pressure_curves').run())"
+        curves = json.loads(state.execute(curve_program))
+        assert curves.get('passed') and curves.get('assertions') == 421
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():
@@ -136,6 +139,11 @@ def run_tests(runtime_path, output):
                               +json.dumps(pressure_root)+"))")
             pressure_result=json.loads(native_state.execute(pressure_program))
             assert pressure_result.get('passed') and pressure_result.get('touch_width') and pressure_result.get('rbd2_roundtrip')
+            curves_root=(output / ('pressure-curves-' + str(time.time_ns()))).as_posix()
+            curves_native_program=("return require('json').encode(require('tests.test_pressure_curves_native').run("
+                                   +json.dumps(curves_root)+"))")
+            curves_native=json.loads(native_state.execute(curves_native_program))
+            assert curves_native.get('passed') and curves_native.get('alpha_response') and curves_native.get('rbd2_roundtrip')
             tilt_root=(output / ('tilt-brush-' + str(time.time_ns()))).as_posix()
             tilt_program=("return require('json').encode(require('tests.test_tilt_brush').run("
                           +json.dumps(tilt_root)+"))")
