@@ -870,10 +870,12 @@ class KernelTests(unittest.TestCase):
         self.assertIn(result[center+3], (102, 103))
         self.assertEqual(mask[15*width+15], result[center+3])
         self.assertEqual(paint((14.5, 15.5), (18.5, 15.5), .4), 0)
-        self.assertEqual(bytes(result), first,
-            'Repeated overlapping coverage must not darken the initial dot')
+        self.assertEqual(result[center+3], first[center+3],
+            'Overlapping coverage must not darken the initial dot')
+        self.assertNotEqual(bytes(result), first,
+            'A new path may paint pixels outside the first dab')
         self.assertEqual(paint((15.5, 12.5), (15.5, 17.5), .4), 0)
-        self.assertEqual(bytes(result), first,
+        self.assertEqual(result[center+3], first[center+3],
             'Intersecting segments must preserve maximum local coverage')
         self.assertEqual(paint((15.5, 15.5), (15.5, 15.5), .8), 0)
         self.assertEqual(result[center+3], 204)
