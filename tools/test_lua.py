@@ -80,6 +80,9 @@ def run_tests(runtime_path, output):
         curve_program = "return require('json').encode(require('tests.test_pressure_curves').run())"
         curves = json.loads(state.execute(curve_program))
         assert curves.get('passed') and curves.get('assertions') == 420
+        influence_program = "return require('json').encode(require('tests.test_pressure_influence').run())"
+        influence = json.loads(state.execute(influence_program))
+        assert influence.get('passed') and influence.get('assertions') >= 3000
     assert state.close_succeeded
     native_ffi = {'status': 'not-run', 'reason': 'compiled DLL absent; separate native suite must fail'}
     if (ROOT / 'build/rebuild_core.dll').is_file():
@@ -144,6 +147,11 @@ def run_tests(runtime_path, output):
                                    +json.dumps(curves_root)+"))")
             curves_native=json.loads(native_state.execute(curves_native_program))
             assert curves_native.get('passed') and curves_native.get('alpha_response') and curves_native.get('rbd2_roundtrip')
+            influence_root=(output / ('pressure-influence-' + str(time.time_ns()))).as_posix()
+            influence_native_program=("return require('json').encode(require('tests.test_pressure_influence_native').run("
+                                       +json.dumps(influence_root)+"))")
+            influence_native=json.loads(native_state.execute(influence_native_program))
+            assert influence_native.get('passed') and influence_native.get('raster_modes') and influence_native.get('rbd2_roundtrip')
             tilt_root=(output / ('tilt-brush-' + str(time.time_ns()))).as_posix()
             tilt_program=("return require('json').encode(require('tests.test_tilt_brush').run("
                           +json.dumps(tilt_root)+"))")
