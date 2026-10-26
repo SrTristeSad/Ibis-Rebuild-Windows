@@ -7,6 +7,7 @@ local Colors=require('colors')
 local ColorPanel=require('color_window')
 local Stabilizer=require('stroke_stabilizer')
 local Pressure=require('touch_pressure')
+local PressureCurves=require('pressure_curves')
 local Ink=require('windows_ink')
 local View=require('canvas_view')
 local EditorTools=require('editor_tools')
@@ -41,7 +42,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
     '09-opacidade-camadas.png'}
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -251,8 +252,9 @@ local function paintBrushSegment(x,y,pressure)
     local previousX,previousY=A.lastStrokeX,A.lastStrokeY
     A.lastPressure=Pressure.normalize(pressure or A.lastPressure)
     if x==previousX and y==previousY then return end
-    local diameter=Pressure.diameter(A.brushDiameter,A.lastPressure)
-    local opacity=Pressure.opacity(A.brushOpacity,A.lastPressure)
+    local mappedPressure=PressureCurves.apply(A.lastPressure,A.pressureCurve)
+    local diameter=Pressure.diameter(A.brushDiameter,mappedPressure)
+    local opacity=Pressure.opacity(A.brushOpacity,mappedPressure)
     if A.tool=='erase' then
         A.layerSession:erase(previousX,previousY,x,y,diameter,opacity)
     elseif A.inkPenId~=nil and A.penTiltEnabled and
@@ -4233,15 +4235,21 @@ local function drawEditor(w,h)
                 false,A.fillTolerance==255)
         else
             if A.tool=='brush' then
-                button(A.penTiltEnabled and 'Inclinação Ink: ativa'
-                    or 'Inclinação Ink: desligada',
-                    panel+20,416,228,28,function()
+                button(A.penTiltEnabled and 'Ink: ativa'
+                    or 'Ink: desligada',
+                    panel+20,416,108,28,function()
                         finishStroke()
                         A.penTiltEnabled=not A.penTiltEnabled
                     end,A.penTiltEnabled)
             else
-                text('PINCEL PRÓPRIO · NÃO EQUIVALENTE',panel+20,429,'small','muted')
+                text('BORRACHA',panel+20,424,'small','muted')
             end
+            button('Curva: '..PressureCurves.LABELS[A.pressureCurve],
+                panel+140,416,108,28,function()
+                    finishStroke()
+                    A.pressureCurve=PressureCurves.next(A.pressureCurve)
+                    status('Pressão: curva '..PressureCurves.LABELS[A.pressureCurve])
+                end,A.pressureCurve~='linear')
             button('−',panel+20,456,46,32,function()
                 A.brushDiameter=math.max(1,A.brushDiameter-2)end)
             text(('Diâmetro %.0f px'):format(A.brushDiameter),panel+77,464,'small')
@@ -5302,8 +5310,9 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
-                    local diameter=Pressure.diameter(A.brushDiameter,pressure)
-                    local opacity=Pressure.opacity(A.brushOpacity,pressure)
+                    local mappedPressure=PressureCurves.apply(pressure,A.pressureCurve)
+                    local diameter=Pressure.diameter(A.brushDiameter,mappedPressure)
+                    local opacity=Pressure.opacity(A.brushOpacity,mappedPressure)
                     if A.tool=='erase' then
                         A.layerSession:erase(px,py,px,py,diameter,opacity)
                     elseif A.inkPenId~=nil and A.penTiltEnabled and
