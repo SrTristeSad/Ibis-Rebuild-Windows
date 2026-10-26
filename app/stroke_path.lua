@@ -57,6 +57,19 @@ function Path:sample(x,y,p,emit)
         self.rawP=p
         return 0
     end
+    -- Preserve the legacy one-segment raster on very short first moves.
+    -- Splitting these into two tiny segments would overpaint translucent
+    -- brush tips, most noticeably on a soft 1-pixel drag.
+    if self.emitted==0 then
+        local dx,dy=x-self.rawX,y-self.rawY
+        if dx*dx+dy*dy<=9 then
+            emit(x,y,p)
+            self.cx=x;self.cy=y;self.cp=p
+            self.rawX=x;self.rawY=y;self.rawP=p
+            self.emitted=1
+            return 1
+        end
+    end
     -- Quadratic between successive midpoints: a new pointer packet only
     -- adds a bounded curve, with no prediction outside received coordinates.
     local ex,ey=(self.rawX+x)*0.5,(self.rawY+y)*0.5
