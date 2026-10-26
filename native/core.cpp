@@ -987,14 +987,14 @@ rb_i32 rb_draw_accumulated_stroke(rb_u8* dst, rb_u64 capacity,
             }
             const bool hard=style==0u || style==2u || hardness==1.0f;
             if (hard ? distance2>radius2 : distance2>=radius2)continue;
-            float coverage=1.0f;
+            float featherCoverage=1.0f;
             if (!hard) {
                 const float inner2=radius2*hardness*hardness;
                 if (distance2>inner2)
-                    coverage=(radius2-distance2)/(radius2-inner2);
+                    featherCoverage=(radius2-distance2)/(radius2-inner2);
             }
             const float alpha=(opacity0+(opacity1-opacity0)*t)*
-                coverage*(style==2u?1.0f:colorAlpha);
+                featherCoverage*(style==2u?1.0f:colorAlpha);
             if (alpha<=0.0f)continue;
             const rb_u64 index=static_cast<rb_u64>(y)*width+x;
             const rb_u8 weight=static_cast<rb_u8>(alpha*255.0f+0.5f);
