@@ -23,6 +23,8 @@ int32_t rb_transform_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32
 int32_t rb_flood_fill_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t*,uint64_t,uint8_t*,uint64_t,uint32_t*);
 int32_t rb_draw_shape_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,int32_t,int32_t,int32_t,int32_t,uint32_t,uint32_t,uint32_t,uint32_t);
 int32_t rb_compose_normal(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float);
+int32_t rb_clear_rect_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t,uint32_t);
+int32_t rb_compose_normal_rect(uint8_t*,uint64_t,const uint8_t*,uint64_t,uint32_t,uint32_t,float,uint32_t,uint32_t,uint32_t,uint32_t);
 int32_t rb_flip_rgba(uint8_t*,uint64_t,uint32_t,uint32_t,uint32_t);
 ]]
 local N={available=false,errors={}}
@@ -216,6 +218,41 @@ function N.composite(destination,source,opacity)
     assert(N.lib.rb_compose_normal(destination.bytes,destination.size,source.bytes,
         source.size,destination.width,destination.height,opacity)==0,
         'Erro ao compor plano RGBA C++')
+end
+local function checkedRect(buffer,rect)
+    assert(rect and rect.x and rect.y and rect.w and rect.h and
+        rect.x%1==0 and rect.y%1==0 and rect.w%1==0 and rect.h%1==0 and
+        rect.x>=0 and rect.y>=0 and rect.w>=1 and rect.h>=1 and
+        rect.x+rect.w<=buffer.width and rect.y+rect.h<=buffer.height,
+        'Região RGBA fora do canvas')
+end
+function N.clearRect(buffer,rect)
+    ready();checkedRect(buffer,rect)
+    assert(N.lib.rb_clear_rect_rgba(buffer.bytes,buffer.size,
+        buffer.width,buffer.height,rect.x,rect.y,rect.w,rect.h)==0,
+        'Erro ao limpar região do canvas')
+end
+function N.compositeRect(destination,source,opacity,rect)
+    ready();checkedRect(destination,rect)
+    assert(destination~=source and
+        destination.width==source.width and
+        destination.height==source.height,'Camadas incompatíveis')
+    assert(N.lib.rb_compose_normal_rect(destination.bytes,destination.size,
+        source.bytes,source.size,destination.width,destination.height,
+        opacity,rect.x,rect.y,rect.w,rect.h)==0,
+        'Erro ao compor região do canvas')
+end
+-- Only the affected patch is materialized as Lua bytes; never copies the
+-- whole bitmap on incremental updates.
+function N.regionBytes(buffer,rect)
+    ready();checkedRect(buffer,rect)
+    local rowbytes=rect.w*4
+    local block=ffi.new('uint8_t[?]',rowbytes*rect.h)
+    for j=0,rect.h-1 do
+        local offset=((rect.y+j)*buffer.width+rect.x)*4
+        ffi.copy(block+j*rowbytes,buffer.bytes+offset,rowbytes)
+    end
+    return ffi.string(block,rowbytes*rect.h)
 end
 function N.readPixel(buffer,x,y)
     ready();local out=ffi.new('uint32_t[1]')

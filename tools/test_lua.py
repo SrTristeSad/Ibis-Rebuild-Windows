@@ -83,6 +83,9 @@ def run_tests(runtime_path, output):
         influence_program = "return require('json').encode(require('tests.test_pressure_influence').run())"
         influence = json.loads(state.execute(influence_program))
         assert influence.get('passed') and influence.get('assertions') >= 3000
+        region_program="return require('json').encode(require('tests.test_dirty_region').run())"
+        region=json.loads(state.execute(region_program))
+        assert region.get('passed') and region.get('bounds_clamped') and region.get('curves_bounded')
         path_program = "return require('json').encode(require('tests.test_stroke_path').run())"
         spatial_path = json.loads(state.execute(path_program))
         assert spatial_path.get('passed') and spatial_path.get('adaptive') and spatial_path.get('exact_release')
@@ -165,6 +168,11 @@ def run_tests(runtime_path, output):
                                 +json.dumps(accumulated_root)+"))")
             accumulated=json.loads(native_state.execute(accumulated_program))
             assert accumulated.get('passed') and accumulated.get('no_darkening') and accumulated.get('undo_redo') and accumulated.get('rbd2_roundtrip')
+            partial_root=(output / ('partial-composition-' + str(time.time_ns()))).as_posix()
+            partial_program=("return require('json').encode(require('tests.test_partial_canvas').run("
+                             +json.dumps(partial_root)+"))")
+            partial=json.loads(native_state.execute(partial_program))
+            assert partial.get('passed') and partial.get('rgba_identical') and partial.get('rbd2_roundtrip')
             path_root=(output / ('curved-spatial-path-' + str(time.time_ns()))).as_posix()
             path_program=("return require('json').encode(require('tests.test_stroke_path').runNative("
                           +json.dumps(path_root)+"))")
