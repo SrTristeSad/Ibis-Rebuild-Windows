@@ -118,8 +118,10 @@ assert(R.readPixel(normal,0,0)==0,'Transparent hidden RGB not cleared')
 -- A via de linhas opacas deve continuar correta com a configuracao
 -- explicitamente ligada/desligada, independente do sistema operacional.
 local originalRowFlag=R.opaqueRowCopyEnabled
+local originalDestFlag=R.opaqueDestFastPathEnabled
 for _,enable in ipairs({false,true}) do
     R.opaqueRowCopyEnabled=enable
+    R.opaqueDestFastPathEnabled=enable
     local background=R.buffer(W,H)
     R.clear(background,0x547abfff)
     R.pixel(background,9,8,0x22ab3300)
@@ -131,6 +133,7 @@ for _,enable in ipairs({false,true}) do
         'Row fast-path toggle changed RGBA: '..tostring(enable))
 end
 R.opaqueRowCopyEnabled=originalRowFlag
+R.opaqueDestFastPathEnabled=originalDestFlag
 
 -- Stress deterministicamente dezenas de milhares de misturas com
 -- destino 100% opaco, incluindo opacidades fracionarias, para detectar
@@ -139,6 +142,8 @@ math.randomseed(130057)
 local cell=16
 local patch={x=0,y=0,w=cell,h=cell}
 local stressCases=0
+for _,enabled in ipairs({false,true}) do
+R.opaqueDestFastPathEnabled=enabled
 for _,op in ipairs({0,.0039,.125,.333333333,.5,.67,.995,1}) do
     for pass=1,14 do
         local from=R.buffer(cell,cell)
@@ -177,6 +182,8 @@ for _,op in ipairs({0,.0039,.125,.333333333,.5,.67,.995,1}) do
         stressCases=stressCases+cell*cell
     end
 end
+end
+R.opaqueDestFastPathEnabled=originalDestFlag
 print(('Opaque destination regression: %d RGBA pixels: OK'):format(stressCases))
 
 print(('RGBA opaque-row compositor: %d reference comparisons, 2/4/8 layers: OK'):format(cases))
