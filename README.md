@@ -1,5 +1,8 @@
 # Ibis Rebuild Windows
 
+> **Branch de migração para Lua (PR #66):** o motor de desenho, ferramentas raster, interface e rotinas novas de build/testes usam LuaJIT/LÖVE. Esta migração ainda aguarda validação Windows real e não foi integrada à `main`. O código legado C++/Python e o workflow antigo ainda permanecem no repositório temporariamente; não são dependências do novo mecanismo de pintura. Veja [o andamento e os limites da migração](docs/LUA_ONLY_MIGRATION.md).
+
+
 Reconstrução **independente e progressiva** dos fluxos do ibisPaint Android 14.1.2 para **Windows x64**, usando LuaJIT/LÖVE 11.5 na interface e C++ no processamento. **Sem WebView, sem Inkora e sem redistribuição de código ou binários Android.** Não existe paridade completa com o aplicativo de referência.
 
 ## Estado executável comprovado
