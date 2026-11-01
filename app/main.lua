@@ -33,6 +33,7 @@ local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
 local IbisTools=require('ibis_visual_tools')
 local IbisPanels=require('ibis_visual_panels')
+local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -48,7 +49,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
     '09-opacidade-camadas.png','10-seletor-ferramentas.png'}
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
 -- Visual language: neutral studio workspace, clear blue tool state and
@@ -4040,7 +4041,17 @@ local function drawGallery(w,h)
     button('Nova tela',w-322,113,140,42,function()modal('new')end,true,not Native.available)
     button('Nova pasta',w-168,113,126,42,function()modal('folder')end)
     button('Raiz',44,206,70,32,function()setFolder('')end,A.folder=='')
-    if A.folder~='' then text('/ '..A.folder,127,213,'small','muted') end
+    if A.folder~='' then
+        fitted('/ '..A.folder,125,213,'small','muted',90)
+    end
+    for i,item in ipairs(GalleryUI.FILTERS) do
+        local px=238+(i-1)*116
+        button(item.name,px,205,108,33,function()
+            A.galleryFilter=item.id
+        end,A.galleryFilter==item.id)
+    end
+    text(('%d desenhos · %d pastas'):format(#A.projects,#A.folders),
+        w-260,212,'small','muted')
     local index=0
     local function card(label,sub,folder,fn,project)
         index=index+1
@@ -4093,14 +4104,32 @@ local function drawGallery(w,h)
         end
         A.buttons[#A.buttons+1]={x=x,y=y,w=r.w,h=r.h,fn=guard(fn)}
     end
-    for _,folder in ipairs(A.folders) do card(folder.name,'Pasta',true,function()setFolder(folder.id)end) end
-    for _,doc in ipairs(A.projects) do
-        card(doc.name,doc.width..' × '..doc.height..' · r'..(doc.revision or 1),
-            false,function()openDoc(A.store:openProject(doc.id))end,doc)
+    if GalleryUI.filter(A.galleryFilter,'folder') then
+        for _,folder in ipairs(A.folders) do
+            card(folder.name,'Pasta',true,function()setFolder(folder.id)end)
+        end
+    end
+    if GalleryUI.filter(A.galleryFilter,'work') then
+        for _,doc in ipairs(A.projects) do
+            card(doc.name,doc.width..' × '..doc.height..
+                ' · r'..(doc.revision or 1),
+                false,function()openDoc(A.store:openProject(doc.id))end,doc)
+        end
     end
     if index==0 then
-        text('Sua galeria está vazia',44,297,'title','muted')
-        text('Toque em Nova tela para começar a desenhar.',44,339,'body','muted')
+        local mx=math.floor(w/2)
+        box(mx-112,292,224,186,'card')
+        c('line')
+        love.graphics.rectangle('line',mx-112,292,224,186,7,7)
+        love.graphics.rectangle('line',mx-44,321,88,78,4,4)
+        c('accent')
+        love.graphics.line(mx-19,360,mx+19,360)
+        love.graphics.line(mx,341,mx,379)
+        text(A.galleryFilter=='folders' and 'Nenhuma pasta' or
+            A.galleryFilter=='works' and 'Nenhum desenho' or
+            'Sua galeria está vazia',mx-104,425,'body','muted')
+        button('Criar desenho',mx-91,489,182,38,
+            function()modal('new')end,true,not Native.available)
     end
 end
 -- A true renderer-produced single dab, composited over the canvas as
@@ -4175,19 +4204,8 @@ local function drawEditor(w,h)
         button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
             w-357,15,134,33,toggleFocusMode,A.focusMode)
     else
-        if A.focusMode then
-            button('Mostrar barra · Tab',20,78,176,34,toggleFocusMode)
-        else
-            iconButton('undo',20,78,43,34,undoDoc,false,
-                not A.layerSession:canUndo())
-            iconButton('redo',67,78,43,34,redoDoc,false,
-                not A.layerSession:canRedo())
-            button('−',118,78,43,34,function()zoomCanvas(1/1.25)end)
-            button('+',165,78,43,34,function()zoomCanvas(1.25)end)
-            button('Encaixar',217,78,90,34,fit)
-            text('Desenho · '..A.doc.width..' × '..A.doc.height,
-                326,87,'small','muted')
-        end
+        -- Controles compactos são desenhados depois do canvas, para não
+        -- serem encobertos pelo fundo cinza nem terem hitboxes invisíveis.
     end
     if A.compactUi then
         button('Salvar',w-282,15,80,33,saveDoc,A.dirty)
@@ -4253,6 +4271,24 @@ local function drawEditor(w,h)
     love.graphics.pop()
     drawBrushTip(w,h)
     love.graphics.setScissor()
+    if A.compactUi then
+        if A.focusMode then
+            button('Mostrar interface · Tab',18,78,196,38,toggleFocusMode)
+        else
+            box(16,75,358,49,'panel')
+            iconButton('undo',21,81,39,35,undoDoc,false,
+                not A.layerSession:canUndo())
+            iconButton('redo',63,81,39,35,redoDoc,false,
+                not A.layerSession:canRedo())
+            button('−',111,81,37,35,
+                function()zoomCanvas(1/1.25)end)
+            button('+',152,81,37,35,
+                function()zoomCanvas(1.25)end)
+            button('Ajustar',197,81,79,35,fit)
+            text(('%d%%'):format(math.floor(A.zoom*100+.5)),
+                288,89,'small','muted')
+        end
+    end
     -- View-only controls remain outside the raster and layer history.
     local dockY=h-116
     if not A.compactUi then
@@ -4791,7 +4827,77 @@ local function drawEditor(w,h)
         end
     end
 end
+local function drawNewCanvasDialog(w,h)
+    local r=GalleryUI.dialog(w,h)
+    local m=A.modal
+    box(r.x,r.y,r.w,r.h,'panel')
+    c('accent')
+    love.graphics.rectangle('fill',r.x,r.y,r.w,3)
+    text('Nova tela',r.x+28,r.y+17,'title')
+    text('Escolha as dimensões da sua obra',
+        r.x+28,r.y+56,'small','muted')
+    local labels={'Nome','Largura (px)','Altura (px)'}
+    for i,field in ipairs(GalleryUI.fields(r)) do
+        text(labels[i],field.x,field.y-24,'small','muted')
+        box(field.x,field.y,field.w,field.h,'card')
+        if m.focus==i then
+            c('accent')
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle('line',field.x+.5,field.y+.5,
+                field.w-1,field.h-1,5,5)
+        end
+        fitted(m.values[i]..(m.focus==i and '|' or ''),
+            field.x+12,field.y+8,'body','text',field.w-22)
+        A.buttons[#A.buttons+1]={x=field.x,y=field.y,w=field.w,h=field.h,
+            fn=function()m.focus=i end}
+    end
+    local preview=GalleryUI.preview(r)
+    box(preview.x,preview.y,preview.w,preview.h,'card')
+    text('PRÉVIA DE PROPORÇÃO',preview.x+15,preview.y+9,'small','muted')
+    local area=GalleryUI.aspectViewport(r,m.values[2],m.values[3])
+    if area then
+        local tile=12
+        for yy=0,area.h-1,tile do
+            for xx=0,area.w-1,tile do
+                local v=(math.floor(xx/tile)+math.floor(yy/tile))%2==0
+                    and .87 or .71
+                love.graphics.setColor(v,v,v,1)
+                love.graphics.rectangle('fill',area.x+xx,area.y+yy,
+                    math.min(tile,area.w-xx),
+                    math.min(tile,area.h-yy))
+            end
+        end
+        c('line')
+        love.graphics.rectangle('line',area.x,area.y,area.w,area.h)
+    else
+        text('Dimensões inválidas',preview.x+34,
+            preview.y+104,'body','warn')
+    end
+    text('TAMANHOS RÁPIDOS',r.x+28,r.y+326,'small','muted')
+    for i,preset in ipairs(GalleryUI.PRESETS) do
+        local btn=GalleryUI.presetButton(r,i)
+        button(preset.name,btn.x,btn.y,btn.w,btn.h,function()
+            m.values[2]=tostring(preset.w)
+            m.values[3]=tostring(preset.h)
+            m.focus=1
+        end,m.values[2]==tostring(preset.w)
+            and m.values[3]==tostring(preset.h))
+    end
+    text('RGBA transparente · máximo 2048 × 2048',
+        r.x+28,r.y+398,'small','muted')
+    button('Cancelar',r.x+28,r.y+427,236,38,function()
+        A.modal=nil
+        love.keyboard.setTextInput(false)
+    end)
+    button('Criar tela',r.x+278,r.y+427,334,38,
+        submitModal,true,not GalleryUI.aspectViewport(r,m.values[2],m.values[3]))
+end
 local function drawModal(w,h)
+    if A.modal.kind=='new' then
+        love.graphics.setColor(0,0,0,.70)
+        love.graphics.rectangle('fill',0,0,w,h)
+        return drawNewCanvasDialog(w,h)
+    end
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
     local x,y=w/2-220,h/2-210;box(x,y,440,420,'panel')
     local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or
