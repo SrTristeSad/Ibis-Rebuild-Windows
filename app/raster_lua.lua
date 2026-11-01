@@ -123,4 +123,5 @@ end
 function Raster.composite(dst, src, opacity)
     compose(dst, src, opacity, {x=0,y=0,w=dst.width,h=dst.height})
 end
+require('raster_stroke')(Raster)
 return Raster
