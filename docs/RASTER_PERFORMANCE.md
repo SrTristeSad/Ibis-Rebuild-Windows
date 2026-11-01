@@ -1,5 +1,14 @@
 # Desempenho do raster Lua — medições reproduzíveis
 
+> **Estado de uso:** o compositor estável por pixel voltou a ser o
+> **padrão no Windows e no Linux**. Os atalhos experimentais de cópia
+> de linhas opacas e mistura sobre destino opaco permanecem isolados em
+> `app/raster_experimental.lua` com
+> `Raster.useExperimentalCompositor=false` inicialmente. Testes comparam
+> ambos, mas os resultados de desempenho oscilam entre runners e não
+> justificam ativação automática. Esta configuração preserva a
+> implementação anterior até estudos mais conclusivos.
+
 ## O que foi otimizado
 
 `app/raster_lua.lua` conserva a fórmula source-over de composição normal
@@ -54,13 +63,13 @@ No Linux: `luajit tests/bench_raster_composition.lua`.
 
 ## Otimização de linhas opacas e destino opaco — 01/11/2026
 
-O compositor percorre as linhas de um retângulo para identificar fontes
+O compositor **experimental** percorre as linhas de um retângulo para identificar fontes
 totalmente opacas em opacidade 100%. Nessas linhas, utiliza **ffi.copy**
 (RGBA8) em lugar de compor cada pixel. Quando o destino está opaco e a
 fonte é semitransparente, evita divisões pelo alfa de saída, mantendo o
 arredondamento original.
 
-A implementação **não guarda metadados de opacidade**: cada chamada
+O caminho experimental **não guarda metadados de opacidade**: cada chamada
 reavalia os alfas, inclusive após desenhos, borracha e transformações.
 Regiões parcialmente transparentes continuam usando source-over.
 
@@ -98,3 +107,14 @@ Para repetir em LuaJIT: executar
 São casos controlados e não reproduzem toda a complexidade de um
 documento real. Próximo passo: perfilar composição semitransparente,
 histórico de edição e custo de upload para GPU no Windows.
+
+### Decisão de estabilidade após repetição dos benchmarks
+
+Medições posteriores no mesmo runner mostraram oscilações relevantes,
+com regressões em alguns casos Windows e Linux. Por isso a aplicação
+**não habilita** os atalhos de linhas opacas e destino opaco por padrão.
+A pesquisa permanece reproduzível e os testes RGBA continuam cobrindo
+ambos os caminhos. O otimizador experimental pode ser habilitado
+explicitamente em testes atribuindo
+`Raster.useExperimentalCompositor=true`, mas não é recomendado em
+versões de produção sem perfilamento de hardware real.
