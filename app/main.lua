@@ -31,6 +31,7 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
+local IbisTools=require('ibis_visual_tools')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -54,18 +55,27 @@ local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
 -- A denser gray and charcoal editing chrome, referencing the official tool
 -- and layer screenshots. The desktop palette remains untouched.
-local compactPalette={bg={.215,.222,.229},panel={.125,.133,.145},
-    card={.210,.220,.231},line={.345,.365,.380},
-    text={.95,.96,.97},muted={.70,.73,.76},
-    accent={.34,.69,1},selected={.14,.29,.43},
-    canvas={.25,.26,.27},warn={1,.72,.35}}
+local compactPalette={bg={.60,.61,.62},panel={.205,.215,.227},
+    card={.29,.305,.325},line={.43,.45,.47},
+    text={.96,.97,.98},muted={.76,.79,.82},
+    accent={.36,.70,1},selected={.20,.36,.53},
+    canvas={.57,.58,.59},warn={1,.72,.35}}
+local galleryPalette={
+    bg={.915,.927,.937},panel={.985,.988,.990},
+    card={1,1,1},line={.78,.81,.84},
+    text={.15,.19,.23},muted={.40,.45,.50},
+    accent={.16,.47,.90},selected={.82,.89,.99},
+    canvas={.86,.87,.88},warn={.86,.42,.19}
+}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
     {name='Vermelho',rgba=0xe53b44ff},{name='Verde',rgba=0x20ba84ff},
     {name='Azul',rgba=0x347ce9ff},{name='Branco',rgba=0xffffffff}
 }
 local function c(key,alpha)
-    local v=(A.compactUi and compactPalette or palette)[key]
+    local colors=A.screen=='gallery' and galleryPalette or
+        (A.compactUi and compactPalette or palette)
+    local v=colors[key]
     love.graphics.setColor(v[1],v[2],v[3],alpha or 1)
 end
 local function text(value,x,y,font,key) c(key or 'text');love.graphics.setFont(A.fonts[font or 'body']);love.graphics.print(value,x,y) end
@@ -4013,7 +4023,13 @@ local function releaseGalleryPreviews()
     A.galleryPreviewCache=nil
 end
 local function drawGallery(w,h)
-    text('Meus desenhos',42,106,'large');text('Projetos locais editáveis · organização offline',44,163,'body','muted')
+    -- Galeria clara, com obras em primeiro plano, mantendo o catálogo
+    -- RBD2, a prévia verdadeira e os destinos de clique existentes.
+    text('A Minha Galeria',42,107,'large')
+    text('Desenhos e pastas deste computador',44,163,'body','muted')
+    c('line')
+    love.graphics.rectangle('fill',42,194,w-84,1)
+    text('OBRAS E PASTAS',44,241,'small','muted')
     button('Nova tela',w-322,113,140,42,function()modal('new')end,true,not Native.available)
     button('Nova pasta',w-168,113,126,42,function()modal('folder')end)
     button('Raiz',44,206,70,32,function()setFolder('')end,A.folder=='')
@@ -4026,7 +4042,10 @@ local function drawGallery(w,h)
         local x,y=r.x,r.y
         local mx,my=love.mouse.getPosition()
         local hovered=mx>=x and mx<x+r.w and my>=y and my<y+r.h
-        box(x,y,r.w,r.h,hovered and 'line' or 'card')
+        box(x,y,r.w,r.h,'card')
+        c(hovered and 'accent' or 'line')
+        love.graphics.setLineWidth(hovered and 2 or 1)
+        love.graphics.rectangle('line',x+.5,y+.5,r.w-1,r.h-1,6,6)
         if folder then
             box(r.preview.x,r.preview.y,r.preview.w,r.preview.h,'bg')
             c('accent')
@@ -4073,8 +4092,8 @@ local function drawGallery(w,h)
             false,function()openDoc(A.store:openProject(doc.id))end,doc)
     end
     if index==0 then
-        text('Uma galeria vazia, pronta para a primeira tela.',44,290,'title','muted')
-        text('Crie uma pasta ou uma tela. Tudo é salvo neste computador.',44,335,'body','muted')
+        text('Sua galeria está vazia',44,297,'title','muted')
+        text('Toque em Nova tela para começar a desenhar.',44,339,'body','muted')
     end
 end
 -- A true renderer-produced single dab, composited over the canvas as
@@ -4163,15 +4182,25 @@ local function drawEditor(w,h)
                 326,87,'small','muted')
         end
     end
-    button(A.compactUi and 'Layout desktop' or 'Layout compacto',
-        w-645,15,134,33,toggleCompactUi,A.compactUi)
-    button(A.previewEnabled and 'Prévia: ligada' or 'Prévia: desligada',
-        w-501,15,134,33,function()
-            A.previewEnabled=not A.previewEnabled
-        end,A.previewEnabled)
+    if A.compactUi then
+        button('Salvar',w-282,15,80,33,saveDoc,A.dirty)
+        button('Desktop',w-191,15,85,33,toggleCompactUi)
+        button('Ajustes',w-96,15,77,33,function()
+            toggleCompactPanel('properties')
+        end)
+    else
+        button('Layout compacto',w-645,15,134,33,toggleCompactUi)
+        button(A.previewEnabled and 'Prévia: ligada' or 'Prévia: desligada',
+            w-501,15,134,33,function()
+                A.previewEnabled=not A.previewEnabled
+            end,A.previewEnabled)
+    end
     local cx,cy=canvasTransform()
-    box(12,120,w-Workspace.panelWidth(paneHidden())-20,
-        h-(A.compactUi and not A.focusMode and 310 or 178),'canvas')
+    if A.compactUi and not A.focusMode then
+        box(0,64,w,h-248,'canvas')
+    else
+        box(12,120,w-Workspace.panelWidth(paneHidden())-20,h-178,'canvas')
+    end
     love.graphics.setScissor(Workspace.scissor(w,h,paneHidden(),A.compactUi and not A.focusMode))
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
@@ -4693,11 +4722,9 @@ local function drawEditor(w,h)
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
     if A.compactUi and not A.focusMode then
-        box(10,h-184,w-20,126,'panel')
-        c('accent')
-        love.graphics.rectangle('fill',10,h-184,3,126)
+        box(0,h-184,w,136,'panel')
         c('line')
-        love.graphics.rectangle('fill',13,h-184,w-23,1)
+        love.graphics.rectangle('fill',0,h-184,w,1)
         text('FERRAMENTA',28,h-162,'small','muted')
         fitted(EditorTools.fromId(A.tool).label,28,h-144,'body',
             'text',210)
@@ -4710,7 +4737,7 @@ local function drawEditor(w,h)
                 (w-350)/2,h-161,'small','muted')
         end
         c('line')
-        love.graphics.rectangle('fill',w/2-310,h-126,620,1)
+        love.graphics.rectangle('fill',w/2-352,h-126,704,1)
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and
                 (A.tool=='brush' or A.tool=='erase')) or
@@ -4729,8 +4756,12 @@ local function drawEditor(w,h)
                     toggleCompactPanel(slot.id)
                 elseif slot.id=='color' then openCompactColor()
                 elseif slot.id=='fullscreen' then toggleFocusMode()
+                elseif slot.id=='undo' then undoDoc()
+                elseif slot.id=='redo' then redoDoc()
                 elseif slot.id=='back' then toGallery() end
-            end,active)
+            end,active,
+                (slot.id=='undo' and not A.layerSession:canUndo()) or
+                (slot.id=='redo' and not A.layerSession:canRedo()))
             c(active and 'accent' or 'text')
             Icons.draw(slot.id=='brush' and
                 (A.tool=='erase' and 'erase' or 'brush') or slot.id,
@@ -5169,19 +5200,33 @@ local function drawCompactPopup(w,h)
     button('×',p.x+p.w-44,p.y+8,31,30,function()
         A.compactPanel=nil end)
     if kind=='tools' then
-        for i,tool in ipairs(EditorTools.items) do
-            local x=p.x+14+(i-1)%2*156
-            local y=p.y+52+math.floor((i-1)/2)*70
-            button(' ',x,y,148,62,function()
-                if selectTool(tool.id) then A.compactPanel=nil end
-            end,A.tool==tool.id)
-            c(A.tool==tool.id and 'accent' or 'text')
-            Icons.draw(tool.id,x+24,y+16,15)
-            text(tool.label,x+44,y+15,'small')
-            text(tool.key,x+121,y+39,'small','muted')
+        -- Catálogo visual completo; somente ferramentas já implementadas
+        -- no motor Lua são acionadas. Outras mostram o estado pendente.
+        for i,tool in ipairs(IbisTools.entries) do
+            local r=IbisTools.grid(p,i)
+            local active=tool.backend==A.tool and tool.backend~=nil
+                or A.visualPendingTool==tool.id
+            button('',r.x,r.y,r.w,r.h,function()
+                local ok,entry=IbisTools.select(tool.id,selectTool)
+                if ok then
+                    A.visualPendingTool=nil
+                    A.compactPanel=nil
+                else
+                    A.visualPendingTool=entry.id
+                    status(entry.label..' · motor Lua pendente')
+                end
+            end,active)
+            c(active and 'accent' or 'text')
+            Icons.draw(tool.icon,r.x+17,r.y+14,17)
+            fitted(tool.label,r.x+32,r.y+9,'small','text',r.w-36)
+            text(tool.backend and (tool.partial and 'Parcial' or 'Pronto')
+                or 'Pendente',r.x+32,r.y+33,'small',
+                tool.backend and 'muted' or 'warn')
         end
-        button('Ajuda · F1',p.x+14,p.y+p.h-57,p.w-28,34,
-            function()A.compactPanel=nil;A.toolHelp=true end)
+        text(A.visualPendingTool and
+            (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
+            or 'Ferramentas da interface · motor Lua',
+            p.x+16,p.y+p.h-28,'small','muted')
     elseif kind=='properties' then
         local x,y=p.x+17,p.y+54
         if A.tool=='fill' then
@@ -5320,21 +5365,21 @@ local function drawCompactPopup(w,h)
 end
 function love.draw()
     A.buttons={};A.galleryPreviewBudget=1
-    local w,h=love.graphics.getDimensions();c('bg')
-    love.graphics.clear((A.compactUi and compactPalette or palette).bg)
+    local w,h=love.graphics.getDimensions()
+    local theme=A.screen=='gallery' and galleryPalette
+        or (A.compactUi and compactPalette or palette)
+    love.graphics.clear(theme.bg)
     box(0,0,w,64,'panel')
-    c('accent');love.graphics.rectangle('fill',0,0,4,64)
-    text('Ibis Rebuild',24,13,'title')
-    if A.screen=='gallery' or w>=1120 then
-        local name=A.screen=='editor' and A.doc and A.doc.name
-            or 'Minha galeria'
-        fitted(name,232,24,'body','muted',
-            A.screen=='editor' and Visual.headerNameWidth(w) or 320)
+    c('accent');love.graphics.rectangle('fill',0,62,w,2)
+    text(A.screen=='gallery' and 'Ibis Rebuild · Galeria'
+        or 'Ibis Rebuild',24,15,'title')
+    if A.screen=='editor' and A.doc and w>=1120 then
+        fitted(A.doc.name,232,24,'body','muted',
+            Visual.headerNameWidth(w))
     end
-    c(Native.available and 'accent' or 'warn')
-    love.graphics.circle('fill',w-201,31,3.2,14)
-    text(Native.available and 'Editor local' or 'Motor indisponível',
-        w-191,24,'small',Native.available and 'accent' or 'warn')
+    if A.screen=='gallery' then
+        text('PROJETOS LOCAIS · LUA',w-213,24,'small','muted')
+    end
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     box(0,h-48,w,48,'panel')
     fitted(A.message or '',20,h-33,'small','muted',w-260)
