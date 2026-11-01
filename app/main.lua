@@ -7,6 +7,7 @@ local Colors=require('colors')
 local ColorPanel=require('color_window')
 local Stabilizer=require('stroke_stabilizer')
 local DirtyRegion=require('dirty_region')
+local GPUUpload=require('gpu_upload')
 local StrokePath=require('stroke_path')
 local Pressure=require('touch_pressure')
 local PressureCurves=require('pressure_curves')
@@ -46,6 +47,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
     '09-opacidade-camadas.png'}
 local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+-- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
+local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
@@ -187,6 +190,7 @@ local function rebuildImage()
             A.layerThumbDirty[layer.id]=true
         end
     end
+    gpuUpload:clear() -- projeto/textura completos invalidam scratch anterior
     if A.image then A.image:release() end
     if A.imageData then A.imageData:release() end
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
@@ -198,10 +202,7 @@ end
 local function updateImageRegion(rect)
     if not rect then return false end
     A.layerSession:recomposeRect(rect)
-    local patch=love.image.newImageData(rect.w,rect.h,'rgba8',
-        Native.regionBytes(A.buffer,rect))
-    A.image:replacePixels(patch,nil,1,rect.x,rect.y)
-    patch:release()
+    gpuUpload:send(A.image,A.buffer,rect)
     local layer=A.doc.layers[A.doc.active_layer]
     A.layerThumbDirty=A.layerThumbDirty or {}
     A.layerThumbDirty[layer.id]=true
@@ -6055,6 +6056,7 @@ function love.resize()
     if A.doc then fit() end
 end
 function love.quit()
+    gpuUpload:clear()
     Ink.close()
     releaseTipCache()
     releaseBrushSamples()
