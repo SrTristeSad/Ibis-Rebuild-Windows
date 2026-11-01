@@ -39,6 +39,8 @@ function T.run()
             eq(v.x>=preview.x and v.y>=preview.y and
                 v.x+v.w<=preview.x+preview.w and
                 v.y+v.h<=preview.y+preview.h,'Preview ultrapassou area')
+            eq(v.y>=preview.y+37 and v.y+v.h<=preview.y+preview.h-8,
+                'Prévia quadriculada cobre título ou margem inferior')
             eq(v.w>0 and v.h>0,'Canvas de preview zerado')
             eq(math.abs(v.w/v.h-preset.w/preset.h)<.02,
                 'Previa nao respeitou aspecto')
