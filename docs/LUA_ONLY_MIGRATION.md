@@ -8,7 +8,10 @@
   a aplicação não carrega mais DLL própria C++.
 - `app/raster_lua.lua`, `app/raster_stroke.lua` e `app/raster_tools.lua`
   implementam pixels, pincéis, borracha, pressão, inclinação, seleção,
-  formas, balde e composição parcial de camadas.
+  formas, balde e composição parcial de camadas. O raster de pincéis
+  agora limita a faixa horizontal de cada linha nas diagonais extensas,
+  preservando bytes RGBA, cobertura e histórico.
+  [Benchmarks e testes](STROKE_SCANLINES.md).
 - O módulo `app/gpu_upload.lua` reutiliza buffers temporários
   de `ImageData` e evita strings RGBA intermediárias nos uploads
   parciais de textura; eventos Windows Ink são agregados por pacote.
