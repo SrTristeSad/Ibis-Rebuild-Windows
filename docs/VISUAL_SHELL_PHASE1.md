@@ -207,3 +207,43 @@ do ibisPaint, mas não comprova equivalência geométrica específica
 com cada build Android 14.1.2. A aprovação visual depende de
 confrontar as capturas reais da aplicação com referências da
 versão-alvo fornecidas pelo criador.
+
+## Fase visual 5 — seletor HSB em losango e sliders dedicados
+
+A [janela de cores descrita no tutorial oficial](https://ibispaint.com/lecture/index.jsp?no=11)
+usa **roda circular de matiz com seletor em losango**, não o
+quadrado pequeno que aparecia no nosso screenshot da fase anterior.
+O objetivo desta fase foi corrigir essa diferença comprovada
+na **apresentação e na interação**, sem mudar o raster Lua.
+
+Implementado:
+
+- `app/color_window.lua`: geometria invertível de um losango HSB:
+  topo representa branco, direita matiz saturada e brilhante,
+  base preto; `svPoint` e `svAt` mantêm posição e valor
+  da cor sincronizados. `svHit` rejeita as áreas transparentes
+  dos cantos da imagem; roda e losango não compartilham hitbox.
+- `app/main.lua`: textura HSB em losango gerada uma vez por
+  matiz arredondada, com cache de imagem GPU liberado ao substituir;
+  indicador da cor selecionada e borda geométrica.
+  A prévia não é uma pincelada nem altera RBD2.
+- **Três sliders HSB compactos**, à direita da roda, para
+  matiz, saturação e brilho, com gradientes, marcadores e
+  captura/arrasto reais. O slider alfa separado, RGB e paleta
+  existentes permanecem disponíveis.
+- `tests/test_color_brush_windows.lua` e
+  `tests/test_ibis_visual_panels.lua`: conversão geométrica,
+  cores nos vértices e dentro do losango, limites, hitboxes
+  da roda e sliders em 960×640, 1220×800 e 1920×1080.
+- Showcase Windows com **19 screenshots reais**, inclusive
+  losango HSB, RGB e paleta. O teste gráfico usa
+  `love.mousepressed` e `love.mousereleased` na roda,
+  no losango e no slider de saturação, verificando a cor
+  resultante, bytes RGBA intactos e histórico de edições
+  inalterado.
+
+**Limitações:** essa referência é uma documentação pública
+do ibisPaint; não equivale a uma inspeção dinâmica da versão
+Android 14.1.2. O painel ainda precisa passar por comparação
+de proporções, cores e componentes com screenshots autenticados
+da versão-alvo. Não introduz pincéis, blends ou filtros novos.
