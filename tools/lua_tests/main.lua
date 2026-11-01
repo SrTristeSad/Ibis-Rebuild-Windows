@@ -6,6 +6,7 @@ local raster={
     'test_raster_layer_integration.lua',
     'test_windows_ink_lua.lua',
     'test_raster_compositor_equivalence.lua',
+    'test_raster_opaque_rows.lua',
     'bench_raster_composition.lua'
 }
 -- Suites historicas Lua reutilizadas para detectar regressoes reais.
