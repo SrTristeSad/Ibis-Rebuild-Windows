@@ -20,11 +20,11 @@ function Panels.brushRow(rect,row)
         type(row)=='number' and row%1==0 and row>=1 and row<=8,
         'Linha de pincel inválida')
     return {x=rect.x+20,y=rect.y+87+(row-1)*43,
-        w=rect.w>=900 and 682 or 682,h=40}
+        w=682,h=40}
 end
 function Panels.brushPreview(rect,row)
     local r=Panels.brushRow(rect,row)
-    return {x=r.x+108,y=r.y+7,w=225,h=25}
+    return {x=r.x+172,y=r.y+8,w=208,h=24}
 end
 function Panels.brushPreviewAction(rect,row)
     local r=Panels.brushRow(rect,row)
