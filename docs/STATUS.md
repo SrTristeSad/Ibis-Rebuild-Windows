@@ -1,5 +1,13 @@
 # Estado atual — migração Lua (01/11/2026)
 
+**Etapa de pinceladas longas:** o rasterizador Lua agora recorta
+conservadoramente a faixa de pixels examinada em cada linha de um
+segmento, acelerando diagonais extensas sem alterar os RGBA. Testes
+comparam 200 configurações e quatro gestos acumulados byte a byte,
+além de 160 segmentos com undo/redo e salvamento RBD2 no Windows.
+[Ver benchmark e limitações](STROKE_SCANLINES.md). Aumento de FPS
+ou redução de latência em caneta física não foram comprovados.
+
 **Nova etapa:** upload parcial de textura GPU em `app/gpu_upload.lua`,
 com reutilização de `ImageData` e orçamento limitado a 1 MiB. Eventos
 Windows Ink do mesmo pacote passam a unir suas regiões de pintura para
