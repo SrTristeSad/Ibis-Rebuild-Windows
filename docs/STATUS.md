@@ -2,7 +2,10 @@
 
 A implementação ativa da branch `migration/lua-only-engine` substituiu
 o motor próprio C++ e scripts Python por LuaJIT/LÖVE, com build Windows
-verificado, testes de raster, RBD2 e GUI real. Consulte
+verificado, testes de raster, RBD2 e GUI real. A entrada Windows Ink
+agora possui ponte LuaJIT/FFI experimental validada em uma janela real,
+com controle para desativá-la. O desempenho e a pressão/inclinação
+em caneta física não foram validados. Consulte
 [LUA_ONLY_MIGRATION.md](LUA_ONLY_MIGRATION.md). O diagnóstico abaixo é
 **histórico**, da arquitetura antiga.
 
