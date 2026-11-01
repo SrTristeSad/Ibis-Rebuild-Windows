@@ -32,6 +32,22 @@ while true do
     if event.kind==3 then seenEnd=true end
 end
 assert(Ink.dropped>0 and seenEnd and last.kind==3,'soltura perdida na fila cheia')
+-- Um DOWN no inicio nunca deve ser expulso por centenas de MOVE.
+Ink._resetTest()
+Ink._offerTest({kind=1,id=4,x=1,y=10,pressure=.4})
+for i=1,600 do
+    Ink._offerTest({kind=2,id=4,pressure=.3,x=i,y=10})
+end
+Ink._offerTest({kind=3,id=4,x=600,y=10,pressure=0})
+local first=Ink._drainTest()
+eq(first.kind,1,'DOWN foi perdido com fila saturada')
+local final=nil
+repeat
+    local event=Ink._drainTest()
+    if event then final=event end
+until not event
+assert(final and final.kind==3,'UP deve ser entregue mesmo na saturacao')
+Ink._resetTest()
 Ink._resetTest()
 assert(Ink.dropped==0)
 print('Lua Windows Ink: pressure mask, FIFO, overflow and release: OK')
