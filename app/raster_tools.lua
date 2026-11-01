@@ -17,7 +17,7 @@ local function color(c)
         band(rshift(c,8),255),band(c,255)
 end
 local function composite(p,i,source,s)
-    local sa=s[s+3]/255
+    local sa=source[s+3]/255
     if sa<=0 then return end
     local da=p[i+3]/255
     local remain=da*(1-sa)
