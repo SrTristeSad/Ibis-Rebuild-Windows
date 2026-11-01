@@ -35,8 +35,10 @@
 
 Não existe fidelidade visual/funcional 1:1 ao ibisPaint Android 14.1.2
 comprovada. O desempenho e a percepção de latência devem ser medidos
-em hardware físico. A antiga ponte Windows Ink C++ foi removida;
-suporte avançado a WM_POINTER, pressão real e inclinação da caneta
-ainda requer implementação Lua/FFI e validação prática.
+em hardware físico. A ponte Windows Ink C++ foi removida e substituída por uma implementação
+LuaJIT FFI que recebe WM_POINTER e lê pressão/inclinação. Os testes de
+integração à janela Windows passaram; validação com caneta física ainda
+é obrigatória. Há opção de desativação via `--no-windows-ink`.
+Consulte [WINDOWS_INK_LUA.md](WINDOWS_INK_LUA.md).
 
 A principal linha `main` não é alterada automaticamente por esta branch.
