@@ -247,3 +247,24 @@ do ibisPaint; não equivale a uma inspeção dinâmica da versão
 Android 14.1.2. O painel ainda precisa passar por comparação
 de proporções, cores e componentes com screenshots autenticados
 da versão-alvo. Não introduz pincéis, blends ou filtros novos.
+
+## Complemento visual — paleta inicial não vazia
+
+A documentação do ibisPaint descreve uma paleta inicial preparada,
+além de cores recentes e da capacidade de guardar cores favoritas.
+A captura anterior do rebuild mostrava uma aba `Paleta`
+praticamente vazia, porque só exibia cores salvas pelo usuário.
+
+Em `app/ibis_palette_ui.lua`, adicionamos uma **paleta inicial
+independente de 36 cores RGBA** em quatro linhas de nove amostras,
+com uma aba `Cores básicas` e outra `Minhas`. As cores são uma
+seleção de interface criada para o rebuild, **não são amostras
+extraídas ou declaradas exatas do Android 14.1.2**.
+O histórico e a persistência de cores pessoais continuam separados.
+
+`tests/test_ibis_palette_ui.lua` testa limites e colisões das
+células nas três dimensões suportadas, cores RGBA e separação da
+paleta pessoal. A GUI Windows clica em uma cor básica e confirma
+que o tom selecionado mudou, mas os bytes do raster e o histórico
+RBD2 ficaram inalterados. O showcase gera **20 capturas**,
+incluindo os estados de cores básicas e cores pessoais.
