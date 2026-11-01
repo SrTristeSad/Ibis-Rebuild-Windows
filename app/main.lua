@@ -34,6 +34,7 @@ local Compact=require('compact_layout')
 local IbisTools=require('ibis_visual_tools')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
+local LayerUI=require('ibis_layer_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -5547,7 +5548,8 @@ local function drawCompactPopup(w,h)
         p.w-1,p.h-1,5,5)
     c('accent');love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,2)
     text(kind=='tools' and 'Ferramentas' or
-        kind=='layers' and 'Camadas raster' or
+        kind=='layers' and 'Camadas' or
+        kind=='blends' and 'Modos de mesclagem' or
         kind=='color' and 'Cores · RGBA' or
         kind=='view' and 'Visualização' or
         kind=='stabilizer' and 'Estabilizador' or
@@ -5721,6 +5723,19 @@ local function drawCompactPopup(w,h)
         end
     elseif kind=='color' then
         drawColorPopup(p)
+    elseif kind=='blends' then
+        text('MODO DA CAMADA ATIVA',p.x+15,p.y+48,'small','muted')
+        for i,mode in ipairs(LayerUI.modes) do
+            local r=LayerUI.blendRow(p,i)
+            button(mode.label,r.x,r.y,r.w,r.h,function()
+                if mode.available then A.compactPanel='layers' end
+            end,mode.id=='normal',not mode.available)
+            if not mode.available then
+                text('Pendente',r.x+r.w-89,r.y+10,'small','warn')
+            end
+        end
+        text('Outros modos exigem o motor Lua de composição.',
+            p.x+14,p.y+p.h-27,'small','muted')
     elseif kind=='layers' then
         local ls=A.layerSession
         local count=#A.doc.layers
@@ -5736,7 +5751,25 @@ local function drawCompactPopup(w,h)
             clearLayerThumbs();A.compactLayerStart=nil
             A.dirty=true;rebuildImage()
         end,false,count<=1)
-        local start,stop,maxStart=Thumbnails.window(count,active,
+        -- Linha distinta para seleção: existe na janela original,
+        -- mas não fingimos que o raster atual tem uma camada especial.
+        local selection=LayerUI.selectionRow(p)
+        box(selection.x,selection.y,selection.w,selection.h,'card')
+        c('line')
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle('line',selection.x+.5,selection.y+.5,
+            selection.w-1,selection.h-1,4,4)
+        c('muted')
+        Icons.draw('select',selection.x+19,selection.y+17,15)
+        text('Camada de seleção',selection.x+38,
+            selection.y+4,'small','text')
+        local area=A.selection
+        local selectionInfo=area and
+            ('Seleção: '..area.w..' × '..area.h..' px')
+            or 'Nenhuma área selecionada'
+        fitted(selectionInfo,selection.x+38,
+            selection.y+21,'small','muted',selection.w-50)
+                local start,stop,maxStart=Thumbnails.window(count,active,
             Compact.layerRows(p),A.compactLayerStart)
         local row=0
         for index=stop,start,-1 do
@@ -5770,13 +5803,20 @@ local function drawCompactPopup(w,h)
             end
             fitted(i..' · '..layer.name,r.x+54,r.y+7,
                 'body',visual.textColor,145)
-            text(('Normal · %.0f%%'):format(layer.opacity*100),
-                r.x+54,r.y+28,'small',visual.textColor)
+            text(('%.0f%%'):format(layer.opacity*100),
+                r.x+151,r.y+30,'small',visual.textColor)
             iconButton(visual.eyeIcon,r.x+r.w-34,r.y+10,32,29,
                 function()
                     finishStroke();ls:setVisible(i,not layer.visible)
                     A.dirty=true;rebuildImage()
                 end,layer.visible)
+            if i==active then
+                button('Normal',r.x+54,r.y+25,90,21,function()
+                    A.compactPanel='blends'
+                end,true)
+            else
+                text('Normal',r.x+57,r.y+30,'small','muted')
+            end
         end
         iconButton('up',p.x+13,p.y+p.h-87,34,28,function()
             A.compactLayerStart=Thumbnails.scroll(start,maxStart,1)
