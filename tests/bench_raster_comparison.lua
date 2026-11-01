@@ -66,6 +66,7 @@ local oldMs=measure(legacy,8)
 local newMs=measure(optimized,8)
 assert(R.bytes(a)==R.bytes(b),'Composicao alterada durante benchmark')
 assert(oldMs>=0 and newMs>=0)
-print(('Lua CPU 1024x1024 same runner: legacy per pixel %.3f ms, opaque row %.3f ms; ratio %.2fx'):format(oldMs,newMs,
+print(('Lua CPU 1024x1024 same runner: legacy per pixel %.3f ms, selected compositor %.3f ms; ratio %.2fx'):format(oldMs,newMs,
     newMs>0 and oldMs/newMs or 0))
+print('Opaque-row memcpy enabled: '..tostring(R.opaqueRowCopyEnabled))
 print('Tempos informativos; medicao nao representa latencia total nem FPS')
