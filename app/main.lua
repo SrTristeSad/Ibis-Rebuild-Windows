@@ -35,6 +35,7 @@ local IbisTools=require('ibis_visual_tools')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 local LayerUI=require('ibis_layer_ui')
+local FilterUI=require('ibis_filter_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -58,7 +59,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '17-losango-hsb.png','18-sliders-rgb.png',
     '19-paleta-cores.png','20-cores-pessoais.png',
     '21-camada-selecao.png','22-modos-mesclagem.png',
-    '23-selecao-ativa.png'}
+    '23-selecao-ativa.png','24-catalogo-filtros.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2109,6 +2110,41 @@ local function advanceShowcase()
         A.compactPanel='layers'
         A.selection={x=44,y=56,w=92,h=74}
         status('Camada de seleção · visual atualiza com área ativa')
+    elseif sh.stage==24 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local tool=A.tool
+        local w,h=love.graphics.getDimensions()
+        local panel=Compact.popup(w,h,'tools')
+        local cell=IbisTools.grid(panel,4)
+        love.draw()
+        love.mousepressed(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        love.mousereleased(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        assert(A.compactPanel=='filters' and
+            A.visualPendingTool=='filter',
+            'Filtro não abriu o catálogo a partir do seletor')
+        local filters=Compact.popup(w,h,'filters')
+        local category=FilterUI.categoryRect(filters,2)
+        love.draw()
+        love.mousepressed(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        love.mousereleased(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        assert(A.filterCategory=='blur' and A.filterPage==1,
+            'Categoria Desfoque não foi selecionada')
+        local first=FilterUI.filterRow(filters,1)
+        love.draw()
+        love.mousepressed(first.x+first.w/2,first.y+first.h/2,1,false)
+        love.mousereleased(first.x+first.w/2,first.y+first.h/2,1,false)
+        assert(A.filterPendingId==FilterUI.pageItems('blur',1)[1].id
+            and A.compactPanel=='filters' and A.tool==tool,
+            'Filtro pendente não preservou o estado do editor')
+        assert(Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==edits,
+            'A navegação em filtros alterou pixels ou histórico')
+        status('Filtros: categorias e lista visual · motores pendentes')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5589,6 +5625,7 @@ local function drawCompactPopup(w,h)
     text(kind=='tools' and 'Ferramentas' or
         kind=='layers' and 'Camadas' or
         kind=='blends' and 'Modos de mesclagem' or
+        kind=='filters' and 'Filtros' or
         kind=='color' and 'Cores · RGBA' or
         kind=='view' and 'Visualização' or
         kind=='stabilizer' and 'Estabilizador' or
@@ -5599,9 +5636,9 @@ local function drawCompactPopup(w,h)
         'Ajustes',p.x+14,p.y+13,'body')
     button('×',p.x+p.w-44,p.y+8,31,30,function()
         A.compactPanel=nil end)
-    if kind=='blends' then
+    if kind=='blends' or kind=='filters' then
         button('<',p.x+p.w-79,p.y+8,31,30,function()
-            A.compactPanel='layers'
+            A.compactPanel=kind=='blends' and 'layers' or 'tools'
         end)
     end
     if kind=='tools' then
@@ -5612,6 +5649,15 @@ local function drawCompactPopup(w,h)
             local active=tool.backend==A.tool and tool.backend~=nil
                 or A.visualPendingTool==tool.id
             button('',r.x,r.y,r.w,r.h,function()
+                if tool.id=='filter' then
+                    A.visualPendingTool='filter'
+                    A.filterCategory=A.filterCategory or 'adjust'
+                    A.filterPage=1
+                    A.filterPendingId=nil
+                    A.compactPanel='filters'
+                    status('Filtros · interface disponível, motor pendente')
+                    return
+                end
                 local ok,entry=IbisTools.select(tool.id,selectTool)
                 if ok then
                     A.visualPendingTool=nil
@@ -5632,6 +5678,43 @@ local function drawCompactPopup(w,h)
             (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
             or 'Ferramentas da interface · motor Lua',
             p.x+16,p.y+p.h-28,'small','muted')
+    elseif kind=='filters' then
+        local current=A.filterCategory or 'adjust'
+        local page=A.filterPage or 1
+        local totalPages=FilterUI.pageCount(current)
+        for i,category in ipairs(FilterUI.categories) do
+            local r=FilterUI.categoryRect(p,i)
+            button(category.label,r.x,r.y,r.w,r.h,function()
+                A.filterCategory=category.id
+                A.filterPage=1
+                A.filterPendingId=nil
+            end,current==category.id)
+        end
+        for i,item in ipairs(FilterUI.pageItems(current,page)) do
+            local r=FilterUI.filterRow(p,i)
+            button('',r.x,r.y,r.w,r.h,function()
+                -- Seleção é visual: nenhuma API de raster é acionada.
+                A.filterPendingId=item.id
+                status(item.label..' · motor Lua pendente')
+            end,A.filterPendingId==item.id)
+            box(r.x+6,r.y+6,41,37,'panel')
+            c('muted')
+            Icons.draw('filter',r.x+26,r.y+24,18)
+            fitted(item.label,r.x+54,r.y+7,'small','text',r.w-64)
+            text('Pendente',r.x+54,r.y+29,'small','warn')
+        end
+        button('‹',p.x+151,p.y+346,35,29,function()
+            A.filterPage=page-1
+            A.filterPendingId=nil
+        end,false,page==1)
+        fitted(('Página %d / %d'):format(page,totalPages),
+            p.x+194,p.y+353,'small','text',133)
+        button('›',p.x+p.w-47,p.y+346,35,29,function()
+            A.filterPage=page+1
+            A.filterPendingId=nil
+        end,false,page==totalPages)
+        fitted('Prévia e aplicação: motor Lua pendente.',
+            p.x+151,p.y+p.h-29,'small','muted',p.w-163)
     elseif kind=='view' then
         local x,y=p.x+16,p.y+53
         text('TELA',x,y,'small','muted')
@@ -6572,7 +6655,12 @@ function love.keypressed(key)
         end
         if key=='escape' then
             A.compactLayerOpacityDrag=nil
-            A.compactPanel=nil;A.colorDrag=nil
+            if A.compactPanel=='filters' then
+                A.compactPanel='tools'
+            else
+                A.compactPanel=nil
+            end
+            A.colorDrag=nil
         elseif EditorTools.fromKey(key) then
             selectTool(EditorTools.fromKey(key).id)
             A.compactPanel=nil

@@ -76,16 +76,19 @@ end
 function UI.popup(w,h,kind)
     assert(kind=='tools' or kind=='layers' or kind=='properties'
         or kind=='color' or kind=='view' or kind=='stabilizer'
-        or kind=='ruler' or kind=='materials' or kind=='blends',
+        or kind=='ruler' or kind=='materials' or kind=='blends'
+        or kind=='filters',
         'Janela compacta desconhecida')
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela compacta inválida')
     local isTop=kind=='view' or kind=='stabilizer'
         or kind=='ruler' or kind=='materials'
-    local width=kind=='color' and 404 or kind=='tools' and 420
+    local width=kind=='color' and 404 or (kind=='tools' or
+        kind=='filters') and 420
         or isTop and 318 or 298
     local height=kind=='color' and 450 or
-        kind=='tools' and math.min(474,h-188) or
+        (kind=='tools' and math.min(474,h-188)) or
+        (kind=='filters' and math.min(440,h-188)) or
         kind=='layers' and math.min(440,h-260) or
         kind=='view' and 314 or kind=='stabilizer' and 254 or
         kind=='blends' and math.min(440,h-260) or
