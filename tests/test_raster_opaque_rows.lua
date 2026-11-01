@@ -90,4 +90,51 @@ R.clear(normal,0xaabbcc00)
 R.clear(clear,0x77777700)
 R.composite(normal,clear,1)
 assert(R.readPixel(normal,0,0)==0,'Transparent hidden RGB not cleared')
+-- Stress deterministicamente dezenas de milhares de misturas com
+-- destino 100% opaco, incluindo opacidades fracionarias, para detectar
+-- diferencas de arredondamento na via sem divisao.
+math.randomseed(130057)
+local cell=16
+local patch={x=0,y=0,w=cell,h=cell}
+local stressCases=0
+for _,op in ipairs({0,.0039,.125,.333333333,.5,.67,.995,1}) do
+    for pass=1,14 do
+        local from=R.buffer(cell,cell)
+        local to=R.buffer(cell,cell)
+        for y=0,cell-1 do
+            for x=0,cell-1 do
+                local sa=({0,1,127,254,255,math.random(0,255)})
+                    [(x+pass)%6+1]
+                local sr,sg,sb=math.random(0,255),math.random(0,255),math.random(0,255)
+                local dr,dg,db=math.random(0,255),math.random(0,255),math.random(0,255)
+                R.pixel(from,x,y,sr*16777216+sg*65536+sb*256+sa)
+                R.pixel(to,x,y,dr*16777216+dg*65536+db*256+255)
+            end
+        end
+        local got=R.buffer(cell,cell,R.bytes(to))
+        local expected=R.buffer(cell,cell,R.bytes(to))
+        R.compositeRect(got,from,op,patch)
+        -- Reference helper uses global W=47, so adapt its pixel traversal
+        -- directly for the smaller stress canvas here.
+        for p=0,expected.size-4,4 do
+            local sa=(from.bytes[p+3]/255)*op
+            local da=expected.bytes[p+3]/255
+            local oa=sa+da*(1-sa)
+            if oa>0 then
+                for k=0,2 do
+                    expected.bytes[p+k]=floor((from.bytes[p+k]*sa
+                        +expected.bytes[p+k]*da*(1-sa))/oa+0.5)
+                end
+            else
+                expected.bytes[p],expected.bytes[p+1],expected.bytes[p+2]=0,0,0
+            end
+            expected.bytes[p+3]=floor(oa*255+0.5)
+        end
+        assert(R.bytes(got)==R.bytes(expected),
+            'Opaque destination float rounding diverged: '..op..' pass '..pass)
+        stressCases=stressCases+cell*cell
+    end
+end
+print(('Opaque destination regression: %d RGBA pixels: OK'):format(stressCases))
+
 print(('RGBA opaque-row compositor: %d reference comparisons, 2/4/8 layers: OK'):format(cases))
