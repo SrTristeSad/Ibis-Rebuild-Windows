@@ -84,6 +84,31 @@ R.clear(first,0x245610ff)
 R.clear(second,0x72c3faff)
 R.composite(first,second,1)
 assert(R.bytes(first)==R.bytes(second),'Opaque full layer copy differs')
+-- O buffer nao pode depender de metadados de opacidade desatualizados.
+-- Uma borracha alterando somente um pixel deve voltar ao caminho normal.
+R.pixel(second,1,1,0xcda13b00)
+R.clear(first,0)
+local beforeEdit=R.buffer(7,3,R.bytes(first))
+R.composite(first,second,1)
+for y=0,2 do
+    for x=0,6 do
+        local p=(y*7+x)*4
+        local sa=second.bytes[p+3]/255
+        local da=beforeEdit.bytes[p+3]/255
+        local oa=sa+da*(1-sa)
+        if oa>0 then
+            for k=0,2 do
+                beforeEdit.bytes[p+k]=floor((second.bytes[p+k]*sa+
+                    beforeEdit.bytes[p+k]*da*(1-sa))/oa+0.5)
+            end
+        else
+            beforeEdit.bytes[p],beforeEdit.bytes[p+1],beforeEdit.bytes[p+2]=0,0,0
+        end
+        beforeEdit.bytes[p+3]=floor(oa*255+0.5)
+    end
+end
+assert(R.bytes(first)==R.bytes(beforeEdit),
+    'Opaque-row detection stale after source alpha edit')
 local normal=R.buffer(3,2)
 local clear=R.buffer(3,2)
 R.clear(normal,0xaabbcc00)
