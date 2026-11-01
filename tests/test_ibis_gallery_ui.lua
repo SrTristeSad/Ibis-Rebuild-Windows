@@ -1,3 +1,4 @@
+package.path='app/?.lua;'..package.path
 local G=require('ibis_gallery_ui')
 local T={}
 function T.run()
