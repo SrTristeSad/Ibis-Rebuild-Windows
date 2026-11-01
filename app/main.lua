@@ -36,6 +36,7 @@ local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 local LayerUI=require('ibis_layer_ui')
 local FilterUI=require('ibis_filter_ui')
+local TextUI=require('ibis_text_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -59,7 +60,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '17-losango-hsb.png','18-sliders-rgb.png',
     '19-paleta-cores.png','20-cores-pessoais.png',
     '21-camada-selecao.png','22-modos-mesclagem.png',
-    '23-selecao-ativa.png','24-catalogo-filtros.png'}
+    '23-selecao-ativa.png','24-catalogo-filtros.png',
+    '25-texto-rascunho.png','26-texto-estilo.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2145,6 +2147,68 @@ local function advanceShowcase()
             A.layerSession:historyStats().undo==edits,
             'A navegação em filtros alterou pixels ou histórico')
         status('Filtros: categorias e lista visual · motores pendentes')
+    elseif sh.stage==25 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local dirty=A.dirty
+        local tool=A.tool
+        local w,h=love.graphics.getDimensions()
+        local panel=Compact.popup(w,h,'tools')
+        local cell=IbisTools.grid(panel,12)
+        love.draw()
+        love.mousepressed(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        love.mousereleased(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        assert(A.compactPanel=='text' and
+            A.visualPendingTool=='text' and A.tool==tool,
+            'Texto nao abriu painel sem mudar ferramenta')
+        local p=Compact.popup(w,h,'text')
+        local field=TextUI.inputRect(p)
+        love.draw()
+        love.mousepressed(field.x+24,field.y+24,1,false)
+        love.mousereleased(field.x+24,field.y+24,1,false)
+        assert(A.textUi.focused,'Editor de rascunho nao recebeu foco')
+        love.textinput('Olá ibis')
+        love.keypressed('backspace')
+        love.textinput('!')
+        assert(A.textUi.value=='Olá ibi!',
+            'Entrada de texto Unicode e backspace falharam')
+        local right=TextUI.alignmentRect(p,3)
+        love.draw()
+        love.mousepressed(right.x+right.w/2,
+            right.y+right.h/2,1,false)
+        love.mousereleased(right.x+right.w/2,
+            right.y+right.h/2,1,false)
+        assert(A.textUi.alignment=='right','Alinhamento falhou')
+        assert(Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==edits and
+            A.dirty==dirty,'Rascunho alterou desenho')
+        A.showcaseTextCheck={rgba=before,undo=edits,dirty=dirty,tool=tool}
+        status('Texto: entrada e alinhamento locais, sem motor')
+    elseif sh.stage==26 then
+        assert(A.compactPanel=='text' and A.showcaseTextCheck,
+            'Painel de Texto perdido entre capturas')
+        local previous=A.showcaseTextCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'text')
+        local tab=TextUI.tabRect(p,3)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        love.mousereleased(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.textUi.tab=='style','Aba de Estilo nao abriu')
+        local stroke=TextUI.propertyRow(p,3)
+        love.draw()
+        love.mousepressed(stroke.x+stroke.w-20,
+            stroke.y+36,1,false)
+        love.mousereleased(stroke.x+stroke.w-20,
+            stroke.y+36,1,false)
+        assert(A.textUi.stroke==1,'Controle visual de contorno falhou')
+        assert(Native.bytes(A.buffer)==previous.rgba and
+            A.layerSession:historyStats().undo==previous.undo and
+            A.dirty==previous.dirty and A.tool==previous.tool,
+            'Estilo de texto alterou o documento')
+        status('Texto: parametros visuais; aplicacao pendente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5626,6 +5690,7 @@ local function drawCompactPopup(w,h)
         kind=='layers' and 'Camadas' or
         kind=='blends' and 'Modos de mesclagem' or
         kind=='filters' and 'Filtros' or
+        kind=='text' and 'Texto' or
         kind=='color' and 'Cores · RGBA' or
         kind=='view' and 'Visualização' or
         kind=='stabilizer' and 'Estabilizador' or
@@ -5635,9 +5700,18 @@ local function drawCompactPopup(w,h)
         A.tool=='select' and 'Seleção' or
         'Ajustes',p.x+14,p.y+13,'body')
     button('×',p.x+p.w-44,p.y+8,31,30,function()
-        A.compactPanel=nil end)
-    if kind=='blends' or kind=='filters' then
+        if kind=='text' and A.textUi then
+            A.textUi.focused=false
+            love.keyboard.setTextInput(false)
+        end
+        A.compactPanel=nil
+    end)
+    if kind=='blends' or kind=='filters' or kind=='text' then
         button('<',p.x+p.w-79,p.y+8,31,30,function()
+            if kind=='text' and A.textUi then
+                A.textUi.focused=false
+                love.keyboard.setTextInput(false)
+            end
             A.compactPanel=kind=='blends' and 'layers' or 'tools'
         end)
     end
@@ -5649,6 +5723,13 @@ local function drawCompactPopup(w,h)
             local active=tool.backend==A.tool and tool.backend~=nil
                 or A.visualPendingTool==tool.id
             button('',r.x,r.y,r.w,r.h,function()
+                if tool.id=='text' then
+                    A.visualPendingTool='text'
+                    A.textUi=TextUI.new()
+                    A.compactPanel='text'
+                    status('Texto: interface aberta, motor Lua pendente')
+                    return
+                end
                 if tool.id=='filter' then
                     A.visualPendingTool='filter'
                     A.filterCategory=A.filterCategory or 'adjust'
@@ -5678,6 +5759,94 @@ local function drawCompactPopup(w,h)
             (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
             or 'Ferramentas da interface · motor Lua',
             p.x+16,p.y+p.h-28,'small','muted')
+    elseif kind=='text' then
+        local draft=assert(A.textUi,'Rascunho de texto ausente')
+        for i,tab in ipairs(TextUI.tabs) do
+            local r=TextUI.tabRect(p,i)
+            button(tab.label,r.x,r.y,r.w,r.h,function()
+                draft.focused=false
+                love.keyboard.setTextInput(false)
+                draft.tab=tab.id
+            end,draft.tab==tab.id)
+        end
+        local x=p.x+20
+        local function property(index,label,key,unit)
+            local r=TextUI.propertyRow(p,index)
+            text(label,r.x,r.y,'small','muted')
+            button('−',r.x,r.y+22,40,29,function()
+                TextUI.step(draft,key,-1)
+            end)
+            fitted(tostring(draft[key])..(unit or ''),
+                r.x+50,r.y+28,'small','text',r.w-138)
+            button('+',r.x+r.w-40,r.y+22,40,29,function()
+                TextUI.step(draft,key,1)
+            end)
+        end
+        if draft.tab=='content' then
+            text('DIGITE O TEXTO',x,p.y+108,'small','muted')
+            local field=TextUI.inputRect(p)
+            button('',field.x,field.y,field.w,field.h,function()
+                draft.focused=true
+                love.keyboard.setTextInput(true)
+            end,draft.focused)
+            c('text')
+            love.graphics.setFont(A.fonts.body)
+            love.graphics.setScissor(field.x+9,field.y+8,
+                field.w-18,field.h-16)
+            love.graphics.printf(draft.value~='' and draft.value
+                or 'Clique e digite aqui...',field.x+12,field.y+11,
+                field.w-24,'left')
+            love.graphics.setScissor()
+            text('Texto ainda nao sera colocado na tela.',
+                x,p.y+237,'small','warn')
+            local alignments={{id='left',label='Esquerda'},
+                {id='center',label='Centro'},
+                {id='right',label='Direita'}}
+            for i,a in ipairs(alignments) do
+                local r=TextUI.alignmentRect(p,i)
+                button(a.label,r.x,r.y,r.w,r.h,function()
+                    draft.alignment=a.id
+                    draft.focused=false
+                    love.keyboard.setTextInput(false)
+                end,draft.alignment==a.id)
+            end
+            for i,o in ipairs({
+                {vertical=false,label='Horizontal'},
+                {vertical=true,label='Vertical'}}) do
+                local r=TextUI.orientationRect(p,i)
+                button(o.label,r.x,r.y,r.w,r.h,function()
+                    draft.vertical=o.vertical
+                    draft.focused=false
+                    love.keyboard.setTextInput(false)
+                end,draft.vertical==o.vertical)
+            end
+        elseif draft.tab=='size' then
+            text('FONTE',x,p.y+103,'small','muted')
+            button('Fontes: pendente',x,p.y+134,p.w-40,40,
+                function()end,false,true)
+            text('TAMANHO (RASCUNHO)',x,p.y+193,'small','muted')
+            property(3,'Tamanho visual','size',' px')
+        elseif draft.tab=='style' then
+            text('ESTILO DO TEXTO',x,p.y+103,'small','muted')
+            button('Cor do texto: pendente',x,p.y+133,p.w-40,39,
+                function()end,false,true)
+            button('Cor do contorno: pendente',x,p.y+193,p.w-40,39,
+                function()end,false,true)
+            property(3,'Espessura do contorno','stroke',' px')
+        elseif draft.tab=='background' then
+            property(1,'Opacidade do fundo','bgOpacity','%')
+            property(2,'Margem horizontal','marginX',' px')
+            property(3,'Margem vertical','marginY',' px')
+            text('Cor de fundo: seletor pendente.',
+                x,p.y+348,'small','warn')
+        elseif draft.tab=='spacing' then
+            property(1,'Espaco entre caracteres','letterSpacing',' px')
+            property(2,'Espaco entre linhas','lineSpacing',' px')
+            text('Ajustes apenas de rascunho.',
+                x,p.y+290,'small','muted')
+        end
+        fitted('Motor de texto pendente: nao aplica ao desenho.',
+            x,p.y+p.h-29,'small','warn',p.w-40)
     elseif kind=='filters' then
         local current=A.filterCategory or 'adjust'
         local page=A.filterPage or 1
@@ -6521,6 +6690,8 @@ function love.focus(focused)
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
+        if A.textUi then A.textUi.focused=false end
+        love.keyboard.setTextInput(false)
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
@@ -6577,7 +6748,13 @@ function love.wheelmoved(x,y)
     end
 end
 function love.textinput(t)
-    if A.modal then local i=A.modal.focus;A.modal.values[i]=A.modal.values[i]..t end
+    if A.modal then
+        local i=A.modal.focus
+        A.modal.values[i]=A.modal.values[i]..t
+    elseif A.screen=='editor' and A.compactPanel=='text'
+        and A.textUi and A.textUi.focused then
+        A.textUi.value=TextUI.append(A.textUi.value,t)
+    end
 end
 function love.keypressed(key)
     if A.desktopLayerOpacityDrag then
@@ -6630,6 +6807,20 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='text' then
+            if key=='escape' then
+                if A.textUi then A.textUi.focused=false end
+                love.keyboard.setTextInput(false)
+                A.compactPanel='tools'
+            elseif A.textUi and A.textUi.focused then
+                if key=='backspace' then
+                    A.textUi.value=TextUI.backspace(A.textUi.value)
+                elseif key=='return' or key=='kpenter' then
+                    A.textUi.value=TextUI.newline(A.textUi.value)
+                end
+            end
+            return
+        end
         if A.compactPanel=='layers' and not A.compactLayerOpacityDrag then
             local nextIndex=LayerKeys.target(key,A.doc.active_layer,
                 #A.doc.layers)
