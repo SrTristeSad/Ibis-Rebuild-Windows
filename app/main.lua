@@ -2447,7 +2447,8 @@ function love.load(args)
         elseif args[i]=='--capture' then options.capture=args[i+1]
         elseif args[i]=='--showcase-dir' then options.showcaseDir=args[i+1]
         elseif args[i]=='--lua-test' then options.luaTest=true
-        elseif args[i]=='--self-test' then options.selfTest=true end
+        elseif args[i]=='--self-test' then options.selfTest=true
+        elseif args[i]=='--lua-gui-smoke' then options.luaGuiSmoke=true end
     end
     A.options=options;local base=love.filesystem.getSourceBaseDirectory()
     package.path=base..'/?.lua;'..base..'/?/init.lua;'..package.path
@@ -2506,6 +2507,14 @@ function love.load(args)
         local user=ffi.load('user32');local hwnd=user.GetActiveWindow()
         if hwnd~=nil then user.ShowWindow(hwnd,0) end
     end
+    if options.luaGuiSmoke then
+        assert(Native.implementation=='lua' and Native.available,
+            'Teste grafico requer o motor Lua')
+        local canvas=Native.buffer(64,64)
+        local project=A.store:createProject('Lua GUI Smoke',64,64,'',Native.bytes(canvas))
+        openDoc(project)
+        A.luaGuiSmoke={frames=0}
+    end
 end
 function love.errorhandler(message)
     local detail=debug.traceback(tostring(message),2)
@@ -2516,6 +2525,50 @@ function love.errorhandler(message)
     return function()return 2 end
 end
 function love.update(dt)
+    -- Smoke grafico: exercita a GUI real do LÖVE e a textura GPU com
+    -- o rasterizador Lua, sem ponte compilada ou motor simulado.
+    if A.luaGuiSmoke then
+        A.luaGuiSmoke.frames=A.luaGuiSmoke.frames+1
+        if A.luaGuiSmoke.frames>=3 then
+            local ok,err=xpcall(function()
+                assert(A.screen=='editor' and A.image and A.layerSession,
+                    'Projeto Lua nao abriu no editor')
+                assert(A.image:getWidth()==64 and A.image:getHeight()==64,
+                    'Textura inicial do editor invalida')
+                local texture=A.image
+                local layers=A.layerSession
+                layers:beginEdit()
+                layers:beginStrokeAccum()
+                layers:pressureStroke(16.5,16.5,24.5,24.5,9,9,
+                    0x4cab93ff,.45,.45,1,0,0,0,true)
+                local region={x=10,y=10,w=24,h=24}
+                updateImageRegion(region)
+                assert(A.image==texture and A.partialCanvasUpdates>=1,
+                    'Upload parcial recriou a textura GPU')
+                local alpha=Native.readPixel(layers:activeBuffer(),20,20)%256
+                assert(alpha>0 and alpha<255,'Trajeto Lua sem opacidade')
+                assert(layers:finishEdit(),'Pincelada nao entrou no historico')
+                assert(layers:undo(),'Desfazer grafico indisponivel')
+                assert(Native.readPixel(layers:activeBuffer(),20,20)==0,
+                    'Undo nao limpou o pixel')
+                assert(layers:redo(),'Refazer grafico indisponivel')
+                assert(Native.readPixel(layers:activeBuffer(),20,20)%256==alpha,
+                    'Redo nao restaurou o pixel')
+                layers:recompose()
+                rebuildImage()
+                saveDoc()
+                local loaded=A.store:openProject(A.doc.id)
+                assert(loaded and loaded.layers and
+                    loaded.layers[1].pixels==Native.bytes(layers:activeBuffer()),
+                    'Persistencia RBD2 divergente apos editor grafico')
+                assert(not A.inkAttached,'GUI ainda anexou DLL Windows Ink antiga')
+                print('GUI LUA SMOKE OK: canvas, GPU, undo/redo, RBD2')
+            end,debug.traceback)
+            if not ok then io.stderr:write('GUI LUA SMOKE FALHOU: '..tostring(err)..'\n') end
+            love.event.quit(ok and 0 or 1)
+        end
+        return
+    end
     if A.showcase then
         local sh=A.showcase
         if sh.error then
