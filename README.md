@@ -11,8 +11,12 @@ Windows usa LuaJIT FFI para acesso ao sistema operacional.
 **Validação disponível:** testes do motor Lua aprovados no Linux e Windows;
 geração de executável e smoke real de GUI Windows com atualização parcial
 de textura, undo/redo e salvamento RBD2. Ainda não há equivalência 1:1
-com o ibisPaint Android 14.1.2. Pressão/inclinação física via Windows
-Ink permanece pendente; mouse e toque via LÖVE seguem disponíveis.
+com o ibisPaint Android 14.1.2. A ponte Windows Ink foi
+reimplementada em LuaJIT FFI e passou na integração com a janela Windows,
+mas pressão/inclinação **com caneta física ainda não foram verificadas**.
+Mouse e toque via LÖVE seguem disponíveis e a ponte pode ser desativada
+com `--no-windows-ink`. Consulte
+[Windows Ink em Lua](docs/WINDOWS_INK_LUA.md).
 
 [Estado e pendências](docs/LUA_ONLY_MIGRATION.md) ·
 [PR da migração](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/pull/66)
