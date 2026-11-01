@@ -1,3 +1,13 @@
+# Estado atual — migração Lua (01/11/2026)
+
+A implementação ativa da branch `migration/lua-only-engine` substituiu
+o motor próprio C++ e scripts Python por LuaJIT/LÖVE, com build Windows
+verificado, testes de raster, RBD2 e GUI real. Consulte
+[LUA_ONLY_MIGRATION.md](LUA_ONLY_MIGRATION.md). O diagnóstico abaixo é
+**histórico**, da arquitetura antiga.
+
+---
+
 # Estado atualizado — validação CI Windows x64 (23/10/2026)
 
 Este documento preserva abaixo o diagnóstico **histórico** do checkout anterior em um Windows com bloqueios de paths e compilador. Não confundir com o resultado de um novo runner independente.

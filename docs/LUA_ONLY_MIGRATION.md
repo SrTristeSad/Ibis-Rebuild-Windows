@@ -1,44 +1,42 @@
 # Migração do Ibis Rebuild Windows para Lua
 
-## Arquitetura ativa da branch
+## Estado da branch migration/lua-only-engine
 
-- Interface: LÖVE 11.5, LuaJIT.
-- Raster: `app/raster_lua.lua`, `app/raster_stroke.lua`,
-  `app/raster_tools.lua`; nenhuma DLL de rasterização própria.
-- Compatibilidade da interface existente: `app/native.lua` agora reexporta
-  a API Lua; o gerenciador de camadas e o formato RBD2 foram preservados.
-- Empacotamento Windows: `build.ps1` invoca o LÖVE para executar o
-  empacotador `tools/lua_builder/main.lua`, sem Python ou C++.
-- Testes Windows: `test.ps1` invoca `tools/lua_tests/main.lua` no LÖVE.
-- Entrada da caneta: `app/windows_ink.lua` não usa mais a antiga DLL
-  WM_POINTER; pressão e inclinação física de canetas ainda não foram
-  restauradas. O toque do LÖVE e o mouse continuam disponíveis.
-- Acesso a arquivos Windows: LuaJIT FFI faz chamadas ao sistema
-  operacional Win32, sem código C/C++ compilado pelo projeto.
+- Interface, edição raster, camadas, histórico e persistência executam
+  em LuaJIT sobre o LÖVE 11.5.
+- `app/native.lua` passou a ser uma fachada que reexporta módulos Lua;
+  a aplicação não carrega mais DLL própria C++.
+- `app/raster_lua.lua`, `app/raster_stroke.lua` e `app/raster_tools.lua`
+  implementam pixels, pincéis, borracha, pressão, inclinação, seleção,
+  formas, balde e composição parcial de camadas.
+- Build de Windows em Lua: `tools/lua_builder/main.lua`, invocado por
+  `build.ps1`. Testes LuaJIT: `tools/lua_tests/main.lua`, invocado
+  por `test.ps1`.
+- Os antigos arquivos C++, Python, CMake e CI C++/Python foram retirados
+  da branch (permanecem recuperáveis pelo histórico Git).
+- Dependências externas: LÖVE 11.5, suas DLLs e APIs Win32 chamadas
+  por LuaJIT FFI.
 
-## Verificações realizadas
+## Validação automatizada
 
-- Workflow Linux LuaJIT: testes de raster, traços, geometria e camadas.
-- Workflow Windows: mesmas suites, geração do executável por Lua e
-  verificação do pacote sem `rebuild_core.dll`.
-- Smoke de GUI Windows real com OpenGL por software: abriu editor,
-  carregou imagem GPU, atualizou sub-região de textura, desfez/refez
-  uma pincelada e salvou/reabriu dados RBD2.
+- CI Linux executa regressões puras de raster LuaJIT.
+- CI Windows executa 12 suítes Lua, incluindo regressões anteriores
+  de documento RBD2, camadas, seleção, preenchimento, traços e histórico.
+- O empacotador Windows cria `.love` e executável final sem compilação C++.
+- O pacote ZIP é aberto e inspecionado, exigindo entradas Lua essenciais
+  e rejeitando C++/Python e DLL própria embutida.
+- GUI real testada com OpenGL por software no runner Windows:
+  abre editor, desenha, atualiza textura GPU, desfaz/refaz e salva RBD2.
+- O executável final **fundido** também inicia e encerra com sucesso no
+  runner Windows. Mesa é usado apenas nos testes e removido antes da
+  publicação do artefato.
 
-Essas verificações foram executadas pelo GitHub Actions; não garantem
-qualidade de pintura, desempenho em hardware real, suporte de canetas
-físicas nem equivalência exata ao ibisPaint Android 14.1.2.
+## Limites que continuam
 
-## Pendências
+Não existe fidelidade visual/funcional 1:1 ao ibisPaint Android 14.1.2
+comprovada. O desempenho e a percepção de latência devem ser medidos
+em hardware físico. A antiga ponte Windows Ink C++ foi removida;
+suporte avançado a WM_POINTER, pressão real e inclinação da caneta
+ainda requer implementação Lua/FFI e validação prática.
 
-- Validar visualmente a fidelidade dos pincéis e as diferenças de
-  arredondamento/composição em comparação à versão histórica.
-- Restaurar Windows Ink inteiramente pela camada Lua/FFI, se tecnicamente
-  possível, com testes de hardware real.
-- Atualizar e ampliar os testes de interface e da persistência RBD2;
-  preservar a segurança do formato e de dados de usuário.
-- Revalidar desempenho sob canvases grandes, múltiplas camadas e
-  pinceladas longas antes de liberar versão estável.
-
-O projeto é uma reimplementação independente; não distribui arquivos
-proprietários do aplicativo Android, nem declara paridade 1:1.
+A principal linha `main` não é alterada automaticamente por esta branch.

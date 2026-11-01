@@ -1,11 +1,27 @@
-# Arquitetura mantida
+# Arquitetura Lua do Ibis Rebuild Windows
 
-Lua é responsável pela interface, ferramentas/comandos, painéis, fluxo, galeria e persistência. C++ recebe operações de pixels e contratos de entrada por ABI C estável. LÖVE 11.5/LuaJIT fornece janela, eventos, apresentação nativa e codec de imagem; não há WebView, servidor ou conexão necessária para os fluxos locais.
+O aplicativo utiliza **LuaJIT no runtime LÖVE 11.5** para interface,
+entrada de mouse/toque, composição de telas, edição raster e persistência.
 
-`app/native.lua` carrega a DLL própria e confere ABI e tamanho da amostra. Não utiliza biblioteca do ibisPaint. Se a DLL falta, não existe motor Lua alternativo que finja a mesma função. O modo de inspeção da galeria informa a indisponibilidade e não ativa edição raster.
+- `app/main.lua`: interface e eventos.
+- `app/raster_lua.lua`: buffers RGBA8, pixels e composição de camadas.
+- `app/raster_stroke.lua`: traços, pressão interpolada, inclinação,
+  cobertura única por gesto, borracha e espelhamento.
+- `app/raster_tools.lua`: seleção, movimentação, transformação,
+  preenchimento e formas.
+- `app/native.lua`: fachada de compatibilidade Lua (não carrega DLL).
+- `app/layers.lua`, `app/store.lua`: histórico e formato RBD2.
+- `app/fs.lua`: acesso a arquivos Win32 via LuaJIT FFI, sem C++ próprio.
+- `tools/lua_builder/`: empacotamento .love + .exe em Lua.
+- `tools/lua_tests/`: testes LuaJIT no Windows.
 
-O núcleo usa buffers do chamador, chamadas síncronas e tipos fixos, sem alocação/STL/CRT. `RBSample` tem 56 bytes no ABI x64; tempo em offset 40, classificação stylus em 48. O header `native/core.h` é a definição canônica. Os sete floats são posição atual/anterior, pressão, altitude e azimute; os bits de estado permanecem opacos.
+A aplicação não contém servidor, WebView nem dependência de código do
+ibisPaint Android. O runtime LÖVE é uma dependência externa que contém
+bibliotecas nativas oficiais; estas não são código C++ do projeto.
 
-O projeto RBD1 e sua camada raster única são infraestrutura independente. Não se confundem com reprodução de IPV ou com implementação completa de camadas. Presets armazenam parâmetros próprios, sem executar conteúdo carregado. A persistência usa APIs Windows Unicode, limites e substituição atômica.
+A antiga ponte C++ de Windows Ink foi removida. Eventos comuns de mouse
+e toque LÖVE continuam. A compatibilidade de pressão/inclinação física
+por WM_POINTER está pendente de implementação Lua/FFI e teste em hardware.
 
-Os testes são separados em três processos: Lua sem gráficos, núcleo C++ via DLL real e UI pelo runtime oficial. O script controlador registra prazo máximo, saída e erros. Nenhum teste gráfico usa Python como host SDL/OpenGL.
+Ver [estado da migração](LUA_ONLY_MIGRATION.md) e
+[workflows de testes](../.github/workflows).
