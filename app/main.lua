@@ -2573,6 +2573,8 @@ function love.update(dt)
                 else
                     assert(Ink.abiValid and A.inkAttached and Ink.available,
                         'Ponte Windows Ink em Lua nao anexou a janela real')
+                    assert(Ink.probe(),
+                        'WndProc Lua nao repassou a mensagem WM_NULL')
                 end
                 print('GUI LUA SMOKE OK: canvas, GPU, undo/redo, RBD2')
             end,debug.traceback)
