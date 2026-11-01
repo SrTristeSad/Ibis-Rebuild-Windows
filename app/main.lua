@@ -41,6 +41,7 @@ local RulerUI=require('ibis_ruler_ui')
 local MaterialUI=require('ibis_material_ui')
 local TransformUI=require('ibis_transform_ui')
 local SelectionToolUI=require('ibis_selection_tool_ui')
+local EffectUI=require('ibis_effect_tools_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -69,7 +70,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '27-reguas-catalogo.png','28-regua-espelho.png',
     '29-materiais-categorias.png','30-materiais-busca.png',
     '31-transformar-mover.png','32-transformar-perspectiva.png',
-    '33-varinha-magica.png','34-laco.png'}
+    '33-varinha-magica.png','34-laco.png',
+    '35-borrar.png','36-desfoque.png',
+    '37-caneta-especial.png','38-liquify.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2432,6 +2435,118 @@ local function advanceShowcase()
             and A.dirty==old.dirty,
             'Laço pendente alterou o projeto real')
         status('Laço: modo Subtrair visual, seleção raster pendente')
+    elseif sh.stage==35 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        local chooser=Compact.popup(w,h,'tools')
+        local r=IbisTools.grid(chooser,7)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='smudge' and A.visualPendingTool=='smudge'
+            and A.effectUi and A.effectUi.diameter==24,
+            'Borrar nao abriu painel de rascunho')
+        local p=Compact.popup(w,h,'smudge')
+        local plus=EffectUI.paintButton(p,1,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.effectUi.diameter==25,'Tamanho de Borrar nao ajustou')
+        A.showcaseEffectCheck=old
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,'Borrar alterou raster ou historico')
+        status('Borrar: parametros locais e motor pendente')
+    elseif sh.stage==36 then
+        local old=assert(A.showcaseEffectCheck)
+        assert(A.compactPanel=='smudge')
+        love.keypressed('escape')
+        assert(A.compactPanel=='tools','Escape de Borrar nao voltou')
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),8)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='blur' and A.visualPendingTool=='blur',
+            'Desfoque nao abriu painel independente')
+        local p=Compact.popup(w,h,'blur')
+        local minus=EffectUI.paintButton(p,2,-1)
+        love.draw()
+        love.mousepressed(minus.x+minus.w/2,minus.y+minus.h/2,1,false)
+        love.mousereleased(minus.x+minus.w/2,minus.y+minus.h/2,1,false)
+        assert(A.effectUi.opacity==95,'Opacidade Desfoque nao mudou')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,'Desfoque pendente alterou documento')
+        status('Desfoque: parametros visuais, sem filtro')
+    elseif sh.stage==37 then
+        local old=assert(A.showcaseEffectCheck)
+        love.keypressed('escape')
+        assert(A.compactPanel=='tools','Escape de Desfoque nao voltou')
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),9)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='special' and
+            A.visualPendingTool=='special' and
+            A.effectUi.specialId=='liquify',
+            'Caneta Especial nao abriu catalogo')
+        local p=Compact.popup(w,h,'special')
+        local copy=EffectUI.specialRect(p,5)
+        love.draw()
+        love.mousepressed(copy.x+copy.w/2,copy.y+copy.h/2,1,false)
+        love.mousereleased(copy.x+copy.w/2,copy.y+copy.h/2,1,false)
+        assert(A.effectUi.specialId=='copy-fixed',
+            'Copia Fixa nao foi destacada')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,'Caneta especial alterou desenho')
+        status('Caneta Especial: Copia Fixa destacada, sem copiar')
+    elseif sh.stage==38 then
+        local old=assert(A.showcaseEffectCheck)
+        assert(A.compactPanel=='special')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'special')
+        local liquify=EffectUI.specialRect(p,1)
+        love.draw()
+        love.mousepressed(liquify.x+liquify.w/2,
+            liquify.y+liquify.h/2,1,false)
+        love.mousereleased(liquify.x+liquify.w/2,
+            liquify.y+liquify.h/2,1,false)
+        local smooth=EffectUI.liquifyModeRect(p,4)
+        love.draw()
+        love.mousepressed(smooth.x+smooth.w/2,
+            smooth.y+smooth.h/2,1,false)
+        love.mousereleased(smooth.x+smooth.w/2,
+            smooth.y+smooth.h/2,1,false)
+        local plus=EffectUI.strengthButton(p,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.effectUi.specialId=='liquify'
+            and A.effectUi.liquifyId=='smoothen'
+            and A.effectUi.strength==55
+            and not EffectUI.canApply(),
+            'Controles Liquify nao mudaram em rascunho')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Liquify visual alterou documento')
+        status('Liquify: suavizar e forca visuais, sem deformacao')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5917,6 +6032,9 @@ local function drawCompactPopup(w,h)
         kind=='transform' and 'Transformar' or
         kind=='wand' and 'Varinha Mágica' or
         kind=='lasso' and 'Laço' or
+        kind=='smudge' and 'Borrar' or
+        kind=='blur' and 'Desfoque' or
+        kind=='special' and 'Caneta Especial' or
         kind=='color' and 'Cores · RGBA' or
         kind=='view' and 'Visualização' or
         kind=='stabilizer' and 'Estabilizador' or
@@ -5936,7 +6054,8 @@ local function drawCompactPopup(w,h)
         A.compactPanel=nil
     end)
     if kind=='blends' or kind=='filters' or kind=='text'
-        or kind=='transform' or kind=='wand' or kind=='lasso' then
+        or kind=='transform' or kind=='wand' or kind=='lasso'
+        or kind=='smudge' or kind=='blur' or kind=='special' then
         button('<',p.x+p.w-79,p.y+8,31,30,function()
             if kind=='text' and A.textUi then
                 A.textUi.focused=false
@@ -5953,6 +6072,14 @@ local function drawCompactPopup(w,h)
             local active=tool.backend==A.tool and tool.backend~=nil
                 or A.visualPendingTool==tool.id
             button('',r.x,r.y,r.w,r.h,function()
+                if tool.id=='smudge' or tool.id=='blur'
+                    or tool.id=='special' then
+                    A.visualPendingTool=tool.id
+                    A.effectUi=EffectUI.new(tool.id)
+                    A.compactPanel=tool.id
+                    status(tool.label..': interface visual, motor pendente')
+                    return
+                end
                 if tool.id=='wand' or tool.id=='lasso' then
                     A.visualPendingTool=tool.id
                     A.selectionToolUi=SelectionToolUI.new(tool.id)
@@ -6003,6 +6130,92 @@ local function drawCompactPopup(w,h)
             (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
             or 'Ferramentas da interface · motor Lua',
             p.x+16,p.y+p.h-28,'small','muted')
+    elseif kind=='smudge' or kind=='blur' or kind=='special' then
+        local draft=assert(A.effectUi,'Rascunho de efeito ausente')
+        assert(draft.kind==kind,'Painel de efeito divergente')
+        if kind=='smudge' or kind=='blur' then
+            text('PARÂMETROS VISUAIS',p.x+16,p.y+61,'small','muted')
+            for i,item in ipairs({
+                {field='diameter',name='Tamanho',unit=' px'},
+                {field='opacity',name='Opacidade',unit='%' }}) do
+                local r=EffectUI.paintRow(p,i)
+                box(r.x,r.y,r.w,r.h,'card')
+                text(item.name,r.x+12,r.y+8,'small','muted')
+                fitted(tostring(draft[item.field])..item.unit,
+                    r.x+150,r.y+34,'small','text',128)
+                for _,dir in ipairs({-1,1}) do
+                    local b=EffectUI.paintButton(p,i,dir)
+                    button(dir==1 and '+' or '−',
+                        b.x,b.y,b.w,b.h,function()
+                        EffectUI.adjust(draft,item.field,dir)
+                    end)
+                end
+            end
+            local preview=EffectUI.paintPreview(p)
+            box(preview.x,preview.y,preview.w,preview.h,'card')
+            c('line')
+            love.graphics.rectangle('line',preview.x+.5,preview.y+.5,
+                preview.w-1,preview.h-1,5,5)
+            c('muted')
+            love.graphics.circle('line',preview.x+70,
+                preview.y+57,math.min(36,8+draft.diameter/12),32)
+            love.graphics.setLineWidth(3)
+            love.graphics.line(preview.x+156,preview.y+64,
+                preview.x+191,preview.y+47,preview.x+221,preview.y+69,
+                preview.x+250,preview.y+44)
+            fitted('Amostra vetorial; não altera a obra.',
+                preview.x+115,preview.y+87,'small','muted',preview.w-125)
+        else
+            text('TIPOS DE CANETA ESPECIAL',p.x+16,p.y+48,
+                'small','muted')
+            for i,item in ipairs(EffectUI.specials) do
+                local r=EffectUI.specialRect(p,i)
+                button('',r.x,r.y,r.w,r.h,function()
+                    EffectUI.selectSpecial(draft,item.id)
+                    status(item.label..' · algoritmo ainda pendente')
+                end,draft.specialId==item.id)
+                c(draft.specialId==item.id and 'accent' or 'muted')
+                Icons.draw('special',r.x+23,r.y+21,17)
+                fitted(item.label,r.x+40,r.y+10,'small','text',r.w-47)
+                text('Pendente',r.x+40,r.y+32,'small','warn')
+            end
+            if draft.specialId=='liquify' then
+                text('LIQUIFY · OPÇÕES VISUAIS',p.x+16,
+                    p.y+246,'small','muted')
+                for i,item in ipairs(EffectUI.liquifyModes) do
+                    local r=EffectUI.liquifyModeRect(p,i)
+                    button(item.label,r.x,r.y,r.w,r.h,function()
+                        EffectUI.selectLiquify(draft,item.id)
+                    end,draft.liquifyId==item.id)
+                end
+                local strength=EffectUI.strengthRow(p)
+                box(strength.x,strength.y,strength.w,strength.h,'card')
+                fitted('Força: '..draft.strength..'%',
+                    strength.x+10,strength.y+11,'small','text',
+                    strength.w-108)
+                for _,dir in ipairs({-1,1}) do
+                    local b=EffectUI.strengthButton(p,dir)
+                    button(dir==1 and '+' or '−',
+                        b.x,b.y,b.w,b.h,function()
+                        EffectUI.adjust(draft,'strength',dir)
+                    end)
+                end
+            else
+                local pnd=EffectUI.pendingRect(p)
+                box(pnd.x,pnd.y,pnd.w,pnd.h,'card')
+                c('muted')
+                Icons.draw('special',pnd.x+35,pnd.y+35,25)
+                fitted(EffectUI.special(draft.specialId).label,
+                    pnd.x+69,pnd.y+25,'body','text',pnd.w-83)
+                fitted('Algoritmo de edição ainda indisponível.',
+                    pnd.x+14,pnd.y+80,'small','warn',pnd.w-28)
+                fitted('Nenhuma operação ocorre no canvas.',
+                    pnd.x+14,pnd.y+105,'small','muted',pnd.w-28)
+            end
+        end
+        local footer=EffectUI.footer(p)
+        fitted('Motor Lua de efeitos pendente · sem aplicar.',
+            footer.x,footer.y,'small','warn',footer.w)
     elseif kind=='wand' or kind=='lasso' then
         local state=assert(A.selectionToolUi,
             'Estado de seleção visual ausente')
@@ -7261,6 +7474,11 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='smudge' or A.compactPanel=='blur'
+            or A.compactPanel=='special' then
+            if key=='escape' then A.compactPanel='tools' end
+            return
+        end
         if A.compactPanel=='wand' or A.compactPanel=='lasso' then
             if key=='escape' then A.compactPanel='tools' end
             return
