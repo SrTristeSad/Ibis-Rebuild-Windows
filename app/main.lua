@@ -48,7 +48,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
-    '09-opacidade-camadas.png','10-seletor-ferramentas.png'}
+    '09-opacidade-camadas.png','10-seletor-ferramentas.png',
+    '11-criar-tela.png','12-galeria-desenhos.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -1942,6 +1943,16 @@ local function advanceShowcase()
         A.compactPanel='tools'
         A.visualPendingTool=nil
         status('Seletor visual · 15 ferramentas e motores Lua disponíveis')
+    elseif sh.stage==11 then
+        toGallery()
+        A.galleryFilter='all'
+        modal('new')
+        status('Nova tela · visualizacao de proporcao e tamanhos predefinidos')
+    elseif sh.stage==12 then
+        A.modal=nil
+        love.keyboard.setTextInput(false)
+        A.galleryFilter='works'
+        status('A Minha Galeria · filtro apenas desenhos')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
