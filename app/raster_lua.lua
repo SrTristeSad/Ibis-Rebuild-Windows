@@ -8,7 +8,8 @@ local Raster = {
     available = true, implementation = "lua",
     -- Runners Windows apresentaram regressao com varredura de linhas.
     -- Manter caminho per-pixel no Windows ate benchmark de hardware real.
-    opaqueRowCopyEnabled = ffi.os ~= "Windows"
+    opaqueRowCopyEnabled = ffi.os ~= "Windows",
+    opaqueDestFastPathEnabled = ffi.os ~= "Windows"
 }
 
 local function integer(n)
@@ -139,7 +140,7 @@ local function compose(dst, src, opacity, rect)
                     -- normalizar seu RGB para zero como no compositor anterior.
                 else
                     local sa = (sourceAlpha/255)*opacity
-                    if destPixels[p+3]==255 then
+                    if Raster.opaqueDestFastPathEnabled and destPixels[p+3]==255 then
                         -- Fundo opaco: source-over permanece opaco.
                         -- Nao ha divisao pelo alfa de saida (igual a 1).
                         local remain=1-sa
