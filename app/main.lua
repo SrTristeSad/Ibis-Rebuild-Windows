@@ -1883,6 +1883,34 @@ end
 -- Explicit CI-only visual capture mode. Every screenshot comes from the
 -- real LÖVE draw callback using the same independent native Lua raster.
 -- Never runs without --showcase-dir and does not touch normal user projects.
+-- O showcase testa cliques reais sobre os ícones da barra superior,
+-- sem escrever nos projetos nem criar entradas de histórico.
+local function showcaseTopClick(id,expectedTool,expectedPanel)
+    assert(A.screen=='editor' and A.compactUi
+        and A.layerSession and not A.modal and not A.brushLibrary)
+    local before=Native.bytes(A.buffer)
+    local edits=A.layerSession:historyStats().undo
+    A.compactPanel=nil
+    love.draw()
+    local slot
+    for _,item in ipairs(TopToolbar.toolbar(
+        love.graphics.getDimensions())) do
+        if item.id==id then slot=item;break end
+    end
+    assert(slot,'Ícone superior não encontrado: '..id)
+    love.mousepressed(slot.x+slot.w/2,
+        slot.y+slot.h/2,1,false)
+    assert(A.compactPanel==expectedPanel,
+        'Clique na barra superior não abriu '..expectedPanel)
+    if expectedTool then
+        assert(A.tool==expectedTool,
+            'Ferramenta superior não selecionada: '..expectedTool)
+    end
+    assert(A.layerSession:historyStats().undo==edits,
+        'A navegação visual não pode editar o histórico')
+    assert(Native.bytes(A.buffer)==before,
+        'O clique na interface alterou os pixels')
+end
 local function advanceShowcase()
     local sh=A.showcase
     sh.stage=sh.stage+1
@@ -1960,18 +1988,17 @@ local function advanceShowcase()
         openDoc(A.store:openProject(sh.projectId))
         A.compactUi=true
         selectTool('brush')
-        A.compactPanel='view'
+        showcaseTopClick('view','brush','view')
         status('Controles superiores · menu de visualização')
     elseif sh.stage==14 then
-        A.compactPanel='stabilizer'
         A.stabilization=3
+        showcaseTopClick('stabilizer','brush','stabilizer')
         status('Estabilização Lua · nível 3 / 5')
     elseif sh.stage==15 then
-        selectTool('shape')
-        A.compactPanel='properties'
+        showcaseTopClick('shape','shape','properties')
         status('Ferramentas de formas · configurações do motor Lua')
     elseif sh.stage==16 then
-        A.compactPanel='materials'
+        showcaseTopClick('materials','shape','materials')
         status('Materiais · aparência disponível, motor pendente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
