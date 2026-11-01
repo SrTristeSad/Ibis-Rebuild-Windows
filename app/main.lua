@@ -34,6 +34,7 @@ local Compact=require('compact_layout')
 local IbisTools=require('ibis_visual_tools')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
+local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
@@ -55,7 +56,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '15-opcoes-forma.png','16-materiais-pendentes.png',
     '17-losango-hsb.png','18-sliders-rgb.png',
     '19-paleta-cores.png'}
-local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
 -- Visual language: neutral studio workspace, clear blue tool state and
@@ -5453,19 +5454,36 @@ local function drawColorPopup(p)
         text('Canais 0 a 255 · precisão de 1 unidade',
             x+21,y+368,'small','muted')
     else
-        text('Cores da paleta local',x+22,y+183,'small','muted')
-        for i,value in ipairs(A.savedColors) do
-            local col=(i-1)%6
-            local row=math.floor((i-1)/6)
-            local px=x+22+col*61
-            local py=y+211+row*46
-            drawColorTile(value,px,py,49,32)
-            A.buttons[#A.buttons+1]={x=px,y=py,w=49,h=32,
+        -- O tutorial do ibisPaint mostra uma paleta inicial pronta.
+        -- As amostras abaixo são nossas, não dados extraídos do APK.
+        button('Cores básicas',x+22,y+169,165,31,function()
+            A.paletteTab='standard'
+        end,A.paletteTab=='standard')
+        button(('Minhas (%d)'):format(#A.savedColors),
+            x+199,y+169,189,31,function()
+                A.paletteTab='personal'
+            end,A.paletteTab=='personal')
+        local items=PaletteUI.entries(A.paletteTab,A.savedColors)
+        for i,value in ipairs(items) do
+            local cell=PaletteUI.swatch(p,i)
+            drawColorTile(value,cell.x,cell.y,cell.w,cell.h)
+            A.buttons[#A.buttons+1]={
+                x=cell.x,y=cell.y,w=cell.w,h=cell.h,
                 fn=function()chooseColor(value)end}
+            if A.color==value then
+                c('accent')
+                love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',cell.x-2,cell.y-2,
+                    cell.w+4,cell.h+4,3,3)
+            end
         end
-        text(('Salvas: %d / %d'):format(#A.savedColors,
-            ColorPanel.PALETTE_LIMIT),x+22,y+316,'small','muted')
-        button('Guardar cor atual',x+204,y+310,184,32,
+        if A.paletteTab=='personal' and #items==0 then
+            text('Você ainda não guardou cores.',
+                x+22,y+246,'body','muted')
+        end
+        text(('Pessoais: %d / %d'):format(#A.savedColors,
+            ColorPanel.PALETTE_LIMIT),x+22,y+367,'small','muted')
+        button('Guardar cor atual',x+205,y+357,183,29,
             savePaletteColor,false,
             #A.savedColors>=ColorPanel.PALETTE_LIMIT)
     end
