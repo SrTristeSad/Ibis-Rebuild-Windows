@@ -1,27 +1,26 @@
 # Ibis Rebuild Windows
 
-Editor de pintura raster para Windows x64, reconstruído independentemente
-em **LuaJIT/LÖVE 11.5**. O motor de pixels, pincéis, camadas, seleções e
-ferramentas é código Lua. **Não exige Python, CMake ou compilação de C++**.
+Editor raster independente para Windows x64, escrito em **LuaJIT/LÖVE 11.5**.
+O motor de pixels, pincéis, camadas, seleções e ferramentas é código Lua.
+**Não exige Python, CMake nem compilação C++ para o aplicativo.**
 
-O LÖVE é um runtime externo que contém bibliotecas nativas oficiais;
-"todo em Lua" refere-se ao código próprio do aplicativo, não ao runtime.
-A API Win32 de arquivos é acessada por LuaJIT FFI diretamente no Windows.
+O LÖVE é um runtime externo com bibliotecas nativas oficiais;
+"todo em Lua" refere-se ao código próprio do aplicativo. A interface
+Windows usa LuaJIT FFI para acesso ao sistema operacional.
 
-**Estado:** motor Lua integrado, testes de raster e empacotamento aprovados
-no Windows e Linux e smoke test real da janela Windows aprovado. A equivalência
-1:1 com o ibisPaint Android 14.1.2 **não foi atingida**. A entrada avançada
-Windows Ink (WM_POINTER, inclinação/pressão da caneta física) continua pendente;
-mouse e eventos de toque do LÖVE permanecem disponíveis.
+**Validação disponível:** testes do motor Lua aprovados no Linux e Windows;
+geração de executável e smoke real de GUI Windows com atualização parcial
+de textura, undo/redo e salvamento RBD2. Ainda não há equivalência 1:1
+com o ibisPaint Android 14.1.2. Pressão/inclinação física via Windows
+Ink permanece pendente; mouse e toque via LÖVE seguem disponíveis.
 
-[Ver migração e limitações](docs/LUA_ONLY_MIGRATION.md) ·
-[Ver PR da migração](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/pull/66)
+[Estado e pendências](docs/LUA_ONLY_MIGRATION.md) ·
+[PR da migração](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/pull/66)
 
-## Histórico das etapas anteriores
+## Histórico de etapas anteriores (arquivo de referência)
 
-Os textos históricos abaixo descrevem as implementações e limites de cada
-etapa **no momento em que foram feitas**. Menções à DLL C++ e scripts Python
-nesses registros são históricas e não descrevem a arquitetura Lua atual.
+A seção a seguir conserva o relato das etapas anteriores, quando havia
+C++/Python. Essas menções históricas **não descrevem a arquitetura Lua atual**.
 
 O [workflow Windows x64](.github/workflows/windows-x64.yml) compila com MSVC, carrega a DLL C++ real, executa os testes Python/ctypes e LuaJIT/FFI, testa persistência e exercita o editor em dois processos LÖVE: executável fundido e pasta de fontes. O [CI aprovado da etapa 1](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/40013747842) concluiu ambas as rotas com código zero, relatórios e capturas.
 
@@ -138,8 +137,7 @@ A máquina virtual de CI não oferece OpenGL suficiente: o teste usa Mesa llvmpi
 
 ## Executar, testar e empacotar no Windows
 
-Requisito: **LÖVE 11.5 x64** instalado (runtime oficial). Para trabalhar
-diretamente com os fontes, execute:
+Requisito: runtime oficial **LÖVE 11.5 x64**. Execute:
 
 ```powershell
 .\run.ps1 -Runtime "C:\Program Files\LOVE"
@@ -147,12 +145,24 @@ diretamente com os fontes, execute:
 .\build.ps1 -Runtime "C:\Program Files\LOVE"
 ```
 
-Os comandos invocam o runtime LÖVE e os lançadores Lua; não exigem
-Python, MSVC ou CMake. O pacote fica em `dist/`, com o executável
-`Android1412Rebuild.exe`, arquivo `.love` e as DLLs oficiais do runtime.
-Nenhuma DLL própria `rebuild_core.dll` é gerada/distribuída.
+Os scripts invocam LÖVE e módulos Lua. O pacote é gerado em `dist/`:
+`Android1412Rebuild.exe`, `Android1412Rebuild.love` e as DLLs
+oficiais do runtime. Nenhuma `rebuild_core.dll` própria é necessária.
 
-Para desenvolvimento, é possível abrir a pasta `app/` diretamente no
-LÖVE. Para auditar os testes automáticos consulte os workflows
+Para desenvolvimento, também é possível abrir `app/` diretamente
+no LÖVE. A validação automatizada está nos workflows
 `lua-migration.yml` e `lua-windows.yml`.
 
+## Organização do projeto
+
+- [app/](app): interface LÖVE, controles, ponte LuaJIT FFI, galeria e armazenamento.
+- [app/raster_lua.lua](app/raster_lua.lua), [raster_stroke.lua](app/raster_stroke.lua) e [raster_tools.lua](app/raster_tools.lua): implementação própria do motor Lua.
+- [tests/](tests): testes Lua do raster, ferramentas, camadas e persistência.
+- [tools/](tools): empacotador e executor de testes em Lua/LÖVE.
+- [docs/](docs): documentação, limites de equivalência, pesquisa derivada e segurança.
+
+## Escopo e segurança
+
+O formato RBD1 é **próprio**, versionado e editável; **não é o formato IPV**. Não há comparação dinâmica completa com o aplicativo Android. Presença de símbolos nativos ou de uma operação com nome semelhante não comprova equivalência de comportamento. A implementação só declara os contratos efetivamente testados e documentados.
+
+O histórico principal foi reiniciado a partir de uma árvore revisada de fontes independentes. Isso não garante eliminação de objetos Git/LFS antigos no servidor. Consulte [segurança da publicação](docs/SECURITY.md) antes de abrir novos PRs. Não incluir APKs, dados pessoais, extrações de engenharia reversa, recursos proprietários ou arquivos do Inkora. Atribuições e licenças de dependências continuam próprias de seus projetos.
