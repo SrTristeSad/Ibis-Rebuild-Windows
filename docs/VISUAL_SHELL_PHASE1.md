@@ -192,6 +192,16 @@ com as telas de Visualização, Estabilizador, Formas e Materiais.
 Os testes de composição, camada, histórico RBD2 e Windows Ink
 existentes permanecem ativos.
 
+**Clique real automatizado:** o showcase Windows executa
+`love.mousepressed` sobre as hitboxes de Visualização, Estabilizador,
+Formas e Materiais nas etapas 13–16. Após cada clique compara a
+ferramenta e o popup esperados, os bytes RGBA antes/depois e a contagem
+do histórico. A interface não pode criar pintura ou edições implícitas
+ao trocar painéis. Essa verificação passou no [Windows Actions
+#41350930811](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/41350930811);
+o teste LuaJIT da geometria passou no [Linux Actions
+#41350930799](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/41350930799).
+
 **Limite da evidência:** a documentação pública descreve o fluxo
 do ibisPaint, mas não comprova equivalência geométrica específica
 com cada build Android 14.1.2. A aprovação visual depende de
