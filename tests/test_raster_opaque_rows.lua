@@ -117,9 +117,11 @@ R.composite(normal,clear,1)
 assert(R.readPixel(normal,0,0)==0,'Transparent hidden RGB not cleared')
 -- A via de linhas opacas deve continuar correta com a configuracao
 -- explicitamente ligada/desligada, independente do sistema operacional.
+local originalMode=R.useExperimentalCompositor
 local originalRowFlag=R.opaqueRowCopyEnabled
 local originalDestFlag=R.opaqueDestFastPathEnabled
 for _,enable in ipairs({false,true}) do
+    R.useExperimentalCompositor=enable
     R.opaqueRowCopyEnabled=enable
     R.opaqueDestFastPathEnabled=enable
     local background=R.buffer(W,H)
@@ -132,6 +134,7 @@ for _,enable in ipairs({false,true}) do
     assert(R.bytes(actualResult)==R.bytes(referenceResult),
         'Row fast-path toggle changed RGBA: '..tostring(enable))
 end
+R.useExperimentalCompositor=originalMode
 R.opaqueRowCopyEnabled=originalRowFlag
 R.opaqueDestFastPathEnabled=originalDestFlag
 
@@ -143,6 +146,7 @@ local cell=16
 local patch={x=0,y=0,w=cell,h=cell}
 local stressCases=0
 for _,enabled in ipairs({false,true}) do
+R.useExperimentalCompositor=enabled
 R.opaqueDestFastPathEnabled=enabled
 for _,op in ipairs({0,.0039,.125,.333333333,.5,.67,.995,1}) do
     for pass=1,14 do
@@ -183,6 +187,7 @@ for _,op in ipairs({0,.0039,.125,.333333333,.5,.67,.995,1}) do
     end
 end
 end
+R.useExperimentalCompositor=originalMode
 R.opaqueDestFastPathEnabled=originalDestFlag
 print(('Opaque destination regression: %d RGBA pixels: OK'):format(stressCases))
 
