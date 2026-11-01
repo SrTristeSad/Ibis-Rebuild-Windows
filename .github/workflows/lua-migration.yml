@@ -33,6 +33,10 @@ jobs:
         run: luajit tests/test_gpu_upload.lua
       - name: Lua Windows Ink queue and pressure model
         run: luajit tests/test_windows_ink_lua.lua
+      - name: Byte-identical brush scanline regression
+        run: luajit tests/test_raster_stroke_scanlines.lua
+      - name: Stroke CPU benchmark (informational)
+        run: luajit tests/bench_raster_stroke_scanlines.lua
       - name: RGBA compositor equivalence
         run: luajit tests/test_raster_compositor_equivalence.lua
       - name: Multi-layer opaque-row regression
