@@ -250,7 +250,7 @@ local function resetCanvasRotation()
     commitView(v);return changed
 end
 local function openDoc(doc)
-    assert(Native.available,'O editor requer o motor C++ compilado. A galeria continua disponível.')
+    assert(Native.available,'O editor requer o motor Lua compilado. A galeria continua disponível.')
     clearLayerThumbs()
     A.layerScroll=nil
     A.layerSession=Layers.open(A.store,doc)
@@ -299,7 +299,7 @@ local function paintBrushSegment(x,y,pressure,defer)
         updateImageRegion(rect)
     end
 end
--- Batch the C++ raster calls from one input packet into one composition/upload.
+-- Batch the Lua raster calls from one input packet into one composition/upload.
 local function paintBrushPath(x,y,pressure,closing)
     if not A.drawing or not A.strokePath then return end
     local emit=function(px,py,p)
@@ -1115,7 +1115,7 @@ local function verifyBrushLibrary()
         Samples.key(A.brushLabDraft,A.color) and
         Native.bytes(A.layerSession.composite)==originalPixels and
         A.layerSession:historyStats().undo==originalHistory,
-        'Prévia de cartão alterou pixels/histórico ou não atualizou C++')
+        'Prévia de cartão alterou pixels/histórico ou não atualizou Lua')
     -- Built-in #3 occupies the second row, first column.
     love.mousepressed(rect.x+34,rect.y+80+88+10,1,false)
     assert(not A.brushLibrary and A.brushStyle=='soft' and
@@ -1281,7 +1281,7 @@ local function verifyBrushTipHover()
         0xe53b44ff,'soft',1,0,0,false))
     assert(Native.bytes(A.tipCache.stamp.buffer)==
         Native.bytes(nativeReference.buffer),
-        'Prévia gráfica divergiu dos bytes RGBA do raster C++')
+        'Prévia gráfica divergiu dos bytes RGBA do raster Lua')
     local cache=A.tipCache
     love.draw()
     assert(A.tipCache==cache,
@@ -1668,7 +1668,7 @@ local function verifyNativeBrushCatalogue()
     openBrushLibrary()
     love.draw()
     local cached=assert(A.brushSampleCache and A.brushSampleCache[3],
-        'Brush window did not render native C++ swatches')
+        'Brush window did not render native Lua swatches')
     local expected=Samples.render(Native,Presets.BUILTINS[3],A.color)
     assert(Native.bytes(cached.sample.buffer)==Native.bytes(expected.buffer),
         'Marker preview does not use native feather renderer')
@@ -1732,7 +1732,7 @@ local function verifyNativeBrushCatalogue()
     selectTool(previousTool)
     A.sideTab=previousTab
 end
--- Stage 35 regression: edit a live C++ brush inspector with pointer drags,
+-- Stage 35 regression: edit a live Lua brush inspector with pointer drags,
 -- explicitly apply/cancel and prove no pixels or saved presets were touched.
 local function verifyBrushLabLive()
     local w,h=love.graphics.getDimensions()
@@ -1779,16 +1779,16 @@ local function verifyBrushLabLive()
         'Stabilizer and draft-modified indicator failed')
     love.draw()
     local appliedPreview=assert(A.brushSampleCache.inspector_active,
-        'In-use C++ comparison sample must be rendered')
+        'In-use Lua comparison sample must be rendered')
     local inUse=brushInUse()
     assert(appliedPreview.key==Samples.key(inUse,A.color) and
         Native.bytes(appliedPreview.sample.buffer)==
         Native.bytes(Samples.render(Native,inUse,A.color).buffer),
-        'In-use comparison differs from actual C++ brush parameters')
+        'In-use comparison differs from actual Lua brush parameters')
     local updated=assert(A.brushSampleCache.inspector)
     assert(updated~=initial and
         updated.key==Samples.key(A.brushLabDraft,A.color),
-        'Live C++ preview did not refresh after adjustments')
+        'Live Lua preview did not refresh after adjustments')
     local expected=Samples.render(Native,A.brushLabDraft,A.color)
     assert(Native.bytes(updated.sample.buffer)==
         Native.bytes(expected.buffer),
@@ -1855,7 +1855,7 @@ local function verifyBrushLabLive()
     selectTool(oldTool);A.sideTab=oldTab
 end
 -- Explicit CI-only visual capture mode. Every screenshot comes from the
--- real LÖVE draw callback using the same independent native C++ raster.
+-- real LÖVE draw callback using the same independent native Lua raster.
 -- Never runs without --showcase-dir and does not touch normal user projects.
 local function advanceShowcase()
     local sh=A.showcase
@@ -1902,7 +1902,7 @@ local function advanceShowcase()
         A.color=0x34aaf7ff
         selectTool('brush')
         fit()
-        status('Ajustes compactos · prévia nativa de pincel C++')
+        status('Ajustes compactos · prévia nativa de pincel Lua')
     elseif sh.stage==9 then
         if #A.doc.layers==1 then
             A.layerSession:add('Destaques')
@@ -1989,7 +1989,7 @@ local function verifyAdaptiveDesktopSidebar()
         love.graphics.getHeight()==oldH,
         'GUI resolution not restored after small viewport test')
 end
--- Stage 40: actual compact properties popup and native C++ swatch.
+-- Stage 40: actual compact properties popup and native Lua swatch.
 -- Exercise the same existing mouse buttons without any document edits.
 local function verifyCompactNativeInspector()
     local w,h=love.graphics.getDimensions()
@@ -2017,14 +2017,14 @@ local function verifyCompactNativeInspector()
         A.brushSampleCache.compact_preview,
         'Native brush swatch not rendered in compact inspector')
     assert(first.key==Samples.key(Inspector.settings(A),A.color),
-        'Compact swatch does not reflect currently active C++ brush')
+        'Compact swatch does not reflect currently active Lua brush')
     love.mousepressed(p.x+17+73+25,p.y+54+29+15,1,false)
     assert(A.brushDiameter==26,'Compact diameter adjustment broke')
     love.draw()
     local second=assert(A.brushSampleCache.compact_preview)
     assert(second.key~=first.key and
         second.key==Samples.key(Inspector.settings(A),A.color),
-        'Diameter change did not invalidate C++ preview cache')
+        'Diameter change did not invalidate Lua preview cache')
     love.mousepressed(p.x+17+30,p.y+54+109+15,1,false)
     assert(math.abs(A.brushOpacity-.7)<1e-8,
         'Opacity popup action not applied to active brush')
@@ -2164,7 +2164,7 @@ local function verifyCompactLayerOpacity()
         A.doc.layers[layerIndex].opacity==initial,
         'Undo did not restore original layer opacity')
     assert(Native.bytes(A.layerSession.composite)==bytes,
-        'Undo must exactly restore original C++ RGBA composite')
+        'Undo must exactly restore original Lua RGBA composite')
     assert(A.layerSession:redo() and
         A.doc.layers[layerIndex].opacity==.37,
         'Redo did not reapply 37 percent')
@@ -2235,7 +2235,7 @@ local function verifyDesktopLayerOpacity()
     assert(A.layerSession:undo() and
         A.doc.layers[index].opacity==initial and
         Native.bytes(A.layerSession.composite)==initialBytes,
-        'Opacity undo must exactly restore C++ composite')
+        'Opacity undo must exactly restore Lua composite')
     assert(A.layerSession:redo() and
         A.doc.layers[index].opacity==target,
         'Opacity redo must reapply the chosen percentage')
@@ -2392,7 +2392,7 @@ local function verifyPressureInfluenceControls()
     A.sidebarScroll=Sidebar.clamp(love.graphics.getHeight(),oldScroll or 0)
 end
 local function nativeSelfTest()
-    assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
+    assert(Native.available,'Lua indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
     assert(Native.pressure(5,false,10,10)==1)
     local value,accepted=Native.thickness(.2,-2);assert(accepted and value==-2)
@@ -2403,7 +2403,7 @@ local function nativeSelfTest()
     assert(Native.readPixel(buf,8,6)==0x123456ff)
     local stroke=Native.buffer(9,7);Native.clear(stroke,0)
     Native.basicStroke(stroke,1.5,2.5,6.5,2.5,1,0xaabbccff,1)
-    assert(Native.readPixel(stroke,4,2)==0xaabbccff,'Traço básico contínuo C++ falhou')
+    assert(Native.readPixel(stroke,4,2)==0xaabbccff,'Traço básico contínuo Lua falhou')
     assert(Native.readPixel(stroke,4,3)==0,'Traço básico atingiu pixel fora do segmento')
     local doc=A.store:createProject('Fixture nativa',9,7,'',Native.bytes(buf));openDoc(doc);saveDoc()
     local reopened=A.store:openProject(doc.id)
@@ -2423,7 +2423,7 @@ local function nativeSelfTest()
     local image=love.image.newImageData(love.filesystem.newFileData(pngData,'oracle.png'))
     local r,g,b,a=image:getPixel(8,6);assert(math.abs(r-18/255)<1/255 and math.abs(g-52/255)<1/255 and math.abs(b-86/255)<1/255 and a==1)
     image:release()
-    -- C++ erases only selected layer, then undo/redo restores its exact RGBA bytes.
+    -- Lua erases only selected layer, then undo/redo restores its exact RGBA bytes.
     A.layerSession:beginEdit()
     A.layerSession:erase(1.5,1.5,1.5,1.5,1,1)
     assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
@@ -2465,9 +2465,9 @@ function love.load(args)
         end
     end
     A.colorHistory={}
-    refreshGallery();status(Native.available and 'Motor C++ v1 carregado' or 'Galeria disponível · motor C++ ainda não compilado')
+    refreshGallery();status(Native.available and 'Motor Lua v1 carregado' or 'Galeria disponível · motor Lua ainda não compilado')
     if options.showcaseDir then
-        assert(Native.available,'Visual showcase requires the real native C++ DLL')
+        assert(Native.available,'Visual showcase requires the real native Lua DLL')
         assert(not options.selfTest and not options.luaTest,
             'Showcase must not share the isolated test modes')
         -- Paint before the gallery capture so its thumbnail depicts the
@@ -2774,7 +2774,7 @@ function love.update(dt)
                 love.mousereleased(lx1,ly1,1)
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==0xe14922ff
                     and Native.readPixel(A.layerSession:activeBuffer(),3,6)==0xe14922ff,
-                    'Linha C++ não desenhou ambas as extremidades')
+                    'Linha Lua não desenhou ambas as extremidades')
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==oldLine,
                     'Undo da linha falhou')
@@ -2905,7 +2905,7 @@ function love.update(dt)
                 A.dirty=true;rebuildImage()
                 love.draw();love.mousepressed(252,90,1)
                 assert(A.tool=='brush' and A.brushStyle=='hard',
-                    'Touch test requires the hard C++ brush')
+                    'Touch test requires the hard Lua brush')
                 for i=1,3 do
                     love.draw();love.mousepressed(panel+40,472,1)
                 end
@@ -2943,7 +2943,7 @@ function love.update(dt)
                 local highAlpha=Native.readPixel(
                     A.layerSession:activeBuffer(),7,5)%256
                 assert(highAlpha>lowAlpha and highAlpha==255,
-                    'Full pressure should produce stronger C++ paint')
+                    'Full pressure should produce stronger Lua paint')
                 -- Moving pressure: release must reach exact endpoint with
                 -- one undo/redo transaction and preserve pixels in RBD2.
                 A.layerSession:add('Traço pressão variável GUI')
@@ -3007,7 +3007,7 @@ function love.update(dt)
                     'Native pen UP failed to end brush')
                 local inkPixel=Native.readPixel(A.layerSession:activeBuffer(),5,1)
                 assert(inkPixel%256>0 and inkPixel%256<255,
-                    'Native pen pressure not passed into C++ brush')
+                    'Native pen pressure not passed into Lua brush')
                 assert(A.layerSession:historyStats().undo==penHistory+1,
                     'Native pen stroke must have one undo step')
                 undoDoc()
@@ -3340,7 +3340,7 @@ function love.update(dt)
                     metadataSaved.layers[otherIndex].visible==otherVisible and
                     metadataSaved.layers[7].name=='Arte azul Étapa 18',
                     'Propriedades das camadas não persistiram')
-                -- Stage 19: real panel duplicate, new C++ pixel allocation,
+                -- Stage 19: real panel duplicate, new Lua pixel allocation,
                 -- independent edits/undo, new ID, RBD2, and capacity guard.
                 love.draw();love.mousepressed(panel+211,448,1,false)
                 assert(#A.doc.layers==Store.MAX_LAYERS-1,
@@ -3577,7 +3577,7 @@ function love.update(dt)
                 redoDoc()
                 assert(#A.doc.layers==countBefore-1 and
                     Native.bytes(A.layerSession.buffers[mergeIndex-1])==mergedPixels,
-                    'Refazer Mesclar não reproduziu o resultado C++')
+                    'Refazer Mesclar não reproduziu o resultado Lua')
                 saveDoc()
                 local mergedSave=A.store:openProject(A.doc.id)
                 assert(mergedSave.layer_count==countBefore-1 and
@@ -3598,7 +3598,7 @@ function love.update(dt)
                 undoDoc()
                 assert(#A.doc.layers==countBefore-1,
                     'Ctrl+Z não restaurou a segunda mesclagem')
-                -- Stage 23: GUI button uses C++ to mirror the active layer.
+                -- Stage 23: GUI button uses Lua to mirror the active layer.
                 local flipIndex=A.doc.active_layer
                 A.layerSession:beginEdit()
                 A.layerSession:pixel(0,0,0xff1122ff)
@@ -4154,7 +4154,7 @@ local function drawEditor(w,h)
         text('Pixels transparentes também podem',panel+20,615,'small','muted')
         text('ser capturados sem alterar o desenho.',panel+20,639,'small','muted')
     elseif A.tool=='shape' then
-        text('FORMAS · RASTER C++',panel+20,377,'small','muted')
+        text('FORMAS · RASTER Lua',panel+20,377,'small','muted')
         button('Retângulo',panel+20,410,108,32,
             function()A.shapeKind=0 end,A.shapeKind==0)
         button('Elipse',panel+140,410,108,32,
@@ -4701,7 +4701,7 @@ local function drawContextMenu()
     end
 end
 -- Each card owns one lazily-created GPU image whose RGBA pixels were
--- produced by the real C++ renderer, not a LÖVE approximation.
+-- produced by the real Lua renderer, not a LÖVE approximation.
 local function brushSampleImage(slot,preset)
     local settingsKey=Samples.key(preset,A.color)
     A.brushSampleCache=A.brushSampleCache or {}
@@ -4720,7 +4720,7 @@ local function brushSampleImage(slot,preset)
 end
 -- Modal brush catalogue. Every preview uses native renderer parameters
 -- only as a schematic sample, never claims a pixel-perfect Android stroke.
--- The larger live inspector uses the existing C++ preview renderer.
+-- The larger live inspector uses the existing Lua preview renderer.
 -- It is a scratch image, never a document stroke.
 local function drawBrushLab(rect)
     local p=Lab.layout(rect)
@@ -4868,7 +4868,7 @@ local function drawBrushLibrary(w,h)
     text('Prévia para examinar · Clique no cartão para aplicar',
         rect.x+20,rect.y+434,'small','muted')
     drawBrushLab(rect)
-    text(('AJUSTES SALVOS  %d / %d · Amostras C++'):format(
+    text(('AJUSTES SALVOS  %d / %d · Amostras Lua'):format(
         filled,Presets.LIMIT),
         rect.x+20,rect.y+452,'small','muted')
     button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
@@ -5000,12 +5000,12 @@ local function drawColorPopup(p)
             fn=function()chooseColor(value)end}
     end
 end
--- Live preview is a native C++ raster on a separate scratch buffer.
+-- Live preview is a native Lua raster on a separate scratch buffer.
 -- Its GPU image cache is shared with the stage-35 catalogue.
 local function drawCompactBrushPreview(p)
     local rect=Inspector.preview(p)
     local caption=Inspector.caption(p)
-    text('PRÉVIA C++',caption.x,caption.y,'small','muted')
+    text('PRÉVIA Lua',caption.x,caption.y,'small','muted')
     for row=0,math.ceil(rect.h/9)-1 do
         for col=0,math.ceil(rect.w/9)-1 do
             local v=(row+col)%2==0 and .81 or .59
@@ -5455,7 +5455,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                         A.color,A.fillTolerance)
                     if changed>0 then
                         A.dirty=true;rebuildImage()
-                        status(('Balde C++ · %d pixels preenchidos · Ctrl+Z desfaz'):format(changed))
+                        status(('Balde Lua · %d pixels preenchidos · Ctrl+Z desfaz'):format(changed))
                     else
                         status('Balde: nenhum pixel alterado')
                     end
@@ -5464,7 +5464,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     A.layerSession:pixel(math.floor(px),math.floor(py),A.color)
                     A.layerSession:finishEdit()
                     A.dirty=true;rebuildImage()
-                    status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
+                    status('Pixel gravado pelo Lua · Ctrl+Z para desfazer')
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
                     A.layerSession:beginStrokeAccum()
@@ -5488,8 +5488,8 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     A.stabilizer=Stabilizer.new(A.stabilization,px,py)
                     A.strokePath=StrokePath.new(px,py,pressure)
                     A.pendingBrushRect=nil
-                    status(A.tool=='erase' and 'Borracha C++ · apaga a camada ativa'
-                        or 'Pincel C++ · histórico por pincelada · Ctrl+Z')
+                    status(A.tool=='erase' and 'Borracha Lua · apaga a camada ativa'
+                        or 'Pincel Lua · histórico por pincelada · Ctrl+Z')
                 end
             end)()
         end
