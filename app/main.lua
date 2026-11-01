@@ -4961,14 +4961,14 @@ local function drawBrushLab(rect)
 end
 local function drawBrushLibrary(w,h)
     local rect=Presets.layout(w,h)
-    love.graphics.setColor(0,0,0,.78)
+    love.graphics.setColor(0,0,0,.67)
     love.graphics.rectangle('fill',0,0,w,h)
     box(rect.x,rect.y,rect.w,rect.h,'panel')
-    c('accent')
-    love.graphics.rectangle('fill',rect.x,rect.y,4,rect.h)
-    text('Biblioteca de pincéis',rect.x+20,rect.y+12,'title')
-    text('Pincéis raster locais · básicos e pessoais',
-        rect.x+20,rect.y+52,'small','muted')
+    c('line')
+    love.graphics.rectangle('fill',rect.x+703,rect.y+79,1,371)
+    text('Pincéis',rect.x+20,rect.y+12,'title')
+    text('Básicos e personalizados · visualização de traços',
+        rect.x+20,rect.y+53,'small','muted')
     local saved=Presets.custom(A.brushes)
     local filled=0
     for i=1,Presets.LIMIT do
@@ -4980,67 +4980,50 @@ local function drawBrushLibrary(w,h)
         switchBrushCategory('builtin') end,A.brushFilter=='builtin')
     button('Meus ('..filled..')',rect.x+567,rect.y+47,110,30,function()
         switchBrushCategory('personal') end,A.brushFilter=='personal')
-    local half=(Lab.CATALOGUE_WIDTH-56)/2
-    for i=1,8 do
-        local column,line=Presets.cardPosition(A.brushFilter,i)
-        -- Invisible slots have no geometry or UI actions in this category.
-        local x=column and rect.x+20+column*(half+16) or nil
-        local y=line and rect.y+80+line*88 or nil
+    local rows=IbisPanels.brushRows(A.brushFilter,saved)
+    for row,item in ipairs(rows) do
+        local i=item.index
+        local r=IbisPanels.brushRow(rect,row)
         local preset=i<=4 and Presets.BUILTINS[i] or saved[i-4]
-        if Presets.visible(A.brushFilter,i) and preset then
+        if preset then
             local selected=Presets.matches(preset,A)
-            button('',x,y,half,80,function()
+            button('',r.x,r.y,r.w,r.h,function()
                 applyBrushPreset(preset)
             end,selected)
-            text(preset.name,x+12,y+5,'body')
-            text(('%d px  ·  %s  ·  %.0f%%  ·  Est. %d'):format(
-                preset.diameter,preset.style=='hard' and 'rígido' or 'suave',
-                preset.opacity*100,preset.stabilization),
-                x+12,y+28,'small','muted')
-            local place=Samples.cardRect(x,y,half)
-            -- Checkerboard makes partial transparency legible.
-            for row=0,1 do for col=0,11 do
-                local bright=(row+col)%2==0
-                local t=bright and .79 or .58
-                love.graphics.setColor(t,t,t,1)
-                love.graphics.rectangle('fill',
-                    place.x+col*place.w/12,place.y+row*place.h/2,
-                    place.w/12+.25,place.h/2+.25)
-            end end
+            if selected then
+                c('accent')
+                love.graphics.rectangle('fill',r.x,r.y,3,r.h,1,1)
+            end
+            fitted(preset.name,r.x+11,r.y+12,'small',
+                selected and 'accent' or 'text',153)
+            local preview=IbisPanels.brushPreview(rect,row)
+            box(preview.x,preview.y,preview.w,preview.h,'canvas')
             local image=brushSampleImage(i,preset)
             love.graphics.setColor(1,1,1,1)
-            love.graphics.draw(image.image,place.x,place.y,0,
-                place.w/image.sample.width,
-                place.h/image.sample.height)
-            -- Separate preview-only action. Clicking the card elsewhere
-            -- still applies immediately, preserving the classic workflow.
-            local previewAction=BrushCard.previewButton(x,y,half)
-            button('Prévia',previewAction.x,previewAction.y,
-                previewAction.w,previewAction.h,function()
-                    A.brushFocus=i
-                    brushLabFromFocus()
-                    status('Prévia: '..preset.name..
-                        ' · Ajuste parâmetros e clique Aplicar ajustes')
-                end,A.brushFocus==i)
-            if A.brushFocus==i then
-                c('accent');love.graphics.setLineWidth(2)
-                love.graphics.rectangle('line',
-                    x+2,y+2,half-4,76,4,4)
-                love.graphics.setLineWidth(1)
-            end
-        elseif Presets.visible(A.brushFilter,i) then
-            box(x,y,half,80,'card')
-            text('Espaço pessoal '..(i-4),x+12,y+16,'body','muted')
-            text('Salve o pincel atual abaixo',x+12,y+42,'small','muted')
+            love.graphics.draw(image.image,preview.x,preview.y,0,
+                preview.w/image.sample.width,
+                preview.h/image.sample.height)
+            text(('%d px · %.0f%%'):format(
+                preset.diameter,preset.opacity*100),
+                r.x+391,r.y+12,'small','muted')
+            local focus=IbisPanels.brushPreviewAction(rect,row)
+            button('Editar',focus.x,focus.y,focus.w,focus.h,function()
+                A.brushFocus=i
+                brushLabFromFocus()
+                status('Prévia: '..preset.name..' · Aplicar ajustes')
+            end,A.brushFocus==i)
+        else
+            box(r.x,r.y,r.w,r.h,'card')
+            text('Pincel pessoal '..(i-4)..' · vazio',
+                r.x+13,r.y+12,'small','muted')
         end
     end
-    text('Prévia para examinar · Clique no cartão para aplicar',
-        rect.x+20,rect.y+434,'small','muted')
+    text('Toque no traço para usar · Editar para visualizar',
+        rect.x+20,rect.y+436,'small','muted')
     drawBrushLab(rect)
-    text(('AJUSTES SALVOS  %d / %d · Amostras Lua'):format(
-        filled,Presets.LIMIT),
-        rect.x+20,rect.y+452,'small','muted')
-    button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
+    text(('PINCEIS PESSOAIS  %d / %d'):format(filled,Presets.LIMIT),
+        rect.x+20,rect.y+456,'small','muted')
+    button('Guardar pincel atual',rect.x+20,rect.y+480,210,37,
         saveCustomBrush,false,filled>=Presets.LIMIT)
     button('Excluir pessoal',rect.x+240,rect.y+480,170,37,
         deleteCustomBrush,false,not A.selectedBrushCustom or
