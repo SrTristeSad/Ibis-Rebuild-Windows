@@ -1,4 +1,4 @@
--- Reference-grounded visual controls: seven vector actions + quick rails.
+-- Reference-grounded visual controls: nine vector actions + quick rails.
 local UI=require('compact_layout')
 local Icons=require('ui_icons')
 local Workspace=require('workspace_layout')
@@ -7,7 +7,7 @@ function T.run()
     local checks=0
     local function check(ok,msg) checks=checks+1;assert(ok,msg) end
     local actions={'brush','tools','properties','color',
-        'fullscreen','layers','back'}
+        'fullscreen','undo','redo','layers','back'}
     for _,name in ipairs(actions) do
         local glyph=Icons.commands(name)
         check(type(glyph)=='table' and #glyph>=2,
@@ -21,10 +21,10 @@ function T.run()
     for _,dim in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local w,h=dim[1],dim[2]
         local bar=UI.toolbar(w,h)
-        check(#bar==7,'Toolbar action count changed')
+        check(#bar==9,'Toolbar action count changed')
         for i,item in ipairs(bar) do
             check(item.id==actions[i],'Toolbar order must match reference')
-            check(item.w==82 and item.h==50,
+            check(item.w==72 and item.h==50,
                 'Compact icon touch area must use visual contract')
             check(UI.pick(w,h,item.x+item.w/2,
                 item.y+item.h/2)==item.id,
