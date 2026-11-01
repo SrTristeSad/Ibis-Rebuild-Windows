@@ -19,8 +19,9 @@
 
 ## Validação automatizada
 
-- CI Linux executa regressões puras de raster LuaJIT.
-- CI Windows executa 12 suítes Lua, incluindo regressões anteriores
+- CI Linux executa regressões puras de raster LuaJIT, equivalência RGBA e
+  benchmark informativo de composição de canvases grandes.
+- CI Windows executa 14 testes Lua e um benchmark informativo, incluindo regressões anteriores
   de documento RBD2, camadas, seleção, preenchimento, traços e histórico.
 - O empacotador Windows cria `.love` e executável final sem compilação C++.
 - O pacote ZIP é aberto e inspecionado, exigindo entradas Lua essenciais
@@ -39,6 +40,9 @@ em hardware físico. A ponte Windows Ink C++ foi removida e substituída por uma
 LuaJIT FFI que recebe WM_POINTER e lê pressão/inclinação. Os testes de
 integração à janela Windows passaram; validação com caneta física ainda
 é obrigatória. Há opção de desativação via `--no-windows-ink`.
-Consulte [WINDOWS_INK_LUA.md](WINDOWS_INK_LUA.md).
+O Windows Ink lê o histórico de amostras agrupadas pelo sistema, sem
+prometer ausência de perda em hardware real. Consulte
+[WINDOWS_INK_LUA.md](WINDOWS_INK_LUA.md) e
+[RASTER_PERFORMANCE.md](RASTER_PERFORMANCE.md).
 
 A principal linha `main` não é alterada automaticamente por esta branch.
