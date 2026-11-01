@@ -19,9 +19,12 @@ A aplicação não contém servidor, WebView nem dependência de código do
 ibisPaint Android. O runtime LÖVE é uma dependência externa que contém
 bibliotecas nativas oficiais; estas não são código C++ do projeto.
 
-A antiga ponte C++ de Windows Ink foi removida. Eventos comuns de mouse
-e toque LÖVE continuam. A compatibilidade de pressão/inclinação física
-por WM_POINTER está pendente de implementação Lua/FFI e teste em hardware.
+A entrada de caneta usa uma ponte Windows Ink experimental em
+`app/windows_ink.lua`, implementada em LuaJIT FFI com APIs Win32.
+Sua integração com a janela LÖVE passou nos testes; pressão/inclinação
+com caneta física ainda não foram verificadas. Mouse/toque do LÖVE
+permanecem como fallback, com opção `--no-windows-ink`.
+Consulte [WINDOWS_INK_LUA.md](WINDOWS_INK_LUA.md).
 
 Ver [estado da migração](LUA_ONLY_MIGRATION.md) e
 [workflows de testes](../.github/workflows).
