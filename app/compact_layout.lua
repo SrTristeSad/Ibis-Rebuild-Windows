@@ -79,7 +79,8 @@ function UI.popup(w,h,kind)
         or kind=='ruler' or kind=='materials' or kind=='blends'
         or kind=='filters' or kind=='text' or kind=='transform'
         or kind=='wand' or kind=='lasso' or kind=='smudge'
-        or kind=='blur' or kind=='special',
+        or kind=='blur' or kind=='special'
+        or kind=='vector' or kind=='frame',
         'Janela compacta desconhecida')
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela compacta inválida')
@@ -89,13 +90,15 @@ function UI.popup(w,h,kind)
         or kind=='materials' and 444 or (kind=='tools' or
         kind=='filters' or kind=='text' or kind=='transform'
         or kind=='wand' or kind=='lasso' or kind=='smudge'
-        or kind=='blur' or kind=='special') and 420
+        or kind=='blur' or kind=='special'
+        or kind=='vector' or kind=='frame') and 420
         or isTop and 318 or 298
     local height=kind=='color' and 450 or
         (kind=='tools' and math.min(474,h-188)) or
         ((kind=='filters' or kind=='text' or kind=='transform'
             or kind=='wand' or kind=='lasso' or kind=='smudge'
-            or kind=='blur' or kind=='special')
+            or kind=='blur' or kind=='special'
+            or kind=='vector' or kind=='frame')
             and math.min(440,h-188)) or
         kind=='layers' and math.min(440,h-260) or
         kind=='view' and 314 or kind=='stabilizer' and 254 or

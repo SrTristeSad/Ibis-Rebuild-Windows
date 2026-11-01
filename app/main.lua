@@ -42,6 +42,7 @@ local MaterialUI=require('ibis_material_ui')
 local TransformUI=require('ibis_transform_ui')
 local SelectionToolUI=require('ibis_selection_tool_ui')
 local EffectUI=require('ibis_effect_tools_ui')
+local VectorFrameUI=require('ibis_vector_frame_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -72,7 +73,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '31-transformar-mover.png','32-transformar-perspectiva.png',
     '33-varinha-magica.png','34-laco.png',
     '35-borrar.png','36-desfoque.png',
-    '37-caneta-especial.png','38-liquify.png'}
+    '37-caneta-especial.png','38-liquify.png',
+    '39-vetor.png','40-dividir-quadros.png',
+    '41-quadros-divisao.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2547,6 +2550,95 @@ local function advanceShowcase()
             and A.dirty==old.dirty,
             'Liquify visual alterou documento')
         status('Liquify: suavizar e forca visuais, sem deformacao')
+    elseif sh.stage==39 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection,
+            layers=#A.doc.layers}
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),11)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='vector' and
+            A.visualPendingTool=='vector' and
+            A.vectorFrameUi and A.vectorFrameUi.tab=='select',
+            'Vetor nao abriu painel independente')
+        local p=Compact.popup(w,h,'vector')
+        local tab=VectorFrameUI.tabRect(p,3)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        love.mousereleased(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.vectorFrameUi.tab=='order'
+            and not VectorFrameUI.canApply(),
+            'Aba Ordem do vetor nao foi selecionada')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and #A.doc.layers==old.layers
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Vetor visual alterou documento raster')
+        A.showcaseVectorFrameCheck=old
+        status('Vetor: ordem sem formas, sem alteracao de camadas')
+    elseif sh.stage==40 then
+        local old=assert(A.showcaseVectorFrameCheck)
+        assert(A.compactPanel=='vector')
+        love.keypressed('escape')
+        assert(A.compactPanel=='tools','Voltar do Vetor nao funcionou')
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),13)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='frame' and
+            A.visualPendingTool=='frame' and
+            A.vectorFrameUi.tab=='create',
+            'Dividir Quadros nao abriu popup')
+        local p=Compact.popup(w,h,'frame')
+        local plus=VectorFrameUI.frameStep(p,1,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.vectorFrameUi.horizontal==13,
+            'Espacamento horizontal nao respondeu')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and #A.doc.layers==old.layers
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Quadro visual criou camada ou modificou raster')
+        status('Dividir Quadros: parametros de rascunho, sem criar')
+    elseif sh.stage==41 then
+        local old=assert(A.showcaseVectorFrameCheck)
+        assert(A.compactPanel=='frame')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'frame')
+        local tab=VectorFrameUI.tabRect(p,2)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        love.mousereleased(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.vectorFrameUi.tab=='divide',
+            'Divisao visual nao abriu')
+        local cut=VectorFrameUI.cutRect(p,2)
+        love.draw()
+        love.mousepressed(cut.x+cut.w/2,cut.y+cut.h/2,1,false)
+        love.mousereleased(cut.x+cut.w/2,cut.y+cut.h/2,1,false)
+        assert(A.vectorFrameUi.cut=='horizontal'
+            and not VectorFrameUI.canApply(),
+            'Direcao de corte nao atualizou estado local')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and #A.doc.layers==old.layers
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Divisao de quadros tentou aplicar geometria real')
+        status('Quadros: divisao horizontal visual, motor pendente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -6035,6 +6127,8 @@ local function drawCompactPopup(w,h)
         kind=='smudge' and 'Borrar' or
         kind=='blur' and 'Desfoque' or
         kind=='special' and 'Caneta Especial' or
+        kind=='vector' and 'Vetor' or
+        kind=='frame' and 'Dividir Quadros' or
         kind=='color' and 'Cores · RGBA' or
         kind=='view' and 'Visualização' or
         kind=='stabilizer' and 'Estabilizador' or
@@ -6055,7 +6149,8 @@ local function drawCompactPopup(w,h)
     end)
     if kind=='blends' or kind=='filters' or kind=='text'
         or kind=='transform' or kind=='wand' or kind=='lasso'
-        or kind=='smudge' or kind=='blur' or kind=='special' then
+        or kind=='smudge' or kind=='blur' or kind=='special'
+        or kind=='vector' or kind=='frame' then
         button('<',p.x+p.w-79,p.y+8,31,30,function()
             if kind=='text' and A.textUi then
                 A.textUi.focused=false
@@ -6072,6 +6167,13 @@ local function drawCompactPopup(w,h)
             local active=tool.backend==A.tool and tool.backend~=nil
                 or A.visualPendingTool==tool.id
             button('',r.x,r.y,r.w,r.h,function()
+                if tool.id=='vector' or tool.id=='frame' then
+                    A.visualPendingTool=tool.id
+                    A.vectorFrameUi=VectorFrameUI.new(tool.id)
+                    A.compactPanel=tool.id
+                    status(tool.label..' · interface disponivel, motor pendente')
+                    return
+                end
                 if tool.id=='smudge' or tool.id=='blur'
                     or tool.id=='special' then
                     A.visualPendingTool=tool.id
@@ -6130,6 +6232,118 @@ local function drawCompactPopup(w,h)
             (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
             or 'Ferramentas da interface · motor Lua',
             p.x+16,p.y+p.h-28,'small','muted')
+    elseif kind=='vector' or kind=='frame' then
+        local draft=assert(A.vectorFrameUi,'Rascunho vetorial ausente')
+        assert(draft.kind==kind,'Ferramenta visual divergente')
+        for i,tab in ipairs(VectorFrameUI.tabs[kind]) do
+            local r=VectorFrameUI.tabRect(p,i)
+            button(tab.label,r.x,r.y,r.w,r.h,function()
+                VectorFrameUI.chooseTab(draft,tab.id)
+            end,draft.tab==tab.id)
+        end
+        if kind=='vector' then
+            local area=VectorFrameUI.vectorPreview(p)
+            box(area.x,area.y,area.w,area.h,'card')
+            c('muted')
+            love.graphics.setLineWidth(1.6)
+            local midX,midY=area.x+area.w/2,area.y+56
+            love.graphics.line(midX-75,midY+16,
+                midX-44,midY-22,midX+4,midY+12,
+                midX+57,midY-18,midX+74,midY+18)
+            c('accent')
+            for _,pt in ipairs({{-75,16},{-44,-22},{4,12},{57,-18},{74,18}}) do
+                love.graphics.circle('fill',midX+pt[1],midY+pt[2],3.5,12)
+            end
+            fitted('Exemplo vetorial · somente interface',
+                area.x+18,area.y+105,'small','muted',area.w-36)
+            local first=VectorFrameUI.vectorAction(p,1)
+            local second=VectorFrameUI.vectorAction(p,2)
+            if draft.tab=='select' then
+                button(draft.multi and 'Modo: múltiplas formas'
+                    or 'Modo: uma forma',first.x,first.y,
+                    first.w,first.h,function()
+                    VectorFrameUI.toggleMulti(draft)
+                end,draft.multi)
+                button('Selecionar forma · indisponível',
+                    second.x,second.y,second.w,second.h,
+                    function()end,false,true)
+            elseif draft.tab=='vertices' then
+                button('Editar vértices · indisponível',
+                    first.x,first.y,first.w,first.h,
+                    function()end,false,true)
+                button('Editar curvas · indisponível',
+                    second.x,second.y,second.w,second.h,
+                    function()end,false,true)
+            else
+                button('Trazer para frente · indisponível',
+                    first.x,first.y,first.w,first.h,
+                    function()end,false,true)
+                button('Enviar para trás · indisponível',
+                    second.x,second.y,second.w,second.h,
+                    function()end,false,true)
+            end
+            text('Sem camada vetorial editável no motor.',
+                p.x+16,p.y+376,'small','warn')
+        else
+            local fields=VectorFrameUI.fieldsFor(draft)
+            for i,key in ipairs(fields) do
+                local item=VectorFrameUI.fields[key]
+                local r=VectorFrameUI.frameRow(p,i)
+                box(r.x,r.y,r.w,r.h,'card')
+                fitted(item.label,r.x+8,r.y+16,
+                    'small','text',184)
+                fitted(tostring(draft[key])..item.unit,
+                    r.x+194,r.y+16,'small','muted',100)
+                for _,direction in ipairs({-1,1}) do
+                    local control=VectorFrameUI.frameStep(p,i,direction)
+                    button(direction==1 and '+' or '−',
+                        control.x,control.y,control.w,control.h,
+                        function()
+                            VectorFrameUI.adjust(draft,key,direction)
+                        end,false,direction==1 and
+                            draft[key]>=item.max or
+                            direction==-1 and draft[key]<=item.min)
+                end
+            end
+            if draft.tab=='divide' then
+                for i,cut in ipairs({
+                    {id='vertical',label='Corte vertical'},
+                    {id='horizontal',label='Corte horizontal'}}) do
+                    local r=VectorFrameUI.cutRect(p,i)
+                    button(cut.label,r.x,r.y,r.w,r.h,function()
+                        VectorFrameUI.chooseCut(draft,cut.id)
+                    end,draft.cut==cut.id)
+                end
+            elseif draft.tab=='border' then
+                local r=VectorFrameUI.frameRow(p,3)
+                button('Cor da borda · pendente',
+                    r.x,r.y+4,r.w,37,function()end,false,true)
+            end
+            local preview=VectorFrameUI.framePreview(p)
+            box(preview.x,preview.y,preview.w,preview.h,'card')
+            local x=preview.x+math.min(55,draft.horizontal/3+18)
+            local y=preview.y+math.min(15,draft.vertical/9+8)
+            local pw=preview.w-2*(x-preview.x)
+            local ph=preview.h-2*(y-preview.y)
+            c('muted')
+            love.graphics.setLineWidth(math.min(4,draft.thickness))
+            love.graphics.rectangle('line',x,y,pw,ph)
+            if draft.tab=='divide' then
+                c('accent')
+                if draft.cut=='vertical' then
+                    love.graphics.line(x+pw/2,y,x+pw/2,y+ph)
+                else
+                    love.graphics.line(x,y+ph/2,x+pw,y+ph/2)
+                end
+            end
+            local action=VectorFrameUI.frameDisabledAction(p)
+            button('Criar / aplicar quadro · pendente',
+                action.x,action.y,action.w,action.h,
+                function()end,false,true)
+        end
+        local footer=VectorFrameUI.footer(p)
+        fitted('Estado visual apenas · motor Lua pendente.',
+            footer.x,footer.y,'small','warn',footer.w)
     elseif kind=='smudge' or kind=='blur' or kind=='special' then
         local draft=assert(A.effectUi,'Rascunho de efeito ausente')
         assert(draft.kind==kind,'Painel de efeito divergente')
@@ -7474,6 +7688,10 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='vector' or A.compactPanel=='frame' then
+            if key=='escape' then A.compactPanel='tools' end
+            return
+        end
         if A.compactPanel=='smudge' or A.compactPanel=='blur'
             or A.compactPanel=='special' then
             if key=='escape' then A.compactPanel='tools' end
