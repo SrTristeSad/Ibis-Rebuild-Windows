@@ -48,6 +48,30 @@ repeat
 until not event
 assert(final and final.kind==3,'UP deve ser entregue mesmo na saturacao')
 Ink._resetTest()
+-- Historico Win32: mais recente primeiro. Precisa sair cronologico,
+-- incluindo a amostra mais recente exatamente uma vez.
+Ink._resetTest()
+Ink._offerTest({kind=1,id=77,x=1,y=2,pressure=.2})
+Ink._historyTest({
+    {kind=2,id=77,x=9,y=2,pressure=.9},
+    {kind=2,id=77,x=7,y=2,pressure=.7},
+    {kind=2,id=77,x=5,y=2,pressure=.5},
+    {kind=2,id=77,x=3,y=2,pressure=.3}
+})
+Ink._offerTest({kind=3,id=77,x=11,y=2,pressure=0})
+local expected={{1,.2},{3,.3},{5,.5},{7,.7},{9,.9},{11,0}}
+for i,pair in ipairs(expected) do
+    local event=Ink._drainTest()
+    assert(event, 'amostra historica faltando: '..i)
+    eq(event.x,pair[1],'ordem do historico')
+    eq(event.pressure,pair[2],'pressao do historico')
+end
+assert(not Ink._drainTest(),'amostra mais recente duplicada')
+Ink._resetTest()
+-- Uma mensagem sem historico deve continuar sendo entregavel como MOVE.
+Ink._historyTest({{kind=2,id=77,x=12,y=4,pressure=.8}})
+eq(Ink._drainTest().x,12,'historico unitario')
+assert(not Ink._drainTest())
 Ink._resetTest()
 assert(Ink.dropped==0)
-print('Lua Windows Ink: pressure mask, FIFO, overflow and release: OK')
+print('Lua Windows Ink: pressure, chronological history, FIFO and release: OK')
