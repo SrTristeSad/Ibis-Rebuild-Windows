@@ -1,5 +1,13 @@
 # Ibis Rebuild Windows
 
+**Foco atual: reconstrução visual e ferramentas do ibisPaint 14.1.2.**
+A primeira passagem da nova galeria, barra de nove ações e seletor
+com quinze categorias está em
+[Visual Shell — Fase 1](docs/VISUAL_SHELL_PHASE1.md).
+O motor Lua existente permanece em operação; recursos ainda sem motor
+aparecem como pendentes, sem simular funcionalidades inexistentes.
+
+
 Editor raster independente para Windows x64, escrito em **LuaJIT/LÖVE 11.5**.
 O motor de pixels, pincéis, camadas, seleções e ferramentas é código Lua.
 **Não exige Python, CMake nem compilação C++ para o aplicativo.**
