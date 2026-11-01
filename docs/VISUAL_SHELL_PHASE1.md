@@ -268,3 +268,50 @@ paleta pessoal. A GUI Windows clica em uma cor básica e confirma
 que o tom selecionado mudou, mas os bytes do raster e o histórico
 RBD2 ficaram inalterados. O showcase gera **20 capturas**,
 incluindo os estados de cores básicas e cores pessoais.
+
+## Fase visual 6 — janela de camadas e modos de mesclagem
+
+A referência [Layer Window Details](https://ibispaint.com/lecture/index.jsp?no=156)
+documenta uma linha distinta para **camada de seleção**, miniaturas
+de camadas, visibilidade, opacidade, operações de camada e uma
+lista de **modos de mesclagem**. Nosso painel compacto anterior
+não apresentava a camada de seleção nem permitia visualizar
+os modos disponíveis no original.
+
+Implementação da interface, sem alterações no raster:
+
+- `app/ibis_layer_ui.lua`: geometria da linha de seleção e
+  catálogo explícito de oito modos. Somente **Normal**
+  aparece disponível, pois o motor Lua atual não comprova
+  mesclagem equivalente às demais opções.
+- `app/main.lua`: linha superior **Camada de seleção** com
+  estado vazio ou dimensões da seleção atual, sem criar uma
+  camada raster fictícia; lista raster deslocada para não
+  se sobrepor; modo `Normal` clicável apenas na camada ativa,
+  com acesso à lista visual completa.
+- Modo `Normal` retorna ao painel de camadas;
+  `Multiplicar`, `Tela`, `Sobrepor`, `Adicionar`,
+  `Subtrair`, `Escurecer` e `Clarear` aparecem
+  desabilitados e não executam operações não implementadas.
+  Cliques nesses itens não fecham a janela nem modificam
+  o desenho. Há botão de retorno do seletor de modos
+  para as camadas.
+- Redimensionados os limites de lista em `app/compact_layout.lua`
+  e `app/ibis_visual_panels.lua` para comportar a linha de
+  seleção mantendo o controle de opacidade e os comandos
+  existentes.
+- `tests/test_ibis_layer_ui.lua` verifica geometria da janela
+  em 960×640, 1220×800 e 1920×1080, ausência de sobreposições,
+  separação da seleção e indisponibilidade explícita
+  dos modos ainda sem motor.
+- Showcase real Windows inclui capturas `21-camada-selecao.png`,
+  `22-modos-mesclagem.png` e `23-selecao-ativa.png`, com cliques
+  reais que verificam a navegação, a permanência do popup de modos
+  desabilitados e a integridade dos bytes RGBA e histórico.
+
+**Fidelidade ainda não comprovada:** títulos, espaçamento e
+proporções são uma aproximação visual a partir do tutorial
+oficial, e não medições diretas da versão Android 14.1.2.
+Pastas, máscaras, alpha lock, clipping e modos alternativos
+continuam pendentes da fase de motor e documentação específica,
+não foram apresentados como já funcionais.
