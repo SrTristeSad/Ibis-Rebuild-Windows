@@ -7,7 +7,8 @@ local raster={
     'test_windows_ink_lua.lua',
     'test_raster_compositor_equivalence.lua',
     'test_raster_opaque_rows.lua',
-    'bench_raster_composition.lua'
+    'bench_raster_composition.lua',
+    'bench_raster_comparison.lua'
 }
 -- Suites historicas Lua reutilizadas para detectar regressoes reais.
 -- Cada suite recebe seu proprio diretorio de documentos RBD2.
