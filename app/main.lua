@@ -50,7 +50,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
     '09-opacidade-camadas.png','10-seletor-ferramentas.png',
-    '11-criar-tela.png','12-galeria-desenhos.png'}
+    '11-criar-tela.png','12-galeria-desenhos.png',
+    '13-menu-visualizacao.png','14-estabilizador.png',
+    '15-opcoes-forma.png','16-materiais-pendentes.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -1954,6 +1956,23 @@ local function advanceShowcase()
         love.keyboard.setTextInput(false)
         A.galleryFilter='works'
         status('A Minha Galeria · filtro apenas desenhos')
+    elseif sh.stage==13 then
+        openDoc(A.store:openProject(sh.projectId))
+        A.compactUi=true
+        selectTool('brush')
+        A.compactPanel='view'
+        status('Controles superiores · menu de visualização')
+    elseif sh.stage==14 then
+        A.compactPanel='stabilizer'
+        A.stabilization=3
+        status('Estabilização Lua · nível 3 / 5')
+    elseif sh.stage==15 then
+        selectTool('shape')
+        A.compactPanel='properties'
+        status('Ferramentas de formas · configurações do motor Lua')
+    elseif sh.stage==16 then
+        A.compactPanel='materials'
+        status('Materiais · aparência disponível, motor pendente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
