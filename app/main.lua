@@ -2547,10 +2547,38 @@ function love.update(dt)
                 layers:pressureStroke(16.5,16.5,24.5,24.5,9,9,
                     0x4cab93ff,.45,.45,1,0,0,0,true)
                 local region={x=10,y=10,w=24,h=24}
+                local beforeStats=gpuUpload:stats()
                 updateImageRegion(region)
-                assert(A.image==texture and A.partialCanvasUpdates>=1,
+                local firstStats=gpuUpload:stats()
+                assert(firstStats.uploads==beforeStats.uploads+1 and
+                    firstStats.copiedBytes==beforeStats.copiedBytes+
+                        region.w*region.h*4,
+                    'Envio FFI nao registrou bytes da regiao')
+                updateImageRegion(region)
+                local reused=gpuUpload:stats()
+                assert(reused.hits==firstStats.hits+1 and
+                    reused.allocations==firstStats.allocations,
+                    'ImageData RGBA nao foi reutilizado')
+                assert(A.image==texture and A.partialCanvasUpdates>=2,
                     'Upload parcial recriou a textura GPU')
                 local alpha=Native.readPixel(layers:activeBuffer(),20,20)%256
+                -- Leitura da textura GPU real, em modo de blend replace,
+                -- para comparar o alfa final com a composicao CPU.
+                local canvas=love.graphics.newCanvas(64,64,{format='rgba8'})
+                love.graphics.push('all')
+                love.graphics.setCanvas(canvas)
+                love.graphics.clear(0,0,0,0)
+                love.graphics.setBlendMode('replace')
+                love.graphics.setColor(1,1,1,1)
+                love.graphics.draw(A.image,0,0)
+                love.graphics.setCanvas()
+                love.graphics.pop()
+                local rendered=canvas:newImageData()
+                local _,_,_,gpuAlpha=rendered:getPixel(20,20)
+                assert(math.abs(gpuAlpha-alpha/255)<=2/255,
+                    'Regiao enviada nao corresponde ao alfa GPU real')
+                rendered:release()
+                canvas:release()
                 assert(alpha>0 and alpha<255,'Trajeto Lua sem opacidade')
                 assert(layers:finishEdit(),'Pincelada nao entrou no historico')
                 assert(layers:undo(),'Desfazer grafico indisponivel')
