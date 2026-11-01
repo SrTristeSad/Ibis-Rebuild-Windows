@@ -5,7 +5,11 @@ o motor próprio C++ e scripts Python por LuaJIT/LÖVE, com build Windows
 verificado, testes de raster, RBD2 e GUI real. A entrada Windows Ink
 agora possui ponte LuaJIT/FFI experimental validada em uma janela real,
 com controle para desativá-la. O desempenho e a pressão/inclinação
-em caneta física não foram validados. Consulte
+em caneta física não foram validados. A etapa atual também acrescentou
+histórico de movimentos Windows Ink via LuaJIT FFI e otimização da
+composição RGBA com testes byte a byte. O benchmark de 256/1024/2048
+pixels está documentado em
+[RASTER_PERFORMANCE.md](RASTER_PERFORMANCE.md). Consulte
 [LUA_ONLY_MIGRATION.md](LUA_ONLY_MIGRATION.md). O diagnóstico abaixo é
 **histórico**, da arquitetura antiga.
 
