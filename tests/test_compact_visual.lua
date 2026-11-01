@@ -31,10 +31,11 @@ function T.run()
                 'Hit area differs from rendered action')
         end
         local quick=UI.quick(w,h)
-        check(quick.diameter.y==quick.opacity.y,
-            'Both quick sliders should share bottom-row baseline')
-        check(quick.diameter.x+quick.diameter.w+30<quick.opacity.x,
-            'Size and opacity controls must remain non-overlapping')
+        check(quick.diameter.y+quick.diameter.h<quick.opacity.y,
+            'Size and opacity rails must use distinct stacked rows')
+        check(quick.diameter.x==quick.opacity.x and
+            quick.diameter.w==quick.opacity.w,
+            'The two compact rails must share a horizontal axis')
         local bounds=Workspace.bounds(w,h,true,true)
         check(bounds.bottom==h-190 and
             bounds.bottom<quick.diameter.y-5,

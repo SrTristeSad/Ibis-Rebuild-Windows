@@ -33,6 +33,7 @@ local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
 local PopupFocus=require('compact_popup_focus')
 local IbisTools=require('ibis_visual_tools')
+local EditorRail=require('ibis_editor_rail')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 local LayerUI=require('ibis_layer_ui')
@@ -77,8 +78,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '37-caneta-especial.png','38-liquify.png',
     '39-vetor.png','40-dividir-quadros.png',
     '41-quadros-divisao.png',
-    '42-busca-fechada.png','43-texto-foco-encerrado.png'}
-local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+    '42-busca-fechada.png','43-texto-foco-encerrado.png',
+    '44-editor-faixa-ferramentas.png','45-editor-faixa-interacao.png'}
+local A={toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
 -- Visual language: neutral studio workspace, clear blue tool state and
@@ -2710,6 +2712,41 @@ local function advanceShowcase()
             and A.selection==old.selection,
             'Troca de layout alterou documento')
         status('Auditoria: texto guardado, entrada desativada')
+    elseif sh.stage==44 then
+        A.compactPanel=nil
+        A.visualPendingTool=nil
+        A.toolRailPage=1
+        selectTool('brush')
+        local w,h=love.graphics.getDimensions()
+        local all=EditorRail.entries(w,h,1,IbisTools.entries)
+        assert(#all==#IbisTools.entries,
+            'Viewport amplo deveria mostrar todas as 15 ferramentas')
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,layer=A.doc.active_layer,tool=A.tool}
+        A.showcaseRailCheck=old
+        love.draw()
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Nova faixa de ferramentas alterou raster')
+        status('Editor: faixa lateral, barra inferior e sliders em duas linhas')
+    elseif sh.stage==45 then
+        local old=assert(A.showcaseRailCheck)
+        local w,h=love.graphics.getDimensions()
+        local row=EditorRail.entries(w,h,1,IbisTools.entries)[7]
+        assert(row.id=='smudge')
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        love.mousereleased(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.compactPanel=='smudge' and A.visualPendingTool=='smudge',
+            'Faixa lateral nao abriu o painel Borrar')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.doc.active_layer==old.layer
+            and A.tool==old.tool,
+            'Barra lateral nao pode acionar outro motor')
+        status('Faixa original: ferramenta Borrar aberta com clique real')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -4947,18 +4984,120 @@ end
 local function drawCompactQuick(kind,w,h,value)
     local d=Compact.quick(w,h)[kind]
     local factor=Compact.quickFraction(kind,value)
-    local label=kind=='diameter' and 'Tamanho' or 'Opac.'
+    local label=kind=='diameter' and 'Espessura' or 'Opacidade'
     local valueLabel=kind=='diameter' and ('%d px'):format(value) or
         ('%.0f%%'):format(value*100)
     text(label,d.labelX,d.y-2,'small','muted')
     text(valueLabel,d.valueX,d.y-2,'small','text')
     c('line')
-    love.graphics.rectangle('fill',d.x,d.y+5,d.w,4,2,2)
+    love.graphics.rectangle('fill',d.x,d.y+5,d.w,5,2,2)
     c('accent')
     love.graphics.rectangle('fill',d.x,d.y+5,
-        math.max(1,d.w*factor),4,2,2)
+        math.max(1,d.w*factor),5,2,2)
     c('text')
-    love.graphics.circle('fill',d.x+d.w*factor,d.y+7,6,18)
+    love.graphics.circle('fill',d.x+d.w*factor,d.y+7,7,18)
+end
+local function activateIbisTool(tool)
+    if tool.id=='vector' or tool.id=='frame' then
+        A.visualPendingTool=tool.id
+        A.vectorFrameUi=VectorFrameUI.new(tool.id)
+        A.compactPanel=tool.id
+        status(tool.label..' · interface disponivel, motor pendente')
+        return
+    end
+    if tool.id=='smudge' or tool.id=='blur'
+        or tool.id=='special' then
+        A.visualPendingTool=tool.id
+        A.effectUi=EffectUI.new(tool.id)
+        A.compactPanel=tool.id
+        status(tool.label..': interface visual, motor pendente')
+        return
+    end
+    if tool.id=='wand' or tool.id=='lasso' then
+        A.visualPendingTool=tool.id
+        A.selectionToolUi=SelectionToolUI.new(tool.id)
+        A.compactPanel=tool.id
+        status(tool.label..': controles visuais; motor pendente')
+        return
+    end
+    if tool.id=='transform' then
+        A.visualPendingTool='transform'
+        A.transformUi=TransformUI.new()
+        A.compactPanel='transform'
+        status('Transformar: interface independente, motor pendente')
+        return
+    end
+    if tool.id=='text' then
+        A.visualPendingTool='text'
+        A.textUi=TextUI.new()
+        A.compactPanel='text'
+        status('Texto: interface aberta, motor Lua pendente')
+        return
+    end
+    if tool.id=='filter' then
+        A.visualPendingTool='filter'
+        A.filterCategory=A.filterCategory or 'adjust'
+        A.filterPage=1
+        A.filterPendingId=nil
+        A.compactPanel='filters'
+        status('Filtros · interface disponível, motor pendente')
+        return
+    end
+    local ok,entry=IbisTools.select(tool.id,selectTool)
+    if ok then
+        A.visualPendingTool=nil
+        A.compactPanel=nil
+    else
+        A.visualPendingTool=entry.id
+        status(entry.label..' · motor Lua pendente')
+    end
+end
+local function drawEditorToolRail(w,h)
+    local count=#IbisTools.entries
+    local rect=EditorRail.layout(w,h,A.toolRailPage or 1,count)
+    c('panel',.94)
+    love.graphics.rectangle('fill',rect.x-1,rect.y-4,
+        rect.w+2,(rect.stop-rect.start+1)*rect.row+
+        (rect.pages>1 and 31 or 8),6,6)
+    for _,item in ipairs(EditorRail.entries(w,h,rect.page,IbisTools.entries)) do
+        local tool=IbisTools.get(item.id)
+        local active=(tool.backend~=nil and tool.backend==A.tool)
+            or A.visualPendingTool==item.id
+        local mx,my=love.mouse.getPosition()
+        local hover=mx>=item.x and mx<item.x+item.w
+            and my>=item.y and my<item.y+item.h
+        if active or hover then
+            c(active and 'selected' or 'line')
+            love.graphics.rectangle('fill',item.x+2,item.y+1,
+                item.w-4,item.h-2,3,3)
+        end
+        c(active and 'accent' or 'text')
+        Icons.draw(item.icon,item.x+17,item.y+item.h/2,17)
+        fitted(item.label,item.x+32,item.y+9,'small',
+            active and 'accent' or 'text',item.w-38)
+        A.buttons[#A.buttons+1]={x=item.x,y=item.y,w=item.w,h=item.h,
+            fn=guard(function()activateIbisTool(tool)end)}
+    end
+    local page=EditorRail.navigation(w,h,rect.page,count)
+    if page then
+        box(page.x+1,page.y,page.w-2,page.h,'card')
+        fitted(('%d/%d'):format(rect.page,rect.pages),
+            page.x+33,page.y+8,'small','text',40)
+        for _,item in ipairs({{x=page.x,delta=-1,enabled=page.back},
+            {x=page.x+page.w-30,delta=1,enabled=page.forward}}) do
+            if item.enabled then
+                c('text')
+                love.graphics.print(item.delta==-1 and '‹' or '›',
+                    item.x+7,page.y+2)
+                local delta=item.delta
+                A.buttons[#A.buttons+1]={x=item.x,y=page.y,w=30,h=page.h,
+                    fn=guard(function()
+                        A.toolRailPage=EditorRail.nextPage(w,h,
+                            A.toolRailPage,count,delta)
+                    end)}
+            end
+        end
+    end
 end
 -- Seis controles no canto superior direito, com a ordem e a
 -- separação de tarefas documentadas nos tutoriais do ibisPaint.
@@ -5582,9 +5721,9 @@ local function drawEditor(w,h)
         box(0,h-184,w,136,'panel')
         c('line')
         love.graphics.rectangle('fill',0,h-184,w,1)
-        text('FERRAMENTA',28,h-162,'small','muted')
-        fitted(EditorTools.fromId(A.tool).label,28,h-144,'body',
-            'text',210)
+        -- Barra de regulagens menos intrusiva, proxima do original.
+        local activeName=EditorTools.fromId(A.tool).label
+        fitted(activeName,22,h-179,'small','muted',170)
         if A.tool=='brush' or A.tool=='erase' then
             drawCompactQuick('diameter',w,h,A.brushDiameter)
             drawCompactQuick('opacity',w,h,A.brushOpacity)
@@ -5595,42 +5734,53 @@ local function drawEditor(w,h)
         end
         c('line')
         love.graphics.rectangle('fill',w/2-352,h-126,704,1)
+        drawEditorToolRail(w,h)
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and
                 (A.tool=='brush' or A.tool=='erase')) or
                 (slot.id=='tools' and A.compactPanel=='tools') or
                 (slot.id=='layers' and A.compactPanel=='layers') or
                 (slot.id=='properties' and A.compactPanel=='properties')
-            local label=slot.id=='brush' and
-                (A.tool=='erase' and 'Borracha' or 'Pincel') or
-                (slot.id=='tools' and 'Ferram.' or
-                slot.id=='fullscreen' and 'Tela' or slot.label)
-            button('',slot.x,slot.y,slot.w,slot.h,function()
-                if slot.id=='brush' then
-                    selectTool(A.tool=='brush' and 'erase' or 'brush')
-                elseif slot.id=='tools' or slot.id=='layers' or
-                    slot.id=='properties' then
-                    toggleCompactPanel(slot.id)
-                elseif slot.id=='color' then openCompactColor()
-                elseif slot.id=='fullscreen' then toggleFocusMode()
-                elseif slot.id=='undo' then undoDoc()
-                elseif slot.id=='redo' then redoDoc()
-                elseif slot.id=='back' then toGallery() end
-            end,active,
-                (slot.id=='undo' and not A.layerSession:canUndo()) or
-                (slot.id=='redo' and not A.layerSession:canRedo()))
-            c(active and 'accent' or 'text')
+            local disabled=(slot.id=='undo' and
+                not A.layerSession:canUndo()) or
+                (slot.id=='redo' and not A.layerSession:canRedo())
+            local mx,my=love.mouse.getPosition()
+            local over=mx>=slot.x and mx<slot.x+slot.w
+                and my>=slot.y and my<slot.y+slot.h
+            if active or (over and not disabled) then
+                c(active and 'selected' or 'line')
+                love.graphics.rectangle('fill',
+                    slot.x+2,slot.y+2,slot.w-4,slot.h-4,3,3)
+            end
+            c(disabled and 'muted' or active and 'accent' or 'text')
             Icons.draw(slot.id=='brush' and
                 (A.tool=='erase' and 'erase' or 'brush') or slot.id,
-                slot.x+slot.w/2,slot.y+17,21)
-            c('text')
-            love.graphics.setFont(A.fonts.small)
-            love.graphics.printf(label,slot.x,slot.y+32,
-                slot.w,'center')
+                slot.x+slot.w/2,slot.y+slot.h/2,23)
+            if slot.id=='color' then
+                local r,g,b=Colors.channels(A.color)
+                love.graphics.setColor(r/255,g/255,b/255,1)
+                love.graphics.rectangle('fill',
+                    slot.x+slot.w/2+13,slot.y+slot.h/2+11,12,7,1,1)
+            end
             if active then
                 c('accent')
-                love.graphics.rectangle('fill',slot.x+12,
-                    slot.y+slot.h-2,slot.w-24,2,1,1)
+                love.graphics.rectangle('fill',slot.x+13,
+                    slot.y+slot.h-3,slot.w-26,2)
+            end
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
+                    w=slot.w,h=slot.h,fn=guard(function()
+                    if slot.id=='brush' then
+                        selectTool(A.tool=='brush' and 'erase' or 'brush')
+                    elseif slot.id=='tools' or slot.id=='layers' or
+                        slot.id=='properties' then
+                        toggleCompactPanel(slot.id)
+                    elseif slot.id=='color' then openCompactColor()
+                    elseif slot.id=='fullscreen' then toggleFocusMode()
+                    elseif slot.id=='undo' then undoDoc()
+                    elseif slot.id=='redo' then redoDoc()
+                    elseif slot.id=='back' then toGallery() end
+                end)}
             end
             if slot.id=='color' then
                 local r,g,b=Colors.channels(A.color)
@@ -6227,59 +6377,7 @@ local function drawCompactPopup(w,h)
             local active=tool.backend==A.tool and tool.backend~=nil
                 or A.visualPendingTool==tool.id
             button('',r.x,r.y,r.w,r.h,function()
-                if tool.id=='vector' or tool.id=='frame' then
-                    A.visualPendingTool=tool.id
-                    A.vectorFrameUi=VectorFrameUI.new(tool.id)
-                    A.compactPanel=tool.id
-                    status(tool.label..' · interface disponivel, motor pendente')
-                    return
-                end
-                if tool.id=='smudge' or tool.id=='blur'
-                    or tool.id=='special' then
-                    A.visualPendingTool=tool.id
-                    A.effectUi=EffectUI.new(tool.id)
-                    A.compactPanel=tool.id
-                    status(tool.label..': interface visual, motor pendente')
-                    return
-                end
-                if tool.id=='wand' or tool.id=='lasso' then
-                    A.visualPendingTool=tool.id
-                    A.selectionToolUi=SelectionToolUI.new(tool.id)
-                    A.compactPanel=tool.id
-                    status(tool.label..': controles visuais; motor pendente')
-                    return
-                end
-                if tool.id=='transform' then
-                    A.visualPendingTool='transform'
-                    A.transformUi=TransformUI.new()
-                    A.compactPanel='transform'
-                    status('Transformar: interface independente, motor pendente')
-                    return
-                end
-                if tool.id=='text' then
-                    A.visualPendingTool='text'
-                    A.textUi=TextUI.new()
-                    A.compactPanel='text'
-                    status('Texto: interface aberta, motor Lua pendente')
-                    return
-                end
-                if tool.id=='filter' then
-                    A.visualPendingTool='filter'
-                    A.filterCategory=A.filterCategory or 'adjust'
-                    A.filterPage=1
-                    A.filterPendingId=nil
-                    A.compactPanel='filters'
-                    status('Filtros · interface disponível, motor pendente')
-                    return
-                end
-                local ok,entry=IbisTools.select(tool.id,selectTool)
-                if ok then
-                    A.visualPendingTool=nil
-                    A.compactPanel=nil
-                else
-                    A.visualPendingTool=entry.id
-                    status(entry.label..' · motor Lua pendente')
-                end
+                activateIbisTool(tool)
             end,active)
             c(active and 'accent' or 'text')
             Icons.draw(tool.icon,r.x+17,r.y+14,17)
@@ -7097,11 +7195,20 @@ function love.draw()
     local theme=A.screen=='gallery' and galleryPalette
         or (A.compactUi and compactPalette or palette)
     love.graphics.clear(theme.bg)
-    box(0,0,w,64,'panel')
-    c('accent');love.graphics.rectangle('fill',0,62,w,2)
-    text(A.screen=='gallery' and 'Ibis Rebuild · Galeria'
-        or 'Ibis Rebuild',24,15,'title')
-    if A.screen=='editor' and A.doc and w>=1120 then
+    if A.screen=='editor' and A.compactUi then
+        c('bg')
+        love.graphics.rectangle('fill',0,0,w,64)
+        c('line')
+        love.graphics.rectangle('fill',0,62,w,1)
+        text(('%d%%'):format(math.floor(A.zoom*100+.5)),
+            24,20,'body','text')
+    else
+        box(0,0,w,64,'panel')
+        c('accent');love.graphics.rectangle('fill',0,62,w,2)
+        text(A.screen=='gallery' and 'Ibis Rebuild · Galeria'
+            or 'Ibis Rebuild',24,15,'title')
+    end
+    if A.screen=='editor' and not A.compactUi and A.doc and w>=1120 then
         fitted(A.doc.name,232,24,'body','muted',
             Visual.headerNameWidth(w))
     end
@@ -7110,8 +7217,13 @@ function love.draw()
     end
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     box(0,h-48,w,48,'panel')
-    fitted(A.message or '',20,h-33,'small','muted',w-260)
-    if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
+    if A.screen~='editor' or not A.compactUi then
+        fitted(A.message or '',20,h-33,'small','muted',w-260)
+    end
+    if A.testReport and (A.screen~='editor' or not A.compactUi) then
+        text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',
+            w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')
+    end
     if A.modal then A.buttons={};drawModal(w,h)
     elseif A.toolHelp and A.screen=='editor' then
         A.buttons={}

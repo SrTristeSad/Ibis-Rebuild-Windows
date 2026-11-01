@@ -40,10 +40,10 @@ function UI.quick(w,h)
         type(h)=='number' and h>=640,'Janela pequena para os ajustes')
     local left=math.floor((w-640)/2)
     return {
-        diameter={x=left+92,y=h-159,w=160,h=14,
-            labelX=left+10,valueX=left+258},
-        opacity={x=left+409,y=h-159,w=160,h=14,
-            labelX=left+319,valueX=left+576}
+        diameter={x=left+185,y=h-169,w=370,h=14,
+            labelX=left+52,valueX=left+569},
+        opacity={x=left+185,y=h-143,w=370,h=14,
+            labelX=left+52,valueX=left+569}
     }
 end
 local ranges={
