@@ -110,7 +110,8 @@ end
 function Picker.svRect(rect)
     assert(type(rect)=='table' and type(rect.x)=='number',
         'Painel HSB inválido')
-    return {x=rect.x+23,y=rect.y+184,w=206,h=145}
+    -- Caixa SV centralizada dentro da roda HSB da interface.
+    return {x=rect.x+101,y=rect.y+229,w=72,h=72}
 end
 function Picker.svAt(rect,x,y)
     local r=Picker.svRect(rect)
@@ -129,7 +130,7 @@ function Picker.hueAt(rect,y)
     return math.floor(math.max(0,math.min(1,(y-r.y)/r.h))*360+.5)
 end
 function Picker.hsbAlphaRect(rect)
-    return {x=rect.x+85,y=rect.y+352,w=278,h=11}
+    return {x=rect.x+85,y=rect.y+373,w=278,h=11}
 end
 function Picker.hsbAlphaValue(rect,x)
     local r=Picker.hsbAlphaRect(rect)
