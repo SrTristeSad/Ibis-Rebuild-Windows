@@ -37,6 +37,8 @@ jobs:
         run: luajit -e "local t=loadfile('tests/test_ibis_text_ui.lua')(); assert(t.run().passed)"
       - name: Lua ruler visual catalog and nonfunctional state
         run: luajit -e "local t=loadfile('tests/test_ibis_ruler_ui.lua')(); assert(t.run().passed)"
+      - name: Lua material categories, UTF-8 search and empty state
+        run: luajit -e "local t=loadfile('tests/test_ibis_material_ui.lua')(); assert(t.run().passed)"
       - name: Lua raster buffer and composite regression
         run: luajit tests/test_raster_lua.lua
       - name: Lua stroke raster regression

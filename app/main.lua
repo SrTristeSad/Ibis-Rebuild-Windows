@@ -38,6 +38,7 @@ local LayerUI=require('ibis_layer_ui')
 local FilterUI=require('ibis_filter_ui')
 local TextUI=require('ibis_text_ui')
 local RulerUI=require('ibis_ruler_ui')
+local MaterialUI=require('ibis_material_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -63,7 +64,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '21-camada-selecao.png','22-modos-mesclagem.png',
     '23-selecao-ativa.png','24-catalogo-filtros.png',
     '25-texto-rascunho.png','26-texto-estilo.png',
-    '27-reguas-catalogo.png','28-regua-espelho.png'}
+    '27-reguas-catalogo.png','28-regua-espelho.png',
+    '29-materiais-categorias.png','30-materiais-busca.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2250,6 +2252,54 @@ local function advanceShowcase()
             and A.dirty==old.dirty and A.tool==old.tool,
             'Régua pendente alterou obra ou historico')
         status('Régua Espelho · opção destacada, motor pendente')
+    elseif sh.stage==29 then
+        local before=Native.bytes(A.buffer)
+        local undo=A.layerSession:historyStats().undo
+        local dirty=A.dirty
+        local tool=A.tool
+        showcaseTopClick('materials',tool,'materials')
+        A.materialUi=MaterialUI.new()
+        assert(#MaterialUI.items(A.materialUi)==0,
+            'Nao deve existir catalogo de materiais inventado')
+        A.showcaseMaterialCheck={rgba=before,undo=undo,
+            dirty=dirty,tool=tool}
+        status('Materiais: categorias, nenhum item local carregado')
+    elseif sh.stage==30 then
+        assert(A.compactPanel=='materials' and A.showcaseMaterialCheck)
+        local old=A.showcaseMaterialCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'materials')
+        local category=MaterialUI.categoryRect(p,4)
+        love.draw()
+        love.mousepressed(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        love.mousereleased(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        assert(A.materialUi.category=='backgrounds',
+            'A categoria Fundos nao respondeu ao clique')
+        local search=MaterialUI.searchRect(p)
+        love.draw()
+        love.mousepressed(search.x+15,search.y+16,1,false)
+        love.mousereleased(search.x+15,search.y+16,1,false)
+        assert(A.materialUi.focused,'Busca de materiais nao recebeu foco')
+        love.textinput('céu')
+        assert(A.materialUi.query=='céu','Busca Unicode nao atualizou')
+        local action=MaterialUI.searchButton(p)
+        love.draw()
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        love.mousereleased(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.materialUi.submittedQuery=='céu'
+            and A.materialUi.searchCount==1
+            and not A.materialUi.focused
+            and #MaterialUI.items(A.materialUi)==0,
+            'Busca pendente nao preservou estado vazio')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool,
+            'Janela de materiais alterou a obra original')
+        status('Materiais: busca local sem catalogo, nenhum pixel alterado')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5744,6 +5794,9 @@ local function drawCompactPopup(w,h)
         if kind=='text' and A.textUi then
             A.textUi.focused=false
             love.keyboard.setTextInput(false)
+        elseif kind=='materials' and A.materialUi then
+            A.materialUi.focused=false
+            love.keyboard.setTextInput(false)
         end
         A.compactPanel=nil
     end)
@@ -6011,13 +6064,52 @@ local function drawCompactPopup(w,h)
         fitted('Guias não implementadas · apenas aparência.',
             p.x+14,p.y+p.h-28,'small','warn',p.w-28)
     elseif kind=='materials' then
-        local x,y=p.x+16,p.y+56
-        text('BIBLIOTECA DE MATERIAIS',x,y,'small','muted')
-        text('Painel visual disponível.',x,y+39,'body','text')
-        text('Motor Lua ainda não implementado.',x,y+68,'small','warn')
-        text('Nenhum pixel será alterado.',x,y+96,'small','muted')
-        button('Voltar ao desenho',x,y+112,p.w-32,32,
-            function()A.compactPanel=nil end)
+        local state=A.materialUi or MaterialUI.new()
+        A.materialUi=state
+        local search=MaterialUI.searchRect(p)
+        button('',search.x,search.y,search.w,search.h,function()
+            state.focused=true
+            love.keyboard.setTextInput(true)
+        end,state.focused)
+        fitted(state.query~='' and state.query or 'Pesquisar materiais...',
+            search.x+11,search.y+11,'small',
+            state.query~='' and 'text' or 'muted',search.w-22)
+        local searchButton=MaterialUI.searchButton(p)
+        button('Buscar',searchButton.x,searchButton.y,
+            searchButton.w,searchButton.h,function()
+            MaterialUI.submit(state)
+            love.keyboard.setTextInput(false)
+            status('Busca local: catálogo de materiais ainda indisponível')
+        end,false,state.query=='')
+        for i,category in ipairs(MaterialUI.categories) do
+            local cell=MaterialUI.categoryRect(p,i)
+            button(category.label,cell.x,cell.y,cell.w,cell.h,function()
+                MaterialUI.setCategory(state,category.id)
+                state.focused=false
+                love.keyboard.setTextInput(false)
+                status(category.label..' · sem arquivos locais')
+            end,state.category==category.id)
+        end
+        local area=MaterialUI.emptyRect(p)
+        box(area.x,area.y,area.w,area.h,'card')
+        c('line')
+        love.graphics.rectangle('line',area.x+.5,area.y+.5,
+            area.w-1,area.h-1,4,4)
+        c('muted')
+        Icons.draw('top-material',area.x+area.w/2,
+            area.y+28,28)
+        local active=MaterialUI.category(state.category)
+        fitted(active.label..' · nenhuma miniatura carregada',
+            area.x+14,area.y+52,'small','text',area.w-28)
+        fitted(state.submittedQuery~='' and
+            ('Busca "'..state.submittedQuery..'": 0 resultados locais')
+            or 'Catálogo original ainda não importado.',
+            area.x+14,area.y+80,'small','muted',area.w-28)
+        fitted('Seleção e aplicação de material: pendentes.',
+            area.x+14,area.y+103,'small','warn',area.w-28)
+        local footer=MaterialUI.footerRect(p)
+        fitted('Nenhuma camada será alterada ao navegar.',
+            footer.x,footer.y,'small','muted',footer.w)
     elseif kind=='properties' then
         local x,y=p.x+17,p.y+54
         if A.tool=='shape' then
@@ -6774,6 +6866,7 @@ function love.focus(focused)
         A.panning=false;A.panButton=nil;A.spaceHeld=false
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
         if A.textUi then A.textUi.focused=false end
+        if A.materialUi then A.materialUi.focused=false end
         love.keyboard.setTextInput(false)
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
@@ -6837,6 +6930,9 @@ function love.textinput(t)
     elseif A.screen=='editor' and A.compactPanel=='text'
         and A.textUi and A.textUi.focused then
         A.textUi.value=TextUI.append(A.textUi.value,t)
+    elseif A.screen=='editor' and A.compactPanel=='materials'
+        and A.materialUi and A.materialUi.focused then
+        MaterialUI.appendQuery(A.materialUi,t)
     end
 end
 function love.keypressed(key)
@@ -6890,6 +6986,21 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='materials' then
+            if key=='escape' then
+                if A.materialUi then A.materialUi.focused=false end
+                love.keyboard.setTextInput(false)
+                A.compactPanel=nil
+            elseif A.materialUi and A.materialUi.focused then
+                if key=='backspace' then
+                    MaterialUI.backspace(A.materialUi)
+                elseif key=='return' or key=='kpenter' then
+                    MaterialUI.submit(A.materialUi)
+                    love.keyboard.setTextInput(false)
+                end
+            end
+            return
+        end
         if A.compactPanel=='text' then
             if key=='escape' then
                 if A.textUi then A.textUi.focused=false end
