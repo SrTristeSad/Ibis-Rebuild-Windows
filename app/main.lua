@@ -40,6 +40,7 @@ local TextUI=require('ibis_text_ui')
 local RulerUI=require('ibis_ruler_ui')
 local MaterialUI=require('ibis_material_ui')
 local TransformUI=require('ibis_transform_ui')
+local SelectionToolUI=require('ibis_selection_tool_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -67,7 +68,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '25-texto-rascunho.png','26-texto-estilo.png',
     '27-reguas-catalogo.png','28-regua-espelho.png',
     '29-materiais-categorias.png','30-materiais-busca.png',
-    '31-transformar-mover.png','32-transformar-perspectiva.png'}
+    '31-transformar-mover.png','32-transformar-perspectiva.png',
+    '33-varinha-magica.png','34-laco.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2352,6 +2354,84 @@ local function advanceShowcase()
             and A.dirty==old.dirty,
             'Rascunho de transformar alterou raster ou selecao')
         status('Transformar: perspectiva visível, operação pendente')
+    elseif sh.stage==33 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        local tools=Compact.popup(w,h,'tools')
+        local wand=IbisTools.grid(tools,2)
+        love.draw()
+        love.mousepressed(wand.x+wand.w/2,wand.y+wand.h/2,1,false)
+        love.mousereleased(wand.x+wand.w/2,wand.y+wand.h/2,1,false)
+        assert(A.compactPanel=='wand'
+            and A.visualPendingTool=='wand'
+            and A.selectionToolUi.mode=='set',
+            'Varinha não abriu um painel independente')
+        local p=Compact.popup(w,h,'wand')
+        local add=SelectionToolUI.modeRect(p,2)
+        love.draw()
+        love.mousepressed(add.x+add.w/2,add.y+add.h/2,1,false)
+        love.mousereleased(add.x+add.w/2,add.y+add.h/2,1,false)
+        local plus=SelectionToolUI.toleranceButton(p,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        local gap=SelectionToolUI.toggleRect(p,1)
+        love.draw()
+        love.mousepressed(gap.x+gap.w/2,gap.y+gap.h/2,1,false)
+        love.mousereleased(gap.x+gap.w/2,gap.y+gap.h/2,1,false)
+        assert(A.selectionToolUi.mode=='add'
+            and A.selectionToolUi.tolerance==15
+            and A.selectionToolUi.gap,
+            'Controles de Varinha não atualizaram rascunho')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Varinha pendente alterou o projeto real')
+        A.showcaseSelectionToolCheck=old
+        status('Varinha: modo Adicionar, reconhecimento visual pendente')
+    elseif sh.stage==34 then
+        assert(A.compactPanel=='wand' and A.showcaseSelectionToolCheck)
+        local old=A.showcaseSelectionToolCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'wand')
+        love.draw()
+        love.mousepressed(p.x+p.w-63,p.y+23,1,false)
+        love.mousereleased(p.x+p.w-63,p.y+23,1,false)
+        assert(A.compactPanel=='tools',
+            'Voltar da Varinha não restaurou o catálogo')
+        local tools=Compact.popup(w,h,'tools')
+        local lasso=IbisTools.grid(tools,3)
+        love.draw()
+        love.mousepressed(lasso.x+lasso.w/2,lasso.y+lasso.h/2,1,false)
+        love.mousereleased(lasso.x+lasso.w/2,lasso.y+lasso.h/2,1,false)
+        assert(A.compactPanel=='lasso'
+            and A.visualPendingTool=='lasso'
+            and A.selectionToolUi.mode=='set',
+            'Laço não abriu painel próprio')
+        local r=Compact.popup(w,h,'lasso')
+        local subtract=SelectionToolUI.modeRect(r,3)
+        love.draw()
+        love.mousepressed(subtract.x+subtract.w/2,
+            subtract.y+subtract.h/2,1,false)
+        love.mousereleased(subtract.x+subtract.w/2,
+            subtract.y+subtract.h/2,1,false)
+        assert(A.selectionToolUi.mode=='subtract'
+            and not SelectionToolUI.canApply(),
+            'Laço não mudou modo ou aplicou seleção falsa')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Laço pendente alterou o projeto real')
+        status('Laço: modo Subtrair visual, seleção raster pendente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5835,6 +5915,8 @@ local function drawCompactPopup(w,h)
         kind=='filters' and 'Filtros' or
         kind=='text' and 'Texto' or
         kind=='transform' and 'Transformar' or
+        kind=='wand' and 'Varinha Mágica' or
+        kind=='lasso' and 'Laço' or
         kind=='color' and 'Cores · RGBA' or
         kind=='view' and 'Visualização' or
         kind=='stabilizer' and 'Estabilizador' or
@@ -5854,7 +5936,7 @@ local function drawCompactPopup(w,h)
         A.compactPanel=nil
     end)
     if kind=='blends' or kind=='filters' or kind=='text'
-        or kind=='transform' then
+        or kind=='transform' or kind=='wand' or kind=='lasso' then
         button('<',p.x+p.w-79,p.y+8,31,30,function()
             if kind=='text' and A.textUi then
                 A.textUi.focused=false
@@ -5871,6 +5953,13 @@ local function drawCompactPopup(w,h)
             local active=tool.backend==A.tool and tool.backend~=nil
                 or A.visualPendingTool==tool.id
             button('',r.x,r.y,r.w,r.h,function()
+                if tool.id=='wand' or tool.id=='lasso' then
+                    A.visualPendingTool=tool.id
+                    A.selectionToolUi=SelectionToolUI.new(tool.id)
+                    A.compactPanel=tool.id
+                    status(tool.label..': controles visuais; motor pendente')
+                    return
+                end
                 if tool.id=='transform' then
                     A.visualPendingTool='transform'
                     A.transformUi=TransformUI.new()
@@ -5914,6 +6003,67 @@ local function drawCompactPopup(w,h)
             (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
             or 'Ferramentas da interface · motor Lua',
             p.x+16,p.y+p.h-28,'small','muted')
+    elseif kind=='wand' or kind=='lasso' then
+        local state=assert(A.selectionToolUi,
+            'Estado de seleção visual ausente')
+        assert(state.kind==kind,'Painel de seleção divergente')
+        for i,mode in ipairs(SelectionToolUI.modes) do
+            local r=SelectionToolUI.modeRect(p,i)
+            button(mode.label,r.x,r.y,r.w,r.h,function()
+                SelectionToolUI.selectMode(state,mode.id)
+            end,state.mode==mode.id)
+        end
+        if kind=='wand' then
+            text('REFERÊNCIA',p.x+14,p.y+109,'small','muted')
+            for i,src in ipairs(SelectionToolUI.sources) do
+                local r=SelectionToolUI.sourceRect(p,i)
+                button(src.label,r.x,r.y,r.w,r.h,function()
+                    SelectionToolUI.selectSource(state,src.id)
+                end,state.source==src.id)
+            end
+            local row=SelectionToolUI.toleranceRow(p)
+            box(row.x,row.y,row.w,row.h,'card')
+            fitted(('Tolerância (rascunho): %d'):format(
+                state.tolerance),row.x+10,row.y+9,'small',
+                'text',row.w-107)
+            for _,delta in ipairs({-1,1}) do
+                local r=SelectionToolUI.toleranceButton(p,delta)
+                button(delta==1 and '+' or '−',
+                    r.x,r.y,r.w,r.h,function()
+                        SelectionToolUI.adjustTolerance(state,delta)
+                    end,false,delta==1 and state.tolerance>=100
+                        or delta==-1 and state.tolerance<=0)
+            end
+            for i,opt in ipairs(SelectionToolUI.toggles) do
+                local r=SelectionToolUI.toggleRect(p,i)
+                button(opt.label,r.x,r.y,r.w,r.h,function()
+                    SelectionToolUI.toggle(state,opt.id)
+                end,state[opt.id])
+            end
+        else
+            local area=SelectionToolUI.lassoIllustration(p)
+            box(area.x,area.y,area.w,area.h,'card')
+            c('accent')
+            love.graphics.setLineWidth(2)
+            local cx=area.x+area.w/2
+            local cy=area.y+70
+            love.graphics.line(cx-56,cy+8,cx-42,cy-22,
+                cx-4,cy-35,cx+41,cy-16,cx+53,cy+14,
+                cx+12,cy+36,cx-30,cy+29,cx-56,cy+8)
+            text('Selecione uma região desenhando um laço',
+                area.x+16,area.y+131,'small','text')
+            text('Captura de traçado: motor pendente',
+                area.x+16,area.y+163,'small','warn')
+        end
+        for i,label in ipairs({'Inverter · pendente',
+            'Limpar · pendente'}) do
+            local r=SelectionToolUI.actionRect(p,i)
+            button(label,r.x,r.y,r.w,r.h,
+                function()end,false,true)
+        end
+        local footer=SelectionToolUI.footerRect(p)
+        fitted('Não altera a seleção raster existente.',
+            footer.x,footer.y,'small','warn',footer.w)
     elseif kind=='transform' then
         local draft=assert(A.transformUi,'Rascunho Transformar ausente')
         for i,mode in ipairs(TransformUI.modes) do
@@ -7111,6 +7261,10 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='wand' or A.compactPanel=='lasso' then
+            if key=='escape' then A.compactPanel='tools' end
+            return
+        end
         if A.compactPanel=='transform' then
             if key=='escape' then
                 A.compactPanel='tools'
