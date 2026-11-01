@@ -9,6 +9,10 @@
 - `app/raster_lua.lua`, `app/raster_stroke.lua` e `app/raster_tools.lua`
   implementam pixels, pincéis, borracha, pressão, inclinação, seleção,
   formas, balde e composição parcial de camadas.
+- O módulo `app/gpu_upload.lua` reutiliza buffers temporários
+  de `ImageData` e evita strings RGBA intermediárias nos uploads
+  parciais de textura; eventos Windows Ink são agregados por pacote.
+  Consulte [GPU_UPLOAD.md](GPU_UPLOAD.md).
 - Build de Windows em Lua: `tools/lua_builder/main.lua`, invocado por
   `build.ps1`. Testes LuaJIT: `tools/lua_tests/main.lua`, invocado
   por `test.ps1`.
