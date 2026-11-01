@@ -30,7 +30,8 @@ local integration={
     'test_ibis_visual_tools.lua',
     'test_ibis_visual_panels.lua',
     'test_ibis_gallery_ui.lua',
-    'test_ibis_top_toolbar.lua'
+    'test_ibis_top_toolbar.lua',
+    'test_ibis_palette_ui.lua'
 }
 local function test(root,name,withStore)
     io.write('[Lua] '..name..'...\n')
