@@ -104,7 +104,7 @@ function M.liquifyModeRect(p,i)
     panel(p);idx(i,#M.liquifyModes)
     local col=(i-1)%3
     local row=math.floor((i-1)/3)
-    return {x=p.x+16+col*132,y=p.y+267+row*43,
+    return {x=p.x+16+col*132,y=p.y+265+row*42,
         w=124,h=36}
 end
 function M.strengthRow(p)
