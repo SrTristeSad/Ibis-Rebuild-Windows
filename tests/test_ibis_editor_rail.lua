@@ -29,8 +29,8 @@ function T.run()
                 check(e.x>=0 and e.x+e.w<=120
                     and e.y>=prev and e.y+e.h<=h-190,
                     'Faixa extrapola canvas seguro')
-                check(Workspace.contains(w,h,true,e.x+2,
-                    e.y+2,true),
+                check(Workspace.contains(w,h,true,e.x+e.w/2,
+                    e.y+e.h/2,true),
                     'Clique lateral nao coincide com workspace')
                 prev=e.y+e.h
             end
