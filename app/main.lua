@@ -5734,7 +5734,6 @@ local function drawEditor(w,h)
         end
         c('line')
         love.graphics.rectangle('fill',w/2-352,h-126,704,1)
-        drawEditorToolRail(w,h)
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and
                 (A.tool=='brush' or A.tool=='erase')) or
@@ -7216,6 +7215,11 @@ function love.draw()
         text('PROJETOS LOCAIS · LUA',w-213,24,'small','muted')
     end
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
+    -- Faixa lateral e overlay visual sobre o canvas, fora da funcao
+    -- monolitica drawEditor (limite LuaJIT de 60 upvalues).
+    if A.screen=='editor' and A.compactUi and not A.focusMode then
+        drawEditorToolRail(w,h)
+    end
     box(0,h-48,w,48,'panel')
     if A.screen~='editor' or not A.compactUi then
         fitted(A.message or '',20,h-33,'small','muted',w-260)
