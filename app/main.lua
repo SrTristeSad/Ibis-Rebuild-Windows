@@ -52,7 +52,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '09-opacidade-camadas.png','10-seletor-ferramentas.png',
     '11-criar-tela.png','12-galeria-desenhos.png',
     '13-menu-visualizacao.png','14-estabilizador.png',
-    '15-opcoes-forma.png','16-materiais-pendentes.png'}
+    '15-opcoes-forma.png','16-materiais-pendentes.png',
+    '17-losango-hsb.png','18-sliders-rgb.png',
+    '19-paleta-cores.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -1915,6 +1917,38 @@ local function showcaseTopClick(id,expectedTool,expectedPanel)
     assert(Native.bytes(A.buffer)==before,
         'O clique na interface alterou os pixels')
 end
+-- Exercita o seletor HSB como um utilizador: roda, losango e
+-- slider de saturação. Os dados RBD2 e o histórico ficam intactos.
+local function showcaseHSBClicks()
+    assert(A.screen=='editor' and A.compactUi
+        and A.compactPanel=='color' and A.colorMode=='hsb')
+    local before=Native.bytes(A.buffer)
+    local edits=A.layerSession:historyStats().undo
+    local rect=Compact.popup(love.graphics.getDimensions(),'color')
+    local function click(x,y)
+        love.draw()
+        love.mousepressed(x,y,1,false)
+        love.mousereleased(x,y,1,false)
+        assert(A.compactPanel=='color',
+            'Ajuste de cor fechou seu próprio painel')
+    end
+    local wx,wy=IbisPanels.wheelPoint(rect,0)
+    click(wx,wy)
+    local dx,dy=ColorPanel.svPoint(rect,100,100)
+    click(dx,dy)
+    assert(A.color==0xff0000ff,
+        'Roda e losango não selecionaram vermelho HSB puro')
+    local mini=ColorPanel.hsbMiniRect(rect,'S')
+    click(mini.x+mini.w*.5,mini.y+mini.h/2)
+    local hue,sat,bright,alpha=ColorPanel.hsb(A.color)
+    assert(hue<=1 and math.abs(sat-50)<=1 and
+        bright>=99 and alpha==255,
+        'Slider de saturação HSB não acompanha a prévia')
+    assert(Native.bytes(A.buffer)==before,
+        'Seletor HSB modificou o desenho original')
+    assert(A.layerSession:historyStats().undo==edits,
+        'Seleção de cor criou uma edição de raster')
+end
 local function advanceShowcase()
     local sh=A.showcase
     sh.stage=sh.stage+1
@@ -2004,6 +2038,17 @@ local function advanceShowcase()
     elseif sh.stage==16 then
         showcaseTopClick('materials','shape','materials')
         status('Materiais · aparência disponível, motor pendente')
+    elseif sh.stage==17 then
+        selectTool('brush')
+        openCompactColor()
+        showcaseHSBClicks()
+        status('HSB: roda, losango e saturação · clique real aprovado')
+    elseif sh.stage==18 then
+        A.colorMode='rgb'
+        status('Cores · canais RGBA Lua')
+    elseif sh.stage==19 then
+        A.colorMode='palette'
+        status('Cores · paleta e histórico local')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
