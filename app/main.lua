@@ -1941,7 +1941,7 @@ local function advanceShowcase()
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
-                native_cpp=Native.available,
+                lua_renderer=Native.implementation=='lua',
                 screenshots=showcaseNames,
                 android_1412_pixel_parity=false}))
         A.showcase=nil
