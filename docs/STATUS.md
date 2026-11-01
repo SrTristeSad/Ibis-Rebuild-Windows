@@ -1,5 +1,12 @@
 # Estado atual — migração Lua (01/11/2026)
 
+**Nova etapa:** upload parcial de textura GPU em `app/gpu_upload.lua`,
+com reutilização de `ImageData` e orçamento limitado a 1 MiB. Eventos
+Windows Ink do mesmo pacote passam a unir suas regiões de pintura para
+uma composição e um envio por pacote. Testes de bytes RGBA, cache e
+leitura da textura real foram adicionados. Consulte
+[GPU_UPLOAD.md](GPU_UPLOAD.md). Não há comprovação de aumento de FPS.
+
 A implementação ativa da branch `migration/lua-only-engine` substituiu
 o motor próprio C++ e scripts Python por LuaJIT/LÖVE, com build Windows
 verificado, testes de raster, RBD2 e GUI real. A entrada Windows Ink
