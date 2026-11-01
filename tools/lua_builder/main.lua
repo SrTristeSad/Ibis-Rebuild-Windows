@@ -44,7 +44,11 @@ local function files(directory,recursive)
     assert(pipe,'Nao foi possivel listar arquivos: '..tostring(err))
     local out={}
     for full in pipe:lines() do
-        full=normalized(full:gsub('\r
+        full=normalized(full)
+        if not recursive and not full:find('\\',1,true) then
+            full=directory..'\\'..full
+        end
+        if full:sub(1,#directory):lower()==directory:lower() then
             local relative=full:sub(#directory+2):gsub('\\','/')
             if relative~='' and relative~='.' and not relative:match('^%.git/') then
                 out[#out+1]={full=full,relative=relative}
