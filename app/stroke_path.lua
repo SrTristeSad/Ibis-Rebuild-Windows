@@ -1,6 +1,6 @@
 -- Stage 46: bounded, curvature-aware spatial reconstruction of pointer samples.
 -- Coordinates and pressures remain in document space. This module never paints;
--- its callbacks feed the existing C++ rasterizer.
+-- its callbacks feed the LuaJIT rasterizer.
 local Path={}
 Path.__index=Path
 local MAX_STEPS=12
@@ -23,7 +23,7 @@ function Path.new(x,y,p)
     },Path)
 end
 -- The perpendicular deviation, not segment length, controls subdivision:
--- long straight motions stay ONE C++ segment; tight bends gain accuracy.
+-- long straight motions stay ONE Lua raster segment; tight bends gain accuracy.
 local function curve(self,ex,ey,ep,kx,ky,kp,emit)
     local dx,dy=ex-self.cx,ey-self.cy
     if dx==0 and dy==0 then
