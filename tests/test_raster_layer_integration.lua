@@ -1,6 +1,8 @@
 package.path='app/?.lua;'..package.path
 -- Isola o gerenciador de camadas do adaptador Win32 de disco.
 -- Testa as chamadas reais de Layers com o novo modulo native.lua (Lua).
+local previousStore=package.loaded.store
+local previousLayers=package.loaded.layers
 package.loaded.store={MAX_LAYERS=8}
 local R=require('native')
 local Layers=require('layers')
@@ -37,4 +39,6 @@ assert(saved==doc and saved.layers[1].pixels==after)
 assert(session:drawShape(1,1,8,8,0,true,1,0x00ff00ff))
 assert(session:fill(0,0,0x0000ffff,0)>0)
 assert(session:historyStats().undo==3)
+package.loaded.store=previousStore
+package.loaded.layers=previousLayers
 print('Lua layer integration: pressure, composite, history, RBD2 source pixels, geometry, fill OK')
