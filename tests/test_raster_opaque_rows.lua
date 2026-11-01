@@ -115,6 +115,23 @@ R.clear(normal,0xaabbcc00)
 R.clear(clear,0x77777700)
 R.composite(normal,clear,1)
 assert(R.readPixel(normal,0,0)==0,'Transparent hidden RGB not cleared')
+-- A via de linhas opacas deve continuar correta com a configuracao
+-- explicitamente ligada/desligada, independente do sistema operacional.
+local originalRowFlag=R.opaqueRowCopyEnabled
+for _,enable in ipairs({false,true}) do
+    R.opaqueRowCopyEnabled=enable
+    local background=R.buffer(W,H)
+    R.clear(background,0x547abfff)
+    R.pixel(background,9,8,0x22ab3300)
+    local referenceResult=R.buffer(W,H)
+    local actualResult=R.buffer(W,H)
+    reference(referenceResult,background,1,rects[1])
+    R.composite(actualResult,background,1)
+    assert(R.bytes(actualResult)==R.bytes(referenceResult),
+        'Row fast-path toggle changed RGBA: '..tostring(enable))
+end
+R.opaqueRowCopyEnabled=originalRowFlag
+
 -- Stress deterministicamente dezenas de milhares de misturas com
 -- destino 100% opaco, incluindo opacidades fracionarias, para detectar
 -- diferencas de arredondamento na via sem divisao.
