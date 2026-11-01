@@ -151,7 +151,7 @@ jobs:
             '13-menu-visualizacao.png','14-estabilizador.png',
             '15-opcoes-forma.png','16-materiais-pendentes.png',
             '17-losango-hsb.png','18-sliders-rgb.png',
-            '19-paleta-cores.png')
+            '19-paleta-cores.png','20-cores-pessoais.png')
           foreach ($name in $expected) {
             $path = Join-Path $screens $name
             if (!(Test-Path $path)) { throw "Falta captura: $name" }
@@ -161,7 +161,7 @@ jobs:
               throw "PNG corrompido: $name"
             }
           }
-          Write-Host "19 capturas reais do editor Lua aprovadas"
+          Write-Host "20 capturas reais do editor Lua aprovadas"
       - name: Publish real Lua editor screenshots
         uses: actions/upload-artifact@v4
         with:
