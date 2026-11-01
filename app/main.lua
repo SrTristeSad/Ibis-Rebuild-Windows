@@ -500,6 +500,10 @@ local function updateColorDrag(kind,x,y)
     elseif kind=='alpha' then
         A.color=ColorPanel.rgba(r,g,b,
             ColorPanel.hsbAlphaValue(p,x))
+    elseif kind:sub(1,5)=='mini-' then
+        local channel=kind:sub(6)
+        local value=ColorPanel.hsbMiniValue(p,channel,x)
+        A.color=ColorPanel.withHSB(A.color,channel,value)
     else
         local mode,channel=kind:match('^(%a+)%-(%u)$')
         assert(mode=='rgb' or mode=='hsb','Ajuste inválido')
@@ -5263,6 +5267,72 @@ local function drawColorTile(color,x,y,w,h)
     c('line')
     love.graphics.rectangle('line',x,y,w,h,2,2)
 end
+-- Losango HSB independente do canvas: textura GPU regenerada somente
+-- quando a matiz arredondada muda. Nenhum pixel da obra é modificado.
+local function drawColorDiamond(p,hue)
+    local tone=math.floor(hue+.5)%360
+    local rect=ColorPanel.svRect(p)
+    local cache=A.colorDiamondCache
+    if not cache or cache.hue~=tone then
+        if cache and cache.image then cache.image:release() end
+        local pixels=love.image.newImageData(rect.w+1,rect.h+1)
+        for yy=0,rect.h do
+            for xx=0,rect.w do
+                local px,py=rect.x+xx,rect.y+yy
+                if ColorPanel.svHit(p,px,py) then
+                    local sat,bright=ColorPanel.svAt(p,px,py)
+                    local rgba=ColorPanel.fromHSB(tone,sat,bright,255)
+                    local r,g,b=Colors.channels(rgba)
+                    pixels:setPixel(xx,yy,r/255,g/255,b/255,1)
+                else
+                    pixels:setPixel(xx,yy,0,0,0,0)
+                end
+            end
+        end
+        local image=love.graphics.newImage(pixels)
+        pixels:release()
+        image:setFilter('linear','linear')
+        cache={hue=tone,image=image}
+        A.colorDiamondCache=cache
+    end
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(cache.image,rect.x,rect.y)
+    local cx,cy=rect.x+rect.w/2,rect.y+rect.h/2
+    local r=rect.w/2
+    love.graphics.setColor(.12,.12,.13,.85)
+    love.graphics.setLineWidth(1.5)
+    love.graphics.polygon('line',cx,cy-r,cx+r,cy,
+        cx,cy+r,cx-r,cy)
+end
+local function drawHSBMiniSliders(p,hue,sat,bright)
+    for _,spec in ipairs({
+        {key='H',value=hue,max=360,title='H'},
+        {key='S',value=sat,max=100,title='S'},
+        {key='V',value=bright,max=100,title='B'}}) do
+        local rail=ColorPanel.hsbMiniRect(p,spec.key)
+        text(('%s: %.0f%s'):format(spec.title,spec.value,
+            spec.key=='H' and '°' or '%'),
+            rail.x,rail.y-24,'small','text')
+        for i=0,43 do
+            local t=i/43
+            local value=spec.key=='H'
+                and ColorPanel.fromHSB(t*360,100,100,255)
+                or spec.key=='S' and ColorPanel.fromHSB(hue,t*100,100,255)
+                or ColorPanel.fromHSB(hue,sat,t*100,255)
+            local red,green,blue=Colors.channels(value)
+            love.graphics.setColor(red/255,green/255,blue/255,1)
+            love.graphics.rectangle('fill',
+                rail.x+i*rail.w/44,rail.y,
+                math.ceil(rail.w/44)+.1,rail.h,1,1)
+        end
+        local t=math.max(0,math.min(1,spec.value/spec.max))
+        local dx=rail.x+rail.w*t
+        love.graphics.setColor(.08,.09,.10,1)
+        love.graphics.circle('fill',dx,rail.y+rail.h/2,6.5,16)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.circle('line',dx,rail.y+rail.h/2,5,16)
+    end
+end
 local function drawColorPopup(p)
     local x,y=p.x,p.y
     text('Atual',x+22,y+49,'small','muted')
@@ -5279,25 +5349,13 @@ local function drawColorPopup(p)
         A.colorMode='palette' end,A.colorMode=='palette')
     if A.colorMode=='hsb' then
         local hue,sat,bright,alpha=ColorPanel.hsb(A.color)
-        local square=ColorPanel.svRect(p)
-        local count=14
-        for row=0,count-1 do
-            for col=0,count-1 do
-                local value=ColorPanel.fromHSB(hue,col/(count-1)*100,
-                    (1-row/(count-1))*100,255)
-                local r,g,b=Colors.channels(value)
-                love.graphics.setColor(r/255,g/255,b/255,1)
-                love.graphics.rectangle('fill',
-                    square.x+col*square.w/count,
-                    square.y+row*square.h/count,
-                    math.ceil(square.w/count)+.2,
-                    math.ceil(square.h/count)+.2)
-            end
-        end
-        local selectX=square.x+square.w*sat/100
-        local selectY=square.y+square.h*(1-bright/100)
-        c('text');love.graphics.setLineWidth(2)
-        love.graphics.circle('line',selectX,selectY,5,18)
+        drawColorDiamond(p,hue)
+        local selectX,selectY=ColorPanel.svPoint(p,sat,bright)
+        love.graphics.setLineWidth(2)
+        love.graphics.setColor(.09,.10,.11,1)
+        love.graphics.circle('fill',selectX,selectY,7,20)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.circle('line',selectX,selectY,6,20)
         -- A roda interativa representa a matiz ao redor da caixa
         -- de saturacao/brilho. A hitbox usa a mesma geometria pura.
         local wheel=IbisPanels.wheel(p)
@@ -5322,13 +5380,7 @@ local function drawColorPopup(p)
         love.graphics.circle('fill',hx,hy,7,20)
         love.graphics.setColor(1,1,1,1)
         love.graphics.circle('line',hx,hy,7,20)
-        c('line')
-        love.graphics.rectangle('line',square.x-.5,square.y-.5,
-            square.w+1,square.h+1,1,1)
-        text(('H %.0f°'):format(hue),x+299,y+195,'small')
-        text(('S %.0f%%'):format(sat),x+299,y+226,'small')
-        text(('B %.0f%%'):format(bright),x+299,y+257,'small')
-        text(('A %d'):format(alpha),x+299,y+288,'small')
+        drawHSBMiniSliders(p,hue,sat,bright)
         local rail=ColorPanel.hsbAlphaRect(p)
         c('line');love.graphics.rectangle('fill',rail.x,rail.y+3,
             rail.w,5,2,2)
@@ -5758,16 +5810,18 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 local channel=ColorPanel.trackHit(p,'rgb',x,y)
                 if channel then kind='rgb-'..channel end
             else
-                local square=ColorPanel.svRect(p)
                 local alpha=ColorPanel.hsbAlphaRect(p)
-                if x>=square.x and x<=square.x+square.w and
-                    y>=square.y and y<=square.y+square.h then
+                if ColorPanel.svHit(p,x,y) then
                     kind='sv'
                 elseif IbisPanels.wheelHit(p,x,y) then
                     kind='wheel'
-                elseif x>=alpha.x-3 and x<=alpha.x+alpha.w+3 and
-                    y>=alpha.y-5 and y<=alpha.y+alpha.h+5 then
-                    kind='alpha'
+                else
+                    local mini=ColorPanel.hsbMiniHit(p,x,y)
+                    if mini then kind='mini-'..mini
+                    elseif x>=alpha.x-3 and x<=alpha.x+alpha.w+3 and
+                        y>=alpha.y-5 and y<=alpha.y+alpha.h+5 then
+                        kind='alpha'
+                    end
                 end
             end
             if kind then
