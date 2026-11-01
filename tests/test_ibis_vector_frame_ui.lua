@@ -38,10 +38,10 @@ function T.run()
         for _,key in ipairs(M.fieldsFor(frame)) do
             local meta=assert(M.fields[key])
             local initial=frame[key]
-            check(M.adjust(frame,key,1)==math.min(meta.max,
-                initial+meta.step),'Ajuste positivo incorreto')
-            check(M.adjust(frame,key,-1)==initial,
-                'Ajuste negativo nao reversivel')
+            check(M.adjust(frame,key,-1)==math.max(meta.min,
+                initial-meta.step),'Ajuste negativo incorreto')
+            check(M.adjust(frame,key,1)==initial,
+                'Ajuste positivo nao reversivel')
             for i=1,300 do M.adjust(frame,key,-1) end
             check(frame[key]==meta.min,
                 'Ajuste abaixo do limite inferior')
