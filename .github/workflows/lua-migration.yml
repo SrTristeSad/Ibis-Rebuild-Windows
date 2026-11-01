@@ -33,5 +33,7 @@ jobs:
         run: luajit tests/test_windows_ink_lua.lua
       - name: RGBA compositor equivalence
         run: luajit tests/test_raster_compositor_equivalence.lua
+      - name: Multi-layer opaque-row regression
+        run: luajit tests/test_raster_opaque_rows.lua
       - name: Canvas composition benchmark (informational)
         run: luajit tests/bench_raster_composition.lua
