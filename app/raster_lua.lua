@@ -4,7 +4,12 @@
 local ffi = require("ffi")
 local bit = require("bit")
 local band, rshift = bit.band, bit.rshift
-local Raster = { available = true, implementation = "lua" }
+local Raster = {
+    available = true, implementation = "lua",
+    -- Runners Windows apresentaram regressao com varredura de linhas.
+    -- Manter caminho per-pixel no Windows ate benchmark de hardware real.
+    opaqueRowCopyEnabled = ffi.os ~= "Windows"
+}
 
 local function integer(n)
     return type(n) == "number" and n == n and n % 1 == 0
@@ -106,7 +111,7 @@ local function compose(dst, src, opacity, rect)
     for y = rect.y, rect.y+rect.h-1 do
         local first=(y*dst.width+rect.x)*4
         local copied=false
-        if opacity==1 then
+        if Raster.opaqueRowCopyEnabled and opacity==1 then
             local last=first+rect.w*4-1
             copied=true
             for alpha=first+3,last,4 do
