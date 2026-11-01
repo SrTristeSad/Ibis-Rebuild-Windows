@@ -123,3 +123,34 @@ geométrica entre roda HSB, quadrado de seleção e slider alfa em
 960×640, 1220×800 e 1920×1080. Smoke gráfico do LÖVE e as dez
 capturas continuam ativos. Ainda falta confronto manual detalhado
 com capturas originais do Android 14.1.2 e teste com caneta física.
+
+## Fase visual 3 — galeria, nova tela e controles de zoom
+
+**Galeria:** três filtros locais (`Tudo`, `Desenhos`, `Pastas`) são
+aplicados **somente ao catálogo exibido**, sem alterar `Store` ou
+a localização de projetos. A galeria vazia tem um estado visual com
+ação `Criar desenho`. Os cartões existentes preservam suas miniaturas
+RGBA geradas do projeto real e os comandos de abrir obras/pastas.
+
+**Nova tela:** diálogo desenhado pelo LÖVE com campos Nome, Largura
+e Altura, visualização ao vivo da proporção em transparência e quatro
+presets (`512×512`, `1024×1024`, `1920×1080`, `1080×1920`).
+Os botões de tamanho atualizam os dois campos, sem criar arquivo antes
+de confirmar. O diálogo aceita qualquer dimensão inteira de 1 a 2048,
+dentro do limite do motor Lua. Projetos continuam sendo criados pela
+mesma rotina `Store:createProject`.
+
+**Canvas:** foi corrigida uma sobreposição: antes o fundo do canvas
+encobria os controles compactos de zoom/desfazer; as áreas de clique
+podiam continuar ativas e invisíveis. Os controles agora são
+renderizados após a composição do canvas, como um grupo flutuante,
+sem permitir que a pintura atinja essas áreas.
+
+**Validação:** `app/ibis_gallery_ui.lua` contém a geometria e os
+filtros em Lua puro. `tests/test_ibis_gallery_ui.lua` cobre
+posicionamento em 960×640/1220×800/1920×1080, categorias, quatro
+presets, valores inválidos, proporção e limites. A captura gráfica
+Windows publica doze telas reais, acrescentando o diálogo e a galeria
+filtrada. A prioridade continua exclusivamente visual: ainda são
+necessários ajustes de proporção baseados em telas comprovadas da
+versão 14.1.2, não apenas em tutoriais públicos.
