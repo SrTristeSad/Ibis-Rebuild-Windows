@@ -134,18 +134,29 @@ local function compose(dst, src, opacity, rect)
                     -- normalizar seu RGB para zero como no compositor anterior.
                 else
                     local sa = (sourceAlpha/255)*opacity
-                    local da = destPixels[p+3]/255
-                    local oa = sa+da*(1-sa)
-                    if oa > 0 then
-                        for k = 0, 2 do
-                            local v = (sourcePixels[p+k]*sa
-                                +destPixels[p+k]*da*(1-sa))/oa
-                            destPixels[p+k] = math.floor(v+0.5)
+                    if destPixels[p+3]==255 then
+                        -- Fundo opaco: source-over permanece opaco.
+                        -- Nao ha divisao pelo alfa de saida (igual a 1).
+                        local remain=1-sa
+                        for k=0,2 do
+                            local v=sourcePixels[p+k]*sa+
+                                destPixels[p+k]*remain
+                            destPixels[p+k]=math.floor(v+0.5)
                         end
                     else
-                        destPixels[p],destPixels[p+1],destPixels[p+2] = 0,0,0
+                        local da = destPixels[p+3]/255
+                        local oa = sa+da*(1-sa)
+                        if oa > 0 then
+                            for k = 0, 2 do
+                                local v = (sourcePixels[p+k]*sa
+                                    +destPixels[p+k]*da*(1-sa))/oa
+                                destPixels[p+k] = math.floor(v+0.5)
+                            end
+                        else
+                            destPixels[p],destPixels[p+1],destPixels[p+2] = 0,0,0
+                        end
+                        destPixels[p+3] = math.floor(oa*255+0.5)
                     end
-                    destPixels[p+3] = math.floor(oa*255+0.5)
                 end
             end
         end -- faixa nao totalmente opaca: composicao pixel a pixel
