@@ -33,6 +33,7 @@ local integration={
     'test_ibis_top_toolbar.lua',
     'test_ibis_palette_ui.lua',
     'test_ibis_layer_ui.lua',
+    'test_ibis_layer_chrome.lua',
     'test_ibis_filter_ui.lua',
     'test_ibis_text_ui.lua',
     'test_ibis_ruler_ui.lua',

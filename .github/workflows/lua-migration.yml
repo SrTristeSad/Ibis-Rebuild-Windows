@@ -53,6 +53,8 @@ jobs:
         run: luajit -e "local t=loadfile('tests/test_compact_popup_focus.lua')(); assert(t.run().passed)"
       - name: Lua original-style editor left tool rail geometry
         run: luajit -e "local t=loadfile('tests/test_ibis_editor_rail.lua')(); assert(t.run().passed)"
+      - name: Lua standalone layer chrome geometry
+        run: luajit -e "local t=loadfile('tests/test_ibis_layer_chrome.lua')(); assert(t.run().passed)"
       - name: Lua raster buffer and composite regression
         run: luajit tests/test_raster_lua.lua
       - name: Lua stroke raster regression

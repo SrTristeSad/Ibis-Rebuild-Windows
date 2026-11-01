@@ -37,6 +37,7 @@ local EditorRail=require('ibis_editor_rail')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 local LayerUI=require('ibis_layer_ui')
+local LayerChrome=require('ibis_layer_chrome')
 local FilterUI=require('ibis_filter_ui')
 local TextUI=require('ibis_text_ui')
 local RulerUI=require('ibis_ruler_ui')
@@ -80,7 +81,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '41-quadros-divisao.png',
     '42-busca-fechada.png','43-texto-foco-encerrado.png',
     '44-editor-faixa-ferramentas.png','45-editor-faixa-interacao.png',
-    '46-paleta-ferramentas.png','47-janela-camadas.png'}
+    '46-paleta-ferramentas.png','47-janela-camadas.png',
+    '48-camadas-visuais.png','49-camada-selecionada.png'}
 local A={toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2782,6 +2784,36 @@ local function advanceShowcase()
             and A.selection==before.selection,
             'Navegacao de janelas alterou projeto')
         status('Camadas: janela ancorada junto ao rodape')
+    elseif sh.stage==48 then
+        A.compactPanel='layers'
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        assert(p.h>=350,'Janela de camadas precisa caber')
+        A.showcaseLayerChromeCheck={pixels=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo,active=A.doc.active_layer}
+        status('Camadas: seleção rosa e camada ativa azul')
+    elseif sh.stage==49 then
+        local old=assert(A.showcaseLayerChromeCheck)
+        local count=#A.doc.layers
+        assert(count>=2 and A.compactPanel=='layers',
+            'Camadas devem continuar abertas')
+        local target=A.doc.active_layer==1 and 2 or 1
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local start,stop=Thumbnails.window(count,A.doc.active_layer,
+            Compact.layerRows(p),A.compactLayerStart)
+        local row=stop-target+1
+        assert(row>=1 and row<=Compact.layerRows(p),
+            'Camada alternativa nao esta visivel')
+        local rect=IbisPanels.layerRow(p,row)
+        love.draw()
+        love.mousepressed(rect.x+rect.w/2,rect.y+14,1,false)
+        love.mousereleased(rect.x+rect.w/2,rect.y+14,1,false)
+        assert(A.doc.active_layer==target,
+            'Clique na camada nao alterou camada ativa')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels,
+            'Troca de camada modificou pixels compostos')
+        status('Camadas: destaque acompanha a selecao real')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -6367,20 +6399,22 @@ end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
-    -- O seletor de ferramentas e uma paleta flutuante discreta.
-    -- As demais janelas compartilham moldura escura sem o antigo
-    -- filete azul que lhes dava aparencia de dialogo generico.
-    c('bg',.38)
-    love.graphics.rectangle('fill',p.x+4,p.y+6,p.w,p.h,7,7)
-    c('panel',kind=='tools' and .94 or .98)
-    love.graphics.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
-    c('line',.75)
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle('line',p.x+.5,p.y+.5,
-        p.w-1,p.h-1,7,7)
-    if kind~='tools' then
-        c('line',.62)
-        love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,1)
+    -- Camadas tem sua propria superficie cinza e linhas claras.
+    if kind=='layers' then
+        LayerChrome.frame(p)
+    else
+        c('bg',.38)
+        love.graphics.rectangle('fill',p.x+4,p.y+6,p.w,p.h,7,7)
+        c('panel',kind=='tools' and .94 or .98)
+        love.graphics.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+        c('line',.75)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle('line',p.x+.5,p.y+.5,
+            p.w-1,p.h-1,7,7)
+        if kind~='tools' then
+            c('line',.62)
+            love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,1)
+        end
     end
     if kind=='tools' then
         text('Ferramentas',p.x+12,p.y+6,'small','text')
@@ -7153,21 +7187,11 @@ local function drawCompactPopup(w,h)
         -- Linha distinta para seleção: existe na janela original,
         -- mas não fingimos que o raster atual tem uma camada especial.
         local selection=LayerUI.selectionRow(p)
-        box(selection.x,selection.y,selection.w,selection.h,'card')
-        c('line')
-        love.graphics.setLineWidth(1)
-        love.graphics.rectangle('line',selection.x+.5,selection.y+.5,
-            selection.w-1,selection.h-1,4,4)
-        c('muted')
-        Icons.draw('select',selection.x+19,selection.y+17,15)
-        text('Camada de seleção',selection.x+38,
-            selection.y+4,'small','text')
         local area=A.selection
         local selectionInfo=area and
             ('Seleção: '..area.w..' × '..area.h..' px')
             or 'Nenhuma área selecionada'
-        fitted(selectionInfo,selection.x+38,
-            selection.y+21,'small','muted',selection.w-50)
+        LayerChrome.selection(selection,selectionInfo,A.fonts.small)
                 local start,stop,maxStart=Thumbnails.window(count,active,
             Compact.layerRows(p),A.compactLayerStart)
         local row=0
@@ -7178,12 +7202,14 @@ local function drawCompactPopup(w,h)
             local visual=LayerRowVisual.presentation(layer.visible,
                 active==i,layer.opacity)
             local r=IbisPanels.layerRow(p,row)
-            button('',r.x,r.y,r.w-35,r.h,function()
-                if i~=A.doc.active_layer then
-                    finishStroke();ls:select(i);A.dirty=true
-                end
-                A.compactLayerStart=start
-            end,active==i)
+            A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w-35,h=r.h,
+                fn=guard(function()
+                    if i~=A.doc.active_layer then
+                        finishStroke();ls:select(i);A.dirty=true
+                    end
+                    A.compactLayerStart=start
+                end)}
+            LayerChrome.row(r,active==i)
             for ty=0,3 do for tx=0,3 do
                 local bright=(tx+ty)%2==0
                 love.graphics.setColor(bright and .8 or .59,
@@ -7196,27 +7222,31 @@ local function drawCompactPopup(w,h)
             love.graphics.setColor(1,1,1,visual.thumbnailAlpha)
             love.graphics.draw(thumb,r.x+6,r.y+5,0,40/tw,40/th)
             love.graphics.setColor(1,1,1,1)
-            if visual.selected then
-                c('accent')
-                love.graphics.rectangle('fill',r.x,r.y+4,3,r.h-8,1,1)
-            end
-            fitted(i..' · '..layer.name,r.x+54,r.y+7,
-                'body',visual.textColor,145)
-            text(('%.0f%%'):format(layer.opacity*100),
-                r.x+151,r.y+30,'small',visual.textColor)
-            iconButton(visual.eyeIcon,r.x+r.w-34,r.y+10,32,29,
-                function()
+            LayerChrome.label(r,i,layer.name,layer.opacity,
+                A.fonts.body,A.fonts.small)
+            local eye=LayerChrome.eye(r,layer.visible,Icons.draw)
+            A.buttons[#A.buttons+1]={x=eye.x,y=eye.y,w=eye.w,
+                h=eye.h,fn=guard(function()
                     finishStroke();ls:setVisible(i,not layer.visible)
                     A.dirty=true;rebuildImage()
-                end,layer.visible)
+                end)}
             if i==active then
-                button('Normal',r.x+54,r.y+25,90,21,function()
-                    A.compactPanel='blends'
-                end,true)
+                A.buttons[#A.buttons+1]={x=r.x+54,y=r.y+26,w=90,h=21,
+                    fn=guard(function()A.compactPanel='blends'end)}
+                love.graphics.setColor(.19,.43,.71,1)
+                love.graphics.rectangle('fill',
+                    r.x+54,r.y+26,90,20,3,3)
+                love.graphics.setColor(1,1,1,1)
+                love.graphics.setFont(A.fonts.small)
+                love.graphics.print('Normal',r.x+60,r.y+28)
             else
-                text('Normal',r.x+57,r.y+30,'small','muted')
+                love.graphics.setColor(LayerChrome.colors.muted)
+                love.graphics.setFont(A.fonts.small)
+                love.graphics.print('Normal',r.x+57,r.y+29)
             end
         end
+        local bg=LayerChrome.backgroundRow(p,stop-start+1)
+        if bg then LayerChrome.background(bg,A.fonts.small) end
         iconButton('up',p.x+13,p.y+p.h-87,34,28,function()
             A.compactLayerStart=Thumbnails.scroll(start,maxStart,1)
         end,false,start>=maxStart)
