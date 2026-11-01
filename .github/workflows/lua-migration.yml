@@ -25,3 +25,5 @@ jobs:
         run: luajit tests/test_raster_lua.lua
       - name: Lua stroke raster regression
         run: luajit tests/test_raster_stroke.lua
+      - name: Lua selections and geometry regression
+        run: luajit tests/test_raster_tools.lua
