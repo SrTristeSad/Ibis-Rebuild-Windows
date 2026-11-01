@@ -1,3 +1,4 @@
+package.path='app/?.lua;'..package.path
 local Top=require('ibis_top_toolbar')
 local Icons=require('ui_icons')
 local UI=require('compact_layout')
