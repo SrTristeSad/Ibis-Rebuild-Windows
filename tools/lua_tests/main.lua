@@ -4,6 +4,7 @@ local raster={
     'test_raster_stroke.lua',
     'test_raster_tools.lua',
     'test_raster_layer_integration.lua',
+    'test_gpu_upload.lua',
     'test_windows_ink_lua.lua',
     'test_raster_compositor_equivalence.lua',
     'test_raster_opaque_rows.lua',
