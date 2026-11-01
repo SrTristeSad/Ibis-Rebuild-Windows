@@ -5289,13 +5289,15 @@ local function drawCompactPopup(w,h)
         end,false,count<=1)
         local start,stop,maxStart=Thumbnails.window(count,active,
             Compact.layerRows(p),A.compactLayerStart)
-        local y=p.y+87
+        local row=0
         for index=stop,start,-1 do
+            row=row+1
             local i=index
             local layer=A.doc.layers[i]
             local visual=LayerRowVisual.presentation(layer.visible,
                 active==i,layer.opacity)
-            button(' ',p.x+13,y,231,35,function()
+            local r=IbisPanels.layerRow(p,row)
+            button('',r.x,r.y,r.w-35,r.h,function()
                 if i~=A.doc.active_layer then
                     finishStroke();ls:select(i);A.dirty=true
                 end
@@ -5305,27 +5307,27 @@ local function drawCompactPopup(w,h)
                 local bright=(tx+ty)%2==0
                 love.graphics.setColor(bright and .8 or .59,
                     bright and .81 or .61,bright and .82 or .63,1)
-                love.graphics.rectangle('fill',p.x+19+tx*7,
-                    y+3+ty*7,7,7)
+                love.graphics.rectangle('fill',r.x+6+tx*10,
+                    r.y+5+ty*10,10,10)
             end end
+            local thumb=layerThumb(i)
+            local tw,th=thumb:getDimensions()
             love.graphics.setColor(1,1,1,visual.thumbnailAlpha)
-            love.graphics.draw(layerThumb(i),p.x+19,y+3)
+            love.graphics.draw(thumb,r.x+6,r.y+5,0,40/tw,40/th)
             love.graphics.setColor(1,1,1,1)
             if visual.selected then
                 c('accent')
-                love.graphics.rectangle('fill',p.x+13,y+5,3,25,1,1)
+                love.graphics.rectangle('fill',r.x,r.y+4,3,r.h-8,1,1)
             end
-            fitted(i..' · '..layer.name,p.x+57,y+9,
-                'small',visual.textColor,Inspector.rowLabelWidth())
-            text(('%.0f%%'):format(layer.opacity*100),
-                p.x+190,y+9,'small',visual.textColor)
-            iconButton(visual.eyeIcon,
-                p.x+251,y+3,33,29,
+            fitted(i..' · '..layer.name,r.x+54,r.y+7,
+                'body',visual.textColor,145)
+            text(('Normal · %.0f%%'):format(layer.opacity*100),
+                r.x+54,r.y+28,'small',visual.textColor)
+            iconButton(visual.eyeIcon,r.x+r.w-34,r.y+10,32,29,
                 function()
                     finishStroke();ls:setVisible(i,not layer.visible)
                     A.dirty=true;rebuildImage()
                 end,layer.visible)
-            y=y+40
         end
         iconButton('up',p.x+13,p.y+p.h-87,34,28,function()
             A.compactLayerStart=Thumbnails.scroll(start,maxStart,1)
