@@ -31,6 +31,7 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
+local PopupFocus=require('compact_popup_focus')
 local IbisTools=require('ibis_visual_tools')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
@@ -75,7 +76,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '35-borrar.png','36-desfoque.png',
     '37-caneta-especial.png','38-liquify.png',
     '39-vetor.png','40-dividir-quadros.png',
-    '41-quadros-divisao.png'}
+    '41-quadros-divisao.png',
+    '42-busca-fechada.png','43-texto-foco-encerrado.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -394,12 +396,16 @@ selectTool=function(id)
 end
 -- The canvas gains horizontal workspace while the document/view state is
 -- untouched. All editing shortcuts remain active with the pane hidden.
+local function navigateCompactPanel(nextPanel)
+    PopupFocus.navigate(A,nextPanel)
+    love.keyboard.setTextInput(false)
+end
 local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
-    A.compactPanel=nil;A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
+    navigateCompactPanel(nil);A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
     A.focusMode=not A.focusMode
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
@@ -411,7 +417,7 @@ local function toggleCompactUi()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
-    A.compactPanel=nil;A.compactLayerStart=nil;A.colorDrag=nil
+    navigateCompactPanel(nil);A.compactLayerStart=nil;A.colorDrag=nil
     A.desktopLayerOpacityDrag=nil
     A.compactUi=not A.compactUi
     status(A.compactUi and 'Interface compacta · barra inferior ativa' or
@@ -421,7 +427,7 @@ local function toggleCompactPanel(kind)
     assert(A.compactUi and A.screen=='editor','Painel compacto indisponível')
     finishStroke()
     A.shapePreview=nil;A.panning=false;A.panButton=nil
-    A.compactPanel=A.compactPanel==kind and nil or kind
+    navigateCompactPanel(A.compactPanel==kind and nil or kind)
 end
 local function undoDoc()
     A.shapePreview=nil
@@ -462,7 +468,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.colorDrag=nil;navigateCompactPanel(nil)
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
@@ -2639,6 +2645,71 @@ local function advanceShowcase()
             and A.dirty==old.dirty,
             'Divisao de quadros tentou aplicar geometria real')
         status('Quadros: divisao horizontal visual, motor pendente')
+    elseif sh.stage==42 then
+        local old={rgba=Native.bytes(A.buffer),undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,layer=A.doc.active_layer,
+            selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        A.compactPanel='materials'
+        A.materialUi=MaterialUI.new()
+        local rect=MaterialUI.searchRect(Compact.popup(w,h,'materials'))
+        love.draw()
+        love.mousepressed(rect.x+20,rect.y+rect.h/2,1,false)
+        love.mousereleased(rect.x+20,rect.y+rect.h/2,1,false)
+        assert(A.materialUi.focused and love.keyboard.hasTextInput(),
+            'Campo de materiais nao recebeu foco')
+        love.textinput('céu')
+        assert(A.materialUi.query=='céu')
+        love.draw()
+        love.mousepressed(110,340,1,false)
+        love.mousereleased(110,340,1,false)
+        assert(A.compactPanel==nil and not A.materialUi.focused
+            and not love.keyboard.hasTextInput(),
+            'Clique externo deixou campo ativo')
+        love.textinput('X')
+        assert(A.materialUi.query=='céu',
+            'Campo invisivel recebeu texto')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool
+            and A.doc.active_layer==old.layer
+            and A.selection==old.selection,
+            'Fechar popup alterou documento')
+        A.showcaseFocusCheck=old
+        status('Auditoria: busca encerrada sem pintar')
+    elseif sh.stage==43 then
+        local old=assert(A.showcaseFocusCheck)
+        local w,h=love.graphics.getDimensions()
+        A.compactPanel='tools'
+        local c=IbisTools.grid(Compact.popup(w,h,'tools'),12)
+        love.draw()
+        love.mousepressed(c.x+c.w/2,c.y+c.h/2,1,false)
+        love.mousereleased(c.x+c.w/2,c.y+c.h/2,1,false)
+        assert(A.compactPanel=='text' and A.textUi)
+        local input=TextUI.inputRect(Compact.popup(w,h,'text'))
+        love.draw()
+        love.mousepressed(input.x+20,input.y+20,1,false)
+        love.mousereleased(input.x+20,input.y+20,1,false)
+        assert(A.textUi.focused and love.keyboard.hasTextInput())
+        love.textinput('Revisão')
+        assert(A.textUi.value=='Revisão')
+        toggleCompactUi()
+        assert(not A.compactUi and A.compactPanel==nil
+            and not A.textUi.focused and not love.keyboard.hasTextInput(),
+            'Modo Desktop deixou teclado ligado')
+        love.textinput('X')
+        assert(A.textUi.value=='Revisão',
+            'Texto oculto foi alterado')
+        toggleCompactUi()
+        assert(A.compactUi and not love.keyboard.hasTextInput(),
+            'Modo Compacto reativou teclado')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool
+            and A.doc.active_layer==old.layer
+            and A.selection==old.selection,
+            'Troca de layout alterou documento')
+        status('Auditoria: texto guardado, entrada desativada')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -6138,25 +6209,14 @@ local function drawCompactPopup(w,h)
         A.tool=='select' and 'Seleção' or
         'Ajustes',p.x+14,p.y+13,'body')
     button('×',p.x+p.w-44,p.y+8,31,30,function()
-        if kind=='text' and A.textUi then
-            A.textUi.focused=false
-            love.keyboard.setTextInput(false)
-        elseif kind=='materials' and A.materialUi then
-            A.materialUi.focused=false
-            love.keyboard.setTextInput(false)
-        end
-        A.compactPanel=nil
+        navigateCompactPanel(nil)
     end)
     if kind=='blends' or kind=='filters' or kind=='text'
         or kind=='transform' or kind=='wand' or kind=='lasso'
         or kind=='smudge' or kind=='blur' or kind=='special'
         or kind=='vector' or kind=='frame' then
         button('<',p.x+p.w-79,p.y+8,31,30,function()
-            if kind=='text' and A.textUi then
-                A.textUi.focused=false
-                love.keyboard.setTextInput(false)
-            end
-            A.compactPanel=kind=='blends' and 'layers' or 'tools'
+            navigateCompactPanel(kind=='blends' and 'layers' or 'tools')
         end)
     end
     if kind=='tools' then
@@ -7140,7 +7200,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         if Compact.contains(Compact.popup(ww,hh,A.compactPanel),x,y) then
             return
         end
-        A.compactPanel=nil;A.colorDrag=nil
+        navigateCompactPanel(nil);A.colorDrag=nil
         return -- Closing a palette must not paint behind it.
     end
     if A.toolHelp then
@@ -7566,10 +7626,8 @@ function love.focus(focused)
         A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
-        if A.textUi then A.textUi.focused=false end
-        if A.materialUi then A.materialUi.focused=false end
-        love.keyboard.setTextInput(false)
+        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil
+        navigateCompactPanel(nil)
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
@@ -7689,29 +7747,27 @@ function love.keypressed(key)
     end
     if A.screen=='editor' and A.compactPanel then
         if A.compactPanel=='vector' or A.compactPanel=='frame' then
-            if key=='escape' then A.compactPanel='tools' end
+            if key=='escape' then navigateCompactPanel('tools') end
             return
         end
         if A.compactPanel=='smudge' or A.compactPanel=='blur'
             or A.compactPanel=='special' then
-            if key=='escape' then A.compactPanel='tools' end
+            if key=='escape' then navigateCompactPanel('tools') end
             return
         end
         if A.compactPanel=='wand' or A.compactPanel=='lasso' then
-            if key=='escape' then A.compactPanel='tools' end
+            if key=='escape' then navigateCompactPanel('tools') end
             return
         end
         if A.compactPanel=='transform' then
             if key=='escape' then
-                A.compactPanel='tools'
+                navigateCompactPanel('tools')
             end
             return
         end
         if A.compactPanel=='materials' then
             if key=='escape' then
-                if A.materialUi then A.materialUi.focused=false end
-                love.keyboard.setTextInput(false)
-                A.compactPanel=nil
+                navigateCompactPanel(nil)
             elseif A.materialUi and A.materialUi.focused then
                 if key=='backspace' then
                     MaterialUI.backspace(A.materialUi)
@@ -7724,9 +7780,7 @@ function love.keypressed(key)
         end
         if A.compactPanel=='text' then
             if key=='escape' then
-                if A.textUi then A.textUi.focused=false end
-                love.keyboard.setTextInput(false)
-                A.compactPanel='tools'
+                navigateCompactPanel('tools')
             elseif A.textUi and A.textUi.focused then
                 if key=='backspace' then
                     A.textUi.value=TextUI.backspace(A.textUi.value)
@@ -7762,9 +7816,9 @@ function love.keypressed(key)
         if key=='escape' then
             A.compactLayerOpacityDrag=nil
             if A.compactPanel=='filters' then
-                A.compactPanel='tools'
+                navigateCompactPanel('tools')
             else
-                A.compactPanel=nil
+                navigateCompactPanel(nil)
             end
             A.colorDrag=nil
         elseif EditorTools.fromKey(key) then
