@@ -82,7 +82,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '42-busca-fechada.png','43-texto-foco-encerrado.png',
     '44-editor-faixa-ferramentas.png','45-editor-faixa-interacao.png',
     '46-paleta-ferramentas.png','47-janela-camadas.png',
-    '48-camadas-visuais.png','49-camada-selecionada.png'}
+    '48-camadas-visuais.png','49-camada-selecionada.png',
+    '50-camadas-comandos.png','51-camadas-adicionar.png',
+    '52-camadas-duplicar.png'}
 local A={toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2814,6 +2816,54 @@ local function advanceShowcase()
         assert(Native.bytes(A.layerSession.composite)==old.pixels,
             'Troca de camada modificou pixels compostos')
         status('Camadas: destaque acompanha a selecao real')
+    elseif sh.stage==50 then
+        assert(A.compactPanel=='layers')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local header=LayerChrome.toolbar(p,'top')
+        local footer=LayerChrome.toolbar(p,'footer')
+        assert(#header==3 and #footer==4
+            and header[1].id=='add' and footer[4].id=='merge',
+            'Comandos de camadas ausentes')
+        A.showcaseLayerActionsCheck={
+            pixels=Native.bytes(A.layerSession.composite),
+            count=#A.doc.layers,
+            undo=A.layerSession:historyStats().undo}
+        status('Camadas: comandos compactos com callbacks originais')
+    elseif sh.stage==51 then
+        local old=assert(A.showcaseLayerActionsCheck)
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local slot=LayerChrome.toolbar(p,'top')[1]
+        love.draw()
+        love.mousepressed(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        assert(#A.doc.layers==old.count+1,
+            'Adicionar nao chamou o motor de camadas Lua')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels,
+            'Adicionar uma camada vazia alterou pixels do desenho')
+        assert(A.compactPanel=='layers',
+            'Adicionar fechou a janela de camadas')
+        status('Camadas: nova camada criada pelo controle visual')
+    elseif sh.stage==52 then
+        local old=assert(A.showcaseLayerActionsCheck)
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local slot=LayerChrome.toolbar(p,'top')[2]
+        love.draw()
+        love.mousepressed(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        assert(#A.doc.layers==old.count+2,
+            'Duplicar nao chamou o motor de camadas Lua')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels,
+            'Duplicar camada vazia alterou pixels do desenho')
+        assert(A.compactPanel=='layers',
+            'Duplicar fechou a janela')
+        status('Camadas: nova camada duplicada pela barra compacta')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -7173,17 +7223,26 @@ local function drawCompactPopup(w,h)
         local ls=A.layerSession
         local count=#A.doc.layers
         local active=A.doc.active_layer
-        button('+',p.x+14,p.y+44,53,32,function()
-            finishStroke();ls:add();A.compactLayerStart=nil
-            A.dirty=true;rebuildImage()
-        end,false,count>=Store.MAX_LAYERS)
-        button('Duplicar',p.x+76,p.y+44,97,32,
-            duplicateActiveLayer,false,count>=Store.MAX_LAYERS)
-        button('Excluir',p.x+181,p.y+44,101,32,function()
-            finishStroke();ls:remove(A.doc.active_layer)
-            clearLayerThumbs();A.compactLayerStart=nil
-            A.dirty=true;rebuildImage()
-        end,false,count<=1)
+        for _,item in ipairs(LayerChrome.toolbar(p,'top')) do
+            local disabled=(item.id=='delete' and count<=1)
+                or (item.id~='delete' and count>=Store.MAX_LAYERS)
+            LayerChrome.paintAction(item,disabled,A.fonts.small)
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=item.x,y=item.y,
+                    w=item.w,h=item.h,fn=guard(function()
+                    if item.id=='add' then
+                        finishStroke();ls:add();A.compactLayerStart=nil
+                        A.dirty=true;rebuildImage()
+                    elseif item.id=='duplicate' then
+                        duplicateActiveLayer()
+                    elseif item.id=='delete' then
+                        finishStroke();ls:remove(A.doc.active_layer)
+                        clearLayerThumbs();A.compactLayerStart=nil
+                        A.dirty=true;rebuildImage()
+                    end
+                end)}
+            end
+        end
         -- Linha distinta para seleção: existe na janela original,
         -- mas não fingimos que o raster atual tem uma camada especial.
         local selection=LayerUI.selectionRow(p)
@@ -7247,15 +7306,28 @@ local function drawCompactPopup(w,h)
         end
         local bg=LayerChrome.backgroundRow(p,stop-start+1)
         if bg then LayerChrome.background(bg,A.fonts.small) end
-        iconButton('up',p.x+13,p.y+p.h-87,34,28,function()
-            A.compactLayerStart=Thumbnails.scroll(start,maxStart,1)
-        end,false,start>=maxStart)
-        iconButton('down',p.x+54,p.y+p.h-87,34,28,function()
-            A.compactLayerStart=Thumbnails.scroll(start,maxStart,-1)
-        end,false,start<=1)
-        button('Nome',p.x+95,p.y+p.h-87,84,28,openLayerRename)
-        button('Mesclar',p.x+186,p.y+p.h-87,98,28,
-            mergeActiveLayerDown,false,active<=1)
+        for _,item in ipairs(LayerChrome.toolbar(p,'footer')) do
+            local disabled=(item.id=='previous' and start>=maxStart)
+                or (item.id=='next' and start<=1)
+                or (item.id=='merge' and active<=1)
+            LayerChrome.paintAction(item,disabled,A.fonts.small)
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=item.x,y=item.y,
+                    w=item.w,h=item.h,fn=guard(function()
+                    if item.id=='previous' then
+                        A.compactLayerStart=Thumbnails.scroll(
+                            start,maxStart,1)
+                    elseif item.id=='next' then
+                        A.compactLayerStart=Thumbnails.scroll(
+                            start,maxStart,-1)
+                    elseif item.id=='rename' then
+                        openLayerRename()
+                    elseif item.id=='merge' then
+                        mergeActiveLayerDown()
+                    end
+                end)}
+            end
+        end
         local layer=A.doc.layers[A.doc.active_layer]
         local drag=A.compactLayerOpacityDrag
         local shown=drag and drag.index==A.doc.active_layer and
@@ -7273,18 +7345,23 @@ local function drawCompactPopup(w,h)
         love.graphics.circle('fill',
             track.x+track.w*LayerOpacity.fraction(shown),
             track.y+6.5,5,16)
-        button('−',p.x+190,p.y+p.h-49,41,30,function()
-            finishStroke()
-            ls:setOpacity(A.doc.active_layer,
-                LayerOpacitySteps.change(A.doc.layers[A.doc.active_layer].opacity,-1))
-            A.dirty=true;rebuildImage()
-        end,false,not LayerOpacitySteps.canChange(layer.opacity,-1))
-        button('+',p.x+242,p.y+p.h-49,41,30,function()
-            finishStroke()
-            ls:setOpacity(A.doc.active_layer,
-                LayerOpacitySteps.change(A.doc.layers[A.doc.active_layer].opacity,1))
-            A.dirty=true;rebuildImage()
-        end,false,not LayerOpacitySteps.canChange(layer.opacity,1))
+        for _,direction in ipairs({-1,1}) do
+            local item=LayerChrome.step(p,direction)
+            local disabled=not LayerOpacitySteps.canChange(
+                layer.opacity,direction)
+            LayerChrome.paintAction(item,disabled,A.fonts.small)
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=item.x,y=item.y,
+                    w=item.w,h=item.h,fn=guard(function()
+                    finishStroke()
+                    ls:setOpacity(A.doc.active_layer,
+                        LayerOpacitySteps.change(
+                            A.doc.layers[A.doc.active_layer].opacity,
+                            direction))
+                    A.dirty=true;rebuildImage()
+                end)}
+            end
+        end
     end
 end
 function love.draw()

@@ -29,6 +29,105 @@ function M.backgroundRow(p,n)
     if y+30>footer.y then return nil end
     return {x=p.x+13,y=y,w=p.w-26,h=30}
 end
+-- Slots fixos e compactos. Os IDs são semânticos e independem
+-- dos rótulos, para preservar os comandos na interface Windows.
+function M.toolbar(p,group)
+    M.regions(p)
+    if group=='top' then
+        return {
+            {id='add',label='Nova',icon='add',
+                x=p.x+13,y=p.y+48,w=86,h=29},
+            {id='duplicate',label='Duplicar',icon='copy',
+                x=p.x+105,y=p.y+48,w=86,h=29},
+            {id='delete',label='Excluir',icon='delete',
+                x=p.x+197,y=p.y+48,w=87,h=29}
+        }
+    end
+    if group=='footer' then
+        local y=p.y+p.h-87
+        return {
+            {id='previous',label='',icon='up',
+                x=p.x+13,y=y,w=34,h=28},
+            {id='next',label='',icon='down',
+                x=p.x+54,y=y,w=34,h=28},
+            {id='rename',label='Nome',icon='edit',
+                x=p.x+95,y=y,w=84,h=28},
+            {id='merge',label='Mesclar',icon='merge',
+                x=p.x+186,y=y,w=98,h=28}
+        }
+    end
+    error('Grupo de controles de camada desconhecido')
+end
+function M.step(p,direction)
+    M.regions(p)
+    assert(direction==1 or direction==-1,'Passo de opacidade invalido')
+    return {id=direction==1 and 'increase' or 'decrease',
+        label=direction==1 and '+' or '−',
+        icon=direction==1 and 'add' or 'subtract',
+        x=p.x+(direction==1 and 242 or 190),
+        y=p.y+p.h-49,w=41,h=30}
+end
+local function icon(g,x,y)
+    -- Ícones vetoriais próprios, sem assets do APK.
+    g.setLineWidth(1.7)
+    if icon=='add' or icon=='subtract' then
+        g.line(x-5,y,x+5,y)
+        if icon=='add' then g.line(x,y-5,x,y+5) end
+    elseif icon=='copy' then
+        g.rectangle('line',x-5,y-7,10,12,1,1)
+        g.rectangle('line',x-2,y-4,10,12,1,1)
+    elseif icon=='delete' then
+        g.rectangle('line',x-5,y-3,10,10,1,1)
+        g.line(x-7,y-5,x+7,y-5)
+        g.line(x-3,y-8,x+3,y-8)
+    elseif icon=='up' or icon=='down' then
+        local v=icon=='up' and -1 or 1
+        g.line(x,y-7*v,x,y+7*v)
+        g.line(x-4,y+2*v,x,y+7*v,x+4,y+2*v)
+    elseif icon=='edit' then
+        g.line(x-5,y+6,x+5,y-4)
+        g.line(x-6,y+7,x-2,y+6)
+        g.line(x+3,y-6,x+7,y-2)
+    elseif icon=='merge' then
+        g.line(x-6,y-5,x+6,y-5)
+        g.line(x-6,y+6,x+6,y+6)
+        g.line(x,y-2,x,y+3)
+        g.line(x-3,y,x,y+3,x+3,y)
+    end
+end
+function M.paintAction(slot,disabled,font)
+    assert(type(slot)=='table' and type(slot.x)=='number'
+        and type(slot.y)=='number' and slot.w>0 and slot.h>0,
+        'Slot de controle invalido')
+    assert(type(font)=='userdata' or type(font)=='table',
+        'Fonte de controle invalida')
+    local lg=love.graphics
+    lg.setColor(disabled and .29 or .27,
+        disabled and .30 or .28,
+        disabled and .32 or .30,1)
+    lg.rectangle('fill',slot.x,slot.y,slot.w,slot.h,4,4)
+    lg.setColor(disabled and .39 or .60,
+        disabled and .41 or .63,
+        disabled and .43 or .66,1)
+    lg.rectangle('line',slot.x+.5,slot.y+.5,
+        slot.w-1,slot.h-1,4,4)
+    lg.setColor(disabled and .55 or .94,
+        disabled and .57 or .95,
+        disabled and .59 or .97,1)
+    local x=slot.label=='' and slot.x+slot.w/2
+        or slot.label=='+' or slot.label=='−'
+        and slot.x+slot.w/2 or slot.x+15
+    -- Evita que um operador de precedência desloque o ícone do botão.
+    if slot.label=='+' or slot.label=='−' then
+        x=slot.x+slot.w/2
+    end
+    icon(lg,x,slot.y+slot.h/2)
+    if slot.label~='' and slot.label~='+' and slot.label~='−' then
+        lg.setFont(font)
+        lg.print(slot.label,slot.x+28,
+            slot.y+(slot.h-font:getHeight())/2)
+    end
+end
 function M.frame(p)
     local q=M.regions(p)
     color('window')
