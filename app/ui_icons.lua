@@ -152,6 +152,35 @@ glyphs['canvas-tool']={
     {op='rectangle',mode='line',x=-6,y=-5,w=12,h=10},
     {op='line',points={-3,2,0,-2,3,2}},
     {op='circle',mode='fill',x=3,y=-2,r=1.2}}
+-- Acoes do canto superior direito, desenhadas em Lua sem assets alheios.
+glyphs['top-view']={
+    {op='line',points={-6,-3,-2,-3,-2,-6}},
+    {op='line',points={2,-6,2,-3,6,-3}},
+    {op='line',points={6,2,6,5,2,5}},
+    {op='line',points={-2,5,-6,5,-6,2}},
+    {op='circle',mode='line',x=0,y=0,r=2.1}}
+glyphs['top-selection']={
+    {op='line',points={-6,-3,-6,-6,-3,-6}},
+    {op='line',points={1,-6,6,-6,6,-2}},
+    {op='line',points={6,2,6,6,2,6}},
+    {op='line',points={-2,6,-6,6,-6,2}},
+    {op='circle',mode='line',x=0,y=0,r=2.6}}
+glyphs['top-stabilizer']={
+    {op='line',points={-6,4,-3,-3,-1,0,2,-4,5,3}},
+    {op='line',points={-6,6,6,6}},
+    {op='circle',mode='fill',x=5,y=3,r=1.7}}
+glyphs['top-shape']={
+    {op='rectangle',mode='line',x=-6,y=-5,w=7.5,h=8},
+    {op='circle',mode='line',x=3,y=2.5,r=3.5}}
+glyphs['top-ruler']={
+    {op='rectangle',mode='line',x=-6.4,y=-2,w=12.8,h=4},
+    {op='line',points={-4,-2,-4,1}},
+    {op='line',points={-.5,-2,-.5,0}},
+    {op='line',points={3,-2,3,1}}}
+glyphs['top-material']={
+    {op='rectangle',mode='line',x=-5.5,y=-5.5,w=11,h=11},
+    {op='circle',mode='fill',x=2.5,y=-2.5,r=1.4},
+    {op='line',points={-4,3,-1,-1,1,1,3,-1,5,3}}}
 function Icons.commands(id)
     return glyphs[id]
 end
