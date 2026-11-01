@@ -29,3 +29,5 @@ jobs:
         run: luajit tests/test_raster_tools.lua
       - name: Lua layer manager integration regression
         run: luajit tests/test_raster_layer_integration.lua
+      - name: Lua Windows Ink queue and pressure model
+        run: luajit tests/test_windows_ink_lua.lua
