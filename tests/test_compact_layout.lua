@@ -40,7 +40,8 @@ function T.run()
                     'Layer popup must page visible rows')
                 check(p.x>w/2,'Layer panel should float near right edge')
             elseif kind=='tools' then
-                check(p.x<w/2,'Tools should float near left edge')
+                check(p.x<w/2 and p.w==242 and p.h==383,
+                    'Tools should float in a narrow two-column palette')
             end
         end
         local v={width=256,height=128,zoom=1.25,rotation=.18,

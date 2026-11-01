@@ -28,9 +28,9 @@ function M.get(id) return byId[id] end
 function M.grid(p,index)
     assert(type(index)=='number' and index%1==0 and
         index>=1 and index<=#M.entries,'Indice da ferramenta inválido')
-    local col=(index-1)%3
-    local row=math.floor((index-1)/3)
-    return {x=p.x+16+col*134,y=p.y+57+row*62,w=126,h=55}
+    local col=(index-1)%2
+    local row=math.floor((index-1)/2)
+    return {x=p.x+10+col*111,y=p.y+29+row*41,w=106,h=39}
 end
 function M.select(id,onBackend)
     local entry=assert(M.get(id),'Ferramenta desconhecida')

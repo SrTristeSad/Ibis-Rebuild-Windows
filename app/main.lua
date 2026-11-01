@@ -79,7 +79,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '39-vetor.png','40-dividir-quadros.png',
     '41-quadros-divisao.png',
     '42-busca-fechada.png','43-texto-foco-encerrado.png',
-    '44-editor-faixa-ferramentas.png','45-editor-faixa-interacao.png'}
+    '44-editor-faixa-ferramentas.png','45-editor-faixa-interacao.png',
+    '46-paleta-ferramentas.png','47-janela-camadas.png'}
 local A={toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -1423,7 +1424,8 @@ local function verifyCompactUi()
     assert(A.compactPanel=='tools','Botão Ferramentas não abriu a paleta')
     local p=Compact.popup(w,h,'tools')
     love.draw()
-    love.mousepressed(p.x+14+156+32,p.y+52+70+25,1,false)
+    local eraser=IbisTools.grid(p,6)
+    love.mousepressed(eraser.x+eraser.w/2,eraser.y+eraser.h/2,1,false)
     assert(not A.compactPanel and A.tool=='erase',
         'Ícone de borracha na paleta não ativou ferramenta')
     tap(1)
@@ -2747,6 +2749,39 @@ local function advanceShowcase()
             and A.tool==old.tool,
             'Barra lateral nao pode acionar outro motor')
         status('Faixa original: ferramenta Borrar aberta com clique real')
+    elseif sh.stage==46 then
+        local before={pixels=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,layer=A.doc.active_layer,
+            tool=A.tool,selection=A.selection}
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        A.showcasePopupVisualCheck=before
+        local w,h=love.graphics.getDimensions()
+        local popup=Compact.popup(w,h,'tools')
+        assert(popup.w==242 and popup.h==383
+            and popup.x==85 and popup.y+popup.h<=h-127,
+            'Seletor de 2 colunas incorreto')
+        assert(Native.bytes(A.buffer)==before.pixels
+            and A.layerSession:historyStats().undo==before.undo
+            and A.dirty==before.dirty,
+            'Paleta de ferramentas modificou raster')
+        status('Ferramentas: paleta flutuante de duas colunas')
+    elseif sh.stage==47 then
+        local before=assert(A.showcasePopupVisualCheck)
+        A.compactPanel='layers'
+        local w,h=love.graphics.getDimensions()
+        local popup=Compact.popup(w,h,'layers')
+        assert(popup.x>=w/2 and popup.y>=134
+            and popup.y+popup.h<=h-130,
+            'Janela de camadas nao acompanha canto inferior direito')
+        assert(Native.bytes(A.buffer)==before.pixels
+            and A.layerSession:historyStats().undo==before.undo
+            and A.doc.active_layer==before.layer
+            and A.dirty==before.dirty and A.tool==before.tool
+            and A.selection==before.selection,
+            'Navegacao de janelas alterou projeto')
+        status('Camadas: janela ancorada junto ao rodape')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -6332,12 +6367,25 @@ end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
     local p=Compact.popup(w,h,kind)
-    box(p.x+5,p.y+7,p.w,p.h,'bg')
-    box(p.x,p.y,p.w,p.h,'panel')
-    c('line');love.graphics.rectangle('line',p.x+.5,p.y+.5,
-        p.w-1,p.h-1,5,5)
-    c('accent');love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,2)
-    text(kind=='tools' and 'Ferramentas' or
+    -- O seletor de ferramentas e uma paleta flutuante discreta.
+    -- As demais janelas compartilham moldura escura sem o antigo
+    -- filete azul que lhes dava aparencia de dialogo generico.
+    c('bg',.38)
+    love.graphics.rectangle('fill',p.x+4,p.y+6,p.w,p.h,7,7)
+    c('panel',kind=='tools' and .94 or .98)
+    love.graphics.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+    c('line',.75)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle('line',p.x+.5,p.y+.5,
+        p.w-1,p.h-1,7,7)
+    if kind~='tools' then
+        c('line',.62)
+        love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,1)
+    end
+    if kind=='tools' then
+        text('Ferramentas',p.x+12,p.y+6,'small','text')
+    else
+        text(kind=='tools' and 'Ferramentas' or
         kind=='layers' and 'Camadas' or
         kind=='blends' and 'Modos de mesclagem' or
         kind=='filters' and 'Filtros' or
@@ -6358,9 +6406,21 @@ local function drawCompactPopup(w,h)
         A.tool=='shape' and 'Formas' or
         A.tool=='select' and 'Seleção' or
         'Ajustes',p.x+14,p.y+13,'body')
-    button('×',p.x+p.w-44,p.y+8,31,30,function()
-        navigateCompactPanel(nil)
-    end)
+    end
+    if kind=='tools' then
+        -- Fechar tambem funciona por Escape, pelo dock ou clique externo.
+        c('muted')
+        love.graphics.setFont(A.fonts.body)
+        love.graphics.print('×',p.x+p.w-20,p.y+3)
+        A.buttons[#A.buttons+1]={x=p.x+p.w-30,y=p.y+2,
+            w=27,h=24,fn=guard(function()
+                navigateCompactPanel(nil)
+            end)}
+    else
+        button('×',p.x+p.w-44,p.y+8,31,30,function()
+            navigateCompactPanel(nil)
+        end)
+    end
     if kind=='blends' or kind=='filters' or kind=='text'
         or kind=='transform' or kind=='wand' or kind=='lasso'
         or kind=='smudge' or kind=='blur' or kind=='special'
@@ -6372,24 +6432,32 @@ local function drawCompactPopup(w,h)
     if kind=='tools' then
         -- Catálogo visual completo; somente ferramentas já implementadas
         -- no motor Lua são acionadas. Outras mostram o estado pendente.
+        local mx,my=love.mouse.getPosition()
         for i,tool in ipairs(IbisTools.entries) do
             local r=IbisTools.grid(p,i)
-            local active=tool.backend==A.tool and tool.backend~=nil
+            local active=(tool.backend~=nil and tool.backend==A.tool)
                 or A.visualPendingTool==tool.id
-            button('',r.x,r.y,r.w,r.h,function()
-                activateIbisTool(tool)
-            end,active)
+            local hover=mx>=r.x and mx<r.x+r.w
+                and my>=r.y and my<r.y+r.h
+            if active or hover then
+                c(active and 'selected' or 'line',.85)
+                love.graphics.rectangle('fill',r.x+1,r.y+1,
+                    r.w-2,r.h-2,3,3)
+            end
+            c(active and 'accent' or
+                tool.backend and 'text' or 'muted')
+            Icons.draw(tool.icon,r.x+r.w/2,r.y+12,19)
+            love.graphics.setFont(A.fonts.micro)
             c(active and 'accent' or 'text')
-            Icons.draw(tool.icon,r.x+17,r.y+14,17)
-            fitted(tool.label,r.x+32,r.y+9,'small','text',r.w-36)
-            text(tool.backend and (tool.partial and 'Parcial' or 'Pronto')
-                or 'Pendente',r.x+32,r.y+33,'small',
-                tool.backend and 'muted' or 'warn')
+            love.graphics.printf(tool.label,r.x+3,
+                r.y+25,r.w-6,'center')
+            A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w,h=r.h,
+                fn=guard(function()activateIbisTool(tool)end)}
         end
-        text(A.visualPendingTool and
-            (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
-            or 'Ferramentas da interface · motor Lua',
-            p.x+16,p.y+p.h-28,'small','muted')
+        c('line',.66)
+        love.graphics.rectangle('fill',p.x+8,p.y+p.h-27,p.w-16,1)
+        fitted('Ferramentas sem motor: prévia apenas',
+            p.x+12,p.y+p.h-19,'micro','muted',p.w-24)
     elseif kind=='vector' or kind=='frame' then
         local draft=assert(A.vectorFrameUi,'Rascunho vetorial ausente')
         assert(draft.kind==kind,'Ferramenta visual divergente')

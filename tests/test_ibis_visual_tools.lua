@@ -41,12 +41,16 @@ function T.run()
     end
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local popup=UI.popup(size[1],size[2],'tools')
+        assert(popup.w==242 and popup.h==383
+            and popup.x==85 and popup.y>=125
+            and popup.y+popup.h<=size[2]-125,
+            'Paleta de duas colunas fora do canvas seguro')
         local keys={}
         for i=1,count do
             local r=Catalog.grid(popup,i)
-            assert(r.x>=popup.x and r.y>=popup.y+48
+            assert(r.x>=popup.x+8 and r.y>=popup.y+26
                 and r.x+r.w<popup.x+popup.w
-                and r.y+r.h<popup.y+popup.h-42,
+                and r.y+r.h<=popup.y+popup.h-25,
                 'Ferramenta fora do seletor em '..size[1]..'x'..size[2])
             for _,prev in ipairs(keys) do
                 assert(r.x+r.w<=prev.x or prev.x+prev.w<=r.x
@@ -54,6 +58,10 @@ function T.run()
                     'Botoes de ferramentas sobrepostos')
             end
             keys[#keys+1]=r
+            if i>=3 then
+                assert(r.y>keys[i-2].y and r.x==keys[i-2].x,
+                    'Paleta nao tem duas colunas de grade')
+            end
         end
     end
     assert(not pcall(Catalog.grid,{x=0,y=0},16))

@@ -86,7 +86,8 @@ function UI.popup(w,h,kind)
         type(h)=='number' and h>=640,'Janela compacta inválida')
     local isTop=kind=='view' or kind=='stabilizer'
         or kind=='ruler' or kind=='materials'
-    local width=kind=='color' and 404 or kind=='ruler' and 390
+    local width=kind=='tools' and 242 or
+        kind=='color' and 404 or kind=='ruler' and 390
         or kind=='materials' and 444 or (kind=='tools' or
         kind=='filters' or kind=='text' or kind=='transform'
         or kind=='wand' or kind=='lasso' or kind=='smudge'
@@ -94,7 +95,7 @@ function UI.popup(w,h,kind)
         or kind=='vector' or kind=='frame') and 420
         or isTop and 318 or 298
     local height=kind=='color' and 450 or
-        (kind=='tools' and math.min(474,h-188)) or
+        (kind=='tools' and 383) or
         ((kind=='filters' or kind=='text' or kind=='transform'
             or kind=='wand' or kind=='lasso' or kind=='smudge'
             or kind=='blur' or kind=='special'
@@ -104,9 +105,12 @@ function UI.popup(w,h,kind)
         kind=='view' and 314 or kind=='stabilizer' and 254 or
         kind=='blends' and math.min(440,h-260) or
         kind=='ruler' and 402 or kind=='materials' and 440 or 354
-    return {x=(kind=='layers' or kind=='color' or kind=='blends' or isTop)
-        and w-width-20 or 20,
-        y=134,w=width,h=height}
+    local x=(kind=='tools' and 85) or
+        ((kind=='layers' or kind=='color' or kind=='blends' or isTop)
+        and w-width-20 or 20)
+    local y=(kind=='tools' and math.max(125,h-130-height-6)) or
+        (kind=='layers' and math.max(134,h-130-height-8)) or 134
+    return {x=x,y=y,w=width,h=height}
 end
 function UI.contains(rect,x,y)
     return x>=rect.x and x<rect.x+rect.w and
