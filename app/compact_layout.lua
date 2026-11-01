@@ -88,7 +88,7 @@ function UI.popup(w,h,kind)
         kind=='tools' and math.min(474,h-188) or
         kind=='layers' and math.min(440,h-260) or
         kind=='view' and 314 or kind=='stabilizer' and 254 or
-        (kind=='ruler' or kind=='materials') and 198 or 354
+        (kind=='ruler' or kind=='materials') and 222 or 354
     return {x=(kind=='layers' or kind=='color' or isTop)
         and w-width-20 or 20,
         y=134,w=width,h=height}
