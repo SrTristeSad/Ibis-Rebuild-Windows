@@ -2,6 +2,8 @@
 local raster={
     'test_raster_lua.lua',
     'test_raster_stroke.lua',
+    'test_raster_stroke_scanlines.lua',
+    'bench_raster_stroke_scanlines.lua',
     'test_raster_tools.lua',
     'test_raster_layer_integration.lua',
     'test_gpu_upload.lua',
