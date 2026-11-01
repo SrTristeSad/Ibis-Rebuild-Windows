@@ -97,7 +97,7 @@ function Lab.source(focus,saved,current)
 end
 function Lab.resetRect(rect)
     local p=Lab.layout(rect)
-    return {x=p.x+8,y=p.y+p.h-36,w=49,h=31}
+    return {x=p.x+8,y=p.y+p.h-36,w=66,h=31}
 end
 function Lab.fit(imageWidth,imageHeight,rect)
     assert(type(imageWidth)=='number' and imageWidth>0 and
