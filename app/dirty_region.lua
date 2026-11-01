@@ -11,7 +11,7 @@ function Region.segment(w,h,x0,y0,x1,y1,d0,d1)
         finite(x1) and finite(y1) and finite(d0) and finite(d1) and
         d0>=1 and d0<=256 and d1>=1 and d1<=256,
         'Região do pincel inválida')
-    -- Stage 45 native border = diameter*0.5*majorScale + 1.
+    -- Lua stroke border = diameter*0.5*majorScale + 1.
     -- majorScale <= 1.75; 2px is a conservative pixel-grid margin.
     local pad=math.max(d0,d1)*0.875+2
     local x=math.max(0,math.floor(math.min(x0,x1)-pad))
