@@ -37,3 +37,5 @@ jobs:
         run: luajit tests/test_raster_opaque_rows.lua
       - name: Canvas composition benchmark (informational)
         run: luajit tests/bench_raster_composition.lua
+      - name: Compare opaque-row and per-pixel compositor (informational)
+        run: luajit tests/bench_raster_comparison.lua
