@@ -111,8 +111,10 @@ jobs:
           Set-Content -Path 'dist/Android1412Rebuild.exe.local' -Value '' -NoNewline
           $runner = Join-Path (Get-Location) 'dist/Android1412Rebuild.exe'
           $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-fused-smoke'
-          & $runner '--lua-gui-smoke' '--data-dir' $root
-          if ($LASTEXITCODE -ne 0) { throw "EXE Lua falhou: $LASTEXITCODE" }
+          # Executaveis GUI do Windows retornam o controle antes do encerramento
+          # quando chamados com &, portanto usamos Start-Process -Wait.
+          $process = Start-Process -FilePath $runner -ArgumentList @('--lua-gui-smoke','--data-dir',$root) -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "EXE Lua falhou: $($process.ExitCode)" }
           Remove-Item 'dist/Android1412Rebuild.exe.local','dist/opengl32.dll','dist/libgallium_wgl.dll' -Force
       - name: Publish tested Windows package
         uses: actions/upload-artifact@v4
