@@ -21,6 +21,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install LuaJIT runtime
         run: sudo apt-get update && sudo apt-get install -y luajit
+      - name: Compile complete Lua editor entrypoint
+        run: luajit -b app/main.lua /tmp/ibis-editor-main-check.luac
       - name: Lua ibisPaint visual panel geometry (no raster changes)
         run: luajit -e "local t=loadfile('tests/test_ibis_visual_panels.lua')(); assert(t.run().passed)"
       - name: Lua gallery tabs and new-canvas preview
