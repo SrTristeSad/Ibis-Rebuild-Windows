@@ -107,19 +107,60 @@ function Picker.trackHit(rect,mode,x,y)
     end
     return nil
 end
+-- O HSB do ibisPaint usa um losango dentro do círculo de matiz.
+-- Quadrado UV (u=saturação, v=1-brilho) rotacionado 45 graus:
+-- topo=branco, direita=matiz pura e base=preto.
+local SV_RADIUS=66
+local function clamp01(v) return math.max(0,math.min(1,v)) end
 function Picker.svRect(rect)
     assert(type(rect)=='table' and type(rect.x)=='number',
         'Painel HSB inválido')
-    -- Caixa SV centralizada dentro da roda HSB da interface.
-    return {x=rect.x+101,y=rect.y+229,w=72,h=72}
+    return {x=rect.x+137-SV_RADIUS,y=rect.y+265-SV_RADIUS,
+        w=SV_RADIUS*2,h=SV_RADIUS*2}
+end
+function Picker.svHit(rect,x,y)
+    local r=Picker.svRect(rect)
+    assert(type(x)=='number' and x==x and
+        type(y)=='number' and y==y,'Ponteiro HSB inválido')
+    local cx,cy=r.x+r.w/2,r.y+r.h/2
+    return math.abs(x-cx)+math.abs(y-cy)<=SV_RADIUS+1
 end
 function Picker.svAt(rect,x,y)
     local r=Picker.svRect(rect)
     assert(type(x)=='number' and x==x and
         type(y)=='number' and y==y,'Ponteiro HSB inválido')
-    local s=math.floor(math.max(0,math.min(1,(x-r.x)/r.w))*100+.5)
-    local b=math.floor((1-math.max(0,math.min(1,(y-r.y)/r.h)))*100+.5)
-    return s,b
+    local dx,dy=x-(r.x+r.w/2),y-(r.y+r.h/2)
+    local u=clamp01((dx+dy+SV_RADIUS)/(SV_RADIUS*2))
+    local v=clamp01((dy-dx+SV_RADIUS)/(SV_RADIUS*2))
+    return math.floor(u*100+.5),math.floor((1-v)*100+.5)
+end
+function Picker.svPoint(rect,s,b)
+    assert(numeric(s,0,100) and numeric(b,0,100),
+        'Saturação ou brilho inválido')
+    local r=Picker.svRect(rect)
+    local u,v=s/100,1-b/100
+    return r.x+r.w/2+SV_RADIUS*(u-v),
+        r.y+r.h/2+SV_RADIUS*(u+v-1)
+end
+-- Trilhos compactos à direita da roda; não invadem o losango.
+function Picker.hsbMiniRect(rect,key)
+    assert(key=='H' or key=='S' or key=='V',
+        'Canal HSB compacto inválido')
+    local i=key=='H' and 0 or key=='S' and 1 or 2
+    return {x=rect.x+299,y=rect.y+218+i*43,w=88,h=10}
+end
+function Picker.hsbMiniHit(rect,x,y)
+    for _,key in ipairs({'H','S','V'}) do
+        local r=Picker.hsbMiniRect(rect,key)
+        if x>=r.x-4 and x<=r.x+r.w+4 and
+            y>=r.y-5 and y<=r.y+r.h+5 then return key end
+    end
+end
+function Picker.hsbMiniValue(rect,key,x)
+    assert(type(x)=='number' and x==x,'Posição HSB inválida')
+    local r=Picker.hsbMiniRect(rect,key)
+    local max=key=='H' and 360 or 100
+    return math.floor(clamp01((x-r.x)/r.w)*max+.5)
 end
 function Picker.hueRect(rect)
     return {x=rect.x+260,y=rect.y+184,w=25,h=145}
