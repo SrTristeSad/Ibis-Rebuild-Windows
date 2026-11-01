@@ -1,5 +1,12 @@
 # Estado atual — migração Lua (01/11/2026)
 
+**Prioridade atual: reconstrução visual do ibisPaint 14.1.2.**
+Galeria remodelada, barra compacta com nove ações e seletor com
+quinze categorias e sinalização honesta do motor disponível.
+O backend Lua e o histórico RBD2 foram preservados.
+[Detalhes, evidências e pendências](VISUAL_SHELL_PHASE1.md).
+
+
 **Etapa de pinceladas longas:** o rasterizador Lua agora recorta
 conservadoramente a faixa de pixels examinada em cada linha de um
 segmento, acelerando diagonais extensas sem alterar os RGBA. Testes
