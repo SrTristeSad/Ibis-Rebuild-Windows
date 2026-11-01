@@ -4919,15 +4919,20 @@ local function drawBrushLab(rect)
     local image=brushSampleImage('inspector',draft)
     local fit=Lab.fit(image.sample.width,image.sample.height,
         halves.draft)
-    text('EM USO',halves.current.x,halves.current.labelY,'small','muted')
     local changes=Lab.differences(brushLabSource(),draft)
-    text(('PRÉVIA · %d alt.'):format(changes),
-        halves.draft.x,halves.draft.labelY,'small',
-        changes>0 and 'accent' or 'muted')
     love.graphics.setColor(1,1,1,1)
     love.graphics.draw(applied.image,currentFit.x,currentFit.y,
         0,currentFit.sx,currentFit.sy)
     love.graphics.draw(image.image,fit.x,fit.y,0,fit.sx,fit.sy)
+    -- Legendas devem ficar visíveis mesmo sobre uma amostra de tinta.
+    box(halves.current.x,halves.current.labelY-2,
+        halves.current.w,18,'card')
+    box(halves.draft.x,halves.draft.labelY-2,
+        halves.draft.w,18,'card')
+    text('EM USO',halves.current.x+4,halves.current.labelY,'small','text')
+    text(('PRÉVIA · %d alterações'):format(changes),
+        halves.draft.x+4,halves.draft.labelY,'small',
+        changes>0 and 'accent' or 'text')
     local names={diameter='Tamanho',opacity='Opacidade',
         stabilization='Estabil.'}
     for _,kind in ipairs({'diameter','opacity','stabilization'}) do
@@ -4957,7 +4962,7 @@ local function drawBrushLab(rect)
     button('Repor',reset.x,reset.y,reset.w,reset.h,
         resetBrushLab,false,changes==0)
     button(changes>0 and 'Aplicar *' or 'Aplicar',
-        p.x+61,p.y+p.h-36,p.w-69,31,applyBrushLab)
+        p.x+80,p.y+p.h-36,p.w-88,31,applyBrushLab)
 end
 local function drawBrushLibrary(w,h)
     local rect=Presets.layout(w,h)
