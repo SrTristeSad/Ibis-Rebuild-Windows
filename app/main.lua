@@ -55,7 +55,7 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '13-menu-visualizacao.png','14-estabilizador.png',
     '15-opcoes-forma.png','16-materiais-pendentes.png',
     '17-losango-hsb.png','18-sliders-rgb.png',
-    '19-paleta-cores.png'}
+    '19-paleta-cores.png','20-cores-pessoais.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2050,7 +2050,25 @@ local function advanceShowcase()
         status('Cores · canais RGBA Lua')
     elseif sh.stage==19 then
         A.colorMode='palette'
-        status('Cores · paleta e histórico local')
+        A.paletteTab='standard'
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'color')
+        local swatch=PaletteUI.swatch(p,7)
+        love.draw()
+        love.mousepressed(swatch.x+swatch.w/2,
+            swatch.y+swatch.h/2,1,false)
+        love.mousereleased(swatch.x+swatch.w/2,
+            swatch.y+swatch.h/2,1,false)
+        assert(A.color==PaletteUI.standard[7] and
+            Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==edits,
+            'Paleta básica não seleciona cor ou altera a obra')
+        status('Cores básicas · 36 amostras, clique real aprovado')
+    elseif sh.stage==20 then
+        A.paletteTab='personal'
+        status('Cores pessoais · vazia até guardar a primeira cor')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
