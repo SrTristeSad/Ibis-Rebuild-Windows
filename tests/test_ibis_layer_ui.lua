@@ -41,7 +41,7 @@ function T.run()
                 'Camadas raster colidem com controles inferiores')
             previous=r.y+r.h
         end
-        local prev=p.y
+        local prev=blend.y
         for i=1,#L.modes do
             local r=L.blendRow(blend,i)
             check(r.x>=blend.x and r.x+r.w<=blend.x+blend.w,
