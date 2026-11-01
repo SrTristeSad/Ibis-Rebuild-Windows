@@ -1,0 +1,27 @@
+name: Lua engine migration checks
+on:
+  push:
+    branches:
+      - 'migration/**'
+  pull_request:
+    paths:
+      - 'app/raster_*.lua'
+      - 'tests/test_raster_*.lua'
+      - '.github/workflows/lua-migration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lua-raster:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT runtime
+        run: sudo apt-get update && sudo apt-get install -y luajit
+      - name: Lua raster buffer and composite regression
+        run: luajit tests/test_raster_lua.lua
+      - name: Lua stroke raster regression
+        run: luajit tests/test_raster_stroke.lua
