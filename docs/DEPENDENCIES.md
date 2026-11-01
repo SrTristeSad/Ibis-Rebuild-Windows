@@ -6,7 +6,7 @@
 - **LuaJIT**, distribuído com LÖVE, usado por código Lua e LuaJIT FFI.
   https://luajit.org/
 - **Windows x64**, com bibliotecas do sistema operacional utilizadas pelo
-  módulo `app/fs.lua`.
+  módulo `app/fs.lua` e pela ponte `app/windows_ink.lua`.
 - **PowerShell**, somente para conveniência de execução de `run.ps1`,
   `test.ps1` e `build.ps1`.
 
