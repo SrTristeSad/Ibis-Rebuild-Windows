@@ -1,12 +1,14 @@
 -- Layout for an independently implemented, mobile-like workspace.
--- The seven main toolbar categories follow the official ibisPaint tutorial
--- (brush/eraser, tools, properties, color, full screen, layers, back).
--- This is a layout reference, NOT an Android view/asset extraction.
+-- As nove acoes principais seguem a ordem documentada na barra
+-- ibisPaint: pincel/borracha, ferramentas, ajustes, cor, tela,
+-- desfazer, refazer, camadas, voltar. Desenhos vetoriais sao originais.
 local UI={}
-UI.IDS={'brush','tools','properties','color','fullscreen','layers','back'}
-UI.LABELS={'Pincel','Ferramentas','Ajustes','Cor','Tela','Camadas','Voltar'}
-UI.WIDTH=82
-UI.GAP=8
+UI.IDS={'brush','tools','properties','color','fullscreen',
+    'undo','redo','layers','back'}
+UI.LABELS={'Pincel','Ferramentas','Ajustes','Cor','Tela',
+    'Desfazer','Refazer','Camadas','Voltar'}
+UI.WIDTH=72
+UI.GAP=7
 UI.HEIGHT=50
 function UI.toolbar(w,h)
     assert(type(w)=='number' and w>=960 and
@@ -76,8 +78,9 @@ function UI.popup(w,h,kind)
         or kind=='color','Janela compacta desconhecida')
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela compacta inválida')
-    local width=kind=='color' and 404 or kind=='tools' and 332 or 298
-    local height=kind=='color' and 450 or kind=='tools' and 410 or
+    local width=kind=='color' and 404 or kind=='tools' and 420 or 298
+    local height=kind=='color' and 450 or
+        kind=='tools' and math.min(474,h-188) or
         kind=='layers' and math.min(440,h-260) or 354
     return {x=(kind=='layers' or kind=='color') and w-width-20 or 20,
         y=134,w=width,h=height}
