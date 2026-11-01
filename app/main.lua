@@ -7220,7 +7220,11 @@ function love.draw()
     if A.screen=='editor' and A.compactUi and not A.focusMode then
         drawEditorToolRail(w,h)
     end
-    box(0,h-48,w,48,'panel')
+    -- O rodape legado cobre os icones inferiores do editor compacto.
+    -- Seu fundo ja e desenhado por drawEditor: nao sobrepor controles.
+    if A.screen~='editor' or not A.compactUi then
+        box(0,h-48,w,48,'panel')
+    end
     if A.screen~='editor' or not A.compactUi then
         fitted(A.message or '',20,h-33,'small','muted',w-260)
     end
