@@ -37,22 +37,34 @@ jobs:
           $rt = Join-Path $env:RUNNER_TEMP 'love-11.5-win64'
           if (!(Test-Path (Join-Path $rt 'lovec.exe'))) { throw 'lovec.exe nao encontrado' }
           "LOVE_RUNTIME=$rt" >> $env:GITHUB_ENV
-      - name: Run all ported LuaJIT regressions without C++ or Python
+      - name: Run LuaJIT regression tests
         shell: pwsh
         run: .\test.ps1 -Runtime "$env:LOVE_RUNTIME"
-      - name: Build Windows executable using Lua packaging
+      - name: Build Windows application using Lua
         shell: pwsh
         run: .\build.ps1 -Runtime "$env:LOVE_RUNTIME"
-      - name: Assert executable and runtime files
+      - name: Assert package contents and ZIP integrity
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $exe = 'dist/Android1412Rebuild.exe'
-          $love = 'dist/Android1412Rebuild.love'
-          if (!(Test-Path $exe) -or !(Test-Path $love)) { throw 'Arquivos de distribuicao ausentes' }
-          if (!(Get-ChildItem 'dist' -Filter '*.dll')) { throw 'DLLs do LÖVE ausentes' }
-          if (Test-Path 'dist/rebuild_core.dll') { throw 'DLL antiga indevidamente empacotada' }
-          if ((Get-Item $exe).Length -le (Get-Item $love).Length) { throw 'Executavel LÖVE nao fundido' }
-      - name: Prepare verified software OpenGL for real GUI test only
+          $archive = 'dist/Android1412Rebuild.love'
+          if (!(Test-Path $exe) -or !(Test-Path $archive)) { throw 'Pacote Windows incompleto' }
+          if ((Get-Item $exe).Length -le (Get-Item $archive).Length) { throw 'LÖVE nao foi fundido' }
+          if (Test-Path 'dist/rebuild_core.dll') { throw 'DLL propria nao permitida' }
+          Add-Type -AssemblyName System.IO.Compression
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $archive).Path)
+          try {
+            $names = @($zip.Entries | ForEach-Object { $_.FullName })
+            foreach ($required in @('main.lua','native.lua','raster_lua.lua','raster_stroke.lua','raster_tools.lua')) {
+              if ($required -notin $names) { throw "Fonte nao empacotado: $required" }
+            }
+            $legacy = @($names | Where-Object { $_ -match '\.(exe|dll|py|cpp|h)$' })
+            if ($legacy.Count -ne 0) { throw "Binarios/codigo legado no pacote: $legacy" }
+            Write-Host "Arquivo .love validado com $($names.Count) entradas"
+          } finally { $zip.Dispose() }
+          if (!(Get-ChildItem 'dist' -Filter '*.dll')) { throw 'Runtime LÖVE incompleto' }
+      - name: Prepare pinned software OpenGL for GUI test only
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -68,14 +80,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao extrair Mesa' }
           $gl = Get-ChildItem $dest -Recurse -File -Filter opengl32.dll |
             Where-Object { $_.FullName -match '[\\/]x64[\\/]' } | Select-Object -First 1
-          if (!$gl) { throw 'OpenGL software x64 ausente' }
+          if (!$gl) { throw 'OpenGL x64 nao encontrado' }
           foreach ($file in @('opengl32.dll','libgallium_wgl.dll')) {
             $source = Join-Path $gl.DirectoryName $file
             if (!(Test-Path $source)) { throw "Mesa incompleto: $file" }
             Copy-Item $source (Join-Path $env:LOVE_RUNTIME $file) -Force
           }
           Set-Content -Path (Join-Path $env:LOVE_RUNTIME 'lovec.exe.local') -Value '' -NoNewline
-      - name: Exercise real LÖVE GUI with Lua raster and RBD2
+      - name: Verify live Lua editor with official LÖVE runtime
         shell: pwsh
         env:
           GALLIUM_DRIVER: llvmpipe
@@ -83,43 +95,16 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $runner = Join-Path $env:LOVE_RUNTIME 'lovec.exe'
-          $projectRoot = Join-Path $env:RUNNER_TEMP 'ibis-lua-gui-smoke'
-          & $runner (Join-Path (Get-Location) 'app') '--lua-gui-smoke' '--data-dir' $projectRoot
-          if ($LASTEXITCODE -ne 0) { throw "GUI real falhou: $LASTEXITCODE" }
-      - name: Verify .love ZIP integrity and Lua entrypoint
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Add-Type -AssemblyName System.IO.Compression
-          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path 'dist/Android1412Rebuild.love').Path)
-          try {
-            $names = @($zip.Entries | ForEach-Object FullName)
-            if ('main.lua' -notin $names -or 'native.lua' -notin $names -or
-                'raster_lua.lua' -notin $names) {
-              throw 'Entradas essenciais do pacote Lua ausentes'
-            }
-            if ($names | Where-Object { $_ -match '\.(exe|dll|py|cpp|h)
-        with:
-          name: IbisRebuild-Lua-Windows
-          path: |
-            dist/Android1412Rebuild.exe
-            dist/Android1412Rebuild.love
-            dist/*.dll
-          if-no-files-found: error
-          retention-days: 7
- }) {
-              throw 'Pacote Lua contem codigo/binario legado'
-            }
-            Write-Host ("Pacote ZIP validado: {0} arquivos Lua" -f $names.Count)
-          } finally { $zip.Dispose() }
-      - name: Test actual fused Windows executable with real GUI
+          $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-gui-smoke'
+          & $runner (Join-Path (Get-Location) 'app') '--lua-gui-smoke' '--data-dir' $root
+          if ($LASTEXITCODE -ne 0) { throw "Editor Lua falhou: $LASTEXITCODE" }
+      - name: Verify fused Windows executable launches real GUI
         shell: pwsh
         env:
           GALLIUM_DRIVER: llvmpipe
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
           $ErrorActionPreference = 'Stop'
-          # Mesa e exclusivamente temporario no runner; nunca sera publicado.
           foreach ($file in @('opengl32.dll','libgallium_wgl.dll')) {
             Copy-Item (Join-Path $env:LOVE_RUNTIME $file) (Join-Path (Get-Location) 'dist' $file) -Force
           }
@@ -127,9 +112,10 @@ jobs:
           $runner = Join-Path (Get-Location) 'dist/Android1412Rebuild.exe'
           $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-fused-smoke'
           & $runner '--lua-gui-smoke' '--data-dir' $root
-          if ($LASTEXITCODE -ne 0) { throw "Executavel final falhou: $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "EXE Lua falhou: $LASTEXITCODE" }
           Remove-Item 'dist/Android1412Rebuild.exe.local','dist/opengl32.dll','dist/libgallium_wgl.dll' -Force
-      - uses: actions/upload-artifact@v4
+      - name: Publish tested Windows package
+        uses: actions/upload-artifact@v4
         with:
           name: IbisRebuild-Lua-Windows
           path: |
