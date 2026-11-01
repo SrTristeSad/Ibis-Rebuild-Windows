@@ -19,6 +19,16 @@ sob responsabilidade do LÖVE. O módulo preserva apenas uma caneta
 ativa por vez; quando a fila está saturada, amostras MOVE têm prioridade
 para descarte, evitando perder eventos DOWN/UP.
 
+**Movimentos rápidos:** quando `WM_POINTERUPDATE` reúne várias amostras,
+`GetPointerPenInfoHistory` recupera a sequência dentro do callback Windows.
+A API entrega da mais recente para a mais antiga; a ponte as recoloca
+na fila cronologicamente, sem repetir a amostra atual. Até 64 amostras
+por mensagem são processadas para limitar alocações. Se o histórico
+falhar, o movimento atual ainda é usado. Estatísticas `historyRecovered`,
+`historyTruncated` e `historyFailures` ajudam no diagnóstico.
+Este recurso tem testes sintéticos de ordem e pressão, mas não foi
+validado com hardware físico ou taxas altas reais.
+
 A ponte exige **Windows x64**, e valida o layout ABI de
 `POINTER_INFO` / `POINTER_PEN_INFO` antes de se anexar. Se não puder
 se anexar, a interface continua com mouse/toque do LÖVE.
@@ -68,7 +78,8 @@ capturas com informações pessoais.
 
 ## Limites
 
-Não há recuperação da história de eventos coalescidos via
-`GetPointerPenInfoHistory`, suporte simultâneo a múltiplas canetas,
-nem teste físico completo. A equivalência com a entrada do ibisPaint
+A recuperação de movimentos agrupados via `GetPointerPenInfoHistory`
+foi implementada, mas **não houve teste físico** e a operação pode
+perder amostras acima do limite por mensagem ou quando a fila satura.
+Não há suporte simultâneo a múltiplas canetas. A equivalência com a entrada do ibisPaint
 Android **não foi demonstrada**. A implementação é experimental.
