@@ -24,7 +24,10 @@ local integration={
     'test_selection.lua',
     'test_stroke_accumulation.lua',
     'test_long_stroke_layers.lua',
-    'test_partial_canvas.lua'
+    'test_partial_canvas.lua',
+    'test_compact_layout.lua',
+    'test_compact_visual.lua',
+    'test_ibis_visual_tools.lua'
 }
 local function test(root,name,withStore)
     io.write('[Lua] '..name..'...\n')
