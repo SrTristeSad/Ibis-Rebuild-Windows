@@ -27,6 +27,8 @@ jobs:
         run: luajit -e "local t=loadfile('tests/test_ibis_gallery_ui.lua')(); assert(t.run().passed)"
       - name: Lua top-right ibis toolbar safety and layout
         run: luajit -e "local t=loadfile('tests/test_ibis_top_toolbar.lua')(); assert(t.run().passed)"
+      - name: Lua built-in and personal palette layout
+        run: luajit -e "local t=loadfile('tests/test_ibis_palette_ui.lua')(); assert(t.run().passed)"
       - name: Lua raster buffer and composite regression
         run: luajit tests/test_raster_lua.lua
       - name: Lua stroke raster regression
