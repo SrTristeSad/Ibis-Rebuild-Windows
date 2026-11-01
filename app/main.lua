@@ -2468,7 +2468,7 @@ function love.load(args)
     A.colorHistory={}
     refreshGallery();status(Native.available and 'Motor Lua v1 carregado' or 'Galeria disponível · motor Lua ainda não compilado')
     if options.showcaseDir then
-        assert(Native.available,'Visual showcase requires the real native Lua DLL')
+        assert(Native.available,'Visual showcase requires the real Lua raster engine')
         assert(not options.selfTest and not options.luaTest,
             'Showcase must not share the isolated test modes')
         -- Paint before the gallery capture so its thumbnail depicts the
@@ -2561,7 +2561,10 @@ function love.update(dt)
                 assert(loaded and loaded.layers and
                     loaded.layers[1].pixels==Native.bytes(layers:activeBuffer()),
                     'Persistencia RBD2 divergente apos editor grafico')
-                assert(not A.inkAttached,'GUI ainda anexou DLL Windows Ink antiga')
+                assert(Native.implementation=='lua',
+                    'GUI deixou de usar raster Lua')
+                assert(Ink.abiValid and A.inkAttached and Ink.available,
+                    'Ponte Windows Ink em Lua nao anexou a janela real')
                 print('GUI LUA SMOKE OK: canvas, GPU, undo/redo, RBD2')
             end,debug.traceback)
             if not ok then io.stderr:write('GUI LUA SMOKE FALHOU: '..tostring(err)..'\n') end
@@ -2616,8 +2619,8 @@ function love.update(dt)
             local ok,err=pcall(function()
                 assert(A.screen=='editor' and A.sideTab=='layers',
                     'Teste GUI de camadas requer editor real')
-                assert(A.inkAttached and Ink.lib.rb_ink_is_attached()==1,
-                    'A ponte Windows Ink não se anexou à janela LÖVE real')
+                assert(A.inkAttached and Ink.available and Ink.abiValid,
+                    'A ponte Lua Windows Ink nao anexou a janela LÖVE real')
                 local panel=love.graphics.getWidth()-268
                 local before=#A.doc.layers
                 love.draw()
