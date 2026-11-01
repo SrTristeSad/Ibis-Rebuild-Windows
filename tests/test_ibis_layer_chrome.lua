@@ -96,6 +96,7 @@ function T.run()
         setLineWidth=function()end,
         setFont=function()end,
         print=function()end,
+        printf=function()end,
         rectangle=function()glyphMarks=glyphMarks+1 end,
         line=function()glyphMarks=glyphMarks+1 end
     }}
