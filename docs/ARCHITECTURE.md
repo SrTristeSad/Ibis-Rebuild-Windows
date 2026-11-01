@@ -11,6 +11,9 @@ entrada de mouse/toque, composição de telas, edição raster e persistência.
   preenchimento e formas.
 - `app/native.lua`: fachada de compatibilidade Lua (não carrega DLL).
 - `app/layers.lua`, `app/store.lua`: histórico e formato RBD2.
+- `app/gpu_upload.lua`: cache LRU de `ImageData` para atualizar regiões
+  de textura GPU sem criar strings RGBA intermediárias.
+  Consulte [GPU_UPLOAD.md](GPU_UPLOAD.md).
 - `app/fs.lua`: acesso a arquivos Win32 via LuaJIT FFI, sem C++ próprio.
 - `tools/lua_builder/`: empacotamento .love + .exe em Lua.
 - `tools/lua_tests/`: testes LuaJIT no Windows.
