@@ -46,11 +46,15 @@ function UI.aspectViewport(rect,width,height)
     local w,h=tonumber(width),tonumber(height)
     if not w or not h or w<1 or h<1 or w>2048 or h>2048
         or w%1~=0 or h%1~=0 then return nil end
-    local spaceW,spaceH=area.w-30,area.h-30
+    -- Reserva 37 px ao cabeçalho: a textura quadriculada nunca pode
+    -- cobrir o título ou invadir a barra de presets do diálogo.
+    local spaceW,spaceH=area.w-30,area.h-56
     local scale=math.min(spaceW/w,spaceH/h)
     local dw,dh=math.max(1,math.floor(w*scale+.5)),
         math.max(1,math.floor(h*scale+.5))
+    local bodyY=area.y+40
+    local bodyHeight=area.h-52
     return {x=math.floor(area.x+(area.w-dw)/2),
-        y=math.floor(area.y+(area.h-dh)/2),w=dw,h=dh}
+        y=math.floor(bodyY+(bodyHeight-dh)/2),w=dw,h=dh}
 end
 return UI
