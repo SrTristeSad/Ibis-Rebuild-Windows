@@ -2448,12 +2448,13 @@ function love.load(args)
         elseif args[i]=='--showcase-dir' then options.showcaseDir=args[i+1]
         elseif args[i]=='--lua-test' then options.luaTest=true
         elseif args[i]=='--self-test' then options.selfTest=true
-        elseif args[i]=='--lua-gui-smoke' then options.luaGuiSmoke=true end
+        elseif args[i]=='--lua-gui-smoke' then options.luaGuiSmoke=true
+        elseif args[i]=='--no-windows-ink' then options.noWindowsInk=true end
     end
     A.options=options;local base=love.filesystem.getSourceBaseDirectory()
     package.path=base..'/?.lua;'..base..'/?/init.lua;'..package.path
     Native.load(base)
-    A.inkAttached=Ink.init(Native)
+    A.inkAttached=not options.noWindowsInk and Ink.init(Native) or false
     A.root=options.data or (base..'/user-data');A.store=Store.open(A.root)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
     A.savedColors={}
@@ -2466,7 +2467,10 @@ function love.load(args)
         end
     end
     A.colorHistory={}
-    refreshGallery();status(Native.available and 'Motor Lua v1 carregado' or 'Galeria disponível · motor Lua ainda não compilado')
+    refreshGallery();status(Native.available and
+        ('Motor Lua v1 carregado · '..(A.inkAttached and
+            'Windows Ink Lua ativo' or 'mouse/toque LÖVE')) or
+        'Galeria disponível · motor Lua indisponível')
     if options.showcaseDir then
         assert(Native.available,'Visual showcase requires the real Lua raster engine')
         assert(not options.selfTest and not options.luaTest,
@@ -2563,8 +2567,13 @@ function love.update(dt)
                     'Persistencia RBD2 divergente apos editor grafico')
                 assert(Native.implementation=='lua',
                     'GUI deixou de usar raster Lua')
-                assert(Ink.abiValid and A.inkAttached and Ink.available,
-                    'Ponte Windows Ink em Lua nao anexou a janela real')
+                if A.options.noWindowsInk then
+                    assert(not A.inkAttached and not Ink.mouseGuard(),
+                        'Entrada mouse/toque deve funcionar sem Windows Ink')
+                else
+                    assert(Ink.abiValid and A.inkAttached and Ink.available,
+                        'Ponte Windows Ink em Lua nao anexou a janela real')
+                end
                 print('GUI LUA SMOKE OK: canvas, GPU, undo/redo, RBD2')
             end,debug.traceback)
             if not ok then io.stderr:write('GUI LUA SMOKE FALHOU: '..tostring(err)..'\n') end
