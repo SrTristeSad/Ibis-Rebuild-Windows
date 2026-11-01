@@ -67,28 +67,28 @@ function M.step(p,direction)
         x=p.x+(direction==1 and 242 or 190),
         y=p.y+p.h-49,w=41,h=30}
 end
-local function icon(g,x,y)
+local function drawGlyph(g,glyphId,x,y)
     -- Ícones vetoriais próprios, sem assets do APK.
     g.setLineWidth(1.7)
-    if icon=='add' or icon=='subtract' then
+    if glyphId=='add' or glyphId=='subtract' then
         g.line(x-5,y,x+5,y)
-        if icon=='add' then g.line(x,y-5,x,y+5) end
-    elseif icon=='copy' then
+        if glyphId=='add' then g.line(x,y-5,x,y+5) end
+    elseif glyphId=='copy' then
         g.rectangle('line',x-5,y-7,10,12,1,1)
         g.rectangle('line',x-2,y-4,10,12,1,1)
-    elseif icon=='delete' then
+    elseif glyphId=='delete' then
         g.rectangle('line',x-5,y-3,10,10,1,1)
         g.line(x-7,y-5,x+7,y-5)
         g.line(x-3,y-8,x+3,y-8)
-    elseif icon=='up' or icon=='down' then
-        local v=icon=='up' and -1 or 1
+    elseif glyphId=='up' or glyphId=='down' then
+        local v=glyphId=='up' and -1 or 1
         g.line(x,y-7*v,x,y+7*v)
         g.line(x-4,y+2*v,x,y+7*v,x+4,y+2*v)
-    elseif icon=='edit' then
+    elseif glyphId=='edit' then
         g.line(x-5,y+6,x+5,y-4)
         g.line(x-6,y+7,x-2,y+6)
         g.line(x+3,y-6,x+7,y-2)
-    elseif icon=='merge' then
+    elseif glyphId=='merge' then
         g.line(x-6,y-5,x+6,y-5)
         g.line(x-6,y+6,x+6,y+6)
         g.line(x,y-2,x,y+3)
@@ -114,14 +114,10 @@ function M.paintAction(slot,disabled,font)
     lg.setColor(disabled and .55 or .94,
         disabled and .57 or .95,
         disabled and .59 or .97,1)
-    local x=slot.label=='' and slot.x+slot.w/2
-        or slot.label=='+' or slot.label=='−'
-        and slot.x+slot.w/2 or slot.x+15
-    -- Evita que um operador de precedência desloque o ícone do botão.
-    if slot.label=='+' or slot.label=='−' then
-        x=slot.x+slot.w/2
-    end
-    icon(lg,x,slot.y+slot.h/2)
+    local centered=slot.label=='' or slot.label=='+'
+        or slot.label=='−'
+    local x=centered and slot.x+slot.w/2 or slot.x+15
+    drawGlyph(lg,slot.icon,x,slot.y+slot.h/2)
     if slot.label~='' and slot.label~='+' and slot.label~='−' then
         lg.setFont(font)
         lg.print(slot.label,slot.x+28,

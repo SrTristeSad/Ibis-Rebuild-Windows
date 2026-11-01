@@ -74,7 +74,34 @@ function T.run()
     check(not pcall(Chrome.regions,{x=0,y=0,w=200,h=200}))
     check(not pcall(Chrome.toolbar,{x=0,y=0,w=298,h=440},'unknown'))
     check(not pcall(Chrome.step,{x=0,y=0,w=298,h=440},0))
+    -- Regression real: cada icone deve produzir primitivas graficas.
+    -- Isto detecta o antigo bug de nome local `icon` que comparava
+    -- a propria funcao com uma string e desenhava botoes vazios.
+    local previous=love
+    local glyphMarks=0
+    local fakeFont={getHeight=function()return 12 end}
+    love={graphics={
+        setColor=function()end,
+        setLineWidth=function()end,
+        setFont=function()end,
+        print=function()end,
+        rectangle=function()glyphMarks=glyphMarks+1 end,
+        line=function()glyphMarks=glyphMarks+1 end
+    }}
+    local p=UI.popup(1220,800,'layers')
+    local buttons=Chrome.toolbar(p,'top')
+    for _,v in ipairs(Chrome.toolbar(p,'footer')) do
+        buttons[#buttons+1]=v
+    end
+    buttons[#buttons+1]=Chrome.step(p,-1)
+    buttons[#buttons+1]=Chrome.step(p,1)
+    for _,slot in ipairs(buttons) do
+        glyphMarks=0
+        Chrome.paintAction(slot,false,fakeFont)
+        check(glyphMarks>=3,'Icone nao produziu nenhum traco: '..slot.id)
+    end
+    love=previous
     return {suite='ibis-layer-chrome',passed=true,assertions=n,
-        visual_only=true}
+        visual_only=true,icon_primitives_verified=true}
 end
 return T
