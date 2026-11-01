@@ -48,15 +48,33 @@ function T.run()
         local rect=UI.popup(size[1],size[2],'color')
         local wheel=P.wheel(rect)
         local square=Color.svRect(rect)
+        local cx,cy=square.x+square.w/2,square.y+square.h/2
         for _,corner in ipairs({
-            {square.x,square.y},{square.x+square.w,square.y},
-            {square.x,square.y+square.h},
-            {square.x+square.w,square.y+square.h}}) do
+            {cx,cy-square.h/2},{cx+square.w/2,cy},
+            {cx,cy+square.h/2},{cx-square.w/2,cy}}) do
             local d=math.sqrt((corner[1]-wheel.cx)^2+
                 (corner[2]-wheel.cy)^2)
-            verify(d<wheel.inner-3,'Caixa de brilho invade a roda')
+            verify(d<wheel.inner-3,'Losango de brilho invade a roda')
+            verify(Color.svHit(rect,corner[1],corner[2]),
+                'Vértice visível do losango não responde')
             verify(not P.wheelHit(rect,corner[1],corner[2]),
                 'Roda captura clique de saturação')
+        end
+        verify(not Color.svHit(rect,square.x,square.y),
+            'Área fora do losango deve deixar o canvas intacto')
+        for _,key in ipairs({'H','S','V'}) do
+            local rail=Color.hsbMiniRect(rect,key)
+            verify(rail.x>wheel.cx+wheel.outer and
+                rail.x+rail.w<rect.x+rect.w,
+                'Slider HSB compacto sobrepõe roda')
+            verify(Color.hsbMiniHit(rect,rail.x+rail.w/2,
+                rail.y+rail.h/2)==key,
+                'Hitbox dos controles HSB não corresponde')
+            verify(Color.hsbMiniValue(rect,key,rail.x)==0,
+                'Controle HSB não retorna zero no início')
+            verify(Color.hsbMiniValue(rect,key,rail.x+rail.w)
+                ==(key=='H' and 360 or 100),
+                'Controle HSB não atinge o valor máximo')
         end
         for hue=0,359,15 do
             local x,y=P.wheelPoint(rect,hue)
