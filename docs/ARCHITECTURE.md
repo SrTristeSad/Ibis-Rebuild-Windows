@@ -6,7 +6,9 @@ entrada de mouse/toque, composição de telas, edição raster e persistência.
 - `app/main.lua`: interface e eventos.
 - `app/raster_lua.lua`: buffers RGBA8, pixels e composição de camadas.
 - `app/raster_stroke.lua`: traços, pressão interpolada, inclinação,
-  cobertura única por gesto, borracha e espelhamento.
+  cobertura única por gesto, borracha e espelhamento. Segmentos diagonais
+  usam limites conservadores por linha, sem variar a matemática dos
+  pixels. [Testes e medições](STROKE_SCANLINES.md).
 - `app/raster_tools.lua`: seleção, movimentação, transformação,
   preenchimento e formas.
 - `app/native.lua`: fachada de compatibilidade Lua (não carrega DLL).
