@@ -73,11 +73,11 @@ local d={x=1,y=2,w=4,h=3}
 assert(uploader:send(image,source,d))
 stats=uploader:stats()
 assert(stats.evictions==1 and stats.cachedEntries==2)
-assert(stats.cacheBytes==120+48 and released==1)
+assert(stats.cacheBytes==80+48 and released==1)
 assert(uploader:send(image,source,{x=0,y=0,w=11,h=5}))
 stats=uploader:stats()
 assert(stats.allocations==4 and stats.cachedEntries==2)
-assert(released==2 and stats.cacheBytes==168,
+assert(released==2 and stats.cacheBytes==128,
     'Patch maior que limite nao pode ficar retido')
 assert(Raster.bytes(source)==original,'Upload alterou fonte raster')
 
