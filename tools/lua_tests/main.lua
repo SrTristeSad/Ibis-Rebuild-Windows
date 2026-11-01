@@ -23,6 +23,7 @@ local integration={
     'test_shapes.lua',
     'test_selection.lua',
     'test_stroke_accumulation.lua',
+    'test_long_stroke_layers.lua',
     'test_partial_canvas.lua'
 }
 local function test(root,name,withStore)
