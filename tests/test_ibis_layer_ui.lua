@@ -47,7 +47,8 @@ function T.run()
             check(r.x>=blend.x and r.x+r.w<=blend.x+blend.w,
                 'Modo de mesclagem fora do painel')
             check(r.y>=prev and r.y+r.h<blend.y+blend.h-25,
-                'Lista de mesclagem colide com o rodapé')
+                ('Lista de mesclagem colide com o rodape: %dx%d linha %d (y=%d, end=%d, limite=%d, popupH=%d)'):format(
+                    w,h,i,r.y,r.y+r.h,blend.y+blend.h-25,blend.h))
             prev=r.y+r.h
         end
         check(blend.x>=w/2 and blend.x+blend.w<=w,
