@@ -5,8 +5,10 @@
 local ffi=require('ffi')
 local bit=require('bit')
 local band=bit.band
-local Ink={available=false,attached=false,errors={},dropped=0,probes=0}
+local Ink={available=false,attached=false,errors={},dropped=0,probes=0,
+    historyRecovered=0,historyTruncated=0,historyFailures=0}
 local MAX_QUEUE=512
+local MAX_HISTORY=64 -- limita alocacao no callback Win32
 local ring,readAt,writeAt={},1,1
 local activeId,lastPenTick=0,0
 local hwnd,oldProc,callback,ownerThread
@@ -16,6 +18,7 @@ local enabled=ffi.os=='Windows' and ffi.abi('64bit')
 local function reset()
     ring={};readAt=1;writeAt=1
     activeId=0;lastPenTick=0;Ink.dropped=0
+    Ink.historyRecovered=0;Ink.historyTruncated=0;Ink.historyFailures=0
 end
 local function nextIndex(index) return index%MAX_QUEUE+1 end
 local function previousIndex(index) return (index-2)%MAX_QUEUE+1 end
@@ -52,6 +55,18 @@ local function push(event)
     end
     ring[writeAt]=event
     writeAt=nextAt
+end
+-- API Windows entrega amostras do mais recente para o mais antigo.
+-- Uma unica rotina garante a ordem de tempo tanto no Windows quanto nos testes.
+local function appendChronological(count,fromNewest)
+    for i=count-1,0,-1 do
+        local sample=fromNewest(i)
+        if sample then push(sample) end
+    end
+end
+function Ink._historyTest(samples)
+    assert(type(samples)=='table')
+    appendChronological(#samples,function(index) return samples[index+1] end)
 end
 local function take()
     if readAt==writeAt then return nil end
@@ -115,6 +130,7 @@ if enabled then
             IB_WNDPROC,void*,uint32_t,uintptr_t,intptr_t);
         int __stdcall GetPointerType(uint32_t,uint32_t*);
         int __stdcall GetPointerPenInfo(uint32_t,IB_POINTER_PEN_INFO*);
+        int __stdcall GetPointerPenInfoHistory(uint32_t,uint32_t*,IB_POINTER_PEN_INFO*);
         int __stdcall ScreenToClient(void*,IB_POINT*);
         int __stdcall GetClientRect(void*,IB_RECT*);
         intptr_t __stdcall SendMessageW(void*,uint32_t,uintptr_t,intptr_t);
@@ -140,6 +156,31 @@ end
 local function recordError(err)
     if #Ink.errors<12 then Ink.errors[#Ink.errors+1]=tostring(err) end
 end
+local function penSample(window,kind,pointerId,pen,packed,clientW,clientH)
+    local position=ffi.new('IB_POINT[1]')
+    local hasPen=pen~=nil
+    if hasPen then
+        position[0].x=pen.pointerInfo.ptPixelLocation.x
+        position[0].y=pen.pointerInfo.ptPixelLocation.y
+    else
+        local px=band(packed,0xffff)
+        local py=band(bit.rshift(packed,16),0xffff)
+        position[0].x=px>=32768 and px-65536 or px
+        position[0].y=py>=32768 and py-65536 or py
+    end
+    if user.ScreenToClient(window,position)==0 then return nil end
+    local mask=hasPen and tonumber(pen.penMask) or 0
+    return {
+        kind=kind,id=pointerId,
+        x=tonumber(position[0].x),y=tonumber(position[0].y),
+        pressure=hasPen and pressure(tonumber(pen.pressure),mask) or 1,
+        tiltX=hasPen and band(mask,4)~=0 and tonumber(pen.tiltX) or 0,
+        tiltY=hasPen and band(mask,8)~=0 and tonumber(pen.tiltY) or 0,
+        flags=hasPen and tonumber(pen.penFlags) or 0,mask=mask,
+        width=clientW,height=clientH
+    }
+end
+
 local function handlePointer(window,message,wparam,lparam)
     local kind=kindOf(message)
     if not kind or window~=hwnd then return end
@@ -153,36 +194,49 @@ local function handlePointer(window,message,wparam,lparam)
     end
     local pen=ffi.new('IB_POINTER_PEN_INFO[1]')
     local hasPen=user.GetPointerPenInfo(pointerId,pen)~=0
-    local position=ffi.new('IB_POINT[1]')
-    if hasPen then
-        position[0].x=pen[0].pointerInfo.ptPixelLocation.x
-        position[0].y=pen[0].pointerInfo.ptPixelLocation.y
-    else
-        local packed=tonumber(ffi.cast('uint32_t',lparam))
-        local px=band(packed,0xffff)
-        local py=band(bit.rshift(packed,16),0xffff)
-        position[0].x=px>=32768 and px-65536 or px
-        position[0].y=py>=32768 and py-65536 or py
-    end
-    if user.ScreenToClient(window,position)==0 then return end
     local rect=ffi.new('IB_RECT[1]')
     if user.GetClientRect(window,rect)==0 then return end
     local w=tonumber(rect[0].right-rect[0].left)
     local h=tonumber(rect[0].bottom-rect[0].top)
     if w<=0 or h<=0 then return end
-    local mask=hasPen and tonumber(pen[0].penMask) or 0
-    local flags=hasPen and tonumber(pen[0].penFlags) or 0
-    local sample={
-        kind=kind,id=pointerId,
-        x=tonumber(position[0].x),y=tonumber(position[0].y),
-        pressure=hasPen and pressure(tonumber(pen[0].pressure),mask) or 1,
-        tiltX=hasPen and band(mask,4)~=0 and tonumber(pen[0].tiltX) or 0,
-        tiltY=hasPen and band(mask,8)~=0 and tonumber(pen[0].tiltY) or 0,
-        flags=flags,mask=mask,width=w,height=h
-    }
+    local packed=tonumber(ffi.cast('uint32_t',lparam))
+    local historyUsed=false
+    -- Apenas WM_POINTERUPDATE: DOWN/UP/CANCEL continuam eventos unicos.
+    -- GetPointerPenInfoHistory so e valido enquanto o Windows processa
+    -- a mensagem atual, antes de retornar ao WndProc anterior.
+    if kind==2 and hasPen then
+        local total=tonumber(pen[0].pointerInfo.historyCount)
+        if total>1 then
+            local wanted=math.min(total,MAX_HISTORY)
+            local count=ffi.new('uint32_t[1]',wanted)
+            local samples=ffi.new('IB_POINTER_PEN_INFO[?]',wanted)
+            if user.GetPointerPenInfoHistory(pointerId,count,samples)~=0 then
+                -- O Windows pode retornar a contagem total mesmo quando
+                -- fornecemos um buffer menor: nunca lemos alem de wanted.
+                local actual=math.min(tonumber(count[0]),wanted)
+                if actual>0 then
+                    appendChronological(actual,function(index)
+                        return penSample(window,kind,pointerId,samples[index],
+                            packed,w,h)
+                    end)
+                    Ink.historyRecovered=Ink.historyRecovered+math.max(0,actual-1)
+                    if total>actual then
+                        Ink.historyTruncated=Ink.historyTruncated+(total-actual)
+                    end
+                    historyUsed=true
+                end
+            else
+                Ink.historyFailures=Ink.historyFailures+1
+            end
+        end
+    end
+    if not historyUsed then
+        local event=penSample(window,kind,pointerId,
+            hasPen and pen[0] or nil,packed,w,h)
+        if event then push(event) end
+    end
     if kind==1 and activeId==0 then activeId=pointerId end
-    if kind~=1 or activeId==pointerId then
-        push(sample)
+    if (kind==1 or owned) and kernel then
         lastPenTick=tonumber(kernel.GetTickCount64())
         if kind==3 or kind==4 then activeId=0 end
     end
