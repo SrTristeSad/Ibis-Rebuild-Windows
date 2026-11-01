@@ -3,7 +3,8 @@ local raster={
     'test_raster_lua.lua',
     'test_raster_stroke.lua',
     'test_raster_tools.lua',
-    'test_raster_layer_integration.lua'
+    'test_raster_layer_integration.lua',
+    'test_windows_ink_lua.lua'
 }
 -- Suites historicas Lua reutilizadas para detectar regressoes reais.
 -- Cada suite recebe seu proprio diretorio de documentos RBD2.
