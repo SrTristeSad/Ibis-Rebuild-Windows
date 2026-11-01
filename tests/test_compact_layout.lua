@@ -7,11 +7,11 @@ function T.run()
     local n=0
     local function check(v,message)n=n+1;assert(v,message)end
     local expected={'brush','tools','properties','color',
-        'fullscreen','layers','back'}
+        'fullscreen','undo','redo','layers','back'}
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local w,h=size[1],size[2]
         local slots=UI.toolbar(w,h)
-        check(#slots==7,'Seven mobile toolbar actions required')
+        check(#slots==9,'Nine mobile toolbar actions required')
         local prevRight=0
         for i,slot in ipairs(slots) do
             check(slot.id==expected[i],'Mobile toolbar action order changed')
