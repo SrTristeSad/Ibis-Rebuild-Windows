@@ -84,3 +84,42 @@ aplicativo em dimensões compatíveis, retificação de dimensões/categorias
 e acabamento do painel de pincéis, cor, camadas, popups e galeria.
 Adicionar telas e controles faltantes com estados de disponibilidade
 visíveis; **não** fazer otimização de raster como prioridade.
+
+## Fase visual 2 — janelas de pintura, cor e camadas
+
+A segunda etapa preservou as APIs de edição Lua e mudou apenas
+geometria, comandos de interface e apresentação.
+
+**Pincéis:** biblioteca passa a exibir oito posições em lista
+vertical compacta, com traço RGBA renderizado pelo motor, nome,
+diâmetro, opacidade e ação `Editar`. Mantém filtros Todos/Básicos/Meus,
+quatro pincéis básicos, quatro posições pessoais, salvamento,
+exclusão e inspetor com rascunho/aplicação. **Não foi criado um catálogo
+falso de centenas de pincéis**.
+
+**Cor:** o painel HSB agora mostra uma roda de matiz interativa,
+em torno de caixa SV, com marcador do tom ativo e alfa abaixo.
+A roda utiliza `app/ibis_visual_panels.lua` e o controle de cor
+continua enviando RGBA ao motor original. RGB, paleta local, histórico
+e campo hex permanecem. A posição visual e a detecção do ponteiro
+compartilham a mesma geometria.
+
+**Camadas:** linhas compactas com 52 px de altura, miniaturas RGBA
+reais ampliadas e informações `Normal · opacidade`; botões
+de visibilidade, ordenação, duplicação, fusão, exclusão e
+controle de opacidade continuam ligados à API `Layers`.
+A inscrição `Normal` descreve o modo já implementado no compositor
+atual; outros modos de mesclagem **não são declarados funcionais**.
+
+**Referências:** orientação de painel e controles visuais baseada na
+[Seleção de cores oficial](https://ibispaint.com/lecture/index.jsp?no=11),
+[Janela de camadas](https://ibispaint.com/lecture/index.jsp?no=156)
+e [Barra de ferramentas](https://ibispaint.com/lecture/index.jsp?no=4).
+Essas referências **não são captura verificada do APK 14.1.2**.
+
+**Validação:** `tests/test_ibis_visual_panels.lua` verifica as
+dimensões do catálogo, separação de ações, miniaturas e relação
+geométrica entre roda HSB, quadrado de seleção e slider alfa em
+960×640, 1220×800 e 1920×1080. Smoke gráfico do LÖVE e as dez
+capturas continuam ativos. Ainda falta confronto manual detalhado
+com capturas originais do Android 14.1.2 e teste com caneta física.
