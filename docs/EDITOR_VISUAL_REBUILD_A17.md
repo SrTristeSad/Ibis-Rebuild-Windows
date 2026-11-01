@@ -33,3 +33,10 @@ dois controles horizontais sobre o rodapé.
 Não foram alterados algoritmos raster, camadas, histórico RBD2,
 arquivo de projeto, entrada Windows Ink ou os motores de pincel.
 Teste real Windows e testes Lua verificam execução e geometria.
+
+## Revisão dos rótulos após inspeção das capturas
+
+Os nomes longos cortados na faixa de 68 px foram substituídos
+por legendas curtas apenas no desenho da coluna; o catálogo
+mantém nomes completos, ordem e callbacks originais. As legendas
+estão centralizadas e não alteram áreas clicáveis.

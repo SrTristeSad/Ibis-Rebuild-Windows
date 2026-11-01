@@ -22,8 +22,12 @@ function T.run()
             local prev=rect.y
             for i,e in ipairs(entries) do
                 check(e.index==rect.start+i-1 and
-                    e.id==Tools.entries[e.index].id,
-                    'Faixa mudou a ordem das ferramentas')
+                    e.id==Tools.entries[e.index].id and
+                    e.label==Tools.entries[e.index].label,
+                    'Faixa mudou a ordem ou nome das ferramentas')
+                check(type(e.shortLabel)=='string' and
+                    #e.shortLabel>0,
+                    'Rotulo compacto vazio')
                 check(not seen[e.id],'Ferramenta repetida')
                 seen[e.id]=true
                 check(e.x>=0 and e.x+e.w<=80

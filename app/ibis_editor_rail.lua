@@ -6,6 +6,11 @@ M.WIDTH=68
 M.LEFT=7
 M.TOP=19
 M.ROW=32
+M.shortLabels={transform='Mover',wand='Varinha',lasso='Laço',
+    filter='Filtro',brush='Pincel',eraser='Borracha',
+    smudge='Borrar',blur='Desfoque',special='Especial',
+    bucket='Balde',vector='Vetor',text='Texto',
+    frame='Quadros',picker='Conta-gotas',canvas='Tela'}
 function M.layout(w,h,page,count)
     assert(type(w)=='number' and w>=960
         and type(h)=='number' and h>=640,
@@ -30,7 +35,9 @@ function M.entries(w,h,page,items)
     local result={}
     for i=r.start,r.stop do
         result[#result+1]={id=items[i].id,
-            label=items[i].label,icon=items[i].icon,index=i,
+            label=items[i].label,shortLabel=M.shortLabels[items[i].id]
+                or items[i].label,
+            icon=items[i].icon,index=i,
             x=r.x,y=r.y+(i-r.start)*r.row,
             w=r.w,h=r.row}
     end

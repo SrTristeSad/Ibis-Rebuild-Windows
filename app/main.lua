@@ -5073,8 +5073,9 @@ local function drawEditorToolRail(w,h)
         end
         c(active and 'accent' or 'text')
         Icons.draw(item.icon,item.x+item.w/2,item.y+11,16)
-        fitted(item.label,item.x+3,item.y+21,'micro',
-            active and 'accent' or 'text',item.w-6)
+        love.graphics.setFont(A.fonts.micro)
+        love.graphics.printf(item.shortLabel,item.x+1,
+            item.y+21,item.w-2,'center')
         A.buttons[#A.buttons+1]={x=item.x,y=item.y,w=item.w,h=item.h,
             fn=guard(function()activateIbisTool(tool)end)}
     end
