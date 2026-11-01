@@ -21,7 +21,7 @@ function M.blendRow(p,i)
     assert(type(p)=='table' and p.w>=298 and p.h>=350
         and type(i)=='number' and i%1==0
         and i>=1 and i<=#M.modes,'Linha de mistura inválida')
-    return {x=p.x+14,y=p.y+64+(i-1)*37,w=p.w-28,h=34}
+    return {x=p.x+14,y=p.y+68+(i-1)*34,w=p.w-28,h=31}
 end
 function M.mode(id)
     for _,value in ipairs(M.modes) do
