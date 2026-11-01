@@ -5,7 +5,7 @@
 local ffi=require('ffi')
 local bit=require('bit')
 local band=bit.band
-local Ink={available=false,attached=false,errors={},dropped=0}
+local Ink={available=false,attached=false,errors={},dropped=0,probes=0}
 local MAX_QUEUE=512
 local ring,readAt,writeAt={},1,1
 local activeId,lastPenTick=0,0
@@ -117,6 +117,7 @@ if enabled then
         int __stdcall GetPointerPenInfo(uint32_t,IB_POINTER_PEN_INFO*);
         int __stdcall ScreenToClient(void*,IB_POINT*);
         int __stdcall GetClientRect(void*,IB_RECT*);
+        intptr_t __stdcall SendMessageW(void*,uint32_t,uintptr_t,intptr_t);
         uint32_t __stdcall GetCurrentThreadId(void);
         uint32_t __stdcall GetCurrentProcessId(void);
         uint64_t __stdcall GetTickCount64(void);
@@ -187,6 +188,7 @@ local function handlePointer(window,message,wparam,lparam)
     end
 end
 local function intercept(window,message,wparam,lparam)
+    if message==0 and window==hwnd then Ink.probes=Ink.probes+1 end
     -- LuaJIT callback nao pode propagar erro ou yield ao WndProc do Windows.
     local ok,err=pcall(handlePointer,window,message,wparam,lparam)
     if not ok then recordError(err) end
@@ -235,6 +237,14 @@ function Ink.init()
     end)
     if not ok then recordError(err) end
     return ok and Ink.attached
+end
+-- WM_NULL permite verificar que o callback esta vivo e repassa mensagens,
+-- sem depender de uma caneta fisica durante o teste Windows CI.
+function Ink.probe()
+    if not Ink.attached or not threadOkay() then return false end
+    local count=Ink.probes
+    user.SendMessageW(hwnd,0,0,0)
+    return Ink.probes==count+1
 end
 function Ink.mouseGuard()
     if not Ink.attached or not threadOkay() then return false end
