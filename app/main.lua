@@ -56,7 +56,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '13-menu-visualizacao.png','14-estabilizador.png',
     '15-opcoes-forma.png','16-materiais-pendentes.png',
     '17-losango-hsb.png','18-sliders-rgb.png',
-    '19-paleta-cores.png','20-cores-pessoais.png'}
+    '19-paleta-cores.png','20-cores-pessoais.png',
+    '21-camada-selecao.png','22-modos-mesclagem.png',
+    '23-selecao-ativa.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2070,6 +2072,43 @@ local function advanceShowcase()
     elseif sh.stage==20 then
         A.paletteTab='personal'
         status('Cores pessoais · vazia até guardar a primeira cor')
+    elseif sh.stage==21 then
+        A.compactPanel='layers'
+        A.compactLayerStart=nil
+        A.selection=nil
+        status('Janela de camadas · seleção separada e raster preservado')
+    elseif sh.stage==22 then
+        A.compactPanel='layers'
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local start,stop=Thumbnails.window(#A.doc.layers,
+            A.doc.active_layer,Compact.layerRows(p),A.compactLayerStart)
+        local position=stop-A.doc.active_layer+1
+        assert(position>=1 and position<=stop-start+1,
+            'Camada ativa deve aparecer no painel')
+        local r=IbisPanels.layerRow(p,position)
+        local before=Native.bytes(A.buffer)
+        local undo=A.layerSession:historyStats().undo
+        love.draw()
+        love.mousepressed(r.x+92,r.y+35,1,false)
+        love.mousereleased(r.x+92,r.y+35,1,false)
+        assert(A.compactPanel=='blends',
+            'Clicar no modo Normal não abriu os modos de mesclagem')
+        local modes=Compact.popup(w,h,'blends')
+        local pending=LayerUI.blendRow(modes,2)
+        love.draw()
+        love.mousepressed(pending.x+40,pending.y+17,1,false)
+        love.mousereleased(pending.x+40,pending.y+17,1,false)
+        assert(A.compactPanel=='blends',
+            'Modo sem motor não pode mudar de painel')
+        assert(Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==undo,
+            'A navegação de mistura não pode editar a obra')
+        status('Mesclagem · Normal ativo, demais modos pendentes')
+    elseif sh.stage==23 then
+        A.compactPanel='layers'
+        A.selection={x=44,y=56,w=92,h=74}
+        status('Camada de seleção · visual atualiza com área ativa')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
