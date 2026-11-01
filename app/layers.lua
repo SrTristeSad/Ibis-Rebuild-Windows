@@ -1,5 +1,5 @@
 -- Independent desktop layer manager: RGBA8 rasters, normal blend only.
--- Lua owns ordering and metadata; only C++ writes/composes raster pixels.
+-- Lua owns ordering and metadata; only Lua writes/composes raster pixels.
 -- Does not claim to reproduce ibisPaint layer folders, masks or blending.
 local Native=require('native')
 local Store=require('store')
@@ -13,7 +13,7 @@ local function assertIndex(self,index)
         index>=1 and index<=#self.doc.layers,'Camada inválida')
 end
 function Layers.open(store,doc)
-    assert(Native.available,'Motor C++ obrigatório para camadas')
+    assert(Native.available,'Motor Lua obrigatório para camadas')
     if not doc.layers then
         -- Promote RBD1 in memory. A disk migration occurs ONLY on save.
         doc.layers={{id=store:newLayerId(),name='Raster 1',pixels=doc.pixels,
@@ -117,7 +117,7 @@ local function reorder(self,from,to,active)
     table.insert(self.buffers,to,buffer)
     self.doc.active_layer=active
 end
--- Merge two adjacent normal-blend layers in C++ while preserving the
+-- Merge two adjacent normal-blend layers in Lua while preserving the
 -- visible contribution of each source (including layer opacity/visibility).
 -- The resulting lower layer has full opacity and keeps the lower layer ID.
 local function flattenedPair(self,below,above,belowBuffer,aboveBuffer)
@@ -528,7 +528,7 @@ function Layers:fill(x,y,rgba,tolerance)
     self:finishEdit()
     return changed
 end
--- A committed straight line uses the existing real C++ brush rasterizer.
+-- A committed straight line uses the existing real Lua brush rasterizer.
 -- Keeping the operation in one edit preserves session undo and RBD2 semantics.
 function Layers:straightLine(x0,y0,x1,y1,diameter,rgba)
     assert(not self.pending,'Finalize a pincelada antes da linha')
