@@ -90,6 +90,6 @@ function UI.contains(rect,x,y)
         y>=rect.y and y<rect.y+rect.h
 end
 function UI.layerRows(rect)
-    return math.max(2,math.min(5,math.floor((rect.h-178)/40)))
+    return math.max(2,math.min(4,math.floor((rect.h-178)/52)))
 end
 return UI
