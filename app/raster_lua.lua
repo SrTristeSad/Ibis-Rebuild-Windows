@@ -98,7 +98,28 @@ local function compose(dst, src, opacity, rect)
     assert(type(opacity) == "number" and opacity >= 0 and opacity <= 1
         and opacity == opacity, "Opacidade invalida")
     checkRect(dst, rect)
+    local destPixels,sourcePixels=dst.bytes,src.bytes
+    -- Em camadas opacas (ex.: fundo), a sobreposicao normal com
+    -- opacidade 1 equivale a copiar a faixa RGBA inteira. O teste e
+    -- feito por linha, sem confiar em flags de opacidade que poderiam
+    -- ficar desatualizadas apos edicoes do raster.
     for y = rect.y, rect.y+rect.h-1 do
+        local first=(y*dst.width+rect.x)*4
+        local copied=false
+        if opacity==1 then
+            local last=first+rect.w*4-1
+            copied=true
+            for alpha=first+3,last,4 do
+                if sourcePixels[alpha]~=255 then
+                    copied=false
+                    break
+                end
+            end
+            if copied then
+                ffi.copy(destPixels+first,sourcePixels+first,rect.w*4)
+            end
+        end
+        if not copied then
         for x = rect.x, rect.x+rect.w-1 do
             local p = (y*dst.width+x)*4
             local sourceAlpha=src.bytes[p+3]
@@ -127,6 +148,7 @@ local function compose(dst, src, opacity, rect)
                 dst.bytes[p+3] = math.floor(oa*255+0.5)
             end
         end
+        end -- faixa nao totalmente opaca: composicao pixel a pixel
     end
 end
 function Raster.compositeRect(dst, src, opacity, rect)
