@@ -201,6 +201,13 @@ end
 -- Non-brush mutations continue to use rebuildImage() for full sync.
 local function updateImageRegion(rect)
     if not rect then return false end
+    -- Uma chamada Ink.poll pode conter dezenas de WM_POINTERUPDATE.
+    -- Nao recompor/enviar a mesma textura a cada amostra do pacote;
+    -- acumular a regiao e fazer um unico envio ao final do love.update.
+    if A.deferInkUploads then
+        A.pendingInkRect=DirtyRegion.union(A.pendingInkRect,rect)
+        return true
+    end
     A.layerSession:recomposeRect(rect)
     gpuUpload:send(A.image,A.buffer,rect)
     local layer=A.doc.layers[A.doc.active_layer]
@@ -2546,6 +2553,23 @@ function love.update(dt)
                 layers:beginStrokeAccum()
                 layers:pressureStroke(16.5,16.5,24.5,24.5,9,9,
                     0x4cab93ff,.45,.45,1,0,0,0,true)
+                -- Duas regioes da mesma entrega WM_POINTER viram
+                -- uma unica composicao/envio GPU no final do pacote.
+                local oldUploads=gpuUpload:stats().uploads
+                A.deferInkUploads=true
+                updateImageRegion({x=1,y=2,w=12,h=10})
+                updateImageRegion({x=9,y=8,w=11,h=10})
+                assert(gpuUpload:stats().uploads==oldUploads,
+                    'Upload prematuro antes do fim do pacote Ink')
+                local batched=A.pendingInkRect
+                assert(batched.x==1 and batched.y==2 and
+                    batched.w==19 and batched.h==16,
+                    'Uniao de eventos Ink incorreta')
+                A.deferInkUploads=false
+                A.pendingInkRect=nil
+                updateImageRegion(batched)
+                assert(gpuUpload:stats().uploads==oldUploads+1,
+                    'Eventos Ink nao foram enviados em um so pacote')
                 local region={x=10,y=10,w=24,h=24}
                 local beforeStats=gpuUpload:stats()
                 updateImageRegion(region)
@@ -2629,7 +2653,18 @@ function love.update(dt)
         end
     end
     if A.inkAttached and dispatchInkEvent then
-        for _,event in ipairs(Ink.poll()) do dispatchInkEvent(event) end
+        local events=Ink.poll()
+        if #events>0 then
+            A.deferInkUploads=true
+            local ok,err=pcall(function()
+                for _,event in ipairs(events) do dispatchInkEvent(event) end
+            end)
+            A.deferInkUploads=false
+            local region=A.pendingInkRect
+            A.pendingInkRect=nil
+            if region then updateImageRegion(region) end
+            if not ok then status('Windows Ink: '..tostring(err)) end
+        end
     end
     if A.testReport then
         A.testFrames=A.testFrames+1
