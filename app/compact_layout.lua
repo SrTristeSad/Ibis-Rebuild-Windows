@@ -76,7 +76,7 @@ end
 function UI.popup(w,h,kind)
     assert(kind=='tools' or kind=='layers' or kind=='properties'
         or kind=='color' or kind=='view' or kind=='stabilizer'
-        or kind=='ruler' or kind=='materials',
+        or kind=='ruler' or kind=='materials' or kind=='blends',
         'Janela compacta desconhecida')
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela compacta inválida')
@@ -88,8 +88,9 @@ function UI.popup(w,h,kind)
         kind=='tools' and math.min(474,h-188) or
         kind=='layers' and math.min(440,h-260) or
         kind=='view' and 314 or kind=='stabilizer' and 254 or
+        kind=='blends' and math.min(440,h-260) or
         (kind=='ruler' or kind=='materials') and 222 or 354
-    return {x=(kind=='layers' or kind=='color' or isTop)
+    return {x=(kind=='layers' or kind=='color' or kind=='blends' or isTop)
         and w-width-20 or 20,
         y=134,w=width,h=height}
 end
@@ -98,6 +99,6 @@ function UI.contains(rect,x,y)
         y>=rect.y and y<rect.y+rect.h
 end
 function UI.layerRows(rect)
-    return math.max(2,math.min(4,math.floor((rect.h-178)/52)))
+    return math.max(2,math.min(4,math.floor((rect.h-188)/52)))
 end
 return UI
