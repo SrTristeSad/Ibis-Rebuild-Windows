@@ -39,6 +39,7 @@ local FilterUI=require('ibis_filter_ui')
 local TextUI=require('ibis_text_ui')
 local RulerUI=require('ibis_ruler_ui')
 local MaterialUI=require('ibis_material_ui')
+local TransformUI=require('ibis_transform_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -65,7 +66,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '23-selecao-ativa.png','24-catalogo-filtros.png',
     '25-texto-rascunho.png','26-texto-estilo.png',
     '27-reguas-catalogo.png','28-regua-espelho.png',
-    '29-materiais-categorias.png','30-materiais-busca.png'}
+    '29-materiais-categorias.png','30-materiais-busca.png',
+    '31-transformar-mover.png','32-transformar-perspectiva.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2300,6 +2302,56 @@ local function advanceShowcase()
             and A.dirty==old.dirty and A.tool==old.tool,
             'Janela de materiais alterou a obra original')
         status('Materiais: busca local sem catalogo, nenhum pixel alterado')
+    elseif sh.stage==31 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        local rect=Compact.popup(w,h,'tools')
+        local cell=IbisTools.grid(rect,1)
+        love.draw()
+        love.mousepressed(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        love.mousereleased(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        assert(A.compactPanel=='transform' and
+            A.visualPendingTool=='transform' and
+            A.transformUi and A.transformUi.mode=='translate',
+            'Transformar nao abriu a janela propria')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Botao Transformar acionou motor indevido')
+        A.showcaseTransformCheck=old
+        status('Transformar: controles visuais, motor ainda pendente')
+    elseif sh.stage==32 then
+        assert(A.compactPanel=='transform' and A.showcaseTransformCheck)
+        local old=A.showcaseTransformCheck
+        local w,h=love.graphics.getDimensions()
+        local rect=Compact.popup(w,h,'transform')
+        local plus=TransformUI.plusRect(rect,3)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.transformUi.zoom==105,
+            'Zoom do rascunho nao respondeu ao clique')
+        local mode=TransformUI.modeRect(rect,2)
+        love.draw()
+        love.mousepressed(mode.x+mode.w/2,mode.y+mode.h/2,1,false)
+        love.mousereleased(mode.x+mode.w/2,mode.y+mode.h/2,1,false)
+        assert(A.transformUi.mode=='perspective'
+            and not TransformUI.canApply(),
+            'Perspectiva visual nao selecionada ou aplicada falsamente')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Rascunho de transformar alterou raster ou selecao')
+        status('Transformar: perspectiva visível, operação pendente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5782,6 +5834,7 @@ local function drawCompactPopup(w,h)
         kind=='blends' and 'Modos de mesclagem' or
         kind=='filters' and 'Filtros' or
         kind=='text' and 'Texto' or
+        kind=='transform' and 'Transformar' or
         kind=='color' and 'Cores · RGBA' or
         kind=='view' and 'Visualização' or
         kind=='stabilizer' and 'Estabilizador' or
@@ -5800,7 +5853,8 @@ local function drawCompactPopup(w,h)
         end
         A.compactPanel=nil
     end)
-    if kind=='blends' or kind=='filters' or kind=='text' then
+    if kind=='blends' or kind=='filters' or kind=='text'
+        or kind=='transform' then
         button('<',p.x+p.w-79,p.y+8,31,30,function()
             if kind=='text' and A.textUi then
                 A.textUi.focused=false
@@ -5817,6 +5871,13 @@ local function drawCompactPopup(w,h)
             local active=tool.backend==A.tool and tool.backend~=nil
                 or A.visualPendingTool==tool.id
             button('',r.x,r.y,r.w,r.h,function()
+                if tool.id=='transform' then
+                    A.visualPendingTool='transform'
+                    A.transformUi=TransformUI.new()
+                    A.compactPanel='transform'
+                    status('Transformar: interface independente, motor pendente')
+                    return
+                end
                 if tool.id=='text' then
                     A.visualPendingTool='text'
                     A.textUi=TextUI.new()
@@ -5853,6 +5914,70 @@ local function drawCompactPopup(w,h)
             (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
             or 'Ferramentas da interface · motor Lua',
             p.x+16,p.y+p.h-28,'small','muted')
+    elseif kind=='transform' then
+        local draft=assert(A.transformUi,'Rascunho Transformar ausente')
+        for i,mode in ipairs(TransformUI.modes) do
+            local r=TransformUI.modeRect(p,i)
+            button(mode.label,r.x,r.y,r.w,r.h,function()
+                TransformUI.chooseMode(draft,mode.id)
+            end,draft.mode==mode.id)
+        end
+        if draft.mode=='translate' then
+            local toggles={{key='scaling',name='Escala'},
+                {key='rotation',name='Rotação'},
+                {key='repeatDisplay',name='Repetição'}}
+            for i,item in ipairs(toggles) do
+                local r=TransformUI.toggleRect(p,i)
+                button(item.name,r.x,r.y,r.w,r.h,function()
+                    TransformUI.toggle(draft,item.key)
+                end,draft[item.key])
+            end
+            for i,item in ipairs(TransformUI.fields) do
+                local r=TransformUI.fieldRow(p,i)
+                box(r.x,r.y,r.w,r.h,'card')
+                fitted(item.label,r.x+9,r.y+9,'small','text',115)
+                fitted(tostring(draft[item.id])..item.unit,
+                    r.x+132,r.y+9,'small','muted',156)
+                local minus=TransformUI.minusRect(p,i)
+                local plus=TransformUI.plusRect(p,i)
+                button('−',minus.x,minus.y,minus.w,minus.h,function()
+                    TransformUI.adjust(draft,item.id,-1)
+                end,false,draft[item.id]<=item.minimum)
+                button('+',plus.x,plus.y,plus.w,plus.h,function()
+                    TransformUI.adjust(draft,item.id,1)
+                end,false,draft[item.id]>=item.maximum)
+            end
+            for i,target in ipairs({
+                {id='layer',name='Camada'},
+                {id='canvas',name='Tela inteira'}}) do
+                local r=TransformUI.targetRect(p,i)
+                button(target.name,r.x,r.y,r.w,r.h,function()
+                    TransformUI.chooseTarget(draft,target.id)
+                end,draft.target==target.id)
+            end
+            local frame=TransformUI.frameRect(p)
+            button('Moldura visível',frame.x,frame.y,
+                frame.w,frame.h,function()
+                    TransformUI.toggle(draft,'showFrame')
+                end,draft.showFrame)
+        else
+            local area=TransformUI.pendingArea(p)
+            box(area.x,area.y,area.w,area.h,'card')
+            c('muted')
+            Icons.draw('select',area.x+area.w/2,
+                area.y+56,34)
+            fitted(draft.mode=='perspective'
+                and 'Transformação em perspectiva'
+                or 'Transformação por malha',
+                area.x+20,area.y+110,'body','text',area.w-40)
+            fitted('Controles e algoritmo Lua ainda pendentes.',
+                area.x+20,area.y+150,'small','warn',area.w-40)
+            fitted('Nenhuma transformação será aplicada.',
+                area.x+20,area.y+178,'small','muted',area.w-40)
+        end
+        local footer=TransformUI.footerRect(p)
+        fitted('Prévia de parâmetros · aplicar indisponível',
+            footer.x,footer.y,'small','warn',footer.w)
     elseif kind=='text' then
         local draft=assert(A.textUi,'Rascunho de texto ausente')
         for i,tab in ipairs(TextUI.tabs) do
@@ -6986,6 +7111,12 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='transform' then
+            if key=='escape' then
+                A.compactPanel='tools'
+            end
+            return
+        end
         if A.compactPanel=='materials' then
             if key=='escape' then
                 if A.materialUi then A.materialUi.focused=false end
