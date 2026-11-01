@@ -10,9 +10,9 @@ Top.items={
     {id='ruler',label='Régua',icon='top-ruler'},
     {id='materials',label='Materiais',icon='top-material'}
 }
-Top.SIZE=41
+Top.SIZE=36
 Top.GAP=7
-Top.Y=80
+Top.Y=8
 Top.RIGHT=18
 function Top.toolbar(w,h)
     assert(type(w)=='number' and w>=960 and

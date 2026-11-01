@@ -11,7 +11,7 @@ function T.run()
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local w,h=size[1],size[2]
         local first=Rail.layout(w,h,1,#Tools.entries)
-        check(first.x<=10 and first.y>=125,
+        check(first.x<=10 and first.y>=10 and first.y<=30,
             'Faixa nao esta no canto esquerdo do editor')
         local seen={}
         for page=1,first.pages do
@@ -26,7 +26,7 @@ function T.run()
                     'Faixa mudou a ordem das ferramentas')
                 check(not seen[e.id],'Ferramenta repetida')
                 seen[e.id]=true
-                check(e.x>=0 and e.x+e.w<=120
+                check(e.x>=0 and e.x+e.w<=80
                     and e.y>=prev and e.y+e.h<=h-130,
                     'Faixa extrapola canvas seguro')
                 check(Workspace.contains(w,h,true,e.x+e.w/2,

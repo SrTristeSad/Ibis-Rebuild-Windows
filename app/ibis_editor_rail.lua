@@ -2,17 +2,17 @@
 -- captura publica do editor ibisPaint. Geometria independente de LÖVE.
 -- Sem redistribuir recursos ou sprites da versao Android.
 local M={}
-M.WIDTH=99
+M.WIDTH=68
 M.LEFT=7
-M.TOP=132
-M.ROW=30
+M.TOP=19
+M.ROW=32
 function M.layout(w,h,page,count)
     assert(type(w)=='number' and w>=960
         and type(h)=='number' and h>=640,
         'Viewport insuficiente para a faixa')
     assert(type(count)=='number' and count%1==0 and count>0,
         'Quantidade de ferramentas invalida')
-    local available=h-130-M.TOP-35
+    local available=h-130-M.TOP-6
     local visible=math.max(1,math.floor(available/M.ROW))
     local pages=math.ceil(count/visible)
     assert(type(page)=='number' and page%1==0

@@ -24,9 +24,9 @@ function T.run()
             check(type(glyph)=='table' and #glyph>=2,
                 'Acao superior sem icone vetorial')
             check(item.x>=420 and item.x+item.w<=w-10,
-                'Controle superior invade faixa do zoom')
-            check(item.y>=64 and item.y+item.h<bounds.top,
-                'Ferramenta superior permite desenhar sobre hitbox')
+                'Controle superior invade comandos de navegação')
+            check(item.y>=4 and item.y+item.h<=55,
+                'Ferramentas de topo devem flutuar junto da borda')
             check(Top.pick(w,h,item.x+item.w/2,
                 item.y+item.h/2)==item.id,
                 'Visual e hitbox da acao superior nao coincidem')

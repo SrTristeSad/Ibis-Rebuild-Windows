@@ -3270,7 +3270,7 @@ local function nativeSelfTest()
     return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,basic_desktop_eraser=true,session_undo_redo=true,layered_roundtrip=true,android_runtime_compared=false}
 end
 function love.load(args)
-    A.fonts={small=love.graphics.newFont(12),body=love.graphics.newFont(14),title=love.graphics.newFont(25),large=love.graphics.newFont(40)}
+    A.fonts={micro=love.graphics.newFont(10),small=love.graphics.newFont(12),body=love.graphics.newFont(14),title=love.graphics.newFont(25),large=love.graphics.newFont(40)}
     local options={}
     for i=1,#args do
         if args[i]=='--data-dir' then options.data=args[i+1]
@@ -5055,7 +5055,7 @@ end
 local function drawEditorToolRail(w,h)
     local count=#IbisTools.entries
     local rect=EditorRail.layout(w,h,A.toolRailPage or 1,count)
-    c('panel',.94)
+    c('panel',.78)
     love.graphics.rectangle('fill',rect.x-1,rect.y-4,
         rect.w+2,(rect.stop-rect.start+1)*rect.row+
         (rect.pages>1 and 31 or 8),6,6)
@@ -5072,9 +5072,9 @@ local function drawEditorToolRail(w,h)
                 item.w-4,item.h-2,3,3)
         end
         c(active and 'accent' or 'text')
-        Icons.draw(item.icon,item.x+17,item.y+item.h/2,17)
-        fitted(item.label,item.x+32,item.y+9,'small',
-            active and 'accent' or 'text',item.w-38)
+        Icons.draw(item.icon,item.x+item.w/2,item.y+11,16)
+        fitted(item.label,item.x+3,item.y+21,'micro',
+            active and 'accent' or 'text',item.w-6)
         A.buttons[#A.buttons+1]={x=item.x,y=item.y,w=item.w,h=item.h,
             fn=guard(function()activateIbisTool(tool)end)}
     end
@@ -5113,13 +5113,13 @@ local function drawTopToolbar(w,h)
         local mx,my=love.mouse.getPosition()
         local hovered=mx>=slot.x and mx<=slot.x+slot.w
             and my>=slot.y and my<=slot.y+slot.h
-        c(active and 'selected' or hovered and 'line' or 'panel',.95)
-        love.graphics.circle('fill',slot.x+slot.w/2,
-            slot.y+slot.h/2,slot.w/2,32)
+        c(active and 'selected' or hovered and 'line' or 'panel',.84)
+        love.graphics.rectangle('fill',slot.x,slot.y,
+            slot.w,slot.h,slot.h/2,slot.h/2)
         c(active and 'accent' or 'line')
         love.graphics.setLineWidth(1)
-        love.graphics.circle('line',slot.x+slot.w/2,
-            slot.y+slot.h/2,slot.w/2-.5,32)
+        love.graphics.rectangle('line',slot.x+.5,slot.y+.5,
+            slot.w-1,slot.h-1,slot.h/2,slot.h/2)
         c(active and 'accent' or 'text')
         Icons.draw(slot.icon,slot.x+slot.w/2,
             slot.y+slot.h/2,19)
@@ -5159,13 +5159,7 @@ local function drawEditor(w,h)
         -- Controles compactos são desenhados depois do canvas, para não
         -- serem encobertos pelo fundo cinza nem terem hitboxes invisíveis.
     end
-    if A.compactUi then
-        button('Salvar',w-282,15,80,33,saveDoc,A.dirty)
-        button('Desktop',w-191,15,85,33,toggleCompactUi)
-        button('Ajustes',w-96,15,77,33,function()
-            toggleCompactPanel('properties')
-        end)
-    else
+    if not A.compactUi then
         button('Layout compacto',w-645,15,134,33,toggleCompactUi)
         button(A.previewEnabled and 'Prévia: ligada' or 'Prévia: desligada',
             w-501,15,134,33,function()
@@ -5174,7 +5168,7 @@ local function drawEditor(w,h)
     end
     local cx,cy=canvasTransform()
     if A.compactUi and not A.focusMode then
-        box(0,64,w,h-194,'canvas')
+        box(0,0,w,h-130,'canvas')
     else
         box(12,120,w-Workspace.panelWidth(paneHidden())-20,h-178,'canvas')
     end
@@ -5225,20 +5219,24 @@ local function drawEditor(w,h)
     love.graphics.setScissor()
     if A.compactUi then
         if A.focusMode then
-            button('Mostrar interface · Tab',18,78,196,38,toggleFocusMode)
+            button('Mostrar interface · Tab',18,8,196,36,toggleFocusMode)
         else
-            box(16,75,358,49,'panel')
-            iconButton('undo',21,81,39,35,undoDoc,false,
-                not A.layerSession:canUndo())
-            iconButton('redo',63,81,39,35,redoDoc,false,
-                not A.layerSession:canRedo())
-            button('−',111,81,37,35,
-                function()zoomCanvas(1/1.25)end)
-            button('+',152,81,37,35,
-                function()zoomCanvas(1.25)end)
-            button('Ajustar',197,81,79,35,fit)
+            -- Controles desktop ficam discretos no canto superior
+            -- esquerdo, fora do seletor de ferramentas.
+            button('Salvar',85,7,70,28,saveDoc,A.dirty)
+            button('Desktop',161,7,79,28,toggleCompactUi)
+            button('Ajustes',246,7,70,28,function()
+                toggleCompactPanel('properties')
+            end)
+            button('−',104,48,33,29,function()
+                zoomCanvas(1/1.25)
+            end,false,A.zoom<=View.MIN_ZOOM)
+            button('+',141,48,33,29,function()
+                zoomCanvas(1.25)
+            end,false,A.zoom>=View.MAX_ZOOM)
+            button('Ajustar',180,48,68,29,fit)
             text(('%d%%'):format(math.floor(A.zoom*100+.5)),
-                288,89,'small','muted')
+                258,55,'small','muted')
             drawTopToolbar(w,h)
         end
     end
@@ -5718,9 +5716,11 @@ local function drawEditor(w,h)
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
     if A.compactUi and not A.focusMode then
-        box(0,h-130,w,130,'panel')
+        -- Os sliders acompanham o fundo cinza da area de desenho.
+        box(0,h-130,w,70,'canvas')
+        box(0,h-60,w,60,'panel')
         c('line')
-        love.graphics.rectangle('fill',0,h-130,w,1)
+        love.graphics.rectangle('fill',0,h-61,w,1)
         -- Barra de regulagens menos intrusiva, proxima do original.
         local activeName=EditorTools.fromId(A.tool).label
         fitted(activeName,22,h-113,'small','muted',170)
@@ -5730,7 +5730,7 @@ local function drawEditor(w,h)
         else
             text(('Zoom %.0f%% · %s'):format(A.zoom*100,
                 EditorTools.fromId(A.tool).label),
-                (w-350)/2,h-161,'small','muted')
+                (w-350)/2,h-113,'small','muted')
         end
         c('line')
         love.graphics.rectangle('fill',w/2-352,h-62,704,1)
@@ -7194,14 +7194,7 @@ function love.draw()
     local theme=A.screen=='gallery' and galleryPalette
         or (A.compactUi and compactPalette or palette)
     love.graphics.clear(theme.bg)
-    if A.screen=='editor' and A.compactUi then
-        c('bg')
-        love.graphics.rectangle('fill',0,0,w,64)
-        c('line')
-        love.graphics.rectangle('fill',0,62,w,1)
-        text(('%d%%'):format(math.floor(A.zoom*100+.5)),
-            24,20,'body','text')
-    else
+    if not (A.screen=='editor' and A.compactUi) then
         box(0,0,w,64,'panel')
         c('accent');love.graphics.rectangle('fill',0,62,w,2)
         text(A.screen=='gallery' and 'Ibis Rebuild · Galeria'
