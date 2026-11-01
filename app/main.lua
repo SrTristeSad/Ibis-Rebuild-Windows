@@ -5560,6 +5560,11 @@ local function drawCompactPopup(w,h)
         'Ajustes',p.x+14,p.y+13,'body')
     button('×',p.x+p.w-44,p.y+8,31,30,function()
         A.compactPanel=nil end)
+    if kind=='blends' then
+        button('<',p.x+p.w-79,p.y+8,31,30,function()
+            A.compactPanel='layers'
+        end)
+    end
     if kind=='tools' then
         -- Catálogo visual completo; somente ferramentas já implementadas
         -- no motor Lua são acionadas. Outras mostram o estado pendente.
@@ -5960,6 +5965,12 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     b.fn();return
                 end
             end
+        end
+        -- Presses em áreas internas desabilitadas (ex.: modos de
+        -- mistura sem motor) não devem fechar o popup nem pintar.
+        local ww,hh=love.graphics.getDimensions()
+        if Compact.contains(Compact.popup(ww,hh,A.compactPanel),x,y) then
+            return
         end
         A.compactPanel=nil;A.colorDrag=nil
         return -- Closing a palette must not paint behind it.
