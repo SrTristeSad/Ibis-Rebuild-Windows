@@ -98,6 +98,17 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-gui-smoke'
           & $runner (Join-Path (Get-Location) 'app') '--lua-gui-smoke' '--data-dir' $root
           if ($LASTEXITCODE -ne 0) { throw "Editor Lua falhou: $LASTEXITCODE" }
+      - name: Verify optional mouse/touch fallback without Windows Ink
+        shell: pwsh
+        env:
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runner = Join-Path $env:LOVE_RUNTIME 'lovec.exe'
+          $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-no-ink-smoke'
+          & $runner (Join-Path (Get-Location) 'app') '--lua-gui-smoke' '--no-windows-ink' '--data-dir' $root
+          if ($LASTEXITCODE -ne 0) { throw "Fallback sem caneta falhou: $LASTEXITCODE" }
       - name: Verify fused Windows executable launches real GUI
         shell: pwsh
         env:
