@@ -154,3 +154,46 @@ Windows publica doze telas reais, acrescentando o diálogo e a galeria
 filtrada. A prioridade continua exclusivamente visual: ainda são
 necessários ajustes de proporção baseados em telas comprovadas da
 versão 14.1.2, não apenas em tutoriais públicos.
+
+## Fase visual 4 — seis controles superiores do editor
+
+A barra superior direita agora segue a **ordem de funções apresentada
+na documentação oficial do ibisPaint**: Visualização, Seleção,
+Estabilizador, Formas, Régua e Materiais. Fonte secundária:
+[03. Toolbar and Tool Selection](https://ibispaint.com/lecture/index.jsp?no=4).
+O catálogo está em `app/ibis_top_toolbar.lua`, com geometria
+testável, seis ícones vetoriais originais em `app/ui_icons.lua`
+e interação isolada acima do canvas.
+
+**Ações conectadas ao motor Lua atual:**
+
+- **Visualização:** painel compacto com Encaixar, zoom, giro,
+  zerar rotação e estado de prévia, reaproveitando `canvas_view.lua`.
+- **Seleção:** ativa a ferramenta `select` e abre propriedades com
+  transformações já disponíveis, desabilitadas sem seleção válida.
+- **Estabilizador:** nível 0..5, com controles reais para
+  `A.stabilization`, sem alterações permanentes no raster ao abrir.
+- **Formas:** ativa a ferramenta `shape`, permitindo selecionar
+  retângulo, elipse, linha, contorno/preenchimento e espessura.
+- **Régua e Materiais:** janelas de apresentação **explicitamente
+  pendentes**, sem implementar nem simular operações e sem alterar
+  a obra.
+
+Os quatro novos popups são tratados por `app/compact_layout.lua`.
+Os botões são renderizados **após** o desenho do canvas,
+e seu hitbox fica fora da área interativa de pintura. Isso evita
+o defeito anterior dos controles de zoom encobertos.
+
+**Validação visual:** `tests/test_ibis_top_toolbar.lua` verifica
+ordem, ícones, posição, áreas de clique, separação da barra de zoom
+e limites de janelas nas três resoluções suportadas.
+A captura Windows agora inclui dezesseis imagens reais,
+com as telas de Visualização, Estabilizador, Formas e Materiais.
+Os testes de composição, camada, histórico RBD2 e Windows Ink
+existentes permanecem ativos.
+
+**Limite da evidência:** a documentação pública descreve o fluxo
+do ibisPaint, mas não comprova equivalência geométrica específica
+com cada build Android 14.1.2. A aprovação visual depende de
+confrontar as capturas reais da aplicação com referências da
+versão-alvo fornecidas pelo criador.
