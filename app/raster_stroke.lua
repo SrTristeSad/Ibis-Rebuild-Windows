@@ -4,6 +4,8 @@ local ffi = require('ffi')
 local bit = require('bit')
 local floor, min, max, abs = math.floor, math.min, math.max, math.abs
 local rshift, band = bit.rshift, bit.band
+-- Benchmark/regressao podem restaurar a varredura retangular original.
+local scanlineEnabled=true
 
 local function inRange(value, low, high)
     return type(value)=='number' and value>=low and value<=high
@@ -82,7 +84,30 @@ local function stroke(b,baseline,mask,x0,y0,x1,y1,d0,d1,rgba,o0,o1,hardness,tx,t
 
     for y=top,bottom do
         local cy=y+0.5-y0
-        for x=left,right do
+        local rowLeft,rowRight=left,right
+        if scanlineEnabled and dy~=0 then
+            -- Qualquer pixel atingido precisa estar a menos de border do
+            -- eixo do segmento. Para esta linha, somente pontos cujo Y
+            -- esteja em [y+0.5-border,y+0.5+border] podem contribuir.
+            -- A banda e conservadora inclusive no pincel inclinado:
+            -- border usa o maior raio do elipsoide.
+            local ta=(cy-border)/dy
+            local tb=(cy+border)/dy
+            if ta>tb then ta,tb=tb,ta end
+            if tb<0 or ta>1 then
+                rowRight=left-1
+            else
+                ta=clamp(ta,0,1)
+                tb=clamp(tb,0,1)
+                local xa=x0+dx*ta
+                local xb=x0+dx*tb
+                -- Margem adicional de um pixel preserva fronteiras
+                -- submetidas a arredondamento de ponto flutuante.
+                rowLeft=max(left,floor(min(xa,xb)-border)-1)
+                rowRight=min(right,math.ceil(max(xa,xb)+border)+1)
+            end
+        end
+        for x=rowLeft,rowRight do
             local cx=x+0.5-x0
             local t=0
             if oriented and metric2>0 then
@@ -155,6 +180,11 @@ local function stroke(b,baseline,mask,x0,y0,x1,y1,d0,d1,rgba,o0,o1,hardness,tx,t
 end
 
 return function(R)
+    function R.setStrokeScanlineEnabled(enabled)
+        assert(type(enabled)=='boolean','Configuracao de varredura invalida')
+        scanlineEnabled=enabled
+    end
+    function R.strokeScanlineEnabled() return scanlineEnabled end
     function R.basicStroke(b,x0,y0,x1,y1,d,rgba,opacity)
         stroke(b,nil,nil,x0,y0,x1,y1,d,d,rgba,opacity,opacity,1,0,0,0)
     end
