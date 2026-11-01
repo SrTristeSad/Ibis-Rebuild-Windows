@@ -107,6 +107,51 @@ glyphs.down={
     {op='polygon',mode='fill',points={-5,-3,5,-3,0,4}},
     {op='line',points={-5,-5,5,-5}}
 }
+-- Icones vetoriais originais para categorias ainda sem motor Lua.
+-- O nome representa a funcao na UI, nao implica suporte funcional.
+glyphs.magic={
+    {op='line',points={-6,6,5,-5}},
+    {op='line',points={2,-6,2,-2}},
+    {op='line',points={0,-4,4,-4}},
+    {op='circle',mode='fill',x=-5,y=-3,r=1.4}}
+glyphs.lasso={
+    {op='circle',mode='line',x=-1,y=-1,r=5.5},
+    {op='line',points={2,3,6,6}},
+    {op='circle',mode='fill',x=6,y=6,r=1.7}}
+glyphs.filter={
+    {op='circle',mode='line',x=0,y=0,r=6.2},
+    {op='line',points={-5,4,4,-5}},
+    {op='circle',mode='fill',x=4,y=4,r=1.8}}
+glyphs.smudge={
+    {op='line',points={-6,4,-3,-2,0,-3,2,-1,5,-5}},
+    {op='line',points={-5,6,-1,2,2,3,5,0}},
+    {op='circle',mode='fill',x=5,y=-5,r=1.5}}
+glyphs.blur={
+    {op='circle',mode='line',x=0,y=0,r=2.5},
+    {op='circle',mode='line',x=0,y=0,r=5.4},
+    {op='circle',mode='fill',x=0,y=0,r=1.1}}
+glyphs.special={
+    {op='line',points={-5,5,4,-4}},
+    {op='circle',mode='fill',x=-5,y=5,r=2},
+    {op='line',points={3,-6,3,-3}},
+    {op='line',points={1,-5,5,-5}}}
+glyphs.vector={
+    {op='circle',mode='line',x=-5,y=5,r=1.8},
+    {op='circle',mode='line',x=0,y=-4,r=1.8},
+    {op='circle',mode='line',x=5,y=4,r=1.8},
+    {op='line',points={-4,3,-1,-2,3,2}}}
+glyphs['text-tool']={
+    {op='line',points={-5,-5,5,-5}},
+    {op='line',points={0,-5,0,6}},
+    {op='line',points={-3,6,3,6}}}
+glyphs['frame-divider']={
+    {op='rectangle',mode='line',x=-6,y=-6,w=12,h=12},
+    {op='line',points={0,-6,0,6}},
+    {op='line',points={-6,0,0,0}}}
+glyphs['canvas-tool']={
+    {op='rectangle',mode='line',x=-6,y=-5,w=12,h=10},
+    {op='line',points={-3,2,0,-2,3,2}},
+    {op='circle',mode='fill',x=3,y=-2,r=1.2}}
 function Icons.commands(id)
     return glyphs[id]
 end
