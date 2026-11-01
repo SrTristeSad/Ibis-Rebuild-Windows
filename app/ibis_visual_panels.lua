@@ -34,11 +34,11 @@ function Panels.layerRow(p,row)
     assert(type(p)=='table' and p.w>=298 and p.h>=350
         and type(row)=='number' and row%1==0 and row>=1 and row<=5,
         'Linha de camada inválida')
-    return {x=p.x+13,y=p.y+87+(row-1)*52,w=p.w-26,h=49}
+    return {x=p.x+13,y=p.y+126+(row-1)*52,w=p.w-26,h=49}
 end
 function Panels.layerRows(p)
     assert(type(p)=='table' and p.h>=350,'Painel de camadas inválido')
-    return math.max(2,math.min(4,floor((p.h-178)/52)))
+    return math.max(2,math.min(4,floor((p.h-188)/52)))
 end
 function Panels.wheel(rect)
     assert(type(rect)=='table' and rect.x and rect.y,
