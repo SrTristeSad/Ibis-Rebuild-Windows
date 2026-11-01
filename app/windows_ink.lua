@@ -56,6 +56,8 @@ function Ink._offerTest(event)
     push(event)
 end
 function Ink._resetTest() reset() end
+function Ink._drainTest() return take() end
+function Ink._activeTest() return activeId end
 
 if enabled then
     ffi.cdef[[
