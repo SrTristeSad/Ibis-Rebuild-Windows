@@ -33,39 +33,74 @@ end
 -- dos rótulos, para preservar os comandos na interface Windows.
 function M.toolbar(p,group)
     M.regions(p)
-    if group=='top' then
-        return {
-            {id='add',label='Nova',icon='add',
-                x=p.x+13,y=p.y+48,w=86,h=29},
-            {id='duplicate',label='Duplicar',icon='copy',
-                x=p.x+105,y=p.y+48,w=86,h=29},
-            {id='delete',label='Excluir',icon='delete',
-                x=p.x+197,y=p.y+48,w=87,h=29}
-        }
+    local icons={
+        {id='add',label='Nova camada',icon='add'},
+        {id='duplicate',label='Duplicar camada',icon='copy'},
+        {id='delete',label='Excluir camada',icon='delete'},
+        {id='previous',label='Subir lista',icon='up'},
+        {id='next',label='Descer lista',icon='down'},
+        {id='rename',label='Renomear',icon='edit'},
+        {id='merge',label='Mesclar abaixo',icon='merge'}
+    }
+    local first,last
+    if group=='top' then first,last=1,3
+    elseif group=='footer' then first,last=4,7
+    else error('Grupo de controles de camada desconhecido') end
+    local result={}
+    for i=first,last do
+        local item=icons[i]
+        result[#result+1]={id=item.id,icon=item.icon,label='',
+            hint=item.label,x=p.x+11+(i-1)*40,
+            y=p.y+49,w=36,h=30}
     end
-    if group=='footer' then
-        local y=p.y+p.h-87
-        return {
-            {id='previous',label='',icon='up',
-                x=p.x+13,y=y,w=34,h=28},
-            {id='next',label='',icon='down',
-                x=p.x+54,y=y,w=34,h=28},
-            {id='rename',label='Nome',icon='edit',
-                x=p.x+95,y=y,w=84,h=28},
-            {id='merge',label='Mesclar',icon='merge',
-                x=p.x+186,y=y,w=98,h=28}
-        }
+    return result
+end
+function M.footerControls(p)
+    M.regions(p)
+    local y=p.y+p.h-87
+    return {
+        {id='clipping',label='Clipping',x=p.x+8,y=y,w=88,h=32,
+            available=false},
+        {id='alpha',label='Alpha Lock',x=p.x+101,y=y,w=91,h=32,
+            available=false},
+        {id='blend',label='Normal',x=p.x+197,y=y,w=93,h=32,
+            available=true}
+    }
+end
+function M.actionHint(p,x,y)
+    for _,group in ipairs({'top','footer'}) do
+        for _,slot in ipairs(M.toolbar(p,group)) do
+            if x>=slot.x and x<slot.x+slot.w and
+                y>=slot.y and y<slot.y+slot.h then
+                return slot.hint
+            end
+        end
     end
-    error('Grupo de controles de camada desconhecido')
+end
+function M.paintFooterControl(slot,font)
+    assert(type(slot)=='table' and type(slot.available)=='boolean')
+    local lg=love.graphics
+    local active=slot.available
+    lg.setColor(active and .93 or .33,active and .94 or .35,
+        active and .95 or .37,1)
+    lg.rectangle('fill',slot.x,slot.y,slot.w,slot.h,2,2)
+    lg.setColor(active and .70 or .43,active and .72 or .44,
+        active and .75 or .45,1)
+    lg.rectangle('line',slot.x+.5,slot.y+.5,
+        slot.w-1,slot.h-1,2,2)
+    lg.setColor(active and .17 or .65,active and .18 or .67,
+        active and .20 or .69,1)
+    lg.setFont(font)
+    lg.printf(slot.label,slot.x+2,slot.y+
+        (slot.h-font:getHeight())/2,slot.w-4,'center')
 end
 function M.step(p,direction)
     M.regions(p)
     assert(direction==1 or direction==-1,'Passo de opacidade invalido')
     return {id=direction==1 and 'increase' or 'decrease',
-        label=direction==1 and '+' or '−',
-        icon=direction==1 and 'add' or 'subtract',
-        x=p.x+(direction==1 and 242 or 190),
-        y=p.y+p.h-49,w=41,h=30}
+        label='',icon=direction==1 and 'add' or 'subtract',
+        x=p.x+(direction==1 and 255 or 49),
+        y=p.y+p.h-35,w=29,h=29}
 end
 local function drawGlyph(g,glyphId,x,y)
     -- Ícones vetoriais próprios, sem assets do APK.

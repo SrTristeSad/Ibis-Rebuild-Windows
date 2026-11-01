@@ -9,10 +9,10 @@ function T.run()
         local w,h=size[1],size[2]
         local popup=Compact.popup(w,h,'layers')
         local r=Rail.rect(popup)
-        check(r.x>=popup.x+13 and r.x+r.w<=popup.x+181 and
-            r.y>popup.y+popup.h-49 and
+        check(r.x>=popup.x+85 and r.x+r.w<=popup.x+250 and
+            r.y>popup.y+popup.h-37 and
             r.y+r.h<=popup.y+popup.h-3,
-            'Opacity rail must fit below label, left of +/- buttons')
+            'Opacity rail must sit between minus/plus under blending')
         check(Rail.hit(popup,r.x,r.y+6) and
             Rail.hit(popup,r.x+r.w,r.y+6),
             'Opacity slider endpoints must be clickable')

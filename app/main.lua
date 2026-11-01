@@ -84,7 +84,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '46-paleta-ferramentas.png','47-janela-camadas.png',
     '48-camadas-visuais.png','49-camada-selecionada.png',
     '50-camadas-comandos.png','51-camadas-adicionar.png',
-    '52-camadas-duplicar.png'}
+    '52-camadas-duplicar.png','53-camadas-rodape-oficial.png',
+    '54-camadas-mesclagem-rodape.png'}
 local A={toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2864,6 +2865,35 @@ local function advanceShowcase()
         assert(A.compactPanel=='layers',
             'Duplicar fechou a janela')
         status('Camadas: nova camada duplicada pela barra compacta')
+    elseif sh.stage==53 then
+        assert(A.compactPanel=='layers')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local footer=LayerChrome.footerControls(p)
+        assert(#footer==3 and not footer[1].available
+            and not footer[2].available and footer[3].available,
+            'Clipping e Alpha Lock nao podem simular motores')
+        local before=Native.bytes(A.layerSession.composite)
+        A.showcaseFooterProof={pixels=before,
+            history=A.layerSession:historyStats().undo,
+            layers=#A.doc.layers,active=A.doc.active_layer}
+        status('Rodape: controles desabilitados e mesclagem Normal')
+    elseif sh.stage==54 then
+        local old=assert(A.showcaseFooterProof)
+        local w,h=love.graphics.getDimensions()
+        local slot=LayerChrome.footerControls(
+            Compact.popup(w,h,'layers'))[3]
+        love.draw()
+        love.mousepressed(slot.x+slot.w/2,slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,slot.y+slot.h/2,1,false)
+        assert(A.compactPanel=='blends',
+            'Modo Normal do rodape nao abriu mesclagem')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels
+            and A.layerSession:historyStats().undo==old.history
+            and #A.doc.layers==old.layers
+            and A.doc.active_layer==old.active,
+            'Abrir mesclagem pelo rodape alterou o desenho')
+        status('Rodape: mesclagem abriu sem editar o documento')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -7306,6 +7336,9 @@ local function drawCompactPopup(w,h)
         end
         local bg=LayerChrome.backgroundRow(p,stop-start+1)
         if bg then LayerChrome.background(bg,A.fonts.small) end
+        -- O grupo de acoes fica junto aos botoes superiores.
+        -- O rodape segue a hierarquia oficial: clipping/bloqueio,
+        -- modo de mistura e barra de opacidade.
         for _,item in ipairs(LayerChrome.toolbar(p,'footer')) do
             local disabled=(item.id=='previous' and start>=maxStart)
                 or (item.id=='next' and start<=1)
@@ -7328,23 +7361,38 @@ local function drawCompactPopup(w,h)
                 end)}
             end
         end
+        for _,slot in ipairs(LayerChrome.footerControls(p)) do
+            LayerChrome.paintFooterControl(slot,A.fonts.small)
+            if slot.available and slot.id=='blend' then
+                A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
+                    w=slot.w,h=slot.h,
+                    fn=guard(function()A.compactPanel='blends'end)}
+            end
+        end
+        local mx,my=love.mouse.getPosition()
+        local hint=LayerChrome.actionHint(p,mx,my)
+        if hint then
+            fitted(hint,p.x+94,p.y+15,'small','muted',145)
+        end
         local layer=A.doc.layers[A.doc.active_layer]
         local drag=A.compactLayerOpacityDrag
         local shown=drag and drag.index==A.doc.active_layer and
             drag.value or layer.opacity
-        text(('Opacidade %.0f%%'):format(shown*100),
-            p.x+14,p.y+p.h-45,'small')
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.setFont(A.fonts.small)
+        love.graphics.print(('%.0f%%'):format(shown*100),
+            p.x+7,p.y+p.h-29)
         local track=LayerOpacity.rect(p)
-        c('line')
+        love.graphics.setColor(.54,.56,.58,1)
         love.graphics.rectangle('fill',track.x,track.y+4,
             track.w,5,2,2)
-        c('accent')
+        love.graphics.setColor(.93,.94,.96,1)
         love.graphics.rectangle('fill',track.x,track.y+4,
             math.max(1,track.w*LayerOpacity.fraction(shown)),5,2,2)
-        c('text')
+        love.graphics.setColor(1,1,1,1)
         love.graphics.circle('fill',
             track.x+track.w*LayerOpacity.fraction(shown),
-            track.y+6.5,5,16)
+            track.y+6.5,7,20)
         for _,direction in ipairs({-1,1}) do
             local item=LayerChrome.step(p,direction)
             local disabled=not LayerOpacitySteps.canChange(

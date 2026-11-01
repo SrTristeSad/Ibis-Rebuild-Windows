@@ -17,34 +17,44 @@ function T.run()
         check(#top==3 and #bottom==4)
         local seen={}
         for _,slot in ipairs(top) do
-            check(slot.y>=p.y+44 and slot.y+slot.h<=p.y+84,
-                'Controle superior colide com cabecalho ou selecao')
-            check(slot.x>=p.x+10 and
-                slot.x+slot.w<=p.x+p.w-10,
-                'Controle superior extrapola largura')
-            for _,prev in ipairs(seen) do
-                check(prev.x+prev.w<=slot.x,
-                    'Controles superiores sobrepostos')
-            end
             seen[#seen+1]=slot
         end
-        seen={}
         for _,slot in ipairs(bottom) do
-            check(slot.y>=reg.footer.y and
-                slot.y+slot.h<reg.footer.y+38,
-                'Controle inferior fora do rodape')
-            check(slot.x>=p.x+10 and
-                slot.x+slot.w<=p.x+p.w-10)
-            for _,prev in ipairs(seen) do
-                check(prev.x+prev.w<=slot.x,
-                    'Controles inferiores sobrepostos')
-            end
             seen[#seen+1]=slot
+        end
+        check(#seen==7,'Sete acoes anteriores devem permanecer')
+        for i,slot in ipairs(seen) do
+            check(slot.y>=p.y+44 and slot.y+slot.h<=p.y+84,
+                'Comando invade cabecalho ou camada de selecao')
+            check(slot.x>=p.x+10 and slot.x+slot.w<p.x+p.w-9,
+                'Comando sai da janela')
+            if i>1 then
+                check(seen[i-1].x+seen[i-1].w<=slot.x,
+                    'Comandos de camada sobrepostos')
+            end
+            check(Chrome.actionHint(p,slot.x+slot.w/2,
+                slot.y+slot.h/2)==slot.hint,
+                'Tooltip do comando nao coincide com clique')
+        end
+        local foot=Chrome.footerControls(p)
+        check(#foot==3 and foot[3].id=='blend',
+            'Rodape deve conter Clipping, Alpha Lock, Normal')
+        check(not foot[1].available and not foot[2].available
+            and foot[3].available,
+            'Ferramentas sem motor nao podem estar ativas')
+        for i,slot in ipairs(foot) do
+            check(slot.y>=reg.footer.y and
+                slot.y+slot.h<=reg.footer.y+37,
+                'Comando do rodape extrapola faixa superior')
+            if i>1 then
+                check(foot[i-1].x+foot[i-1].w<slot.x,
+                    'Comandos do rodape sobrepostos')
+            end
         end
         local minus=Chrome.step(p,-1)
         local plus=Chrome.step(p,1)
         check(minus.x+minus.w<plus.x
-            and minus.y>=reg.footer.y+38
+            and minus.y>=reg.footer.y+45
             and plus.x+plus.w<=p.x+p.w-10,
             'Passos de opacidade colidem')
         local selection=Layer.selectionRow(p)
@@ -74,6 +84,7 @@ function T.run()
     check(not pcall(Chrome.regions,{x=0,y=0,w=200,h=200}))
     check(not pcall(Chrome.toolbar,{x=0,y=0,w=298,h=440},'unknown'))
     check(not pcall(Chrome.step,{x=0,y=0,w=298,h=440},0))
+    check(Chrome.actionHint(UI.popup(960,640,'layers'),0,0)==nil)
     -- Regression real: cada icone deve produzir primitivas graficas.
     -- Isto detecta o antigo bug de nome local `icon` que comparava
     -- a propria funcao com uma string e desenhava botoes vazios.
@@ -99,6 +110,12 @@ function T.run()
         glyphMarks=0
         Chrome.paintAction(slot,false,fakeFont)
         check(glyphMarks>=3,'Icone nao produziu nenhum traco: '..slot.id)
+    end
+    for _,slot in ipairs(Chrome.footerControls(p)) do
+        glyphMarks=0
+        Chrome.paintFooterControl(slot,fakeFont)
+        check(glyphMarks>=2,
+            'Rodape nao desenhou o botao: '..slot.id)
     end
     love=previous
     return {suite='ibis-layer-chrome',passed=true,assertions=n,

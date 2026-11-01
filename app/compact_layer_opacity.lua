@@ -6,7 +6,7 @@ function Rail.rect(p)
         type(p.y)=='number' and type(p.w)=='number' and
         type(p.h)=='number' and p.w>=298 and p.h>=354,
         'Invalid compact layer popup')
-    return {x=p.x+15,y=p.y+p.h-20,w=158,h=12}
+    return {x=p.x+91,y=p.y+p.h-30,w=150,h=12}
 end
 function Rail.hit(p,x,y)
     if type(x)~='number' or type(y)~='number' or
