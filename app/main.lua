@@ -5778,8 +5778,8 @@ local function drawCompactPopup(w,h)
                 text('Pendente',r.x+r.w-89,r.y+10,'small','warn')
             end
         end
-        text('Outros modos exigem o motor Lua de composição.',
-            p.x+14,p.y+p.h-27,'small','muted')
+        fitted('Demais modos: motor Lua pendente.',
+            p.x+14,p.y+p.h-27,'small','muted',p.w-28)
     elseif kind=='layers' then
         local ls=A.layerSession
         local count=#A.doc.layers
