@@ -83,7 +83,7 @@ function UI.popup(w,h,kind)
         type(h)=='number' and h>=640,'Janela compacta inválida')
     local isTop=kind=='view' or kind=='stabilizer'
         or kind=='ruler' or kind=='materials'
-    local width=kind=='color' and 404 or (kind=='tools' or
+    local width=kind=='color' and 404 or kind=='ruler' and 390 or (kind=='tools' or
         kind=='filters' or kind=='text') and 420
         or isTop and 318 or 298
     local height=kind=='color' and 450 or
@@ -92,7 +92,7 @@ function UI.popup(w,h,kind)
         kind=='layers' and math.min(440,h-260) or
         kind=='view' and 314 or kind=='stabilizer' and 254 or
         kind=='blends' and math.min(440,h-260) or
-        (kind=='ruler' or kind=='materials') and 222 or 354
+        kind=='ruler' and 402 or kind=='materials' and 222 or 354
     return {x=(kind=='layers' or kind=='color' or kind=='blends' or isTop)
         and w-width-20 or 20,
         y=134,w=width,h=height}

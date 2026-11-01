@@ -37,6 +37,7 @@ local IbisPanels=require('ibis_visual_panels')
 local LayerUI=require('ibis_layer_ui')
 local FilterUI=require('ibis_filter_ui')
 local TextUI=require('ibis_text_ui')
+local RulerUI=require('ibis_ruler_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -61,7 +62,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '19-paleta-cores.png','20-cores-pessoais.png',
     '21-camada-selecao.png','22-modos-mesclagem.png',
     '23-selecao-ativa.png','24-catalogo-filtros.png',
-    '25-texto-rascunho.png','26-texto-estilo.png'}
+    '25-texto-rascunho.png','26-texto-estilo.png',
+    '27-reguas-catalogo.png','28-regua-espelho.png'}
 local A={screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
@@ -2209,6 +2211,45 @@ local function advanceShowcase()
             A.dirty==previous.dirty and A.tool==previous.tool,
             'Estilo de texto alterou o documento')
         status('Texto: parametros visuais; aplicacao pendente')
+    elseif sh.stage==27 then
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local dirty=A.dirty
+        local tool=A.tool
+        showcaseTopClick('ruler',tool,'ruler')
+        A.rulerUi=RulerUI.new()
+        assert(A.rulerUi.previewId==nil,
+            'Regua nao pode ligar guia sem motor')
+        A.showcaseRulerCheck={rgba=before,undo=edits,
+            dirty=dirty,tool=tool}
+        status('Réguas · 8 tipos documentados, sem aplicação')
+    elseif sh.stage==28 then
+        assert(A.compactPanel=='ruler' and A.showcaseRulerCheck)
+        local old=A.showcaseRulerCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'ruler')
+        local row=RulerUI.cell(p,5)
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        love.mousereleased(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.rulerUi.previewId=='mirror' and A.compactPanel=='ruler',
+            'Espelho nao ganhou destaque visual')
+        local clear=RulerUI.clear(p)
+        love.draw()
+        love.mousepressed(clear.x+clear.w/2,clear.y+clear.h/2,1,false)
+        love.mousereleased(clear.x+clear.w/2,clear.y+clear.h/2,1,false)
+        assert(A.rulerUi.previewId==nil,
+            'Limpar deve remover apenas selecao visual')
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        love.mousereleased(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.rulerUi.previewId=='mirror',
+            'Selecao visual nao restaurada')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool,
+            'Régua pendente alterou obra ou historico')
+        status('Régua Espelho · opção destacada, motor pendente')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5926,10 +5967,52 @@ local function drawCompactPopup(w,h)
             (p.w-32)*A.stabilization/5,7,3,3)
         button('Abrir ajustes do pincel',x,y+163,p.w-32,32,
             function()A.compactPanel='properties' end)
-    elseif kind=='ruler' or kind=='materials' then
+    elseif kind=='ruler' then
+        -- Icones simbolicos, todos locais ao painel, sem guias no canvas.
+        local draft=A.rulerUi or RulerUI.new()
+        A.rulerUi=draft
+        for i,item in ipairs(RulerUI.types) do
+            local r=RulerUI.cell(p,i)
+            local active=draft.previewId==item.id
+            button('',r.x,r.y,r.w,r.h,function()
+                RulerUI.select(draft,item.id)
+                status(item.name..' · régua não aplicada, motor pendente')
+            end,active)
+            local sx,sy=r.x+26,r.y+23
+            box(r.x+5,r.y+7,41,40,'panel')
+            c(active and 'accent' or 'muted')
+            love.graphics.push()
+            love.graphics.translate(sx,sy)
+            love.graphics.scale(1.65,1.65)
+            love.graphics.setLineWidth(1.1)
+            for _,cmd in ipairs(RulerUI.symbol(item.id)) do
+                if cmd.op=='line' then
+                    love.graphics.line(unpack(cmd.a))
+                elseif cmd.op=='circle' then
+                    love.graphics.circle('line',unpack(cmd.a))
+                elseif cmd.op=='ellipse' then
+                    love.graphics.ellipse('line',unpack(cmd.a))
+                elseif cmd.op=='rectangle' then
+                    love.graphics.rectangle('line',unpack(cmd.a))
+                end
+            end
+            love.graphics.pop()
+            fitted(item.name,r.x+53,r.y+8,'small','text',r.w-61)
+            text('Pendente',r.x+53,r.y+33,'small','warn')
+        end
+        local clear=RulerUI.clear(p)
+        button('Limpar',clear.x,clear.y,clear.w,clear.h,function()
+            RulerUI.select(draft,nil)
+        end,false,draft.previewId==nil)
+        local caption=RulerUI.caption(p)
+        local current=RulerUI.get(draft.previewId)
+        fitted(current and ('Opção: '..current.name) or 'Nenhuma régua',
+            caption.x,caption.y,'small','text',caption.w)
+        fitted('Guias não implementadas · apenas aparência.',
+            p.x+14,p.y+p.h-28,'small','warn',p.w-28)
+    elseif kind=='materials' then
         local x,y=p.x+16,p.y+56
-        text(kind=='ruler' and 'RÉGUAS E GUIAS'
-            or 'BIBLIOTECA DE MATERIAIS',x,y,'small','muted')
+        text('BIBLIOTECA DE MATERIAIS',x,y,'small','muted')
         text('Painel visual disponível.',x,y+39,'body','text')
         text('Motor Lua ainda não implementado.',x,y+68,'small','warn')
         text('Nenhum pixel será alterado.',x,y+96,'small','muted')
