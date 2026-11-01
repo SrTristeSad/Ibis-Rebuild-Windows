@@ -31,3 +31,7 @@ jobs:
         run: luajit tests/test_raster_layer_integration.lua
       - name: Lua Windows Ink queue and pressure model
         run: luajit tests/test_windows_ink_lua.lua
+      - name: RGBA compositor equivalence
+        run: luajit tests/test_raster_compositor_equivalence.lua
+      - name: Canvas composition benchmark (informational)
+        run: luajit tests/bench_raster_composition.lua
