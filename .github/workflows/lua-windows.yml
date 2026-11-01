@@ -147,7 +147,9 @@ jobs:
             '05-camadas.png','06-editor-desktop.png',
             '07-editor-960x640.png','08-ajustes-pincel.png',
             '09-opacidade-camadas.png','10-seletor-ferramentas.png',
-            '11-criar-tela.png','12-galeria-desenhos.png')
+            '11-criar-tela.png','12-galeria-desenhos.png',
+            '13-menu-visualizacao.png','14-estabilizador.png',
+            '15-opcoes-forma.png','16-materiais-pendentes.png')
           foreach ($name in $expected) {
             $path = Join-Path $screens $name
             if (!(Test-Path $path)) { throw "Falta captura: $name" }
@@ -157,7 +159,7 @@ jobs:
               throw "PNG corrompido: $name"
             }
           }
-          Write-Host "12 capturas reais do editor Lua aprovadas"
+          Write-Host "16 capturas reais do editor Lua aprovadas"
       - name: Publish real Lua editor screenshots
         uses: actions/upload-artifact@v4
         with:
