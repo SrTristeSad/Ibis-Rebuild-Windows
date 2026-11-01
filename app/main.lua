@@ -32,6 +32,7 @@ local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
 local IbisTools=require('ibis_visual_tools')
+local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 local GalleryUI=require('ibis_gallery_ui')
 local LayerKeys=require('compact_layer_keys')
@@ -4203,6 +4204,51 @@ local function drawCompactQuick(kind,w,h,value)
     c('text')
     love.graphics.circle('fill',d.x+d.w*factor,d.y+7,6,18)
 end
+-- Seis controles no canto superior direito, com a ordem e a
+-- separação de tarefas documentadas nos tutoriais do ibisPaint.
+-- Ações sem backend permanecem explícitas e nunca pintam no canvas.
+local function drawTopToolbar(w,h)
+    for _,slot in ipairs(TopToolbar.toolbar(w,h)) do
+        local active=(slot.id=='selection' and A.tool=='select')
+            or (slot.id=='shape' and A.tool=='shape')
+            or (slot.id=='view' and A.compactPanel=='view')
+            or (slot.id=='stabilizer' and A.compactPanel=='stabilizer')
+            or (slot.id=='ruler' and A.compactPanel=='ruler')
+            or (slot.id=='materials' and A.compactPanel=='materials')
+        local mx,my=love.mouse.getPosition()
+        local hovered=mx>=slot.x and mx<=slot.x+slot.w
+            and my>=slot.y and my<=slot.y+slot.h
+        c(active and 'selected' or hovered and 'line' or 'panel',.95)
+        love.graphics.circle('fill',slot.x+slot.w/2,
+            slot.y+slot.h/2,slot.w/2,32)
+        c(active and 'accent' or 'line')
+        love.graphics.setLineWidth(1)
+        love.graphics.circle('line',slot.x+slot.w/2,
+            slot.y+slot.h/2,slot.w/2-.5,32)
+        c(active and 'accent' or 'text')
+        Icons.draw(slot.icon,slot.x+slot.w/2,
+            slot.y+slot.h/2,19)
+        A.buttons[#A.buttons+1]={
+            x=slot.x,y=slot.y,w=slot.w,h=slot.h,
+            fn=guard(function()
+                if slot.id=='selection' or slot.id=='shape' then
+                    local target=slot.id=='selection' and 'select' or 'shape'
+                    if selectTool(target) then
+                        A.compactPanel='properties'
+                    end
+                else
+                    toggleCompactPanel(slot.id)
+                end
+            end)}
+        if hovered and not A.compactPanel then
+            local labelX=math.max(10,
+                math.min(w-144,slot.x-45))
+            box(labelX,slot.y+slot.h+5,132,24,'panel')
+            fitted(slot.label,labelX+8,slot.y+slot.h+10,
+                'small','text',118)
+        end
+    end
+end
 local function drawEditor(w,h)
     local panel=w-268
     if not A.compactUi then
@@ -4298,6 +4344,7 @@ local function drawEditor(w,h)
             button('Ajustar',197,81,79,35,fit)
             text(('%d%%'):format(math.floor(A.zoom*100+.5)),
                 288,89,'small','muted')
+            drawTopToolbar(w,h)
         end
     end
     -- View-only controls remain outside the raster and layer history.
@@ -5322,6 +5369,12 @@ local function drawCompactPopup(w,h)
     text(kind=='tools' and 'Ferramentas' or
         kind=='layers' and 'Camadas raster' or
         kind=='color' and 'Cores · RGBA' or
+        kind=='view' and 'Visualização' or
+        kind=='stabilizer' and 'Estabilizador' or
+        kind=='ruler' and 'Régua' or
+        kind=='materials' and 'Materiais' or
+        A.tool=='shape' and 'Formas' or
+        A.tool=='select' and 'Seleção' or
         'Ajustes',p.x+14,p.y+13,'body')
     button('×',p.x+p.w-44,p.y+8,31,30,function()
         A.compactPanel=nil end)
@@ -5353,9 +5406,101 @@ local function drawCompactPopup(w,h)
             (IbisTools.get(A.visualPendingTool).label..': aguardando motor')
             or 'Ferramentas da interface · motor Lua',
             p.x+16,p.y+p.h-28,'small','muted')
+    elseif kind=='view' then
+        local x,y=p.x+16,p.y+53
+        text('TELA',x,y,'small','muted')
+        button('Ajustar ao espaço',x,y+30,p.w-32,36,fit)
+        button('−',x,y+83,44,34,
+            function()zoomCanvas(1/1.25)end)
+        text(('Zoom: %.0f%%'):format(A.zoom*100),
+            x+54,y+91,'small','text')
+        button('+',x+p.w-76,y+83,44,34,
+            function()zoomCanvas(1.25)end)
+        text('ROTAÇÃO',x,y+137,'small','muted')
+        iconButton('rotate-left',x,y+162,54,34,
+            function()rotateCanvas(-math.pi/12)end)
+        button('0°',x+65,y+162,p.w-162,34,resetCanvasRotation)
+        iconButton('rotate-right',x+p.w-86,y+162,54,34,
+            function()rotateCanvas(math.pi/12)end)
+        button(A.previewEnabled and 'Prévia: ligada'
+            or 'Prévia: desligada',x,y+213,p.w-32,34,function()
+                A.previewEnabled=not A.previewEnabled
+            end,A.previewEnabled)
+    elseif kind=='stabilizer' then
+        local x,y=p.x+16,p.y+54
+        text('SUAVIZAÇÃO DE TRAÇO',x,y,'small','muted')
+        text('Ajuste do estabilizador Lua existente.',
+            x,y+29,'small','muted')
+        button('−',x,y+72,56,40,function()
+            finishStroke()
+            A.stabilization=math.max(0,A.stabilization-1)
+        end,false,A.stabilization==0)
+        text(('Nível %d / 5'):format(A.stabilization),
+            x+79,y+83,'body','text')
+        button('+',x+p.w-88,y+72,56,40,function()
+            finishStroke()
+            A.stabilization=math.min(5,A.stabilization+1)
+        end,false,A.stabilization==5)
+        c('line')
+        love.graphics.rectangle('fill',x,y+140,p.w-32,7,3,3)
+        c('accent')
+        love.graphics.rectangle('fill',x,y+140,
+            (p.w-32)*A.stabilization/5,7,3,3)
+        button('Abrir ajustes do pincel',x,y+163,p.w-32,32,
+            function()A.compactPanel='properties' end)
+    elseif kind=='ruler' or kind=='materials' then
+        local x,y=p.x+16,p.y+56
+        text(kind=='ruler' and 'RÉGUAS E GUIAS'
+            or 'BIBLIOTECA DE MATERIAIS',x,y,'small','muted')
+        text('Painel visual disponível.',x,y+39,'body','text')
+        text('Motor Lua ainda não implementado.',x,y+68,'small','warn')
+        text('Nenhum pixel será alterado.',x,y+96,'small','muted')
+        button('Voltar ao desenho',x,y+112,p.w-32,32,
+            function()A.compactPanel=nil end)
     elseif kind=='properties' then
         local x,y=p.x+17,p.y+54
-        if A.tool=='fill' then
+        if A.tool=='shape' then
+            text('TIPO DE FORMA',x,y,'small','muted')
+            button('Retângulo',x,y+28,125,34,
+                function()A.shapeKind=0 end,A.shapeKind==0)
+            button('Elipse',x+139,y+28,125,34,
+                function()A.shapeKind=1 end,A.shapeKind==1)
+            button('Linha',x,y+74,125,34,
+                function()A.shapeKind=2 end,A.shapeKind==2)
+            button('Contorno',x,y+130,125,34,
+                function()A.shapeFilled=false end,not A.shapeFilled)
+            button('Preencher',x+139,y+130,125,34,
+                function()A.shapeFilled=true end,A.shapeFilled)
+            text(('Espessura: %d px'):format(A.shapeWidth),
+                x,y+189,'small','muted')
+            button('−',x,y+213,62,31,function()
+                A.shapeWidth=math.max(1,A.shapeWidth-1)
+            end,false,A.shapeWidth==1)
+            button('+',x+79,y+213,62,31,function()
+                A.shapeWidth=math.min(128,A.shapeWidth+1)
+            end,false,A.shapeWidth==128)
+        elseif A.tool=='select' then
+            local rect=A.selection
+            text('SELEÇÃO RETANGULAR',x,y,'small','muted')
+            text(rect and ('Área: '..rect.w..' × '..rect.h..' px')
+                or 'Arraste na tela para selecionar.',
+                x,y+31,'small','muted')
+            button('Girar -90°',x,y+73,125,34,
+                function()applySelectionTransform(3,1)end,
+                false,not rect or rect.h>A.doc.width or
+                    rect.w>A.doc.height)
+            button('Girar +90°',x+139,y+73,125,34,
+                function()applySelectionTransform(1,1)end,
+                false,not rect or rect.h>A.doc.width or
+                    rect.w>A.doc.height)
+            button('Diminuir 50%',x,y+125,125,34,
+                function()applySelectionTransform(0,.5)end,false,not rect)
+            button('Ampliar 200%',x+139,y+125,125,34,
+                function()applySelectionTransform(0,2)end,
+                false,not rect or rect.w*2>A.doc.width
+                    or rect.h*2>A.doc.height)
+            text('Ctrl+D remove a seleção.',x,y+193,'small','muted')
+        elseif A.tool=='fill' then
             text('Tolerância: '..A.fillTolerance..'/255',x,y,'body')
             button('−',x,y+32,60,34,function()
                 A.fillTolerance=math.max(0,A.fillTolerance-8) end)
@@ -5390,8 +5535,10 @@ local function drawCompactPopup(w,h)
                 drawCompactBrushPreview(p)
             end
         end
-        button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
-            openBrushLibrary)
+        if A.tool=='brush' or A.tool=='erase' then
+            button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
+                openBrushLibrary)
+        end
     elseif kind=='color' then
         drawColorPopup(p)
     elseif kind=='layers' then
