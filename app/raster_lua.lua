@@ -101,19 +101,31 @@ local function compose(dst, src, opacity, rect)
     for y = rect.y, rect.y+rect.h-1 do
         for x = rect.x, rect.x+rect.w-1 do
             local p = (y*dst.width+x)*4
-            local sa = (src.bytes[p+3]/255)*opacity
-            local da = dst.bytes[p+3]/255
-            local oa = sa+da*(1-sa)
-            if oa > 0 then
-                for k = 0, 2 do
-                    local v = (src.bytes[p+k]*sa
-                        +dst.bytes[p+k]*da*(1-sa))/oa
-                    dst.bytes[p+k] = math.floor(v+0.5)
-                end
+            local sourceAlpha=src.bytes[p+3]
+            if opacity==1 and sourceAlpha==255 then
+                -- Source-over 100% opaco: copiar bytes e matematicamente
+                -- equivalente, sem divisao/normalizacao por pixel.
+                dst.bytes[p],dst.bytes[p+1],dst.bytes[p+2],dst.bytes[p+3]=
+                    src.bytes[p],src.bytes[p+1],src.bytes[p+2],255
+            elseif sourceAlpha==0 and dst.bytes[p+3]>0 then
+                -- Fonte totalmente transparente nao altera destino
+                -- com alfa positivo. Se destino for transparente, devemos
+                -- normalizar seu RGB para zero como no compositor anterior.
             else
-                dst.bytes[p],dst.bytes[p+1],dst.bytes[p+2] = 0,0,0
+                local sa = (sourceAlpha/255)*opacity
+                local da = dst.bytes[p+3]/255
+                local oa = sa+da*(1-sa)
+                if oa > 0 then
+                    for k = 0, 2 do
+                        local v = (src.bytes[p+k]*sa
+                            +dst.bytes[p+k]*da*(1-sa))/oa
+                        dst.bytes[p+k] = math.floor(v+0.5)
+                    end
+                else
+                    dst.bytes[p],dst.bytes[p+1],dst.bytes[p+2] = 0,0,0
+                end
+                dst.bytes[p+3] = math.floor(oa*255+0.5)
             end
-            dst.bytes[p+3] = math.floor(oa*255+0.5)
         end
     end
 end
