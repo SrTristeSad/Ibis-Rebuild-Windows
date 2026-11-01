@@ -15,7 +15,7 @@ function UI.toolbar(w,h)
         type(h)=='number' and h>=640,'Dimensão insuficiente')
     local total=#UI.IDS*UI.WIDTH+(#UI.IDS-1)*UI.GAP
     local x=math.floor((w-total)/2)
-    local y=h-112
+    local y=h-60
     local result={}
     for i,id in ipairs(UI.IDS) do
         result[i]={id=id,label=UI.LABELS[i],
@@ -40,9 +40,9 @@ function UI.quick(w,h)
         type(h)=='number' and h>=640,'Janela pequena para os ajustes')
     local left=math.floor((w-640)/2)
     return {
-        diameter={x=left+185,y=h-169,w=370,h=14,
+        diameter={x=left+185,y=h-123,w=370,h=14,
             labelX=left+52,valueX=left+569},
-        opacity={x=left+185,y=h-143,w=370,h=14,
+        opacity={x=left+185,y=h-97,w=370,h=14,
             labelX=left+52,valueX=left+569}
     }
 end

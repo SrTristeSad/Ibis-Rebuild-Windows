@@ -37,7 +37,7 @@ function T.run()
             quick.diameter.w==quick.opacity.w,
             'The two compact rails must share a horizontal axis')
         local bounds=Workspace.bounds(w,h,true,true)
-        check(bounds.bottom==h-190 and
+        check(bounds.bottom==h-130 and
             bounds.bottom<quick.diameter.y-5,
             'Canvas must end before draggable settings')
         for _,kind in ipairs({'diameter','opacity'}) do

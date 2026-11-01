@@ -12,7 +12,7 @@ function M.layout(w,h,page,count)
         'Viewport insuficiente para a faixa')
     assert(type(count)=='number' and count%1==0 and count>0,
         'Quantidade de ferramentas invalida')
-    local available=h-190-M.TOP-4
+    local available=h-130-M.TOP-35
     local visible=math.max(1,math.floor(available/M.ROW))
     local pages=math.ceil(count/visible)
     assert(type(page)=='number' and page%1==0

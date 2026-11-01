@@ -17,7 +17,7 @@ function T.run()
             check(slot.id==expected[i],'Mobile toolbar action order changed')
             check(slot.w>=72 and slot.h>=34,'Touch target too small')
             check(slot.x>=12 and slot.x+slot.w<w-12 and
-                slot.y>=h-140 and slot.y+slot.h<h-48,
+                slot.y>=h-85 and slot.y+slot.h<=h-8,
                 'Bottom toolbar must be fully inside viewport')
             check(slot.x>prevRight,'Toolbar buttons must not overlap')
             check(UI.pick(w,h,slot.x+slot.w/2,

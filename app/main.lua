@@ -1414,7 +1414,7 @@ local function verifyCompactUi()
         love.mousepressed(b.x+b.w/2,b.y+b.h/2,1,false)
     end
     local clip=Workspace.bounds(w,h,true,true)
-    assert(clip.right==w-16 and clip.bottom==h-190,
+    assert(clip.right==w-16 and clip.bottom==h-130,
         'Canvas compacto deve evitar os ajustes e a barra inferior')
     assert(A.zoom==zoom and A.rotation==rotation and
         A.panX==panX and A.panY==panY,
@@ -5174,7 +5174,7 @@ local function drawEditor(w,h)
     end
     local cx,cy=canvasTransform()
     if A.compactUi and not A.focusMode then
-        box(0,64,w,h-248,'canvas')
+        box(0,64,w,h-194,'canvas')
     else
         box(12,120,w-Workspace.panelWidth(paneHidden())-20,h-178,'canvas')
     end
@@ -5718,12 +5718,12 @@ local function drawEditor(w,h)
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
     if A.compactUi and not A.focusMode then
-        box(0,h-184,w,136,'panel')
+        box(0,h-130,w,130,'panel')
         c('line')
-        love.graphics.rectangle('fill',0,h-184,w,1)
+        love.graphics.rectangle('fill',0,h-130,w,1)
         -- Barra de regulagens menos intrusiva, proxima do original.
         local activeName=EditorTools.fromId(A.tool).label
-        fitted(activeName,22,h-179,'small','muted',170)
+        fitted(activeName,22,h-113,'small','muted',170)
         if A.tool=='brush' or A.tool=='erase' then
             drawCompactQuick('diameter',w,h,A.brushDiameter)
             drawCompactQuick('opacity',w,h,A.brushOpacity)
@@ -5733,7 +5733,7 @@ local function drawEditor(w,h)
                 (w-350)/2,h-161,'small','muted')
         end
         c('line')
-        love.graphics.rectangle('fill',w/2-352,h-126,704,1)
+        love.graphics.rectangle('fill',w/2-352,h-62,704,1)
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and
                 (A.tool=='brush' or A.tool=='erase')) or

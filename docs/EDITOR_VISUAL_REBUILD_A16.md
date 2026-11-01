@@ -38,3 +38,12 @@ comportamentos são idênticos à build Android **14.1.2**.
 O confronto pixel a pixel ainda depende de imagens dessa
 versão e do mesmo tamanho de viewport. Não houve extração
 nem inclusão de assets do APK.
+
+## Segunda revisão de proporção do rodapé
+
+A inspeção das capturas de CI revelou uma região inferior excessiva.
+A faixa do editor compacto ocupa agora aproximadamente 130 px de
+altura em vez de 184 px; os controles de espessura e opacidade
+continuam empilhados, e o dock com ícones foi rebaixado ao rodapé.
+O canvas recupera 60 px de espaço vertical e sua área de clique e
+recorte acompanham a nova geometria, sem deformar ou editar pixels.

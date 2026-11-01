@@ -27,7 +27,7 @@ function T.run()
                 check(not seen[e.id],'Ferramenta repetida')
                 seen[e.id]=true
                 check(e.x>=0 and e.x+e.w<=120
-                    and e.y>=prev and e.y+e.h<=h-190,
+                    and e.y>=prev and e.y+e.h<=h-130,
                     'Faixa extrapola canvas seguro')
                 check(Workspace.contains(w,h,true,e.x+e.w/2,
                     e.y+e.h/2,true),
@@ -37,7 +37,7 @@ function T.run()
             local nav=Rail.navigation(w,h,page,#Tools.entries)
             if rect.pages>1 then
                 check(nav~=nil and nav.y>=prev
-                    and nav.y+nav.h<=h-160,
+                    and nav.y+nav.h<=h-130,
                     'Paginacao fora da area livre')
                 check(nav.back==(page>1) and
                     nav.forward==(page<rect.pages),
