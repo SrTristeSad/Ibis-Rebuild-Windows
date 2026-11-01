@@ -32,6 +32,7 @@ local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
 local IbisTools=require('ibis_visual_tools')
+local IbisPanels=require('ibis_visual_panels')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -486,9 +487,11 @@ local function updateColorDrag(kind,x,y)
         local sat,bright=ColorPanel.svAt(p,x,y)
         local hue=ColorPanel.hsb(A.color)
         A.color=ColorPanel.fromHSB(hue,sat,bright,a)
-    elseif kind=='hue' then
+    elseif kind=='hue' or kind=='wheel' then
         local _,sat,bright=ColorPanel.hsb(A.color)
-        A.color=ColorPanel.fromHSB(ColorPanel.hueAt(p,y),sat,bright,a)
+        local angle=kind=='wheel' and IbisPanels.wheelHue(p,x,y)
+            or ColorPanel.hueAt(p,y)
+        A.color=ColorPanel.fromHSB(angle,sat,bright,a)
     elseif kind=='alpha' then
         A.color=ColorPanel.rgba(r,g,b,
             ColorPanel.hsbAlphaValue(p,x))
@@ -5097,19 +5100,33 @@ local function drawColorPopup(p)
         local selectY=square.y+square.h*(1-bright/100)
         c('text');love.graphics.setLineWidth(2)
         love.graphics.circle('line',selectX,selectY,5,18)
-        local hueRect=ColorPanel.hueRect(p)
-        for i=0,35 do
-            local value=ColorPanel.fromHSB(i*10,100,100,255)
+        -- A roda interativa representa a matiz ao redor da caixa
+        -- de saturacao/brilho. A hitbox usa a mesma geometria pura.
+        local wheel=IbisPanels.wheel(p)
+        for i=0,95 do
+            local a0=i*math.pi/48
+            local a1=(i+1)*math.pi/48
+            local value=ColorPanel.fromHSB(i*360/96,100,100,255)
             local r,g,b=Colors.channels(value)
             love.graphics.setColor(r/255,g/255,b/255,1)
-            love.graphics.rectangle('fill',hueRect.x,
-                hueRect.y+i*hueRect.h/36,hueRect.w,
-                math.ceil(hueRect.h/36)+.1)
+            love.graphics.polygon('fill',
+                wheel.cx+math.cos(a0)*wheel.outer,
+                wheel.cy+math.sin(a0)*wheel.outer,
+                wheel.cx+math.cos(a1)*wheel.outer,
+                wheel.cy+math.sin(a1)*wheel.outer,
+                wheel.cx+math.cos(a1)*wheel.inner,
+                wheel.cy+math.sin(a1)*wheel.inner,
+                wheel.cx+math.cos(a0)*wheel.inner,
+                wheel.cy+math.sin(a0)*wheel.inner)
         end
-        c('text');love.graphics.setLineWidth(2)
-        local yy=hueRect.y+hueRect.h*hue/360
-        love.graphics.rectangle('line',hueRect.x-2,yy-2,
-            hueRect.w+4,4,1,1)
+        local hx,hy=IbisPanels.wheelPoint(p,hue)
+        love.graphics.setColor(.11,.12,.13,1)
+        love.graphics.circle('fill',hx,hy,7,20)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.circle('line',hx,hy,7,20)
+        c('line')
+        love.graphics.rectangle('line',square.x-.5,square.y-.5,
+            square.w+1,square.h+1,1,1)
         text(('H %.0f°'):format(hue),x+299,y+195,'small')
         text(('S %.0f%%'):format(sat),x+299,y+226,'small')
         text(('B %.0f%%'):format(bright),x+299,y+257,'small')
@@ -5122,7 +5139,7 @@ local function drawColorPopup(p)
         c('text')
         love.graphics.circle('fill',rail.x+rail.w*alpha/255,
             rail.y+5,5,18)
-        text('Alfa',x+23,y+350,'small','muted')
+        text('Opacidade',x+21,y+370,'small','muted')
     elseif A.colorMode=='rgb' then
         local r,g,b,a=Colors.channels(A.color)
         local values={R=r,G=g,B=b,A=a}
@@ -5442,14 +5459,12 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 if channel then kind='rgb-'..channel end
             else
                 local square=ColorPanel.svRect(p)
-                local hue=ColorPanel.hueRect(p)
                 local alpha=ColorPanel.hsbAlphaRect(p)
                 if x>=square.x and x<=square.x+square.w and
                     y>=square.y and y<=square.y+square.h then
                     kind='sv'
-                elseif x>=hue.x-3 and x<=hue.x+hue.w+3 and
-                    y>=hue.y-3 and y<=hue.y+hue.h+3 then
-                    kind='hue'
+                elseif IbisPanels.wheelHit(p,x,y) then
+                    kind='wheel'
                 elseif x>=alpha.x-3 and x<=alpha.x+alpha.w+3 and
                     y>=alpha.y-5 and y<=alpha.y+alpha.h+5 then
                     kind='alpha'
