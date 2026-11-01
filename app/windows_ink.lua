@@ -17,13 +17,38 @@ local function reset()
     ring={};readAt=1;writeAt=1
     activeId=0;lastPenTick=0;Ink.dropped=0
 end
+local function nextIndex(index) return index%MAX_QUEUE+1 end
+local function previousIndex(index) return (index-2)%MAX_QUEUE+1 end
+local function discardMove()
+    local slot=readAt
+    while slot~=writeAt do
+        if ring[slot] and ring[slot].kind==2 then
+            -- Preserva os extremos DOWN/UP: remove apenas um MOVE,
+            -- compactando a fila circular. O(n) somente em saturacao.
+            local last=previousIndex(writeAt)
+            while slot~=last do
+                ring[slot]=ring[nextIndex(slot)]
+                slot=nextIndex(slot)
+            end
+            ring[last]=nil
+            writeAt=last
+            return true
+        end
+        slot=nextIndex(slot)
+    end
+    return false
+end
 local function push(event)
-    local nextAt=writeAt%MAX_QUEUE+1
+    local nextAt=nextIndex(writeAt)
     if nextAt==readAt then
         Ink.dropped=Ink.dropped+1
         if event.kind==2 then return end
-        -- Entregas de DOWN/UP/CANCEL nunca sao descartadas em favor de MOVE.
-        readAt=readAt%MAX_QUEUE+1
+        -- Em transicoes criticas, elimina MOVE antes de sacrificar DOWN.
+        if not discardMove() then
+            ring[readAt]=nil
+            readAt=nextIndex(readAt)
+        end
+        nextAt=nextIndex(writeAt)
     end
     ring[writeAt]=event
     writeAt=nextAt
@@ -96,6 +121,7 @@ if enabled then
         uint32_t __stdcall GetCurrentProcessId(void);
         uint64_t __stdcall GetTickCount64(void);
         void __stdcall SetLastError(uint32_t);
+        uint32_t __stdcall GetLastError(void);
     ]]
     -- Validar tamanhos ANTES de instalar o callback: divergencia seria
     -- corrupcao de memoria na chamada GetPointerPenInfo.
@@ -195,7 +221,7 @@ function Ink.init()
         local previous=user.SetWindowLongPtrW(window,-4,
             ffi.cast('intptr_t',fn))
         if previous==0 then
-            local failure=tonumber(ffi.errno())
+            local failure=tonumber(kernel.GetLastError())
             fn:free()
             error('Falha ao registrar WndProc Lua: '..failure)
         end
@@ -249,7 +275,8 @@ function Ink.close()
         local prior=user.SetWindowLongPtrW(hwnd,-4,
             ffi.cast('intptr_t',oldProc))
         if prior==0 then
-            recordError('Falha ao restaurar WndProc original')
+            recordError('Falha ao restaurar WndProc original: '..
+                tostring(kernel.GetLastError()))
             return false
         end
     end
