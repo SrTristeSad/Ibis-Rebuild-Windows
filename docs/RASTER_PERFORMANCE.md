@@ -51,3 +51,50 @@ No Linux: `luajit tests/bench_raster_composition.lua`.
 - Consumo de memória e tempo de desfazer/refazer com o histórico.
 - Comparação visual e de desempenho com a referência Android,
   sem afirmar paridade 1:1.
+
+## Otimização de linhas opacas e destino opaco — 01/11/2026
+
+O compositor percorre as linhas de um retângulo para identificar fontes
+totalmente opacas em opacidade 100%. Nessas linhas, utiliza **ffi.copy**
+(RGBA8) em lugar de compor cada pixel. Quando o destino está opaco e a
+fonte é semitransparente, evita divisões pelo alfa de saída, mantendo o
+arredondamento original.
+
+A implementação **não guarda metadados de opacidade**: cada chamada
+reavalia os alfas, inclusive após desenhos, borracha e transformações.
+Regiões parcialmente transparentes continuam usando source-over.
+
+**Validação:** 28 casos completos/parciais com 2, 4 e 8 camadas,
+além de 28.672 comparações de pixels com destino opaco e diferentes
+opacidades fracionárias, byte a byte contra a fórmula anterior.
+
+### Comparação lado a lado no mesmo processo (1024×1024, duas camadas)
+
+| GitHub runner | Percurso anterior por pixel | Linhas opacas + destino opaco | Razão anterior/novo |
+|---|---:|---:|---:|
+| Linux | 15,747 ms | 10,748 ms | 1,47× |
+| Windows | 17,875 ms | 18,375 ms | 0,97× |
+
+Os tempos do Windows **não demonstraram aceleração** nesse teste:
+podem existir variações de máquina, compilação JIT, agendamento e
+precisão de cronômetro. Não prometer melhoria universal. Medições são
+**tempo de CPU de composição**, não taxa de quadros nem latência da
+caneta ou upload de texturas.
+
+Fontes: [GitHub Actions Linux](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/41339331774),
+[GitHub Actions Windows](https://github.com/SrTristeSad/Ibis-Rebuild-Windows/actions/runs/41339331816).
+Para repetir em LuaJIT: executar
+\`tests/test_raster_opaque_rows.lua\` e
+\`tests/bench_raster_comparison.lua\`, ou \`test.ps1\` no Windows.
+
+### Escalonamento com mais camadas (512×512, último CI)
+
+| Camadas | Linux completo | Linux parcial 64×64 | Windows completo | Windows parcial 64×64 |
+|---|---:|---:|---:|---:|
+| 2 | 4,769 ms | 0,091 ms | 4,667 ms | 0,063 ms |
+| 4 | 13,924 ms | 0,232 ms | 15,000 ms | 0,313 ms |
+| 8 | 32,478 ms | 0,513 ms | 30,333 ms | 0,500 ms |
+
+São casos controlados e não reproduzem toda a complexidade de um
+documento real. Próximo passo: perfilar composição semitransparente,
+histórico de edição e custo de upload para GPU no Windows.
