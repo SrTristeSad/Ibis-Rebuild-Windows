@@ -6587,15 +6587,19 @@ function IbisPanels.drawGalleryExpanded(w,h)
         lg.setColor(.55,.57,.59,1)
         lg.rectangle('line',image.x,image.y,image.w,image.h)
     end
-    local label=IbisPanels.galleryDetail.caption(w,h)
+    -- Titulo e dimensoes acompanham os limites da imagem, como
+    -- no tutorial #20; nao inventar duracao de desenho no Store.
+    local label=IbisPanels.galleryDetail.captionForImage(w,h,image)
     lg.setColor(.19,.20,.22,1)
     lg.setFont(A.fonts.small)
+    local dimensions=('%d × %d'):format(doc.width,doc.height)
+    local metaWidth=math.ceil(A.fonts.small:getWidth(dimensions))+4
     local title=TextFit.truncate('Título: '..doc.name,
-        math.max(1,label.w-165),function(t)
+        math.max(1,label.w-metaWidth-12),function(t)
             return A.fonts.small:getWidth(t) end)
     lg.print(title,label.x,label.y)
-    lg.printf(('%d × %d'):format(doc.width,doc.height),
-        label.x+label.w-158,label.y,158,'right')
+    lg.printf(dimensions,label.x+label.w-metaWidth,
+        label.y,metaWidth,'right')
     -- Sem setas fixas de desktop sobre a galeria Android.
     -- Apenas a area visivel sob hover recebe callback de mouse.
     local pointerX,pointerY=love.mouse.getPosition()

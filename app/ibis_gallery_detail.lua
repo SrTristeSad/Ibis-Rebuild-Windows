@@ -72,6 +72,25 @@ function M.caption(w,h)
     viewport(w,h)
     return {x=110,y=h-126,w=w-220,h=26}
 end
+-- Os metadados devem acompanhar a obra, nao toda a largura
+-- da janela. Imagens muito estreitas recebem uma legenda minima
+-- centralizada, sem invadir as bordas nem o rodape.
+function M.captionForImage(w,h,image)
+    viewport(w,h)
+    assert(type(image)=='table'
+        and type(image.x)=='number' and type(image.y)=='number'
+        and type(image.w)=='number' and type(image.h)=='number'
+        and image.w>=1 and image.h>=1
+        and image.x>=0 and image.x+image.w<=w
+        and image.y>=54 and image.y+image.h<=h-52,
+        'Imagem invalida para a legenda da galeria')
+    local width=math.min(w-220,math.max(260,image.w))
+    return {
+        x=math.floor(image.x+(image.w-width)/2),
+        y=math.floor(image.y+image.h+14),
+        w=width,h=26
+    }
+end
 
 -- Os cinco controles seguem a ordem da barra inferior mostrada
 -- no tutorial oficial #20. Apenas Criar tem callback existente.

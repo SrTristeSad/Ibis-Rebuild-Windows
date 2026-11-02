@@ -55,6 +55,25 @@ function T.run()
                 'Imagem ampliada colide com controles')
             ok(math.abs(box.w/box.h-size[1]/size[2])<.01,
                 'Imagem ampliada distorceu proporcao')
+            local imageCaption=Detail.captionForImage(w,h,box)
+            ok(imageCaption.y==box.y+box.h+14 and
+                imageCaption.y+imageCaption.h<h-52,
+                'Legenda nao acompanha a base do desenho')
+            ok(imageCaption.x>=0 and imageCaption.w>=260 and
+                imageCaption.x+imageCaption.w<=w and
+                math.abs((imageCaption.x+imageCaption.w/2)-
+                    (box.x+box.w/2))<=1,
+                'Legenda nao esta centralizada sob a obra')
+            ok(imageCaption.w==math.max(260,box.w),
+                'Legenda nao respeita a largura da obra')
+        end
+        for _,shape in ipairs({{2048,64},{64,2048}}) do
+            local veryThin=Detail.imageRect(w,h,shape[1],shape[2])
+            local line=Detail.captionForImage(w,h,veryThin)
+            ok(line.w>=260 and line.x>=0 and
+                line.x+line.w<=w and
+                line.y==veryThin.y+veryThin.h+14,
+                'Legenda de formato extremo nao acompanha a imagem')
         end
         local back=Detail.nav(w,h,-1)
         local forward=Detail.nav(w,h,1)
@@ -119,6 +138,12 @@ function T.run()
         'Sampler ampliado ignorou limite de memoria')
     ok(not pcall(Detail.imageRect,500,400,512,512),
         'Dimensao nao suportada passou')
+    ok(not pcall(Detail.captionForImage,960,640,
+        {x=-2,y=80,w=120,h=120}),
+        'Legenda aceitou imagem fora da janela')
+    ok(not pcall(Detail.captionForImage,960,640,
+        {x=20,y=580,w=140,h=100}),
+        'Legenda aceitou obra sobre o rodape')
     ok(not pcall(Detail.step,source,'a','all',2),
         'Navegacao aceitou salto invalido')
     ok(not pcall(Detail.artworks,source,'wrong'),
