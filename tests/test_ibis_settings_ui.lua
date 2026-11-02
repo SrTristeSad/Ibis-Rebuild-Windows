@@ -45,8 +45,13 @@ function T.run(root)
     check(UI.labelsVisible(nil) and UI.labelsVisible(true)
         and not UI.labelsVisible(false))
     check(UI.positionAvailable('popup')
-        and not UI.positionAvailable('left')
-        and not UI.positionAvailable('right'))
+        and UI.positionAvailable('left')
+        and UI.positionAvailable('right')
+        and not UI.positionAvailable('other'))
+    check(UI.normalizePosition(nil)=='left'
+        and UI.normalizePosition('missing')=='left'
+        and UI.normalizePosition('right')=='right'
+        and UI.normalizePosition('popup')=='popup')
     check(not pcall(UI.columnRect,{x=0,y=0,w=540,h=438},4))
     if root then
         -- O Store atual usa LuaJIT FFI Win32; a prova de
@@ -56,9 +61,11 @@ function T.run(root)
         local prefs=store:getPreferences()
         prefs.toolPopupColumns=1
         prefs.toolPopupLabels=false
+        prefs.toolRailPosition='right'
         store:setPreferences(prefs)
         local saved=Store.open(root):getPreferences()
-        check(saved.toolPopupColumns==1 and saved.toolPopupLabels==false,
+        check(saved.toolPopupColumns==1 and saved.toolPopupLabels==false
+            and saved.toolRailPosition=='right',
             'Preferencias do seletor nao persistem no Store')
     end
     return {suite='ibis-settings-ui',passed=true,assertions=count}
