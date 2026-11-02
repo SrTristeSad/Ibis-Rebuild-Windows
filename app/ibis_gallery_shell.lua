@@ -536,10 +536,16 @@ function M.dragAdvance(gesture,x,y,now)
         and type(y)=='number' and type(now)=='number',
         'Arrasto da galeria invalido')
     gesture.px=x;gesture.py=y
-    local distance=(x-gesture.x)^2+(y-gesture.y)^2
-    if distance>M.DRAG_SLOP^2 then gesture.moved=true end
-    if now-gesture.started>=M.LONG_PRESS_SECONDS then
+    -- A pointer that moves before the hold is an aborted tap/scroll,
+    -- never a delayed drag that could reorder documents accidentally.
+    if not gesture.active and not gesture.earlyMove and
+        now-gesture.started>=M.LONG_PRESS_SECONDS then
         gesture.active=true
+    end
+    local distance=(x-gesture.x)^2+(y-gesture.y)^2
+    if distance>M.DRAG_SLOP^2 then
+        gesture.moved=true
+        if not gesture.active then gesture.earlyMove=true end
     end
     return gesture.active
 end
