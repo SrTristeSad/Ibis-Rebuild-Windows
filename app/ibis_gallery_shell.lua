@@ -98,7 +98,17 @@ function M.parentDrop(w,h,x,y)
     M.layout(w,h)
     return x>=10 and x<122 and y>=7 and y<49
 end
-function M.dropAction(current,parent,source,target,w,h,x,y)
+function M.groupHit(rect,x,y)
+    assert(type(rect)=='table' and type(rect.x)=='number'
+        and type(rect.y)=='number' and type(rect.w)=='number'
+        and type(rect.h)=='number','Galeria: cartao invalido')
+    -- Dropping over the thumbnail's centre groups; dropping along its
+    -- edges continues reordering the grid. This disambiguation is local
+    -- to the rebuild and not a measured Android hitbox.
+    return x>=rect.x+28 and x<rect.x+rect.w-28
+        and y>=rect.y+22 and y<rect.y+rect.h-47
+end
+function M.dropAction(current,parent,source,target,w,h,x,y,targetRect)
     assert(type(current)=='string' and
         (parent==nil or type(parent)=='string') and
         type(source)=='string','Galeria: destino de arrasto invalido')
@@ -109,6 +119,10 @@ function M.dropAction(current,parent,source,target,w,h,x,y)
     if not target or target==source then return nil end
     if source:sub(1,2)=='p:' and target:sub(1,2)=='f:' then
         return {kind='move',folder=target:sub(3)}
+    end
+    if source:sub(1,2)=='p:' and target:sub(1,2)=='p:'
+        and targetRect and M.groupHit(targetRect,x,y) then
+        return {kind='group',target=target}
     end
     return {kind='reorder',target=target}
 end
