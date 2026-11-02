@@ -9317,7 +9317,20 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         end
     end
     if buttonNumber==1 then
-        for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
+        for i=#A.buttons,1,-1 do
+            local b=A.buttons[i]
+            if x>=b.x and x<=b.x+b.w and
+                y>=b.y and y<=b.y+b.h then
+                A.shapePreview=nil
+                if A.screen=='gallery' and not A.gallerySelecting
+                    and not A.galleryTrash and b.galleryKey
+                    and (not A.showcase or A.showcase.stage>100) then
+                    A.galleryGesture=GalleryShell.dragBegin(
+                        b.galleryKey,x,y,love.timer.getTime(),b.fn)
+                else b.fn() end
+                return
+            end
+        end
         -- An unimplemented visual tool must NEVER fall through to the
         -- previously active brush. Magic Wand is the first pixel-mask
         -- engine here; other pending modes consume the click safely.
@@ -9428,6 +9441,29 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.screen=='gallery' and b==1 and A.galleryGesture then
+        local gesture=A.galleryGesture
+        A.galleryGesture=nil
+        GalleryShell.dragAdvance(gesture,x,y,love.timer.getTime())
+        if gesture.active then
+            local w,h=love.graphics.getDimensions()
+            local target=GalleryShell.dragTarget(w,h,A.galleryScroll,
+                A.galleryItems or {},x,y)
+            if target and target~=gesture.key then
+                guard(function()
+                    if A.store:reorderGallery(A.folder,gesture.key,target) then
+                        refreshGallery()
+                        status('Ordem das obras salva na galeria')
+                    end
+                end)()
+            else
+                status('Arrasto cancelado; ordem preservada')
+            end
+        elseif not gesture.moved and gesture.callback then
+            gesture.callback()
+        end
+        return
+    end
     if A.desktopLayerOpacityDrag and b==1 then
         local drag=A.desktopLayerOpacityDrag
         A.desktopLayerOpacityDrag=nil
@@ -9507,6 +9543,11 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.screen=='gallery' and A.galleryGesture then
+        GalleryShell.dragAdvance(A.galleryGesture,x,y,
+            love.timer.getTime())
+        return
+    end
     if A.desktopLayerOpacityDrag then
         A.desktopLayerOpacityDrag.value=DesktopOpacity.value(
             love.graphics.getWidth(),love.graphics.getHeight(),x)
@@ -9647,6 +9688,7 @@ function love.focus(focused)
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
         A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
+        A.galleryGesture=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil
         navigateCompactPanel(nil)
@@ -9657,6 +9699,7 @@ function love.focus(focused)
 end
 function love.wheelmoved(x,y)
     if A.screen=='gallery' then
+        A.galleryGesture=nil
         if A.modal or A.galleryCreateMenu or A.galleryMoveMenu
             or A.galleryMoreMenu or A.galleryDeleteMenu
             or A.galleryRestoreMenu then return end
@@ -9778,7 +9821,10 @@ function love.keypressed(key)
         end
     end
     if A.screen=='gallery' and key=='escape' then
-        if A.modal then
+        if A.galleryGesture then
+            A.galleryGesture=nil
+            status('Reorganização cancelada')
+        elseif A.modal then
             A.modal=nil;love.keyboard.setTextInput(false)
         elseif A.galleryCreateMenu then A.galleryCreateMenu=false
         elseif A.galleryMoreMenu then A.galleryMoreMenu=false
