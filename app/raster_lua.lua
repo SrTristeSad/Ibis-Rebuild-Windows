@@ -72,7 +72,12 @@ function Raster.pixel(b, x, y, rgba)
     checkBuffer(b)
     local p = offset(b, x, y)
     local r, g, blue, a = color(rgba)
-    b.bytes[p], b.bytes[p+1], b.bytes[p+2], b.bytes[p+3] = r, g, blue, a
+    if b.alphaLock then
+        if b.bytes[p+3]==0 then return end
+        b.bytes[p],b.bytes[p+1],b.bytes[p+2]=r,g,blue
+    else
+        b.bytes[p], b.bytes[p+1], b.bytes[p+2], b.bytes[p+3] = r, g, blue, a
+    end
 end
 function Raster.readPixel(b, x, y)
     checkBuffer(b)

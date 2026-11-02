@@ -57,6 +57,8 @@ end
 -- cobertura por pixel. Ambos sao opcionais apenas para gestos simples.
 local function stroke(b,baseline,mask,x0,y0,x1,y1,d0,d1,rgba,o0,o1,hardness,tx,ty,style)
     checkStroke(b,x0,y0,x1,y1,d0,d1,o0,o1,hardness,tx,ty,style)
+    -- Locking transparency makes erasing an intentional no-op.
+    if b.alphaLock and style==2 then return end
     local r,g,blue,ca=colors(rgba)
     if o0==0 and o1==0 then return end
     if style~=2 and ca==0 then return end
@@ -156,6 +158,18 @@ local function stroke(b,baseline,mask,x0,y0,x1,y1,d0,d1,rgba,o0,o1,hardness,tx,t
                                     pixels[pos],pixels[pos+1],pixels[pos+2]=
                                         base[pos],base[pos+1],base[pos+2]
                                 end
+                            elseif b.alphaLock then
+                                -- Recolor existing pixels without changing
+                                -- their original (possibly partial) alpha.
+                                if base[pos+3]>0 then
+                                    pixels[pos]=round(clamp(r*effective+
+                                        base[pos]*(1-effective),0,255))
+                                    pixels[pos+1]=round(clamp(g*effective+
+                                        base[pos+1]*(1-effective),0,255))
+                                    pixels[pos+2]=round(clamp(blue*effective+
+                                        base[pos+2]*(1-effective),0,255))
+                                    pixels[pos+3]=base[pos+3]
+                                end
                             else
                                 local da=base[pos+3]/255
                                 local remain=da*(1-effective)
@@ -170,6 +184,15 @@ local function stroke(b,baseline,mask,x0,y0,x1,y1,d0,d1,rgba,o0,o1,hardness,tx,t
                         end
                     elseif style==2 then
                         erase(pixels,pos,alpha)
+                    elseif b.alphaLock then
+                        if pixels[pos+3]>0 then
+                            pixels[pos]=round(clamp(r*alpha+
+                                pixels[pos]*(1-alpha),0,255))
+                            pixels[pos+1]=round(clamp(g*alpha+
+                                pixels[pos+1]*(1-alpha),0,255))
+                            pixels[pos+2]=round(clamp(blue*alpha+
+                                pixels[pos+2]*(1-alpha),0,255))
+                        end
                     else
                         blend(pixels,pos,r,g,blue,alpha)
                     end

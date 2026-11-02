@@ -101,6 +101,8 @@ return function(R)
         local n=w*h
         local seed=(y*w+x)*4
         local sr,sg,sb,sa=p[seed],p[seed+1],p[seed+2],p[seed+3]
+        if b.alphaLock and (sa==0 or
+            (sr==r and sg==g and sb==blue)) then return 0 end
         if tolerance==0 and sr==r and sg==g and sb==blue and sa==a then
             return 0
         end
@@ -114,13 +116,18 @@ return function(R)
             local at=queue[head]
             head=head+1
             local i=at*4
-            p[i],p[i+1],p[i+2],p[i+3]=r,g,blue,a
-            changed=changed+1
+            if not b.alphaLock or p[i]~=r or
+                p[i+1]~=g or p[i+2]~=blue then
+                p[i],p[i+1],p[i+2]=r,g,blue
+                if not b.alphaLock then p[i+3]=a end
+                changed=changed+1
+            end
             local xx=at%w
             local yy=floor(at/w)
             local function consider(other)
                 if visited[other]~=0 then return end
                 local pos=other*4
+                if b.alphaLock and p[pos+3]==0 then return end
                 if abs(p[pos]-sr)<=tolerance and
                     abs(p[pos+1]-sg)<=tolerance and
                     abs(p[pos+2]-sb)<=tolerance and
@@ -167,7 +174,19 @@ return function(R)
                         or (dx*dx)/(irx*irx)+(dy*dy)/(iry*iry)>=1)
                 end
                 if covered then
-                    compositeRGBA(b.bytes,(y*b.width+x)*4,r,g,blue,a/255)
+                    local pos=(y*b.width+x)*4
+                    if b.alphaLock then
+                        if b.bytes[pos+3]>0 then
+                            local fraction=a/255
+                            for k,v in ipairs({r,g,blue}) do
+                                b.bytes[pos+k-1]=floor(
+                                    v*fraction+
+                                    b.bytes[pos+k-1]*(1-fraction)+.5)
+                            end
+                        end
+                    else
+                        compositeRGBA(b.bytes,pos,r,g,blue,a/255)
+                    end
                 end
             end
         end
