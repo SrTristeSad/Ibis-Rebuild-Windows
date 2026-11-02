@@ -6764,7 +6764,6 @@ local function drawGallery(w,h)
                 end
                 setFolder(parent)
             end)}
-    end
     else
         -- Voltar na raiz agora tem destino real: tela inicial.
         A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
