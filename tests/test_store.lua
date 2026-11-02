@@ -137,6 +137,73 @@ function Test.run(rootPath)
     check(Store.open(rootPath):getBrushes()[1].thicknessToPressure==-1.25,'brush library roundtrip')
     rejects(function() store:saveBrushes({{id='bad',name='Bad',thicknessToPressure=2.01}}) end,'invalid observed setter range persisted')
     check(store:getBrushes()[1].id=='research_default','failed brush write altered library')
+    -- v14.1 recoverable deletion: atomic journal only, never RBD file loss.
+    local recoverable=store:createProject('Recuperar RBD1',2,2,
+        child,pixels)
+    local layeredDeleted=store:createProject('Recuperar RBD2',
+        2,2,child,pixels)
+    layeredDeleted.layers=JSON.array({
+        {id=store:newLayerId(),name='Overlay',
+            visible=true,opacity=.65,pixels=pixels}})
+    layeredDeleted.active_layer=1
+    layeredDeleted.pixels=nil
+    store:saveProject(layeredDeleted)
+    local imageA=fs:read('projects/'..recoverable.id..'.rbd')
+    local imageB=fs:read('projects/'..layeredDeleted.id..'.rbd')
+    local baseline=#store:listProjects(child)
+    rejects(function()store:deleteProjects(
+        {recoverable.id,recoverable.id},child)end,
+        'Duplicate deletion accepted')
+    rejects(function()store:deleteProjects(
+        {recoverable.id,'p_not_found'},child)end,
+        'Missing document accepted in deletion preflight')
+    rejects(function()store:deleteProjects(
+        {recoverable.id},parent)end,
+        'Wrong source accepted for deletion')
+    check(#store:deletedProjects()==0 and
+        #store:listProjects(child)==baseline,
+        'Failed preflight modified gallery state')
+    local del=store:deleteProjects(
+        {recoverable.id,layeredDeleted.id},child)
+    check(del.deleted==2 and #store:listProjects(child)==baseline-2,
+        'Atomic batch deletion did not hide both projects')
+    check(fs:read('projects/'..recoverable.id..'.rbd')==imageA
+        and fs:read('projects/'..layeredDeleted.id..'.rbd')==imageB,
+        'Deleting project changed original RBD bytes')
+    rejects(function()store:openProject(recoverable.id)end,
+        'Deleted project still opens in editor')
+    rejects(function()store:moveProjects(
+        {layeredDeleted.id},parent,child)end,
+        'Deleted project accepted in move batch')
+    local reopenedTrash=Store.open(rootPath)
+    check(#reopenedTrash:deletedProjects()==2
+        and #reopenedTrash:listProjects(child)==baseline-2,
+        'Deleted index not persisted across restart')
+    local deletedIndex=fs:read('deleted.json')
+    local writeAtomic=store.fs.writeAtomic
+    store.fs.writeAtomic=function(self,path,data)
+        if path=='deleted.json' then error('disk error in trash') end
+        return writeAtomic(self,path,data)
+    end
+    rejects(function()store:restoreProjects(
+        {recoverable.id})end,
+        'Write failure during restore not reported')
+    store.fs.writeAtomic=writeAtomic
+    check(fs:read('deleted.json')==deletedIndex
+        and #store:deletedProjects()==2,
+        'Failed recovery altered deletion index')
+    local restored=store:restoreProjects(
+        {recoverable.id,layeredDeleted.id})
+    check(restored.restored==2 and
+        #store:listProjects(child)==baseline,
+        'Recover did not restore source gallery')
+    check(fs:read('projects/'..recoverable.id..'.rbd')==imageA
+        and fs:read('projects/'..layeredDeleted.id..'.rbd')==imageB,
+        'Recover changed RBD bytes')
+    check(#Store.open(rootPath):deletedProjects()==0
+        and Store.open(rootPath):openProject(
+            layeredDeleted.id).layers[1].opacity==.65,
+        'Recovery not persisted or lost layer properties')
     local goodPath='projects/'..doc.id..'.rbd'; local original=fs:read(goodPath)
     fs:writeAtomic(goodPath,original:sub(1,-2))
     rejects(function() store:openProject(doc.id) end,'truncated document accepted')
