@@ -2,7 +2,7 @@
 
 ## Problema verificado
 O artefato **IbisRebuild-Lua-Real-Screenshots** do workflow Windows
-41519732599, commit 4d3538323, contém o PNG real \`00-inicial.png\`.
+41519732599, commit 4d3538323, contém o PNG real `00-inicial.png`.
 Nele o logotipo aparece com aproximadamente 215 px de largura no
 viewport 1220×800, e os dois destinos ficam agrupados perto do centro.
 O tamanho é muito menor do que a composição exibida na referência pública.
@@ -14,23 +14,30 @@ O tamanho é muito menor do que a composição exibida na referência pública.
   https://ibispaint.com/lecture/index.jsp?lang=pt&no=03
 - Alteração oficial 12.2.0 que removeu Coleção:
   https://ibispaint.com/newFeature.jsp
-- \`docs/RESEARCH.md\` e \`docs/research/evidence-index.json\`:
+- `docs/RESEARCH.md` e `docs/research/evidence-index.json`:
   evidência derivada, **sem comparação dinâmica 14.1.2**.
 
 A referência 14.0.2 NÃO comprova equivalência 1:1 com a versão 14.1.2.
 A roda cromática e os pictogramas permanecem vetores próprios.
 
 ## Alterações
-- \`app/ibis_home_screen.lua\`: marca dimensionada em função da
+- `app/ibis_home_screen.lua`: marca dimensionada em função da
   viewport, mantendo proporções tipográficas e posicionamento central;
   círculos maiores e mais separados, com labels e áreas de clique
   sincronizados. Nenhuma fonte ou textura é recriada durante frames.
-- \`tests/test_ibis_gallery_ui.lua\`: verifica geometria e separação
+- `tests/test_ibis_gallery_ui.lua`: verifica geometria e separação
   em 960×640, 1220×800 e 1920×1080, inclusive ausência de hitbox
   no espaço vazio entre os destinos.
-- \`app/main.lua\`, raster Lua, camadas, RBD2 e Windows Ink intactos.
+- `app/main.lua`, raster Lua, camadas, RBD2 e Windows Ink intactos.
 
 ## Validação
 Executar workflow Linux e Windows do commit da A36 e inspecionar
-o novo \`00-inicial.png\` publicado pelo LÖVE. Não considerar
+o novo `00-inicial.png` publicado pelo LÖVE. Não considerar
 a comparação visual final aprovada sem essas verificações.
+
+## Revisão da captura A36
+A primeira captura real do commit `d72fdbd` ampliou a marca, mas
+mostrou serrilhamento/desfoque por escalonamento de fonte de 40 px.
+A revisão usa fonte LÖVE gerada no tamanho final e mantida em cache,
+mais haste vetorial do `P` cromático. A fonte é criada somente quando
+a resolução altera seu tamanho. Verificar novamente com captura real.

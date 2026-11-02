@@ -3,6 +3,7 @@
 -- Geometria visual baseada na captura pública de 14.0.2, não
 -- em medição autenticada do Android 14.1.2.
 local M={}
+local cachedBrandFont,cachedBrandSize
 local BG={.145,.30,.46,1}
 local colors={
     {1,.64,.11,1},{1,.44,.13,1},{.91,.25,.38,1},
@@ -48,13 +49,16 @@ function M.hit(w,h,x,y)
     return nil
 end
 local function wheel(g,cx,cy,r)
+    -- Haste de P atrás da roda cromática, como no logotipo de referência.
+    g.setColor(1,1,1,1)
+    g.rectangle('fill',cx-r*.93,cy,r*.16,r*1.08)
     for i,rgba in ipairs(colors) do
         g.setColor(rgba)
         local a=(i-1)*math.pi/6-math.pi/2
         g.arc('fill',cx,cy,r,a,a+math.pi/6,12)
     end
     g.setColor(1,1,1,1)
-    g.setLineWidth(.7)
+    g.setLineWidth(math.max(2,r*.025))
     g.circle('line',cx,cy,r)
     g.setColor(BG)
     g.circle('fill',cx,cy,r*.43)
@@ -90,24 +94,33 @@ function M.draw(w,h,fonts)
     g.rectangle('fill',0,0,w,h)
     g.setColor(1,1,1,1)
     g.setFont(fonts.large)
-    -- O disco cromático substitui a primeira letra de "Paint".
     local left,right='ibis','aint'
-    local height=fonts.large:getHeight()
-    local leftWidth=fonts.large:getWidth(left)
+    local baseHeight=fonts.large:getHeight()
+    local rawWidth=fonts.large:getWidth(left)+baseHeight*1.12+
+        fonts.large:getWidth(right)
+    local brand=M.logoMetrics(w,h,rawWidth,baseHeight)
+    -- Escalar fontes de 40 px na GPU desfoca as letras: criar uma
+    -- fonte nativa maior somente quando a viewport mudar.
+    local size=math.floor(40*brand.scale+.5)
+    if not cachedBrandFont or cachedBrandSize~=size then
+        cachedBrandFont=g.newFont(size)
+        cachedBrandSize=size
+    end
+    local large=cachedBrandFont
+    local height=large:getHeight()
+    local leftWidth=large:getWidth(left)
     local gap=height*1.12
-    local full=leftWidth+gap+fonts.large:getWidth(right)
-    local brand=M.logoMetrics(w,h,full,height)
-    g.push()
-    g.translate(brand.x,brand.y)
-    g.scale(brand.scale)
-    g.print(left,0,0)
-    wheel(g,leftWidth+gap/2,height*.50,height*.49)
-    g.print(right,leftWidth+gap,0)
-    g.pop()
+    local full=leftWidth+gap+large:getWidth(right)
+    local x=math.floor((w-full)/2)
+    local y=brand.y
+    g.setFont(large)
+    g.print(left,x,y)
+    wheel(g,x+leftWidth+gap/2,y+height*.50,height*.42)
+    g.print(right,x+leftWidth+gap,y)
     g.setFont(fonts.small)
     g.setColor(.85,.90,.94,1)
     g.printf('Rebuild para Windows · base Android 14.1.2',
-        brand.x,brand.y+brand.h+14,brand.w,'right')
+        x,y+height+14,full,'right')
     local mx,my=love.mouse.getPosition()
     for _,kind in ipairs({'gallery','online'}) do
         local rect=buttons[kind]
