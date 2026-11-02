@@ -32,6 +32,44 @@ function M.scroll(w,h,count,current,direction)
     local max=M.maxScroll(w,h,count)
     return math.max(0,math.min(max,current-direction*70))
 end
+-- Edge scrolling runs only during an active artwork/folder drag.
+-- Constants are a conservative Windows adaptation, not reverse-
+-- engineered timings from ibisPaint Android.
+M.DRAG_EDGE_ZONE=72
+M.DRAG_EDGE_MIN_SPEED=160
+M.DRAG_EDGE_MAX_SPEED=660
+function M.dragAutoScroll(w,h,count,current,y,dt)
+    local layout=M.layout(w,h)
+    local max=M.maxScroll(w,h,count)
+    assert(type(current)=='number' and current==current
+        and type(y)=='number' and y==y
+        and type(dt)=='number' and dt==dt and dt>=0,
+        'Galeria: tempo ou posicao de arrasto invalidos')
+    current=math.max(0,math.min(max,current))
+    if max==0 or dt==0 or y<layout.top or y>layout.bottom then
+        return current,0
+    end
+    local ratio=0
+    local direction=0
+    if y<layout.top+M.DRAG_EDGE_ZONE then
+        ratio=(layout.top+M.DRAG_EDGE_ZONE-y)/
+            M.DRAG_EDGE_ZONE
+        direction=-1
+    elseif y>layout.bottom-M.DRAG_EDGE_ZONE then
+        ratio=(y-(layout.bottom-M.DRAG_EDGE_ZONE))/
+            M.DRAG_EDGE_ZONE
+        direction=1
+    end
+    if direction==0 then return current,0 end
+    ratio=math.max(0,math.min(1,ratio))
+    -- Clamp irregular frame times: focus loss does not jump 1000 pixels.
+    local velocity=M.DRAG_EDGE_MIN_SPEED+
+        (M.DRAG_EDGE_MAX_SPEED-M.DRAG_EDGE_MIN_SPEED)*ratio
+    local nextScroll=math.max(0,math.min(max,
+        current+direction*velocity*math.min(dt,.05)))
+    if nextScroll==current then return current,0 end
+    return nextScroll,direction
+end
 function M.card(w,h,index,scroll)
     local l=M.layout(w,h)
     assert(type(index)=='number' and index%1==0 and index>=1
