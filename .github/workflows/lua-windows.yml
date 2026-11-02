@@ -233,7 +233,9 @@ jobs:
             '116-arrasto-rolagem-cancelado.png',
             '117-alpha-lock-camada-ativado.png',
             '118-alpha-lock-pintura-real.png',
-            '119-alpha-lock-rbd2-reaberto.png')
+            '119-alpha-lock-rbd2-reaberto.png',
+            '120-ferramentas-direita.png',
+            '121-ferramentas-popup-sem-faixa.png')
           foreach ($name in $expected) {
             $path = Join-Path $screens $name
             if (!(Test-Path $path)) { throw "Falta captura: $name" }
