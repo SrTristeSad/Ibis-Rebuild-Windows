@@ -5861,7 +5861,7 @@ local function drawGallery(w,h)
             local enabled=GalleryShell.selectionAvailable(item.id)
                 and (item.id=='all' and count<#keys
                     or item.id=='clear' and count>0
-                    or item.id=='move' and
+                    or (item.id=='move' or item.id=='delete') and
                         GalleryShell.selectedProjectIds(
                             A.gallerySelected or {},keys)~=nil)
             local pending=not GalleryShell.selectionAvailable(item.id)
@@ -5922,6 +5922,60 @@ local function drawGallery(w,h)
 end
 local function drawGalleryCreateMenu(w,h)
     local lg=love.graphics
+    if A.galleryDeleteMenu or A.galleryRestoreMenu then
+        local deleting=A.galleryDeleteMenu~=nil
+        local state=A.galleryDeleteMenu or A.galleryRestoreMenu
+        local p=GalleryShell.confirmPopup(w,h)
+        lg.setColor(0,0,0,.69)
+        lg.rectangle('fill',0,0,w,h)
+        lg.setColor(.96,.96,.96,1)
+        lg.rectangle('fill',p.x,p.y,p.w,p.h,8,8)
+        lg.setColor(.18,.21,.25,1)
+        lg.setFont(A.fonts.title)
+        lg.print(deleting and 'Excluir desenhos?' or
+            'Recuperar desenho?',p.x+23,p.y+20)
+        lg.setFont(A.fonts.body)
+        lg.printf(deleting and
+            ('Enviar %d obra(s) para Excluídos recentemente?')
+                :format(#state.ids)
+            or 'Restaurar a obra à pasta original?',
+            p.x+23,p.y+77,p.w-46,'left')
+        lg.setFont(A.fonts.small)
+        lg.setColor(.41,.44,.48,1)
+        lg.printf('Os arquivos RBD serão preservados. '..
+            'Limpeza automática após 30 dias: pendente.',
+            p.x+23,p.y+124,p.w-46,'left')
+        local cancel=GalleryShell.confirmCancel(p)
+        button('Cancelar',cancel.x,cancel.y,cancel.w,cancel.h,
+            function()
+                A.galleryDeleteMenu=nil
+                A.galleryRestoreMenu=nil
+            end)
+        local confirm=GalleryShell.confirmAction(p)
+        button(deleting and 'Excluir' or 'Recuperar',
+            confirm.x,confirm.y,confirm.w,confirm.h,
+            function()
+                if deleting then
+                    local report=A.store:deleteProjects(
+                        state.ids,A.folder)
+                    A.galleryDeleteMenu=nil
+                    A.gallerySelected={}
+                    A.gallerySelecting=false
+                    A.galleryScroll=0
+                    refreshGallery()
+                    status(('%d obra(s) excluída(s) recuperavelmente')
+                        :format(report.deleted))
+                else
+                    local report=A.store:restoreProjects({state.id})
+                    A.galleryRestoreMenu=nil
+                    A.galleryScroll=0
+                    refreshGallery()
+                    status(('%d obra(s) recuperada(s)')
+                        :format(report.restored))
+                end
+            end,true)
+        return
+    end
     if A.galleryMoveMenu then
         local state=A.galleryMoveMenu
         local p=GalleryShell.movePopup(w,h)
@@ -8662,7 +8716,8 @@ function love.draw()
         text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',
             w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')
     end
-    if (A.galleryCreateMenu or A.galleryMoveMenu)
+    if (A.galleryCreateMenu or A.galleryMoveMenu
+        or A.galleryDeleteMenu or A.galleryRestoreMenu)
         and A.screen=='gallery' then
         A.buttons={}
         drawGalleryCreateMenu(w,h)
@@ -8700,7 +8755,8 @@ function love.draw()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
-    if (A.galleryCreateMenu or A.galleryMoveMenu)
+    if (A.galleryCreateMenu or A.galleryMoveMenu
+        or A.galleryDeleteMenu or A.galleryRestoreMenu)
         and A.screen=='gallery' then
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
@@ -8709,6 +8765,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     y>=b.y and y<b.y+b.h then b.fn();return end
             end
             A.galleryCreateMenu=false
+            A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil
             if A.galleryMoveMenu then
                 if A.galleryMoveMenu.creating then
                     GalleryShell.cancelNewFolder(A.galleryMoveMenu)
@@ -9259,7 +9316,8 @@ function love.focus(focused)
 end
 function love.wheelmoved(x,y)
     if A.screen=='gallery' then
-        if A.modal or A.galleryCreateMenu or A.galleryMoveMenu then return end
+        if A.modal or A.galleryCreateMenu or A.galleryMoveMenu
+            or A.galleryDeleteMenu or A.galleryRestoreMenu then return end
         local total=(GalleryUI.filter(A.galleryFilter,'folder')
             and #A.folders or 0)+(GalleryUI.filter(A.galleryFilter,'work')
             and #A.projects or 0)
@@ -9362,7 +9420,8 @@ function love.keypressed(key)
     end
     if A.screen=='gallery' and A.gallerySelecting and
         not A.modal and not A.galleryCreateMenu
-        and not A.galleryMoveMenu and
+        and not A.galleryMoveMenu
+        and not A.galleryDeleteMenu and not A.galleryRestoreMenu and
         love.keyboard.isDown('lctrl','rctrl') then
         if key=='a' then
             A.gallerySelected=GalleryShell.selectAll(
@@ -9378,6 +9437,13 @@ function love.keypressed(key)
         if A.modal then
             A.modal=nil;love.keyboard.setTextInput(false)
         elseif A.galleryCreateMenu then A.galleryCreateMenu=false
+        elseif A.galleryDeleteMenu then A.galleryDeleteMenu=nil
+        elseif A.galleryRestoreMenu then A.galleryRestoreMenu=nil
+        elseif A.galleryTrash then
+            A.galleryTrash=false
+            A.galleryFilter=A.galleryBeforeTrash or 'all'
+            A.galleryBeforeTrash=nil;A.galleryScroll=0
+            refreshGallery()
         elseif A.galleryMoveMenu then
             A.galleryMoveMenu=nil
             love.keyboard.setTextInput(false)
