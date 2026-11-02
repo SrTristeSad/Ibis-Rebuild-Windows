@@ -315,6 +315,21 @@ function T.run()
             item.y+item.h<=p.y+p.h,
             'Opcao recentemente excluidos sai do menu')
     end
+    for _,size in ipairs(sizes) do
+        local oldRight
+        for _,action in ipairs({'all','clear','recover'}) do
+            local r=Retention.trashAction(size[1],size[2],action)
+            eq(r.x>=0 and r.y>=Shell.layout(size[1],size[2]).footerY
+                and r.x+r.w<=size[1] and r.y+r.h<=size[2],
+                'Acoes de recuperacao fora do rodape')
+            if oldRight then
+                eq(r.x>oldRight,'Acoes de recuperacao sobrepostas')
+            end
+            oldRight=r.x+r.w
+        end
+    end
+    eq(not pcall(Retention.trashAction,960,640,'delete'),
+        'Exclusao definitiva nao pode ser exposta')
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
     eq(G.preset('ibis-square').w==768)
     eq(G.preset('ibis-portrait').w==768

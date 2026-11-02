@@ -126,7 +126,11 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '90-excluir-recuperavel.png',
     '91-excluidos-recentemente.png',
     '92-recuperar-confirmacao.png',
-    '93-desenho-recuperado.png'}
+    '93-desenho-recuperado.png',
+    '94-galeria-menu-tres-pontos.png',
+    '95-excluidos-prazo-recuperacao.png',
+    '96-excluidos-selecao-em-lote.png',
+    '97-excluidos-lote-recuperado.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -3630,7 +3634,14 @@ local function advanceShowcase()
     elseif sh.stage==91 then
         local w,h=love.graphics.getDimensions()
         love.draw()
-        love.mousepressed(193,27,1,false)
+        love.mousepressed(166,27,1,false)
+        assert(A.galleryMoreMenu,
+            'Menu de tres pontos nao abriu')
+        local p=IbisPanels.trash.morePopup(w,h)
+        local item=IbisPanels.trash.moreItem(p)
+        love.draw()
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
         assert(A.galleryTrash and #A.trashProjects>=1,
             'Excluídos recentemente não abriu')
         local found=false
@@ -3649,14 +3660,25 @@ local function advanceShowcase()
         assert(index,'Obra não está na lista de recuperação')
         A.galleryScroll=0
         love.draw()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting,
+            'Selecionar nao ativou recuperacao')
+        love.draw()
         local item=GalleryShell.card(w,h,index,0)
         assert(item.visible,'Obra de recuperação fora da viewport')
         love.mousepressed(item.x+item.w/2,
             item.y+item.h/2,1,false)
+        assert(A.gallerySelected['p:'..A.showcaseTrashId],
+            'Miniatura nao foi marcada para recuperar')
+        love.draw()
+        local action=IbisPanels.trash.trashAction(w,h,'recover')
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
         assert(A.galleryRestoreMenu and
-            A.galleryRestoreMenu.id==A.showcaseTrashId,
-            'Clique não abriu confirmação de recuperar')
-        status('Recuperação exige confirmação')
+            #A.galleryRestoreMenu.ids==1 and
+            A.galleryRestoreMenu.ids[1]==A.showcaseTrashId,
+            'Recuperar nao abriu confirmacao')
+        status('Seleção e recuperação exigem confirmação')
     elseif sh.stage==93 then
         local w,h=love.graphics.getDimensions()
         local p=GalleryShell.confirmPopup(w,h)
@@ -3681,6 +3703,79 @@ local function advanceShowcase()
             A.store:openProject(A.showcaseTrashId).folder==A.folder,
             'Obra recuperada não aparece na pasta anterior')
         status('Recuperação concluída · RBD intacto')
+    elseif sh.stage==94 then
+        local rgba=string.rep(string.char(0,0,0,0),4)
+        local first=A.store:createProject('Descartável A',
+            2,2,A.folder,rgba)
+        local second=A.store:createProject('Descartável B',
+            2,2,A.folder,rgba)
+        A.showcaseBatchTrashIds={first.id,second.id}
+        local outcome=A.store:deleteProjects(
+            A.showcaseBatchTrashIds,A.folder)
+        assert(outcome.deleted==2,'Nao preparou duas obras excluidas')
+        A.showcaseBatchRBD={
+            A.store.fs:read('projects/'..first.id..'.rbd'),
+            A.store.fs:read('projects/'..second.id..'.rbd')}
+        refreshGallery()
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(166,27,1,false)
+        assert(A.galleryMoreMenu,'Menu de tres pontos ausente')
+        status('Galeria · menu de mais opções')
+    elseif sh.stage==95 then
+        local w,h=love.graphics.getDimensions()
+        local p=IbisPanels.trash.morePopup(w,h)
+        local item=IbisPanels.trash.moreItem(p)
+        love.draw()
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        assert(A.galleryTrash and #A.trashProjects==2,
+            'Navegacao recente nao preservou dois itens')
+        for _,doc in ipairs(A.trashProjects) do
+            assert(doc.retention_days==30 and
+                not doc.retention_expired,
+                'Prazo inicial de recuperacao nao exibido')
+        end
+        status('Itens excluidos: 30 dias · sem apagamento automatico')
+    elseif sh.stage==96 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting)
+        love.draw()
+        local all=IbisPanels.trash.trashAction(w,h,'all')
+        love.mousepressed(all.x+all.w/2,
+            all.y+all.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            {},A.trashProjects,'works')
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==2,
+            'Selecionar Todos nao funciona em Excluidos')
+        status('Excluidos: duas obras marcadas para recuperar')
+    elseif sh.stage==97 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local action=IbisPanels.trash.trashAction(w,h,'recover')
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.galleryRestoreMenu and
+            #A.galleryRestoreMenu.ids==2,
+            'Recuperar lote nao abriu confirmacao')
+        local popup=GalleryShell.confirmPopup(w,h)
+        local yes=GalleryShell.confirmAction(popup)
+        love.draw()
+        love.mousepressed(yes.x+yes.w/2,
+            yes.y+yes.h/2,1,false)
+        assert(not A.galleryRestoreMenu and
+            not A.gallerySelecting and #A.trashProjects==0,
+            'Restauracao em lote nao limpou itens excluidos')
+        for i,id in ipairs(A.showcaseBatchTrashIds) do
+            local doc=A.store:openProject(id)
+            assert(doc.folder==A.folder and
+                A.store.fs:read('projects/'..id..'.rbd')==
+                    A.showcaseBatchRBD[i],
+                'Recuperacao lote alterou arquivo RBD')
+        end
+        status('Duas obras recuperadas em lote · RBD intactos')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,

@@ -605,3 +605,35 @@ O ibisPaint 14.1.0 passou a preservar obras excluídas na área
 eliminação definitiva não foram implementados. A exclusão
 permanece recuperável indefinidamente por segurança.
 Não há sincronização com o armazenamento em nuvem.
+
+## Recuperação na navegação da versão 14.1 e metadados de 30 dias
+
+A [documentação oficial da versão 14.1.0](https://ibispaint.com/newFeature.jsp?lang=en)
+mostra **Minha Galeria → ⋯ → Excluídos recentemente →
+Selecionar → Recuperar**. O rebuild agora segue esse percurso:
+
+- Substituída a entrada direta `Excluídos` pelo **menu ⋯**
+  da galeria, com uma opção `Excluídos recentemente`.
+- O modo `Selecionar` funciona também dentro da lixeira,
+  com seleção de várias miniaturas, `Todos`, `Limpar`
+  e `Recuperar` com confirmação explícita.
+- `Store:deletedProjects(now)` informa
+  `retention_deadline`, `retention_days` e
+  `retention_expired`. A geometria, textos e cálculo
+  permanecem em `app/ibis_deleted_retention.lua`;
+  testes com relógio determinístico cobrem início, dia 29,
+  dia 30, atraso e regressão do relógio.
+- As miniaturas excluídas exibem os **dias restantes**,
+  atualizados no momento da renderização. Após o período
+  mostram **prazo vencido · arquivo preservado**.
+- A restauração em lote continua gravando somente o
+  índice `deleted.json`, sem modificar os arquivos
+  RBD1/RBD2. Capturas reais Windows **94–97** verificam
+  o menu, a janela de prazo, a seleção em lote e a
+  recuperação de dois projetos do armazenamento de teste.
+
+**Divergência intencional de segurança:** o ibisPaint original
+remove o acesso de recuperação após 30 dias. Este rebuild
+apenas calcula e sinaliza a data; não apaga arquivos
+automaticamente nem desabilita a restauração vencida.
+Essa diferença continua explícita na interface e na documentação.
