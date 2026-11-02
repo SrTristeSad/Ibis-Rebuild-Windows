@@ -6,7 +6,14 @@ function T.run()
     local checks=0
     local function eq(cond,msg) checks=checks+1;assert(cond,msg) end
     eq(#G.FILTERS==3,'Galeria precisa de tres filtros')
-    eq(#G.PRESETS==4,'Dialogo precisa de quatro formatos')
+    eq(#G.PRESETS==4,'Dialogo precisa preservar quatro formatos')
+    eq(#G.OFFICIAL_PRESETS==4,
+        'Nova aba deve ter quatro tamanhos de referencia')
+    eq(#G.PRESET_TABS==2,'Nova tela precisa de duas categorias')
+    eq(G.presetList('basic')==G.PRESETS)
+    eq(G.presetList('formats')==G.OFFICIAL_PRESETS)
+    eq(not pcall(G.presetList,'invalid'),
+        'Categoria invalida foi aceita')
     for _,kind in ipairs({'folder','work'}) do
         eq(G.filter('all',kind),'Tudo deve mostrar desenhos e pastas')
         eq(G.filter(kind=='work' and 'works' or 'folders',kind),
@@ -33,7 +40,19 @@ function T.run()
         local preview=G.preview(r)
         eq(preview.x>fields[1].x+fields[1].w,
             'Previa da tela encobre entradas')
-        for index,preset in ipairs(G.PRESETS) do
+        local tabs={}
+        for i=1,2 do
+            local tab=G.tabRect(r,i)
+            tabs[i]=tab
+            eq(tab.x>=r.x and tab.y>=r.y and
+                tab.x+tab.w<=r.x+r.w and
+                tab.y+tab.h<r.y+351,
+                'Aba invade preset ou borda do dialogo')
+        end
+        eq(tabs[1].x+tabs[1].w<tabs[2].x,
+            'Abas se sobrepoem')
+        for _,category in ipairs({'basic','formats'}) do
+        for index,preset in ipairs(G.presetList(category)) do
             local b=G.presetButton(r,index)
             local v=G.aspectViewport(r,tostring(preset.w),tostring(preset.h))
             eq(v~=nil,'Preset de tela invalido')
@@ -52,6 +71,7 @@ function T.run()
                 local before=G.presetButton(r,index-1)
                 eq(before.x+before.w<b.x,'Presets se sobrepoem')
             end
+        end
         end
         eq(G.aspectViewport(r,'2049','512')==nil,
             'Dimensoes maiores que o motor aceitas')
@@ -108,6 +128,14 @@ function T.run()
         end
     end
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
+    eq(G.preset('ibis-square').w==768)
+    eq(G.preset('ibis-portrait').w==768
+        and G.preset('ibis-portrait').h==1024)
+    eq(G.preset('ibis-story').w==720
+        and G.preset('ibis-story').h==1280)
+    eq(G.preset('ibis-a4').w==1240
+        and G.preset('ibis-a4').h==1754)
+    eq(not pcall(G.tabRect,G.dialog(960,640),3))
     eq(G.preset('nonexistent')==nil)
     eq(not pcall(G.filter,'invalid','work'))
     eq(not pcall(G.presetButton,{x=0,y=0},5))

@@ -443,3 +443,35 @@ de 0 a 5, visualmente incompatível com a atualização 14.1.x.
 Fast Strokes, After ou Fade como motores.** Essa fase
 corrige exclusivamente aparência, navegação e estados,
 sem modificar o algoritmo de estabilização existente.
+
+## Nova tela — categorias de formato e dimensões da referência
+
+A documentação oficial de [criação de obra](https://ibispaint.com/lecture/index.jsp?no=03)
+mostra o seletor de dimensões e o uso de qualquer tamanho, HD/SD;
+o [histórico oficial de novidades](https://ibispaint.com/newFeature.jsp?lang=en)
+publica os tamanhos 1:1 (768×768), 3:4 (768×1024),
+9:16 (720×1280) e A4 150 dpi (1240×1754).
+
+- O diálogo `Nova tela` mantém seus campos de nome, largura,
+  altura e a prévia da proporção, mas dispõe agora de duas abas:
+  **Básicos** (presets anteriores) e **Formatos** (as quatro
+  dimensões publicadas pelo ibisPaint).
+- A aba de formatos fornece apenas dimensões em pixels; o
+  **DPI do papel A4 não é armazenado** e não se promete
+  fidelidade de exportação/impressão. O texto da interface
+  sinaliza essa limitação.
+- Alternar abas não sobrescreve dimensões digitadas,
+  não cria arquivos e não muda o raster. Somente selecionar
+  um preset altera largura/altura; somente `Criar tela`
+  confirma `Store:createProject`.
+- `app/ibis_gallery_ui.lua` centraliza dados e hitboxes;
+  `tests/test_ibis_gallery_ui.lua` testa os dois catálogos,
+  limites, proporções e ausência de sobreposição a 960×640,
+  1220×800 e 1920×1080. O showcase gráfico Windows
+  testa o clique real nas abas e nos tamanhos 3:4/A4,
+  com capturas **70–74** e prova de que o número de obras,
+  bytes RGBA e histórico não mudam antes da confirmação.
+
+O limite de 2048 pixels por dimensão é do motor do rebuild,
+não do ibisPaint original. Os screenshots oficiais
+não comprovam paridade pixel a pixel com o Android 14.1.2.

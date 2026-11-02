@@ -101,7 +101,12 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '66-estabilizador-1412-tempo-real.png',
     '67-estabilizador-1412-fade.png',
     '68-estabilizador-1412-rascunho.png',
-    '69-estabilizador-legado-lua.png'}
+    '69-estabilizador-legado-lua.png',
+    '70-nova-tela-tamanhos-basicos.png',
+    '71-nova-tela-formatos-oficiais.png',
+    '72-nova-tela-proporcao-3-4.png',
+    '73-nova-tela-a4-pixels.png',
+    '74-nova-tela-presets-preservados.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -615,6 +620,7 @@ local function modal(kind)
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
     A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
         kind=='color' and {Colors.format(A.color)} or {''}}
+    if kind=='new' then A.modal.presetTab='basic' end
     love.keyboard.setTextInput(true)
 end
 local function openLayerRename()
@@ -3185,6 +3191,88 @@ local function advanceShowcase()
             and A.layerSession:historyStats().undo==history,
             'Ajuste legado nao deve modificar pixels existentes')
         status(('Legado Lua: nível %d / 5 aplicado'):format(A.stabilization))
+    elseif sh.stage==70 then
+        toGallery()
+        A.galleryFilter='all'
+        modal('new')
+        assert(A.modal and A.modal.kind=='new' and
+            A.modal.presetTab=='basic',
+            'Nova tela nao iniciou nos formatos existentes')
+        A.showcaseCanvasProof={
+            count=#A.projects,
+            pixels=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo}
+        status('Nova tela · tamanhos basicos preservados')
+    elseif sh.stage==71 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryUI.dialog(w,h)
+        local tab=GalleryUI.tabRect(r,2)
+        local proof=assert(A.showcaseCanvasProof)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,
+            tab.y+tab.h/2,1,false)
+        love.mousereleased(tab.x+tab.w/2,
+            tab.y+tab.h/2,1,false)
+        assert(A.modal.presetTab=='formats'
+            and A.modal.values[2]=='512'
+            and A.modal.values[3]=='512',
+            'Trocar de aba nao pode alterar dimensoes editadas')
+        assert(#A.projects==proof.count,
+            'Trocar de aba nao pode criar projeto')
+        status('Formatos ibisPaint · 1:1, 3:4, 9:16 e A4')
+    elseif sh.stage==72 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryUI.dialog(w,h)
+        local btn=GalleryUI.presetButton(r,2)
+        love.draw()
+        love.mousepressed(btn.x+btn.w/2,
+            btn.y+btn.h/2,1,false)
+        love.mousereleased(btn.x+btn.w/2,
+            btn.y+btn.h/2,1,false)
+        assert(A.modal.values[2]=='768'
+            and A.modal.values[3]=='1024',
+            'Formato 3:4 nao atualizou campos e preview')
+        status('Nova tela · formato 3:4 768×1024')
+    elseif sh.stage==73 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryUI.dialog(w,h)
+        local btn=GalleryUI.presetButton(r,4)
+        love.draw()
+        love.mousepressed(btn.x+btn.w/2,
+            btn.y+btn.h/2,1,false)
+        love.mousereleased(btn.x+btn.w/2,
+            btn.y+btn.h/2,1,false)
+        assert(A.modal.values[2]=='1240'
+            and A.modal.values[3]=='1754',
+            'Formato A4 nao atualizou proporcao')
+        assert(GalleryUI.aspectViewport(r,
+            A.modal.values[2],A.modal.values[3]),
+            'A4 excedeu limites atuais do motor Lua')
+        status('Nova tela · A4 1240×1754 pixels, sem DPI')
+    elseif sh.stage==74 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryUI.dialog(w,h)
+        local proof=assert(A.showcaseCanvasProof)
+        love.draw()
+        local tab=GalleryUI.tabRect(r,1)
+        love.mousepressed(tab.x+tab.w/2,
+            tab.y+tab.h/2,1,false)
+        assert(A.modal.presetTab=='basic'
+            and A.modal.values[2]=='1240'
+            and A.modal.values[3]=='1754',
+            'Voltar aos basicos perdeu dimensoes inseridas')
+        local btn=GalleryUI.presetButton(r,1)
+        love.draw()
+        love.mousepressed(btn.x+btn.w/2,
+            btn.y+btn.h/2,1,false)
+        assert(A.modal.values[2]=='512'
+            and A.modal.values[3]=='512',
+            'Preset legado foi alterado')
+        assert(#A.projects==proof.count and
+            Native.bytes(A.layerSession.composite)==proof.pixels
+            and A.layerSession:historyStats().undo==proof.undo,
+            'Navegacao do dialogo criou obra ou alterou o raster')
+        status('Nova tela · compatibilidade dos presets legados')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -6400,7 +6488,16 @@ local function drawNewCanvasDialog(w,h)
             preview.y+104,'body','warn')
     end
     text('TAMANHOS RÁPIDOS',r.x+28,r.y+326,'small','muted')
-    for i,preset in ipairs(GalleryUI.PRESETS) do
+    -- Dois catalogos no mesmo espaco. A troca nao toca no tamanho
+    -- digitado nem cria obra ate o clique explicito em Criar tela.
+    local selectedTab=m.presetTab or 'basic'
+    for i,tab in ipairs(GalleryUI.PRESET_TABS) do
+        local rTab=GalleryUI.tabRect(r,i)
+        button(tab.name,rTab.x,rTab.y,rTab.w,rTab.h,function()
+            m.presetTab=tab.id
+        end,selectedTab==tab.id)
+    end
+    for i,preset in ipairs(GalleryUI.presetList(selectedTab)) do
         local btn=GalleryUI.presetButton(r,i)
         button(preset.name,btn.x,btn.y,btn.w,btn.h,function()
             m.values[2]=tostring(preset.w)
@@ -6409,7 +6506,9 @@ local function drawNewCanvasDialog(w,h)
         end,m.values[2]==tostring(preset.w)
             and m.values[3]==tostring(preset.h))
     end
-    text('RGBA transparente · máximo 2048 × 2048',
+    text(selectedTab=='formats'
+        and 'Formatos ibisPaint em pixels · DPI não gravado'
+        or 'RGBA transparente · máximo 2048 × 2048',
         r.x+28,r.y+398,'small','muted')
     button('Cancelar',r.x+28,r.y+427,236,38,function()
         A.modal=nil

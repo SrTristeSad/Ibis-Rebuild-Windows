@@ -2,12 +2,35 @@
 -- ou gravacao de projetos. Os dados permanecem em Store/RBD2.
 local UI={}
 UI.FILTERS={{id='all',name='Tudo'},{id='works',name='Desenhos'},{id='folders',name='Pastas'}}
+-- Presets antigos preservados para nao alterar fluxos ja existentes.
 UI.PRESETS={
     {id='square',name='Quadrado',w=512,h=512},
     {id='large',name='1024 × 1024',w=1024,h=1024},
     {id='landscape',name='Paisagem',w=1920,h=1080},
     {id='portrait',name='Retrato',w=1080,h=1920}
 }
+-- Dimensoes em pixels publicadas no historico de novidades do ibisPaint.
+-- A4 aqui e apenas tamanho de pixel; metadata DPI nao e gravada.
+UI.OFFICIAL_PRESETS={
+    {id='ibis-square',name='1:1',w=768,h=768},
+    {id='ibis-portrait',name='3:4',w=768,h=1024},
+    {id='ibis-story',name='9:16',w=720,h=1280},
+    {id='ibis-a4',name='A4 (px)',w=1240,h=1754}
+}
+UI.PRESET_TABS={{id='basic',name='Básicos'},
+    {id='formats',name='Formatos'}}
+function UI.presetList(tab)
+    assert(tab=='basic' or tab=='formats',
+        'Categoria de formato desconhecida')
+    return tab=='basic' and UI.PRESETS or UI.OFFICIAL_PRESETS
+end
+function UI.tabRect(rect,i)
+    assert(type(rect)=='table' and rect.w>=640 and rect.h>=482,
+        'Dialogo invalido para abas')
+    assert(i==1 or i==2,'Aba de formatos desconhecida')
+    return {x=rect.x+312+(i-1)*150,
+        y=rect.y+317,w=137,h=29}
+end
 function UI.filter(id,kind)
     assert(kind=='work' or kind=='folder','Tipo de galeria invalido')
     assert(id=='all' or id=='works' or id=='folders','Filtro de galeria invalido')
@@ -15,7 +38,11 @@ function UI.filter(id,kind)
         or id=='folders' and kind=='folder'
 end
 function UI.preset(id)
-    for _,p in ipairs(UI.PRESETS) do if p.id==id then return p end end
+    for _,tab in ipairs({'basic','formats'}) do
+        for _,p in ipairs(UI.presetList(tab)) do
+            if p.id==id then return p end
+        end
+    end
     return nil
 end
 function UI.dialog(w,h)
