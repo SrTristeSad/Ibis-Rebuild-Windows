@@ -4514,6 +4514,9 @@ local function advanceShowcase()
             'Editar nao abriu a obra ampliada no editor real')
         status('Galeria: Editar abriu projeto RBD2 no motor Lua')
     elseif sh.stage>#showcaseNames then
+        -- A captura 00 e verificada separadamente; o codificador
+        -- JSON so permite arrays sequenciais com indices de 1 em diante.
+        showcaseNames[0]=nil
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
                 lua_renderer=Native.implementation=='lua',
