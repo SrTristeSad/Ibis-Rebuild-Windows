@@ -172,7 +172,10 @@ jobs:
             '53-camadas-rodape-oficial.png',
             '54-camadas-mesclagem-rodape.png',
             '55-varinha-mascara-real.png',
-            '56-ferramenta-pendente-nao-pinta.png')
+            '56-ferramenta-pendente-nao-pinta.png',
+            '57-ferramentas-uma-coluna.png',
+            '58-ferramentas-uma-coluna-pagina2.png',
+            '59-ferramentas-tres-colunas.png')
           foreach ($name in $expected) {
             $path = Join-Path $screens $name
             if (!(Test-Path $path)) { throw "Falta captura: $name" }

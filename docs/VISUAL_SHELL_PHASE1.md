@@ -315,3 +315,30 @@ oficial, e não medições diretas da versão Android 14.1.2.
 Pastas, máscaras, alpha lock, clipping e modos alternativos
 continuam pendentes da fase de motor e documentação específica,
 não foram apresentados como já funcionais.
+
+## Complemento — seletor de ferramentas em 1, 2 ou 3 colunas
+
+O [tutorial oficial #03](https://ibispaint.com/lecture/index.jsp?no=4)
+descreve **1, 2 ou 3 colunas** no seletor popup. A interface
+anterior só desenhava duas colunas, embora a documentação da fase
+inicial descrevesse incorretamente uma grade 3×5. Corrigimos
+a divergência permitindo os três modos sem alterar os 15 IDs,
+a ordem ou seus backends Lua.
+
+- A opção ativa é persistida em `preferences.json`
+  (`toolPopupColumns`). Valores ausentes ou inválidos usam duas
+  colunas, preservando a apresentação anterior.
+- Uma coluna dispõe os itens em páginas de até sete ferramentas;
+  duas colunas exibem oito linhas; três usam cinco linhas.
+  Assim todas as ações permanecem acessíveis na janela 960×640.
+- O seletor de colunas foi colocado no **cabeçalho do popup**
+  como adaptação para Windows. **Diferença declarada:** no ibisPaint
+  documentado, essa preferência é ajustada na tela Configurações.
+- `tests/test_ibis_tool_popup_columns.lua` valida geometria,
+  ausência de colisões, acesso a quinze ferramentas e persistência.
+  O showcase Windows gera três capturas reais extras, testa cliques
+  de paginação e troca de coluna, verificando bytes RGBA e histórico
+  inalterados.
+- Não é declarada paridade pixel a pixel com o APK 14.1.2:
+  escala, iconografia e o controle no cabeçalho dependem de
+  validação visual do criador.

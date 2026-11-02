@@ -87,7 +87,10 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '52-camadas-duplicar.png','53-camadas-rodape-oficial.png',
     '54-camadas-mesclagem-rodape.png',
     '55-varinha-mascara-real.png',
-    '56-ferramenta-pendente-nao-pinta.png'}
+    '56-ferramenta-pendente-nao-pinta.png',
+    '57-ferramentas-uma-coluna.png',
+    '58-ferramentas-uma-coluna-pagina2.png',
+    '59-ferramentas-tres-colunas.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -2945,6 +2948,48 @@ local function advanceShowcase()
             and A.layerSession:historyStats().undo==proof.undo,
             'Laço pendente nao pode editar o canvas')
         status('Laço pendente: clique não aciona o pincel anterior')
+    elseif sh.stage==57 then
+        A.visualPendingTool=nil
+        A.compactUi=true
+        A.compactPanel='tools'
+        A.toolPopupColumns=1
+        A.toolPopupPage=1
+        status('Ferramentas · uma coluna, 7 itens por pagina')
+    elseif sh.stage==58 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'tools',1)
+        local nextPage=IbisTools.pageButton(p,1)
+        love.draw()
+        love.mousepressed(nextPage.x+nextPage.w/2,
+            nextPage.y+nextPage.h/2,1,false)
+        love.mousereleased(nextPage.x+nextPage.w/2,
+            nextPage.y+nextPage.h/2,1,false)
+        assert(A.toolPopupPage==2 and A.toolPopupColumns==1,
+            'Botao de pagina nao navegou em uma coluna')
+        assert(Native.bytes(A.layerSession.composite)==old and
+            A.layerSession:historyStats().undo==undo,
+            'Navegacao do seletor nao pode alterar o raster')
+        status('Ferramentas · uma coluna, segunda pagina')
+    elseif sh.stage==59 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'tools',1)
+        local three=IbisTools.columnRect(p,3)
+        love.draw()
+        love.mousepressed(three.x+three.w/2,
+            three.y+three.h/2,1,false)
+        love.mousereleased(three.x+three.w/2,
+            three.y+three.h/2,1,false)
+        assert(A.toolPopupColumns==3 and A.toolPopupPage==1
+            and A.store:getPreferences().toolPopupColumns==3,
+            'Tres colunas nao foram aplicadas/persistidas')
+        assert(Native.bytes(A.layerSession.composite)==old and
+            A.layerSession:historyStats().undo==undo,
+            'Configuracao visual nao pode alterar o raster')
+        status('Ferramentas · tres colunas, quinze categorias')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -3486,6 +3531,9 @@ function love.load(args)
     A.inkAttached=not options.noWindowsInk and Ink.init(Native) or false
     A.root=options.data or (base..'/user-data');A.store=Store.open(A.root)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
+    local cols=A.preferences.toolPopupColumns
+    A.toolPopupColumns=(cols==1 or cols==2 or cols==3) and cols or 2
+    A.toolPopupPage=1
     A.savedColors={}
     if type(A.preferences.colorPalette)=='table' then
         for _,v in ipairs(A.preferences.colorPalette) do
@@ -6550,7 +6598,8 @@ local function drawCompactBrushPreview(p)
 end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
-    local p=Compact.popup(w,h,kind)
+    local p=Compact.popup(w,h,kind,
+        kind=='tools' and (A.toolPopupColumns or 2) or nil)
     -- Camadas tem sua propria superficie cinza e linhas claras.
     if kind=='layers' then
         LayerChrome.frame(p)
@@ -6616,12 +6665,33 @@ local function drawCompactPopup(w,h)
         end)
     end
     if kind=='tools' then
-        -- Catálogo visual completo; somente ferramentas já implementadas
-        -- no motor Lua são acionadas. Outras mostram o estado pendente.
+        -- As opcoes de coluna sao documentadas pelo ibisPaint. O
+        -- controle no cabecalho e uma adaptacao para Windows: o original
+        -- coloca esta configuracao na tela de ajustes.
+        for index=1,3 do
+            local count=index
+            local selector=IbisTools.columnRect(p,count)
+            button(tostring(count),selector.x,selector.y,selector.w,
+                selector.h,function()
+                    local prefs={}
+                    for key,value in pairs(A.preferences or {}) do
+                        prefs[key]=value
+                    end
+                    prefs.toolPopupColumns=count
+                    A.store:setPreferences(prefs)
+                    A.preferences=prefs
+                    A.toolPopupColumns=count
+                    A.toolPopupPage=1
+                end,A.toolPopupColumns==count)
+        end
+        local columns=A.toolPopupColumns or 2
+        local page=A.toolPopupPage or 1
         local mx,my=love.mouse.getPosition()
-        for i,tool in ipairs(IbisTools.entries) do
-            local r=IbisTools.grid(p,i)
-            local active=(tool.backend~=nil and tool.backend==A.tool)
+        for _,item in ipairs(IbisTools.pageItems(columns,page)) do
+            local tool=item.entry
+            local r=IbisTools.grid(p,item.index,columns,page)
+            local active=(not A.visualPendingTool
+                and tool.backend~=nil and tool.backend==A.tool)
                 or A.visualPendingTool==tool.id
             local hover=mx>=r.x and mx<r.x+r.w
                 and my>=r.y and my<r.y+r.h
@@ -6632,13 +6702,33 @@ local function drawCompactPopup(w,h)
             end
             c(active and 'accent' or
                 tool.backend and 'text' or 'muted')
-            Icons.draw(tool.icon,r.x+r.w/2,r.y+12,19)
-            love.graphics.setFont(A.fonts.micro)
-            c(active and 'accent' or 'text')
-            love.graphics.printf(tool.label,r.x+3,
-                r.y+25,r.w-6,'center')
+            if columns==1 then
+                Icons.draw(tool.icon,r.x+24,r.y+19,20)
+                fitted(tool.label,r.x+49,r.y+12,
+                    'small','text',r.w-54)
+            else
+                Icons.draw(tool.icon,r.x+r.w/2,r.y+12,19)
+                love.graphics.setFont(A.fonts.micro)
+                c(active and 'accent' or 'text')
+                love.graphics.printf(tool.label,r.x+3,
+                    r.y+25,r.w-6,'center')
+            end
             A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w,h=r.h,
                 fn=guard(function()activateIbisTool(tool)end)}
+        end
+        if columns==1 then
+            for _,delta in ipairs({-1,1}) do
+                local step=IbisTools.pageButton(p,delta)
+                button(delta==-1 and '‹' or '›',
+                    step.x,step.y,step.w,step.h,
+                    function()
+                        A.toolPopupPage=math.max(1,
+                            math.min(IbisTools.pages(columns),page+delta))
+                    end,false,(delta==-1 and page==1)
+                        or (delta==1 and page==IbisTools.pages(columns)))
+            end
+            fitted(('%d / %d'):format(page,IbisTools.pages(columns)),
+                p.x+88,p.y+p.h-53,'small','text',65)
         end
         c('line',.66)
         love.graphics.rectangle('fill',p.x+8,p.y+p.h-27,p.w-16,1)

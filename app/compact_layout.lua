@@ -73,7 +73,12 @@ function UI.quickHit(w,h,x,y)
     end
     return nil
 end
-function UI.popup(w,h,kind)
+function UI.popup(w,h,kind,columns)
+    columns=columns or 2
+    if kind=='tools' then
+        assert(columns==1 or columns==2 or columns==3,
+            'Colunas do seletor invalidas')
+    end
     assert(kind=='tools' or kind=='layers' or kind=='properties'
         or kind=='color' or kind=='view' or kind=='stabilizer'
         or kind=='ruler' or kind=='materials' or kind=='blends'
@@ -86,7 +91,7 @@ function UI.popup(w,h,kind)
         type(h)=='number' and h>=640,'Janela compacta inválida')
     local isTop=kind=='view' or kind=='stabilizer'
         or kind=='ruler' or kind=='materials'
-    local width=kind=='tools' and 242 or
+    local width=kind=='tools' and (columns==3 and 358 or 242) or
         kind=='color' and 404 or kind=='ruler' and 390
         or kind=='materials' and 444 or (kind=='tools' or
         kind=='filters' or kind=='text' or kind=='transform'
@@ -95,7 +100,7 @@ function UI.popup(w,h,kind)
         or kind=='vector' or kind=='frame') and 420
         or isTop and 318 or 298
     local height=kind=='color' and 450 or
-        (kind=='tools' and 383) or
+        (kind=='tools' and (columns==3 and 288 or 383)) or
         ((kind=='filters' or kind=='text' or kind=='transform'
             or kind=='wand' or kind=='lasso' or kind=='smudge'
             or kind=='blur' or kind=='special'
