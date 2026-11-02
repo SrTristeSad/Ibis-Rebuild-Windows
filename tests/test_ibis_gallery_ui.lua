@@ -132,6 +132,29 @@ function T.run()
         eq(Home.hit(w,h,0,0)==nil,
             'Cliques vazios da tela inicial vazam para galeria')
     end
+    -- A36: a marca agora ocupa uma área legível e os ícones
+    -- ampliados continuam dentro das áreas de clique reais.
+    for _,size in ipairs(sizes) do
+        local w,h=size[1],size[2]
+        local buttons=Home.layout(w,h)
+        local brand=Home.logoMetrics(w,h,200,32)
+        eq(brand.scale>2 and brand.w>=w*.3,
+            'Marca da tela inicial continua pequena')
+        eq(brand.x>=0 and brand.x+brand.w<=w and
+            brand.y+brand.h+50<buttons.gallery.y,
+            'Marca invade os destinos da tela inicial')
+        for _,kind in ipairs({'gallery','online'}) do
+            local rect=buttons[kind]
+            eq(rect.iconRadius>=50 and
+                rect.y+rect.h<=h and
+                rect.iconRadius*2+45<=rect.h,
+                'Icone ou rotulo invade area fora do clique')
+        end
+        local between=math.floor((buttons.gallery.x+
+            buttons.gallery.w+buttons.online.x)/2)
+        eq(Home.hit(w,h,between,buttons.gallery.y+40)==nil,
+            'Espaco entre destinos captura clique invisivel')
+    end
     eq(not pcall(Home.layout,320,480),
         'Tela inicial aceita resolucao inferior ao minimo')
     for _,size in ipairs(sizes) do

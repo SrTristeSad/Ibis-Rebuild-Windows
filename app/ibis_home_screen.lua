@@ -1,7 +1,7 @@
--- Tela inicial do rebuild, baseada no fluxo de navegacao do
--- ibisPaint atual: Minha Galeria e Galeria Online. A Colecao foi
--- removida no ibisPaint 12.2.0, nao deve ser recriada no 14.1.2.
--- Sem Store, ferramentas ou acesso externo.
+-- Tela inicial do rebuild; navegação do ibisPaint atual.
+-- Galeria Online continua indisponível, sem callback fictício.
+-- Geometria visual baseada na captura pública de 14.0.2, não
+-- em medição autenticada do Android 14.1.2.
 local M={}
 local BG={.145,.30,.46,1}
 local colors={
@@ -14,12 +14,30 @@ function M.layout(w,h)
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,
         'Janela inicial menor que o minimo Windows')
-    local bw,bh=194,160
-    local y=math.floor(h*.58)
+    -- Manter o círculo inteiro dentro do retângulo clicável.
+    local radius=math.floor(math.min(90,h*.082))
+    local bw=math.floor(math.min(244,math.max(180,h*.26)))
+    local bh=radius*2+74
+    local y=math.floor(h*.60)
+    local separation=math.floor(math.min(w*.43,h*.40))
     return {
-        gallery={x=math.floor(w/2-bw-20),y=y,w=bw,h=bh},
-        online={x=math.floor(w/2+20),y=y,w=bw,h=bh}
+        gallery={x=math.floor((w-separation-bw)/2),y=y,
+            w=bw,h=bh,iconRadius=radius},
+        online={x=math.floor((w+separation-bw)/2),y=y,
+            w=bw,h=bh,iconRadius=radius}
     }
+end
+-- Escala a fonte já carregada: nenhuma nova fonte ou textura por frame.
+-- A largura é limitada pela altura para preservar 960x640.
+function M.logoMetrics(w,h,textWidth,fontHeight)
+    M.layout(w,h)
+    assert(type(textWidth)=='number' and textWidth>0 and
+        type(fontHeight)=='number' and fontHeight>0,
+        'Medidas invalidas do logotipo')
+    local width=math.min(w*.70,h*.85)
+    local scale=width/textWidth
+    return {x=math.floor((w-width)/2),y=math.floor(h*.22),
+        w=width,h=fontHeight*scale,scale=scale}
 end
 function M.hit(w,h,x,y)
     local buttons=M.layout(w,h)
@@ -29,39 +47,40 @@ function M.hit(w,h,x,y)
     end
     return nil
 end
-local function wheel(g,cx,cy)
-    local r=30
+local function wheel(g,cx,cy,r)
     for i,rgba in ipairs(colors) do
         g.setColor(rgba)
         local a=(i-1)*math.pi/6-math.pi/2
         g.arc('fill',cx,cy,r,a,a+math.pi/6,12)
     end
     g.setColor(1,1,1,1)
-    g.setLineWidth(2)
+    g.setLineWidth(.7)
     g.circle('line',cx,cy,r)
     g.setColor(BG)
-    g.circle('fill',cx,cy,14)
+    g.circle('fill',cx,cy,r*.43)
     g.setColor(1,1,1,1)
-    g.circle('line',cx,cy,14)
+    g.circle('line',cx,cy,r*.43)
 end
-local function emblem(g,kind,cx,cy,enabled)
+local function emblem(g,kind,cx,cy,enabled,radius)
+    g.push()
+    g.translate(cx,cy)
+    g.scale(radius/42)
     g.setColor(1,1,1,enabled and .94 or .38)
     g.setLineWidth(1.5)
-    g.circle('line',cx,cy,42)
+    g.circle('line',0,0,42)
     if kind=='gallery' then
         g.setLineWidth(3)
-        g.line(cx-17,cy+17,cx+13,cy-14)
+        g.line(-17,17,13,-14)
         g.setLineWidth(1.7)
-        g.polygon('line',cx+11,cy-12,cx+19,cy-20,
-            cx+24,cy-16,cx+17,cy-8)
-        g.polygon('line',cx-19,cy+18,cx-11,cy+13,
-            cx-15,cy+8,cx-22,cy+16)
+        g.polygon('line',11,-12,19,-20,24,-16,17,-8)
+        g.polygon('line',-19,18,-11,13,-15,8,-22,16)
     else
-        g.circle('line',cx,cy,23)
-        g.line(cx-23,cy,cx+23,cy)
-        g.arc('line',cx,cy,11,0,math.pi*2,32)
-        g.line(cx,cy-23,cx,cy+23)
+        g.circle('line',0,0,23)
+        g.line(-23,0,23,0)
+        g.arc('line',0,0,11,0,math.pi*2,32)
+        g.line(0,-23,0,23)
     end
+    g.pop()
 end
 function M.draw(w,h,fonts)
     local g=assert(love and love.graphics,'LÖVE requerido')
@@ -71,20 +90,24 @@ function M.draw(w,h,fonts)
     g.rectangle('fill',0,0,w,h)
     g.setColor(1,1,1,1)
     g.setFont(fonts.large)
-    local left='ibis'
-    local right='aint'
-    local full=fonts.large:getWidth(left)+72+
-        fonts.large:getWidth(right)
-    local start=math.floor((w-full)/2)
-    local y=math.floor(h*.28)
-    g.print(left,start,y)
-    wheel(g,start+fonts.large:getWidth(left)+36,
-        y+fonts.large:getHeight()/2)
-    g.print(right,start+fonts.large:getWidth(left)+72,y)
+    -- O disco cromático substitui a primeira letra de "Paint".
+    local left,right='ibis','aint'
+    local height=fonts.large:getHeight()
+    local leftWidth=fonts.large:getWidth(left)
+    local gap=height*1.12
+    local full=leftWidth+gap+fonts.large:getWidth(right)
+    local brand=M.logoMetrics(w,h,full,height)
+    g.push()
+    g.translate(brand.x,brand.y)
+    g.scale(brand.scale)
+    g.print(left,0,0)
+    wheel(g,leftWidth+gap/2,height*.50,height*.49)
+    g.print(right,leftWidth+gap,0)
+    g.pop()
     g.setFont(fonts.small)
     g.setColor(.85,.90,.94,1)
     g.printf('Rebuild para Windows · base Android 14.1.2',
-        w/2-280,y+66,560,'center')
+        brand.x,brand.y+brand.h+14,brand.w,'right')
     local mx,my=love.mouse.getPosition()
     for _,kind in ipairs({'gallery','online'}) do
         local rect=buttons[kind]
@@ -96,15 +119,17 @@ function M.draw(w,h,fonts)
             g.setColor(1,1,1,.10)
             g.rectangle('fill',rect.x,rect.y,rect.w,rect.h,5,5)
         end
-        emblem(g,kind,rect.x+rect.w/2,rect.y+57,enabled)
+        emblem(g,kind,rect.x+rect.w/2,
+            rect.y+rect.iconRadius+4,enabled,rect.iconRadius)
         g.setColor(1,1,1,enabled and .95 or .58)
         g.setFont(fonts.body)
+        local labelY=rect.y+rect.iconRadius*2+16
         g.printf(enabled and 'Minha Galeria' or 'Galeria Online',
-            rect.x,rect.y+114,rect.w,'center')
+            rect.x,labelY,rect.w,'center')
         if not enabled then
             g.setFont(fonts.small)
             g.printf('Indisponível',rect.x,
-                rect.y+137,rect.w,'center')
+                labelY+23,rect.w,'center')
         end
     end
     g.pop()
