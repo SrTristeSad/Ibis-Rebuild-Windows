@@ -735,3 +735,31 @@ para criar automaticamente uma pasta, autoscroll durante
 arraste e paridade visual pixel a pixel Android 14.1.2.
 A implementação nova não altera regras de autoria dos
 documentos nem substitui a interface inteira.
+
+## Criar uma pasta arrastando uma obra sobre outra
+
+Referência oficial: [30. Artworks Folder Feature](https://ibispaint.com/lecture/index.jsp?no=193)
+declara que arrastar um desenho sobre outro cria uma pasta.
+
+- Ao arrastar uma **obra sobre o centro de outra obra**, a
+  galeria apresenta alvo roxo `Criar pasta` e cria uma pasta
+  com as duas obras (destino e origem). Para preservar a
+  reorganização já existente, **soltar na borda** continua
+  reordenando cartões; essa separação entre centro e borda é
+  uma adaptação do rebuild, **não uma medida do APK original**.
+- `Store:groupArtworks` valida ambas as obras e a pasta
+  atual **antes** de criar o destino; gera `Nova pasta`
+  ou `Nova pasta (N)` quando há nomes duplicados.
+  Usa `Store:createFolder` e `Store:moveProjects` para
+  persistir os documentos RBD1/RBD2 existentes.
+- Agrupamentos são **transações parciais** (catálogo + dois
+  arquivos RBD); falhas de I/O são retornadas com a contagem
+  realmente movimentada e o ID que falhou. O rebuild não
+  informa sucesso falso, nem apaga obras para simular
+  rollback. A obra que não foi movida continua disponível
+  na pasta de origem.
+- Testes de armazenamento cobrem documentos RBD1/RBD2,
+  validação, nome duplicado, persistência, revisão, pixels,
+  falha simulada na segunda gravação e recuperação manual.
+  Capturas Windows **110–113** exercitam arrastar, soltar,
+  reabrir pasta e criar nova pasta com nome numerado.

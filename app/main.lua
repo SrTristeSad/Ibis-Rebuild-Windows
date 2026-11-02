@@ -142,7 +142,11 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '106-arrastar-desenho-para-pasta.png',
     '107-desenho-dentro-da-pasta.png',
     '108-arrastar-desenho-para-voltar.png',
-    '109-desenho-movido-para-pasta-pai.png'}
+    '109-desenho-movido-para-pasta-pai.png',
+    '110-agrupar-desenho-sobre-outro.png',
+    '111-pasta-criada-com-dois-desenhos.png',
+    '112-conteudo-da-pasta-agrupada.png',
+    '113-agrupar-com-nome-duplicado.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -4071,6 +4075,117 @@ local function advanceShowcase()
             A.showcaseFolderDropId).folder==A.folder,
             'Obra nao reapareceu na pasta pai apos reiniciar')
         status('Obra devolvida a pasta pai; dados RBD intactos')
+    elseif sh.stage==110 then
+        local rgbaA=string.rep(string.char(250,34,77,255),4)
+        local rgbaB=string.rep(string.char(38,167,231,255),4)
+        local root=A.folder
+        A.showcaseGroupParent=A.store:createFolder(
+            'Agrupamento com gesto',root)
+        A.showcaseGroupSource=A.store:createProject(
+            'Fonte do grupo',2,2,A.showcaseGroupParent,rgbaA)
+        A.showcaseGroupTarget=A.store:createProject(
+            'Alvo do grupo',2,2,A.showcaseGroupParent,rgbaB)
+        A.showcaseGroupPixels={rgbaA,rgbaB}
+        setFolder(A.showcaseGroupParent)
+        A.galleryFilter='all'
+        assert(#A.projects==2 and #A.folders==0,
+            'Teste de agrupamento nao comecou com duas obras')
+        local w,h=love.graphics.getDimensions()
+        local source=GalleryShell.card(w,h,1,0)
+        local destination=GalleryShell.card(w,h,2,0)
+        A.showcaseGroupDragKey=A.galleryItems[1].key
+        A.showcaseGroupDropKey=A.galleryItems[2].key
+        love.draw()
+        love.mousepressed(source.x+source.w/2,
+            source.y+source.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==A.showcaseGroupDragKey,
+            'Gesto de grupo nao iniciou pressionamento')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(destination.x+destination.w/2,
+            destination.y+destination.h/2,
+            destination.x-source.x,
+            destination.y-source.y,false)
+        local action=GalleryShell.dropAction(
+            A.folder,nil,A.showcaseGroupDragKey,
+            A.showcaseGroupDropKey,w,h,
+            destination.x+destination.w/2,
+            destination.y+destination.h/2,destination)
+        assert(A.galleryGesture.active and
+            action.kind=='group',
+            'Sobreposicao central nao criou alvo de agrupamento')
+        status('Arrastar desenho sobre outro: criar nova pasta')
+    elseif sh.stage==111 then
+        local w,h=love.graphics.getDimensions()
+        local destination=GalleryShell.card(w,h,2,0)
+        love.draw()
+        love.mousereleased(destination.x+destination.w/2,
+            destination.y+destination.h/2,1,false)
+        assert(not A.galleryGesture and #A.projects==0
+            and #A.folders==1 and
+            A.folders[1].name=='Nova pasta',
+            'Agrupar nao criou pasta com as duas obras')
+        A.showcaseGroupedFolder=A.folders[1].id
+        for _,doc in ipairs({
+            A.showcaseGroupSource,A.showcaseGroupTarget}) do
+            local saved=A.store:openProject(doc.id)
+            assert(saved.folder==A.showcaseGroupedFolder
+                and saved.revision==doc.revision+1,
+                'Agrupamento nao persistiu ambos os documentos')
+        end
+        assert(A.store:openProject(A.showcaseGroupSource.id).pixels==
+            A.showcaseGroupPixels[1] and
+            A.store:openProject(A.showcaseGroupTarget.id).pixels==
+            A.showcaseGroupPixels[2],
+            'Agrupar regravou o raster original')
+        status('Nova pasta criada com duas obras reais')
+    elseif sh.stage==112 then
+        setFolder(A.showcaseGroupedFolder)
+        local fromDisk=Store.open(A.store.root)
+        local projects=fromDisk:listProjects(A.showcaseGroupedFolder)
+        assert(#A.projects==2 and #projects==2
+            and A.folder==A.showcaseGroupedFolder,
+            'Obras nao aparecem na pasta depois da reabertura')
+        assert(fromDisk:openProject(A.showcaseGroupSource.id).pixels==
+            A.showcaseGroupPixels[1] and
+            fromDisk:openProject(A.showcaseGroupTarget.id).pixels==
+            A.showcaseGroupPixels[2],
+            'Reabrir a pasta perdeu os pixels')
+        status('Galeria agrupada: duas miniaturas persistidas')
+    elseif sh.stage==113 then
+        setFolder(A.showcaseGroupParent)
+        local rgba=string.rep(string.char(10,20,30,255),4)
+        local one=A.store:createProject('Outro desenho A',
+            2,2,A.folder,rgba)
+        local two=A.store:createProject('Outro desenho B',
+            2,2,A.folder,rgba)
+        refreshGallery()
+        local sourceIndex,targetIndex
+        for i,item in ipairs(A.galleryItems) do
+            if item.key=='p:'..one.id then sourceIndex=i end
+            if item.key=='p:'..two.id then targetIndex=i end
+        end
+        assert(sourceIndex and targetIndex,
+            'Faltam desenhos para segundo agrupamento')
+        local w,h=love.graphics.getDimensions()
+        local src=GalleryShell.card(w,h,sourceIndex,0)
+        local dst=GalleryShell.card(w,h,targetIndex,0)
+        love.draw()
+        love.mousepressed(src.x+src.w/2,
+            src.y+src.h/2,1,false)
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(dst.x+dst.w/2,dst.y+dst.h/2,
+            dst.x-src.x,dst.y-src.y,false)
+        love.mousereleased(dst.x+dst.w/2,
+            dst.y+dst.h/2,1,false)
+        assert(#A.folders==2 and #A.projects==0
+            and A.folders[1].name=='Nova pasta'
+            and A.folders[2].name=='Nova pasta (2)',
+            'Segundo agrupamento nao gerou nome exclusivo')
+        assert(A.store:openProject(one.id).folder==A.folders[2].id
+            and A.store:openProject(two.id).folder==A.folders[2].id,
+            'Segundo grupo nao moveu os dois projetos')
+        status('Agrupar obras: pastas com nomes unicos')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
