@@ -59,6 +59,8 @@ jobs:
         run: luajit tests/test_raster_lua.lua
       - name: Lua stroke raster regression
         run: luajit tests/test_raster_stroke.lua
+      - name: Real Lua Magic Wand flood mask and union regression
+        run: luajit tests/test_wand_selection.lua
       - name: Lua selections and geometry regression
         run: luajit tests/test_raster_tools.lua
       - name: Lua layer manager integration regression

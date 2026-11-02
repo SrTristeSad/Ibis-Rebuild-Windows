@@ -10,7 +10,9 @@ function T.run()
     end
     check(#Selection.modes==3 and #Selection.sources==2
         and #Selection.toggles==3,'Catalogo de selecao incompleto')
-    check(not Selection.canApply(),'Seletor falso de pixels')
+    check(Selection.canApply('wand') and
+        not Selection.canApply('lasso') and not Selection.canApply(),
+        'Varinha deve ter motor de mascara; Laco segue pendente')
     for _,kind in ipairs({'wand','lasso'}) do
         local d=Selection.new(kind)
         check(d.kind==kind and d.mode=='set',
@@ -115,6 +117,6 @@ function T.run()
     check(not pcall(Selection.modeRect,
         {x=0,y=0,w=318,h=440},1))
     return {suite='ibis-selection-tool-ui',passed=true,
-        assertions=checks,active_selection_engines=0}
+        assertions=checks,active_selection_engines=1}
 end
 return T

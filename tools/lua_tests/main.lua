@@ -40,6 +40,7 @@ local integration={
     'test_ibis_material_ui.lua',
     'test_ibis_transform_ui.lua',
     'test_ibis_selection_tool_ui.lua',
+    'test_wand_selection.lua',
     'test_ibis_effect_tools_ui.lua',
     'test_ibis_vector_frame_ui.lua',
     'test_compact_popup_focus.lua',

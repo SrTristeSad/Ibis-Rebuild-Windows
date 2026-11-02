@@ -28,7 +28,7 @@ function M.new(kind)
         tolerance=10,gap=false,unpainted=false,
         continuous=false}
 end
-function M.canApply() return false end
+function M.canApply(kind) return kind=='wand' end
 function M.selectMode(state,id)
     assert(type(state)=='table' and modeById[id],
         'Modo de selecao visual invalido')
