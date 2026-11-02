@@ -3867,15 +3867,16 @@ local function advanceShowcase()
             'Galeria abriu imagem antes de pressao prolongada')
         A.galleryGesture.started=love.timer.getTime()-1
         local dest=GalleryShell.card(w,h,first,0)
-        love.mousemoved(dest.x+dest.w/2,dest.y+dest.h/2,
-            dest.x-start.x,dest.y-start.y,false)
+        love.mousemoved(dest.x+7,dest.y+dest.h/2,
+            dest.x+7-start.x-start.w/2,
+            dest.y-start.y,false)
         assert(A.galleryGesture and A.galleryGesture.active,
             'Pressao prolongada nao ativou arrasto')
         status('Galeria: arrastando miniatura sobre outra')
     elseif sh.stage==102 then
         local w,h=love.graphics.getDimensions()
         local target=GalleryShell.card(w,h,#A.folders+1,0)
-        love.mousereleased(target.x+target.w/2,
+        love.mousereleased(target.x+7,
             target.y+target.h/2,1,false)
         assert(not A.galleryGesture
             and A.galleryItems[#A.folders+1].key==
@@ -6331,9 +6332,14 @@ local function drawGallery(w,h)
             for i,item in ipairs(A.galleryItems or {}) do
                 if item.key==key then
                     local r=GalleryShell.card(w,h,i,A.galleryScroll)
-                    local intoFolder=gesture.key:sub(1,2)=='p:'
-                        and key:sub(1,2)=='f:'
-                    if intoFolder then
+                    local action=GalleryShell.dropAction(
+                        A.folder,nil,gesture.key,key,w,h,
+                        gesture.px,gesture.py,r)
+                    local grouping=action and action.kind=='group'
+                    local intoFolder=action and action.kind=='move'
+                    if grouping then
+                        lg.setColor(.63,.36,.86,.95)
+                    elseif intoFolder then
                         lg.setColor(.12,.65,.38,.95)
                     else
                         lg.setColor(.20,.51,.92,.95)
@@ -6341,13 +6347,16 @@ local function drawGallery(w,h)
                     lg.setLineWidth(4)
                     lg.rectangle('line',r.x+2,r.y+2,
                         r.w-4,r.h-4,5,5)
-                    if intoFolder then
-                        lg.setColor(.07,.34,.19,.96)
+                    if grouping or intoFolder then
+                        lg.setColor(grouping and .35 or .07,
+                            grouping and .17 or .34,
+                            grouping and .55 or .19,.96)
                         lg.rectangle('fill',r.x+8,r.y+r.h-39,
                             r.w-16,27,4,4)
                         lg.setColor(1,1,1,1)
                         lg.setFont(A.fonts.micro)
-                        lg.printf('Mover para pasta',r.x+10,
+                        lg.printf(grouping and 'Criar pasta'
+                            or 'Mover para pasta',r.x+10,
                             r.y+r.h-32,r.w-20,'center')
                     end
                     break
@@ -9725,11 +9734,34 @@ local function pointerReleased(x,y,b,pressure)
                     end
                 end
             end
+            local targetRect
+            if target then
+                for i,item in ipairs(A.galleryItems or {}) do
+                    if item.key==target then
+                        targetRect=GalleryShell.card(
+                            w,h,i,A.galleryScroll)
+                        break
+                    end
+                end
+            end
             local action=GalleryShell.dropAction(
-                A.folder,parent,gesture.key,target,w,h,x,y)
+                A.folder,parent,gesture.key,target,w,h,x,y,targetRect)
             if action then
                 guard(function()
-                    if action.kind=='move' then
+                    if action.kind=='group' then
+                        local report=A.store:groupArtworks(
+                            gesture.key:sub(3),action.target:sub(3),
+                            A.folder)
+                        refreshGallery()
+                        if report.moved==2 and not report.error then
+                            status(('Pasta %s criada com duas obras')
+                                :format(report.name))
+                        else
+                            status(('Agrupamento incompleto (%d/2): %s')
+                                :format(report.moved,
+                                    tostring(report.error)))
+                        end
+                    elseif action.kind=='move' then
                         local report=A.store:moveProjects(
                             {gesture.key:sub(3)},action.folder,A.folder)
                         assert(report.moved==1 and not report.error,
