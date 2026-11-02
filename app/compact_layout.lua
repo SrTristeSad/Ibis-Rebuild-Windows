@@ -92,7 +92,7 @@ function UI.popup(w,h,kind,columns)
     local isTop=kind=='view' or kind=='stabilizer'
         or kind=='ruler' or kind=='materials'
     local width=kind=='tools' and (columns==3 and 358 or 242) or
-        kind=='color' and 404 or kind=='ruler' and 390
+        kind=='stabilizer' and 348 or kind=='color' and 404 or kind=='ruler' and 390
         or kind=='materials' and 444 or (kind=='tools' or
         kind=='filters' or kind=='text' or kind=='transform'
         or kind=='wand' or kind=='lasso' or kind=='smudge'
@@ -107,7 +107,7 @@ function UI.popup(w,h,kind,columns)
             or kind=='vector' or kind=='frame')
             and math.min(440,h-188)) or
         kind=='layers' and math.min(440,h-260) or
-        kind=='view' and 314 or kind=='stabilizer' and 254 or
+        kind=='view' and 314 or kind=='stabilizer' and 430 or
         kind=='blends' and math.min(440,h-260) or
         kind=='ruler' and 402 or kind=='materials' and 440 or 354
     local x=(kind=='tools' and 85) or

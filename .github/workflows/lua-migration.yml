@@ -31,6 +31,8 @@ jobs:
         run: luajit -e "local t=loadfile('tests/test_ibis_gallery_ui.lua')(); assert(t.run().passed)"
       - name: Lua top-right ibis toolbar safety and layout
         run: luajit -e "local t=loadfile('tests/test_ibis_top_toolbar.lua')(); assert(t.run().passed)"
+      - name: Lua ibisPaint 14.1 stabilizer visual layout and pending modes
+        run: luajit -e "package.path='app/?.lua;'..package.path; local t=loadfile('tests/test_ibis_stabilizer_ui.lua')(); assert(t.run().passed)"
       - name: Lua built-in and personal palette layout
         run: luajit -e "local t=loadfile('tests/test_ibis_palette_ui.lua')(); assert(t.run().passed)"
       - name: Lua layer window and blend-mode UI layout

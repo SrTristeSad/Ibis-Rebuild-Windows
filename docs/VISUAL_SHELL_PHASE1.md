@@ -408,3 +408,38 @@ e **obras inacessíveis quando excediam a primeira viewport**.
 **Limite de evidência:** screenshots de tutoriais oficiais
 fundamentam hierarquia visual, não equivalência pixel a pixel
 com o APK Android 14.1.2. Nenhum asset original foi copiado.
+
+## Estabilizador — controles específicos do ibisPaint 14.1
+
+A [versão oficial 14.1.0](https://ibispaint.com/newFeature.jsp?lang=en)
+e o [tutorial 39, Stabilizer](https://ibispaint.com/lecture/index.jsp?no=50)
+documentam a janela de **Tempo real**, **Constante**, **Traços rápidos**
+e **Fade**, além da possibilidade de optar pela estabilização legada.
+A janela anterior do rebuild apresentava apenas um controle legado
+de 0 a 5, visualmente incompatível com a atualização 14.1.x.
+
+- `app/ibis_stabilizer_ui.lua`: abas Estabilizar/Fade, opção
+  de aplicar apenas ao pincel atual, seção de Tempo real,
+  dois controles de rascunho independentes (Constante e Traços
+  rápidos), interface de comprimentos inicial/final, formato
+  Suave/Linear e geometria pura em Lua.
+- `app/compact_layout.lua`: popup do estabilizador passa de
+  318×254 a 348×430; cabe inteiramente em 960×640.
+- `app/main.lua`: seleção de abas, escopo, rascunhos e
+  opções Fade clicáveis. **Esses controles NÃO afetam a
+  pintura**. A opção Após fica explicitamente pendente.
+  O **nível legado 0–5** continua conectado ao motor Lua
+  preexistente e é identificado separadamente.
+- Escalas 0–100 dos rascunhos são uma escolha provisória
+  de visualização; não são declaradas medições exatas
+  do Android 14.1.2, nem simulam equivalência de curvas.
+- `tests/test_ibis_stabilizer_ui.lua`: posicionamento,
+  limites, independência de parâmetros e motores desabilitados.
+  O showcase Windows adiciona quatro imagens `66–69`,
+  exercitando cliques reais, integridade RGBA/histórico e
+  manutenção do controle legado funcional.
+
+**A reconstrução ainda não implementa a correção Constant,
+Fast Strokes, After ou Fade como motores.** Essa fase
+corrige exclusivamente aparência, navegação e estados,
+sem modificar o algoritmo de estabilização existente.

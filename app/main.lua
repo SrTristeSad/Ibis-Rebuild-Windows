@@ -50,6 +50,7 @@ local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local GalleryShell=require('ibis_gallery_shell')
 local SettingsUI=require('ibis_settings_ui')
+local StabilizerUI=require('ibis_stabilizer_ui')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -96,7 +97,11 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '60-menu-voltar.png','61-configuracoes-ibis.png',
     '62-ferramentas-sem-rotulos.png',
     '63-galeria-miniaturas.png','64-galeria-rolagem.png',
-    '65-galeria-selecao-visual.png'}
+    '65-galeria-selecao-visual.png',
+    '66-estabilizador-1412-tempo-real.png',
+    '67-estabilizador-1412-fade.png',
+    '68-estabilizador-1412-rascunho.png',
+    '69-estabilizador-legado-lua.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -3118,6 +3123,68 @@ local function advanceShowcase()
         assert(selected==1 and A.screen=='gallery',
             'Selecao visual nao deve abrir nem editar obra')
         status('Galeria: seleção visual · ações em lote pendentes')
+    elseif sh.stage==66 then
+        openDoc(A.store:openProject(sh.projectId))
+        A.compactUi=true
+        selectTool('brush')
+        A.stabilization=2
+        A.stabilizerVisual=StabilizerUI.new()
+        A.compactPanel='stabilizer'
+        status('14.1 · Tempo real com Constante e Traços rápidos')
+    elseif sh.stage==67 then
+        local old=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        -- Usa a geometria real do popup da barra superior.
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'stabilizer')
+        local tab=StabilizerUI.tabRect(p,2)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.stabilizerVisual.tab=='fade',
+            'Aba Fade nao abriu com clique real')
+        assert(Native.bytes(A.layerSession.composite)==old
+            and A.layerSession:historyStats().undo==history,
+            'Navegacao Fade nao pode alterar raster')
+        status('14.1 · Fade e comprimentos (prévia pendente)')
+    elseif sh.stage==68 then
+        local before=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        local previous=A.stabilization
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'stabilizer')
+        local tab=StabilizerUI.tabRect(p,1)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.stabilizerVisual.tab=='stabilization')
+        for i=1,2 do
+            local step=StabilizerUI.draftButton(p,i,1)
+            love.draw()
+            love.mousepressed(step.x+step.w/2,
+                step.y+step.h/2,1,false)
+        end
+        assert(A.stabilizerVisual.constant==10 and
+            A.stabilizerVisual.fast==10 and A.stabilization==previous,
+            'Ajustes novos nao podem fingir aplicacao no motor Lua')
+        assert(Native.bytes(A.layerSession.composite)==before
+            and A.layerSession:historyStats().undo==history,
+            'Rascunho de estabilizador modificou pixels')
+        status('14.1 · rascunho dos dois modos, motor preservado')
+    elseif sh.stage==69 then
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'stabilizer')
+        local legacy=StabilizerUI.legacyRow(p)
+        local before=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        local old=A.stabilization
+        love.draw()
+        love.mousepressed(legacy.x+legacy.w-18,
+            legacy.y+30,1,false)
+        assert(A.stabilization==old+1,
+            'Estabilizador legado deixou de ser funcional')
+        assert(Native.bytes(A.layerSession.composite)==before
+            and A.layerSession:historyStats().undo==history,
+            'Ajuste legado nao deve modificar pixels existentes')
+        status(('Legado Lua: nível %d / 5 aplicado'):format(A.stabilization))
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -7420,27 +7487,101 @@ local function drawCompactPopup(w,h)
                 A.previewEnabled=not A.previewEnabled
             end,A.previewEnabled)
     elseif kind=='stabilizer' then
-        local x,y=p.x+16,p.y+54
-        text('SUAVIZAÇÃO DE TRAÇO',x,y,'small','muted')
-        text('Ajuste do estabilizador Lua existente.',
-            x,y+29,'small','muted')
-        button('−',x,y+72,56,40,function()
-            finishStroke()
-            A.stabilization=math.max(0,A.stabilization-1)
-        end,false,A.stabilization==0)
-        text(('Nível %d / 5'):format(A.stabilization),
-            x+79,y+83,'body','text')
-        button('+',x+p.w-88,y+72,56,40,function()
-            finishStroke()
-            A.stabilization=math.min(5,A.stabilization+1)
-        end,false,A.stabilization==5)
-        c('line')
-        love.graphics.rectangle('fill',x,y+140,p.w-32,7,3,3)
-        c('accent')
-        love.graphics.rectangle('fill',x,y+140,
-            (p.w-32)*A.stabilization/5,7,3,3)
-        button('Abrir ajustes do pincel',x,y+163,p.w-32,32,
-            function()A.compactPanel='properties' end)
+        -- ibisPaint 14.1: Real Time Constant/Fast Strokes e Fade.
+        -- So a regulagem Legado Lua 0..5 e conectada ao raster.
+        local draft=A.stabilizerVisual or StabilizerUI.new()
+        A.stabilizerVisual=draft
+        for i,tab in ipairs(StabilizerUI.tabs) do
+            local r=StabilizerUI.tabRect(p,i)
+            button(tab.label,r.x,r.y,r.w,r.h,function()
+                StabilizerUI.tab(draft,tab.id)
+            end,draft.tab==tab.id)
+        end
+        local scope=StabilizerUI.scopeRect(p)
+        local scopeKey=draft.tab=='fade' and 'fadeScope' or 'scope'
+        button('Apenas para este pincel · prévia',
+            scope.x,scope.y,scope.w,scope.h,function()
+                StabilizerUI.toggle(draft,scopeKey)
+                status('Escopo por pincel: apenas estado visual')
+            end,draft[scopeKey])
+        if draft.tab=='stabilization' then
+            for i,method in ipairs({
+                {label='Tempo real',id='realtime'},
+                {label='Após · pendente',id='after'}}) do
+                local r=StabilizerUI.methodRect(p,i)
+                button(method.label,r.x,r.y,r.w,r.h,
+                    function()end,i==1,i==2)
+            end
+            local legacy=StabilizerUI.legacyRow(p)
+            text('MOTOR LUA · ESTABILIZAÇÃO LEGADA',
+                legacy.x,legacy.y,'small','muted')
+            button('−',legacy.x,legacy.y+17,36,27,function()
+                finishStroke()
+                A.stabilization=math.max(0,A.stabilization-1)
+            end,false,A.stabilization==0)
+            fitted(('Nível %d / 5 · aplicado'):format(A.stabilization),
+                legacy.x+47,legacy.y+23,'small','text',178)
+            button('+',legacy.x+legacy.w-36,legacy.y+17,
+                36,27,function()
+                finishStroke()
+                A.stabilization=math.min(5,A.stabilization+1)
+            end,false,A.stabilization==5)
+            for i,field in ipairs({
+                {id='constant',label='Constante'},
+                {id='fast',label='Traços rápidos'}}) do
+                local r=StabilizerUI.draftRow(p,i)
+                fitted(field.label..' · prévia',
+                    r.x,r.y,'small','text',r.w-90)
+                fitted(draft[field.id]==0 and 'OFF'
+                    or tostring(draft[field.id]),
+                    r.x+175,r.y+6,'small','muted',55)
+                for _,delta in ipairs({-1,1}) do
+                    local b=StabilizerUI.draftButton(p,i,delta)
+                    button(delta==-1 and '−' or '+',
+                        b.x,b.y,b.w,b.h,function()
+                        StabilizerUI.step(draft,field.id,delta)
+                    end,false,delta==-1 and draft[field.id]==0
+                        or delta==1 and draft[field.id]==100)
+                end
+            end
+            local note=StabilizerUI.footerRect(p)
+            fitted('Modos 14.1: sem efeito no motor atual',
+                note.x,note.y,'small','warn',note.w)
+        else
+            local toggle=StabilizerUI.fadeToggleRect(p)
+            button('Forçar Fade · prévia',
+                toggle.x,toggle.y,toggle.w,toggle.h,
+                function()StabilizerUI.toggle(draft,'fadeEnabled')end,
+                draft.fadeEnabled)
+            for i,field in ipairs({
+                {id='start',label='Comprimento inicial'},
+                {id='end',label='Comprimento final'}}) do
+                local r=StabilizerUI.fadeRow(p,i)
+                fitted(field.label,r.x,r.y,
+                    'small','text',r.w-90)
+                fitted(tostring(draft[field.id]),
+                    r.x+175,r.y+5,'small','muted',55)
+                for _,delta in ipairs({-1,1}) do
+                    local b=StabilizerUI.fadeButton(p,i,delta)
+                    button(delta==-1 and '−' or '+',
+                        b.x,b.y,b.w,b.h,function()
+                        StabilizerUI.step(draft,field.id,delta)
+                    end,false,delta==-1 and draft[field.id]==0
+                        or delta==1 and draft[field.id]==100)
+                end
+            end
+            for i,item in ipairs({
+                {id='smooth',label='Suave'},
+                {id='linear',label='Linear'}}) do
+                local r=StabilizerUI.shapeRect(p,i)
+                button(item.label,r.x,r.y,r.w,r.h,function()
+                    StabilizerUI.shape(draft,item.id)
+                end,draft.shape==item.id)
+            end
+            local note=StabilizerUI.footerRect(p)
+            fitted('Fade: somente controles visuais',
+                note.x,note.y,'small','warn',note.w)
+        end
     elseif kind=='ruler' then
         -- Icones simbolicos, todos locais ao painel, sem guias no canvas.
         local draft=A.rulerUi or RulerUI.new()
