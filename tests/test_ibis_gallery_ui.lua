@@ -40,6 +40,40 @@ function T.run()
         'Drop outside grid accepted')
     eq(not pcall(Shell.dragBegin,'bad',1,2,0),
         'Invalid gallery key accepted')
+    local into=Shell.dropAction('','', 'p:p_a','f:f_b',
+        960,640,rect.x+20,rect.y+20)
+    eq(into and into.kind=='move' and into.folder=='f_b',
+        'Artwork dropped on folder must move into folder')
+    local atParent=Shell.dropAction('f_child','f_parent',
+        'p:p_a',nil,960,640,25,25)
+    eq(atParent and atParent.kind=='move' and
+        atParent.folder=='f_parent',
+        'Back drop must move artwork to parent')
+    local atRoot=Shell.dropAction('f_top','',
+        'p:p_a',nil,960,640,25,25)
+    eq(atRoot and atRoot.kind=='move' and
+        atRoot.folder=='',
+        'Back drop must allow returning to gallery root')
+    eq(Shell.dropAction('',nil,'p:p_a',nil,
+        960,640,25,25)==nil,
+        'Root Back cannot move a project')
+    local keeping=Shell.dropAction('','',
+        'f:f_one','f:f_two',960,640,40,75)
+    eq(keeping and keeping.kind=='reorder'
+        and keeping.target=='f:f_two',
+        'Folder reordering should not nest folders accidentally')
+    local other=Shell.dropAction('','',
+        'p:p_a','p:p_b',960,640,40,75)
+    eq(other and other.kind=='reorder'
+        and other.target=='p:p_b',
+        'Artwork reordering should remain working')
+    eq(Shell.dropAction('',nil,'p:p_a','p:p_a',
+        960,640,40,75)==nil,
+        'Self drop cannot move or reorder')
+    eq(not Shell.parentDrop(960,640,160,25) and
+        not Shell.parentDrop(960,640,25,65) and
+        Shell.parentDrop(960,640,25,25),
+        'Parent drop hitbox outside real Back control')
     eq(#G.FILTERS==3,'Galeria precisa de tres filtros')
     eq(#G.PRESETS==4,'Dialogo precisa preservar quatro formatos')
     eq(#G.OFFICIAL_PRESETS==4,
