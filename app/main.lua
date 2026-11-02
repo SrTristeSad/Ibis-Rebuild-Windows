@@ -85,8 +85,17 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '48-camadas-visuais.png','49-camada-selecionada.png',
     '50-camadas-comandos.png','51-camadas-adicionar.png',
     '52-camadas-duplicar.png','53-camadas-rodape-oficial.png',
-    '54-camadas-mesclagem-rodape.png'}
-local A={toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+    '54-camadas-mesclagem-rodape.png',
+    '55-varinha-mascara-real.png',
+    '56-ferramenta-pendente-nao-pinta.png'}
+local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local function clearWandSelection()
+    if A.wandOverlay then
+        A.wandOverlay:release()
+        A.wandOverlay=nil
+    end
+    A.wandSelection=nil
+end
 -- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
 local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
 -- Visual language: neutral studio workspace, clear blue tool state and
@@ -310,6 +319,7 @@ local function openDoc(doc)
     assert(Native.available,'O editor requer o motor Lua compilado. A galeria continua disponível.')
     clearLayerThumbs()
     A.layerScroll=nil
+    clearWandSelection()
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
@@ -396,6 +406,8 @@ selectTool=function(id)
         return false
     end
     finishStroke()
+    clearWandSelection()
+    A.visualPendingTool=nil
     if A.tool~=id then A.shapePreview=nil;A.sidebarScroll=0 end
     A.tool=id
     local tab=EditorTools.panelFor(id)
@@ -476,6 +488,8 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
+    clearWandSelection()
+    A.visualPendingTool=nil
     A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.colorDrag=nil;navigateCompactPanel(nil)
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
@@ -2894,6 +2908,43 @@ local function advanceShowcase()
             and A.doc.active_layer==old.active,
             'Abrir mesclagem pelo rodape alterou o desenho')
         status('Rodape: mesclagem abriu sem editar o documento')
+    elseif sh.stage==55 then
+        A.compactPanel=nil
+        A.visualPendingTool='wand'
+        A.selectionToolUi=SelectionToolUI.new('wand')
+        A.selectionToolUi.continuous=true
+        local old=Native.bytes(A.layerSession.composite)
+        local edits=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local sx,sy=View.center(viewData(),w,h)
+        love.draw()
+        love.mousepressed(sx,sy,1,false)
+        love.mousereleased(sx,sy,1,false)
+        assert(A.wandSelection and A.wandSelection.count>0
+            and A.wandOverlay,
+            'Clique real da varinha nao criou a mascara')
+        assert(Native.bytes(A.layerSession.composite)==old
+            and A.layerSession:historyStats().undo==edits,
+            'Varinha nao pode alterar composicao nem historico')
+        A.showcaseWandProof={pixels=old,undo=edits}
+        status(('Varinha: máscara RGBA de %d pixels'):format(A.wandSelection.count))
+    elseif sh.stage==56 then
+        local proof=assert(A.showcaseWandProof)
+        clearWandSelection()
+        A.visualPendingTool='lasso'
+        A.selectionToolUi=SelectionToolUI.new('lasso')
+        local w,h=love.graphics.getDimensions()
+        local sx,sy=View.center(viewData(),w,h)
+        local previousTool=A.tool
+        love.draw()
+        love.mousepressed(sx,sy,1,false)
+        love.mousereleased(sx,sy,1,false)
+        assert(A.tool==previousTool and not A.drawing,
+            'Ferramenta pendente chamou motor do pincel')
+        assert(Native.bytes(A.layerSession.composite)==proof.pixels
+            and A.layerSession:historyStats().undo==proof.undo,
+            'Laço pendente nao pode editar o canvas')
+        status('Laço pendente: clique não aciona o pincel anterior')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5145,6 +5196,7 @@ local function drawCompactQuick(kind,w,h,value)
     love.graphics.circle('fill',d.x+d.w*factor,d.y+7,7,18)
 end
 local function activateIbisTool(tool)
+    if tool.id~='wand' then clearWandSelection() end
     if tool.id=='vector' or tool.id=='frame' then
         A.visualPendingTool=tool.id
         A.vectorFrameUi=VectorFrameUI.new(tool.id)
@@ -5164,7 +5216,9 @@ local function activateIbisTool(tool)
         A.visualPendingTool=tool.id
         A.selectionToolUi=SelectionToolUI.new(tool.id)
         A.compactPanel=tool.id
-        status(tool.label..': controles visuais; motor pendente')
+        status(tool.id=='wand' and
+            'Varinha: clique na tela para criar máscara RGBA'
+            or 'Laço: interface visual; motor pendente')
         return
     end
     if tool.id=='transform' then
@@ -5330,6 +5384,10 @@ local function drawEditor(w,h)
         love.graphics.rectangle('fill',x-dw/2,y-dh/2,math.min(checker,dw-x),math.min(checker,dh-y))
     end end
     love.graphics.setColor(1,1,1);love.graphics.draw(A.image,-dw/2,-dh/2)
+    if A.wandOverlay then
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(A.wandOverlay,-dw/2,-dh/2)
+    end
     if A.shapePreview then
         local p=A.shapePreview
         local left=math.min(p.x0,p.x1)-dw/2
@@ -6790,7 +6848,7 @@ local function drawCompactPopup(w,h)
             end
             local row=SelectionToolUI.toleranceRow(p)
             box(row.x,row.y,row.w,row.h,'card')
-            fitted(('Tolerância (rascunho): %d'):format(
+            fitted(('Tolerância RGBA: %d'):format(
                 state.tolerance),row.x+10,row.y+9,'small',
                 'text',row.w-107)
             for _,delta in ipairs({-1,1}) do
@@ -6822,14 +6880,17 @@ local function drawCompactPopup(w,h)
             text('Captura de traçado: motor pendente',
                 area.x+16,area.y+163,'small','warn')
         end
-        for i,label in ipairs({'Inverter · pendente',
-            'Limpar · pendente'}) do
+        for i,label in ipairs({'Inverter · pendente','Limpar máscara'}) do
             local r=SelectionToolUI.actionRect(p,i)
-            button(label,r.x,r.y,r.w,r.h,
-                function()end,false,true)
+            local enabled=kind=='wand' and i==2 and A.wandSelection~=nil
+            button(label,r.x,r.y,r.w,r.h,function()
+                if enabled then clearWandSelection() end
+            end,false,not enabled)
         end
         local footer=SelectionToolUI.footerRect(p)
-        fitted('Não altera a seleção raster existente.',
+        fitted(kind=='wand' and
+            'Clique na tela · máscara não limita edição ainda'
+            or 'Laço: captura de traçado ainda indisponível.',
             footer.x,footer.y,'small','warn',footer.w)
     elseif kind=='transform' then
         local draft=assert(A.transformUi,'Rascunho Transformar ausente')
@@ -7667,6 +7728,40 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
     if buttonNumber==1 then
         for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
+        -- An unimplemented visual tool must NEVER fall through to the
+        -- previously active brush. Magic Wand is the first pixel-mask
+        -- engine here; other pending modes consume the click safely.
+        if A.screen=='editor' and A.compactUi and
+            A.visualPendingTool and not A.modal then
+            if Workspace.contains(love.graphics.getWidth(),
+                love.graphics.getHeight(),paneHidden(),x,y,
+                not A.focusMode) then
+                if A.visualPendingTool=='wand' then
+                    guard(function()
+                        local vx,vy=canvasPoint(x,y)
+                        if vx>=0 and vy>=0 and vx<A.doc.width
+                            and vy<A.doc.height then
+                            local state=assert(A.selectionToolUi)
+                            local source=state.source=='current'
+                                and A.layerSession:activeBuffer()
+                                or A.layerSession.composite
+                            local mask=A.wandEngine.select(
+                                source,math.floor(vx),math.floor(vy),
+                                state.tolerance,state.mode,
+                                state.continuous,A.wandSelection)
+                            local preview=A.wandEngine.preview(mask)
+                            clearWandSelection()
+                            A.wandSelection=mask
+                            A.wandOverlay=preview
+                            status(('Varinha: %d pixels na máscara · edição mascarada pendente'):format(mask.count))
+                        end
+                    end)()
+                else
+                    status('Ferramenta visual pendente · nenhum pixel modificado')
+                end
+            end
+            return
+        end
         if A.screen=='editor' and not A.modal and Workspace.contains(
             love.graphics.getWidth(),love.graphics.getHeight(),paneHidden(),x,y,A.compactUi and not A.focusMode) then
             guard(function()
@@ -8263,7 +8358,8 @@ function love.keypressed(key)
         A.shapePreview=nil;status('Forma cancelada')
     elseif A.screen=='editor' and (key=='escape' or
         (key=='d' and love.keyboard.isDown('lctrl','rctrl'))) and A.selection then
-        guard(finishSelection)();A.selection=nil;status('Seleção desmarcada')
+        guard(finishSelection)();A.selection=nil;clearWandSelection()
+        status('Seleção desmarcada')
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
         if love.keyboard.isDown('lshift','rshift') then guard(redoDoc)() else guard(undoDoc)() end
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='y' then guard(redoDoc)()
