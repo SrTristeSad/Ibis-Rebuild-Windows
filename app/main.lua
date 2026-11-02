@@ -3356,22 +3356,29 @@ local function advanceShowcase()
         local keys=GalleryShell.selectionKeys(
             A.folders,A.projects,A.galleryFilter)
         assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1)
-        local disabled=GalleryShell.selectionAction(w,h,'delete')
+        local action=GalleryShell.selectionAction(w,h,'delete')
         love.draw()
-        love.mousepressed(disabled.x+disabled.w/2,
-            disabled.y+disabled.h/2,1,false)
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.galleryDeleteMenu and #A.galleryDeleteMenu.ids==1,
+            'Excluir deve exigir confirmacao')
+        local dialog=GalleryShell.confirmPopup(w,h)
+        local cancel=GalleryShell.confirmCancel(dialog)
+        love.draw()
+        love.mousepressed(cancel.x+cancel.w/2,
+            cancel.y+cancel.h/2,1,false)
         local proof=assert(A.showcaseGallerySelection)
         assert(A.screen=='gallery' and A.gallerySelecting and
             GalleryShell.selectionCount(A.gallerySelected,keys)==1
-            and not A.modal and not A.galleryCreateMenu
-            and not A.galleryMoveMenu,
-            'Acao Excluir pendente nao pode abrir dialogo ficticio')
+            and not A.galleryDeleteMenu and
+            not A.galleryCreateMenu and not A.galleryMoveMenu,
+            'Cancelar exclusao nao retornou a selecao')
         assert(#A.projects==proof.projects and
             #A.folders==proof.folders and
             Native.bytes(A.layerSession.composite)==proof.pixels and
             A.layerSession:historyStats().undo==proof.undo,
-            'Acao desabilitada alterou documentos')
-        status('Galeria: Excluir indisponivel e seguro')
+            'Cancelar alterou documentos')
+        status('Galeria: Excluir exige confirmacao e permite cancelar')
     elseif sh.stage==79 then
         A.gallerySelecting=true
         A.gallerySelected={}
