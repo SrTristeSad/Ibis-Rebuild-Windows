@@ -6598,18 +6598,21 @@ function IbisPanels.drawGalleryExpanded(w,h)
     lg.print(title,label.x,label.y)
     lg.printf(('%d × %d'):format(doc.width,doc.height),
         label.x+label.w-158,label.y,158,'right')
+    -- Sem setas fixas de desktop sobre a galeria Android.
+    -- Apenas a area visivel sob hover recebe callback de mouse.
+    local pointerX,pointerY=love.mouse.getPosition()
     for _,direction in ipairs({-1,1}) do
         local available=direction==-1 and index>1 or index<total
-        local nav=IbisPanels.galleryDetail.nav(w,h,direction)
-        lg.setColor(available and .31 or .78,
-            available and .34 or .79,
-            available and .38 or .80,1)
-        lg.rectangle('fill',nav.x,nav.y,nav.w,nav.h,5,5)
-        lg.setColor(1,1,1,1)
-        lg.setFont(A.fonts.title)
-        lg.printf(direction==-1 and '‹' or '›',
-            nav.x,nav.y+10,nav.w,'center')
-        if available then
+        local shown=available and IbisPanels.galleryDetail.navRevealed(
+            w,h,direction,pointerX,pointerY)
+        if shown then
+            local nav=IbisPanels.galleryDetail.nav(w,h,direction)
+            lg.setColor(.26,.29,.32,.42)
+            lg.rectangle('fill',nav.x,nav.y,nav.w,nav.h,5,5)
+            lg.setColor(.94,.96,.98,1)
+            Icons.draw(direction==-1 and 'gallery-prev'
+                or 'gallery-next',nav.x+nav.w/2,
+                nav.y+nav.h/2,19)
             A.buttons[#A.buttons+1]={x=nav.x,y=nav.y,
                 w=nav.w,h=nav.h,fn=function()
                     A.galleryDetailId=IbisPanels.galleryDetail.step(

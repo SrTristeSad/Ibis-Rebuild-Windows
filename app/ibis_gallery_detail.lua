@@ -54,6 +54,16 @@ function M.nav(w,h,direction)
     return {x=direction==-1 and 24 or w-70,
         y=math.floor((h-52)/2)-25,w=46,h=50}
 end
+-- As setas sao uma adaptacao de mouse/Windows. Na referencia
+-- Android sao usados gestos; nao manter hitboxes invisiveis.
+function M.navRevealed(w,h,direction,mouseX,mouseY)
+    local r=M.nav(w,h,direction)
+    assert(type(mouseX)=='number' and mouseX==mouseX and
+        type(mouseY)=='number' and mouseY==mouseY,
+        'Ponteiro de navegacao invalido')
+    return mouseX>=r.x-22 and mouseX<=r.x+r.w+22
+        and mouseY>=r.y-24 and mouseY<=r.y+r.h+24
+end
 function M.edit(w,h)
     viewport(w,h)
     return {x=w-121,y=h-51,w=111,h=49}

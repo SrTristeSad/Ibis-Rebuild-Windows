@@ -64,9 +64,22 @@ function T.run()
             back.y==forward.y and back.y>=54 and
             back.y+back.h<h-52,
             'Setas nao cabem na janela')
+        ok(Detail.navRevealed(w,h,-1,
+            back.x+back.w/2,back.y+back.h/2)
+            and Detail.navRevealed(w,h,1,
+            forward.x+forward.w/2,forward.y+forward.h/2),
+            'Navegacao de mouse nao aparece ao aproximar a borda')
+        ok(not Detail.navRevealed(w,h,-1,w/2,h/2)
+            and not Detail.navRevealed(w,h,1,w/2,h/2)
+            and not Detail.navRevealed(w,h,-1,
+                forward.x+forward.w/2,forward.y+forward.h/2),
+            'Seta oculta nao pode capturar evento invisivel')
     end
     -- Icones do rodape nao dependem de caracteres Unicode ausentes.
     local Icons=require('ui_icons')
+    ok(#Icons.commands('gallery-prev')==1
+        and #Icons.commands('gallery-next')==1,
+        'Setas de hover nao possuem glyphs vetoriais')
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local w,h=size[1],size[2]
         local footer=Detail.footerIcons(w,h)

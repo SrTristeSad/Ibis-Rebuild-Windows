@@ -201,6 +201,12 @@ glyphs['gallery-more']={
     {op='circle',mode='fill',x=-5,y=0,r=1.5},
     {op='circle',mode='fill',x=0,y=0,r=1.5},
     {op='circle',mode='fill',x=5,y=0,r=1.5}}
+
+-- Setas discretas exibidas somente ao aproximar o ponteiro.
+glyphs['gallery-prev']={
+    {op='line',points={3.6,-6,-3.6,0,3.6,6}}}
+glyphs['gallery-next']={
+    {op='line',points={-3.6,-6,3.6,0,-3.6,6}}}
 function Icons.commands(id)
     return glyphs[id]
 end
