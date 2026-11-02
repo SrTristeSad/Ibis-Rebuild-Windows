@@ -4918,6 +4918,19 @@ function love.update(dt)
             end
         end
     end
+    -- The pointer is stationary at the viewport edge while the
+    -- thumbnails move beneath it; scrolling therefore belongs to the
+    -- frame update, not mousemoved or the document renderer.
+    if A.screen=='gallery' and A.galleryGesture and
+        A.galleryGesture.active and A.galleryGesture.moved and
+        not A.galleryTrash and not A.gallerySelecting and
+        not A.galleryMoveMenu and not A.galleryCreateMenu and
+        not A.galleryMoreMenu and not A.galleryDeleteMenu then
+        local w,h=love.graphics.getDimensions()
+        A.galleryScroll=GalleryShell.dragAutoScroll(
+            w,h,#(A.galleryItems or {}),A.galleryScroll or 0,
+            A.galleryGesture.py,dt)
+    end
     if A.inkAttached and dispatchInkEvent then
         local events=Ink.poll()
         if #events>0 then
