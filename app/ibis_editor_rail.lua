@@ -1,17 +1,17 @@
--- Faixa lateral do editor inspirada na disposicao vertical da
--- captura publica do editor ibisPaint. Geometria independente de LÖVE.
+-- Faixa lateral do editor reconstruida a partir da disposicao publica
+-- do ibisPaint (15 ferramentas, icones e legendas compactas). Geometria independente de LÖVE.
 -- Sem redistribuir recursos ou sprites da versao Android.
 local M={}
-M.WIDTH=68
-M.LEFT=7
-M.TOP=19
+M.WIDTH=52
+M.LEFT=0
+M.TOP=20
 M.RIGHT_TOP=64 -- abaixo dos seis comandos superiores
 M.ROW=32
 M.shortLabels={transform='Mover',wand='Varinha',lasso='Laço',
     filter='Filtro',brush='Pincel',eraser='Borracha',
     smudge='Borrar',blur='Desfoque',special='Especial',
     bucket='Balde',vector='Vetor',text='Texto',
-    frame='Quadros',picker='Conta-gotas',canvas='Tela'}
+    frame='Quadros',picker='Gotas',canvas='Tela'}
 function M.layout(w,h,page,count,position)
     assert(type(w)=='number' and w>=960
         and type(h)=='number' and h>=640,
