@@ -374,3 +374,37 @@ Configurações → Interface**, e não no cabeçalho da paleta de ferramentas.
 **Evidência:** a hierarquia foi obtida dos tutoriais publicados,
 não medida diretamente no APK Android 14.1.2. A disposição exata,
 as cores e fontes exigem conferência contra imagens autênticas do APK.
+
+## Galeria compacta de miniaturas e rolagem independente
+
+O fluxo `My Gallery` mostrado em
+[20. View Your Artwork](https://ibispaint.com/lecture/index.jsp?no=20)
+e [29. Rearrange artworks](https://ibispaint.com/lecture/index.jsp?no=103)
+apresenta **barra escura superior, título com quantidade de obras,
+miniaturas em grade, e barra de ações inferior**. A galeria anterior
+do rebuild tinha cabeçalho de aplicativo desktop, cartões grandes
+e **obras inacessíveis quando excediam a primeira viewport**.
+
+- `app/ibis_gallery_shell.lua` fornece geometria pura para grade
+  responsiva, viewport, áreas clicáveis, rolagem limitada e menu
+  da ação `+`. Preserva `visual_hierarchy.lua` para os contratos
+  e testes da interface desktop anterior; não cria outro catálogo.
+- `app/main.lua` usa miniaturas RGBA reais do cache existente,
+  barra superior `A Minha Galeria (n)`, botão `Selecionar` em
+  modo **somente visual** e rodapé `+` com ações existentes de
+  `Nova tela` e `Nova pasta`. A seleção em lote, ordenação,
+  compartilhamento e ferramentas de nuvem **não foram implementadas**.
+- Os filtros `Tudo / Desenhos / Pastas` permanecem no rebuild,
+  claramente não reivindicados como organização exata do APK.
+  A rolagem do mouse não toca em pixels RBD2, camada, histórico
+  nem muda de ferramenta. O botão `Voltar` navega ao pai da
+  pasta atual, sem fingir uma tela inicial Android inexistente.
+- `tests/test_ibis_gallery_ui.lua` cobre a nova geometria, a
+  acessibilidade da última obra e clipping; o showcase Windows
+  cria 18 **obras de teste isoladas**, compara a integridade do
+  desenho ativo e captura as telas `63–65` (grade, rolagem,
+  seleção visual).
+
+**Limite de evidência:** screenshots de tutoriais oficiais
+fundamentam hierarquia visual, não equivalência pixel a pixel
+com o APK Android 14.1.2. Nenhum asset original foi copiado.

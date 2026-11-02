@@ -48,6 +48,7 @@ local EffectUI=require('ibis_effect_tools_ui')
 local VectorFrameUI=require('ibis_vector_frame_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
+local GalleryShell=require('ibis_gallery_shell')
 local SettingsUI=require('ibis_settings_ui')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
@@ -93,7 +94,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '58-ferramentas-uma-coluna-pagina2.png',
     '59-ferramentas-tres-colunas.png',
     '60-menu-voltar.png','61-configuracoes-ibis.png',
-    '62-ferramentas-sem-rotulos.png'}
+    '62-ferramentas-sem-rotulos.png',
+    '63-galeria-miniaturas.png','64-galeria-rolagem.png',
+    '65-galeria-selecao-visual.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -215,7 +218,9 @@ local function externalWrite(path,bytes)
 end
 local function refreshGallery() A.folders=A.store:folders(A.folder);A.projects=A.store:listProjects(A.folder) end
 local function setFolder(id)
-    A.folder=id or '';refreshGallery()
+    A.folder=id or '';A.galleryScroll=0
+    A.gallerySelected={};A.gallerySelecting=false
+    refreshGallery()
 end
 local function clearLayerThumbs()
     if A.layerThumbs then
@@ -495,6 +500,8 @@ local function saveDoc()
 end
 local function toGallery()
     A.backMenu=false;A.settingsOpen=false
+    A.galleryCreateMenu=false;A.galleryScroll=0
+    A.gallerySelecting=false;A.gallerySelected={}
     clearWandSelection()
     A.visualPendingTool=nil
     A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.colorDrag=nil;navigateCompactPanel(nil)
@@ -3069,6 +3076,48 @@ local function advanceShowcase()
             A.layerSession:historyStats().undo==undo,
             'Mudanca visual de rotulos alterou raster')
         status('Ferramentas: nomes desativados, ícones mantidos')
+    elseif sh.stage==63 then
+        toGallery()
+        A.galleryFilter='all'
+        local sample=Native.buffer(96,96)
+        for i=1,18 do
+            Native.clear(sample,0)
+            Native.basicStroke(sample,8,10+(i%5)*6,86,81,9,
+                (i%2==0) and 0x338adfff or 0xe17caaff,1)
+            A.store:createProject(('Ilustração %02d'):format(i),
+                96,96,'',Native.bytes(sample))
+        end
+        refreshGallery()
+        assert(#A.projects>=18,'Galeria nao criou obras de prova')
+        A.galleryScroll=0
+        status('Galeria em grade compacta · miniaturas reais')
+    elseif sh.stage==64 then
+        local before=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        love.wheelmoved(0,-7)
+        assert((A.galleryScroll or 0)>0,
+            'Roda do mouse nao percorreu a galeria')
+        assert(Native.bytes(A.layerSession.composite)==before
+            and A.layerSession:historyStats().undo==history,
+            'Scroll de galeria nao pode alterar documento')
+        status('Galeria: rolagem independente das obras')
+    elseif sh.stage==65 then
+        A.galleryScroll=0
+        love.draw()
+        local w,h=love.graphics.getDimensions()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting,
+            'Selecionar nao ativou o estado visual')
+        love.draw()
+        local r=GalleryShell.card(w,h,1,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local selected=0
+        for _,v in pairs(A.gallerySelected) do
+            if v then selected=selected+1 end
+        end
+        assert(selected==1 and A.screen=='gallery',
+            'Selecao visual nao deve abrir nem editar obra')
+        status('Galeria: seleção visual · ações em lote pendentes')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5162,105 +5211,197 @@ local function releaseGalleryPreviews()
     A.galleryPreviewCache=nil
 end
 local function drawGallery(w,h)
-    -- Galeria clara, com obras em primeiro plano, mantendo o catálogo
-    -- RBD2, a prévia verdadeira e os destinos de clique existentes.
-    text('A Minha Galeria',42,107,'large')
-    text('Desenhos e pastas deste computador',44,163,'body','muted')
-    c('line')
-    love.graphics.rectangle('fill',42,194,w-84,1)
-    text('OBRAS E PASTAS',44,241,'small','muted')
-    button('Nova tela',w-322,113,140,42,function()modal('new')end,true,not Native.available)
-    button('Nova pasta',w-168,113,126,42,function()modal('folder')end)
-    button('Raiz',44,206,70,32,function()setFolder('')end,A.folder=='')
+    -- Galeria com barra escura, miniaturas rolaveis e rodape proprio.
+    -- Os arquivos permanecem no Store/RBD2; sem ordenacao inventada.
+    local lg=love.graphics
+    local l=GalleryShell.layout(w,h)
+    local folders=GalleryUI.filter(A.galleryFilter,'folder')
+        and #A.folders or 0
+    local works=GalleryUI.filter(A.galleryFilter,'work')
+        and #A.projects or 0
+    local total=folders+works
+    A.galleryScroll=math.min(A.galleryScroll or 0,
+        GalleryShell.maxScroll(w,h,total))
+    -- Barra superior do My Gallery (oficial); sem cabeçalho desktop.
+    lg.setColor(.18,.19,.20,1)
+    lg.rectangle('fill',0,0,w,54)
+    lg.setColor(.95,.96,.97,1)
+    lg.setFont(A.fonts.body)
+    lg.printf(('A Minha Galeria (%d)'):format(total),
+        math.floor((w-390)/2),16,390,'center')
+    lg.setColor(A.folder~='' and .45 or .55,.74,.94,1)
+    lg.print('‹ Voltar',18,17)
     if A.folder~='' then
-        fitted('/ '..A.folder,125,213,'small','muted',90)
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=guard(function()
+                local parent=''
+                for _,f in ipairs(A.store.catalog.folders) do
+                    if f.id==A.folder then parent=f.parent;break end
+                end
+                setFolder(parent)
+            end)}
     end
+    lg.setColor(.45,.74,.94,1)
+    lg.printf(A.gallerySelecting and 'Concluir' or 'Selecionar',
+        w-156,17,136,'right')
+    A.buttons[#A.buttons+1]={x=w-166,y=7,w=152,h=42,
+        fn=function()
+            A.gallerySelecting=not A.gallerySelecting
+            A.gallerySelected={}
+        end}
+    -- Filtros de catalogo locais: adicionais do rebuild, nao da APK.
+    lg.setColor(.96,.95,.92,1)
+    lg.rectangle('fill',0,54,w,66)
+    lg.setColor(.75,.75,.72,1)
+    lg.rectangle('fill',0,119,w,1)
     for i,item in ipairs(GalleryUI.FILTERS) do
-        local px=238+(i-1)*116
-        button(item.name,px,205,108,33,function()
-            A.galleryFilter=item.id
-        end,A.galleryFilter==item.id)
+        local x=18+(i-1)*110
+        local active=A.galleryFilter==item.id
+        lg.setColor(active and .69 or .89,
+            active and .80 or .89,active and .94 or .89,1)
+        lg.rectangle('fill',x,70,101,33,5,5)
+        lg.setColor(.23,.26,.30,1)
+        lg.setFont(A.fonts.small)
+        lg.printf(item.name,x,79,101,'center')
+        A.buttons[#A.buttons+1]={x=x,y=70,w=101,h=33,
+            fn=function()
+                A.galleryFilter=item.id
+                A.galleryScroll=0;A.gallerySelected={}
+            end}
     end
-    text(('%d desenhos · %d pastas'):format(#A.projects,#A.folders),
-        w-260,212,'small','muted')
+    lg.setColor(.34,.36,.37,1)
+    lg.setFont(A.fonts.small)
+    lg.printf(A.gallerySelecting and
+        'Seleção visual · ações em lote pendentes' or
+        ('Desenhos: %d   Pastas: %d'):format(#A.projects,#A.folders),
+        w-420,80,402,'right')
     local index=0
-    local function card(label,sub,folder,fn,project)
+    lg.setScissor(0,l.top,w,l.bottom-l.top)
+    local function card(label,sub,folder,fn,project,identifier)
         index=index+1
-        local r=Visual.galleryCard(w,h,index)
+        local r=GalleryShell.card(w,h,index,A.galleryScroll)
         if not r.visible then return end
-        local x,y=r.x,r.y
-        local mx,my=love.mouse.getPosition()
-        local hovered=mx>=x and mx<x+r.w and my>=y and my<y+r.h
-        box(x,y,r.w,r.h,'card')
-        c(hovered and 'accent' or 'line')
-        love.graphics.setLineWidth(hovered and 2 or 1)
-        love.graphics.rectangle('line',x+.5,y+.5,r.w-1,r.h-1,6,6)
+        local mx,my=lg.getDimensions() -- default, avoids mutable hit geometry
+        local px,py=love.mouse.getPosition()
+        local hovered=GalleryShell.hit(w,h,index,A.galleryScroll,px,py)
+        local selected=A.gallerySelected and A.gallerySelected[identifier]
+        lg.setColor(selected and .66 or .98,
+            selected and .79 or .98,
+            selected and .96 or .97,1)
+        lg.rectangle('fill',r.x,r.y,r.w,r.h,3,3)
+        lg.setColor(selected and .22 or hovered and .32 or .71,
+            selected and .54 or hovered and .52 or .71,
+            selected and .91 or hovered and .79 or .70,1)
+        lg.setLineWidth(selected and 3 or 1)
+        lg.rectangle('line',r.x+.5,r.y+.5,r.w-1,r.h-1,3,3)
+        -- O fundo da prévia não é pintura, edição nem arquivo novo.
+        lg.setColor(.89,.88,.86,1)
+        lg.rectangle('fill',r.preview.x,r.preview.y,
+            r.preview.w,r.preview.h)
         if folder then
-            box(r.preview.x,r.preview.y,r.preview.w,r.preview.h,'bg')
-            c('accent')
-            love.graphics.rectangle('fill',x+75,y+75,67,43,6,6)
-            love.graphics.rectangle('fill',x+75,y+60,31,20,4,4)
+            lg.setColor(.58,.70,.82,1)
+            lg.rectangle('fill',r.preview.x+35,r.preview.y+42,
+                r.preview.w-70,50,5,5)
+            lg.rectangle('fill',r.preview.x+35,r.preview.y+32,
+                31,17,3,3)
         else
-            c('bg')
-            love.graphics.rectangle('fill',r.preview.x,r.preview.y,
-                r.preview.w,r.preview.h,3,3)
             local preview=project and galleryPreview(project)
             if preview then
                 local pw,ph=preview:getDimensions()
                 local left=r.preview.x+(r.preview.w-pw)/2
                 local top=r.preview.y+(r.preview.h-ph)/2
-                local tile=8
-                for row=0,math.ceil(ph/tile)-1 do
-                    for col=0,math.ceil(pw/tile)-1 do
-                        local v=(row+col)%2==0 and .83 or .67
-                        love.graphics.setColor(v,v,v,1)
-                        love.graphics.rectangle('fill',
-                            left+col*tile,top+row*tile,
-                            math.min(tile,pw-col*tile),
-                            math.min(tile,ph-row*tile))
-                    end
-                end
-                love.graphics.setColor(1,1,1,1)
-                love.graphics.draw(preview,left,top)
+                lg.setColor(1,1,1,1)
+                lg.draw(preview,left,top)
             else
-                c('muted')
-                love.graphics.rectangle('line',x+83,y+52,46,46,3,3)
+                lg.setColor(.58,.61,.64,1)
+                lg.rectangle('line',r.preview.x+42,
+                    r.preview.y+39,56,52)
             end
         end
-        fitted(label,r.titleX,r.titleY,'body','text',176)
-        text(sub,r.metaX,r.metaY,'small','muted')
-        if hovered then
-            c('accent')
-            love.graphics.rectangle('fill',x,y+2,3,r.h-4,2,2)
+        fitted(label,r.titleX,r.titleY,'small','text',r.w-18)
+        fitted(sub,r.metaX,r.metaY,'micro','muted',r.w-18)
+        if selected then
+            lg.setColor(.14,.43,.80,1)
+            lg.circle('fill',r.x+r.w-13,r.y+14,9)
+            lg.setColor(1,1,1,1)
+            lg.setFont(A.fonts.micro)
+            lg.print('✓',r.x+r.w-17,r.y+8)
         end
-        A.buttons[#A.buttons+1]={x=x,y=y,w=r.w,h=r.h,fn=guard(fn)}
+        local hitTop=math.max(r.y,l.top)
+        local hitBottom=math.min(r.y+r.h,l.bottom)
+        A.buttons[#A.buttons+1]={x=r.x,y=hitTop,w=r.w,
+            h=hitBottom-hitTop,fn=guard(function()
+                if A.gallerySelecting then
+                    A.gallerySelected=A.gallerySelected or {}
+                    A.gallerySelected[identifier]=not
+                        A.gallerySelected[identifier] or nil
+                else
+                    fn()
+                end
+            end)}
     end
     if GalleryUI.filter(A.galleryFilter,'folder') then
         for _,folder in ipairs(A.folders) do
-            card(folder.name,'Pasta',true,function()setFolder(folder.id)end)
+            card(folder.name,'Pasta',true,
+                function()setFolder(folder.id)end,nil,'f:'..folder.id)
         end
     end
     if GalleryUI.filter(A.galleryFilter,'work') then
         for _,doc in ipairs(A.projects) do
-            card(doc.name,doc.width..' × '..doc.height..
-                ' · r'..(doc.revision or 1),
-                false,function()openDoc(A.store:openProject(doc.id))end,doc)
+            card(doc.name,doc.width..'×'..doc.height,false,
+                function()openDoc(A.store:openProject(doc.id))end,
+                doc,'p:'..doc.id)
         end
     end
-    if index==0 then
-        local mx=math.floor(w/2)
-        box(mx-112,292,224,186,'card')
-        c('line')
-        love.graphics.rectangle('line',mx-112,292,224,186,7,7)
-        love.graphics.rectangle('line',mx-44,321,88,78,4,4)
-        c('accent')
-        love.graphics.line(mx-19,360,mx+19,360)
-        love.graphics.line(mx,341,mx,379)
-        text(A.galleryFilter=='folders' and 'Nenhuma pasta' or
+    lg.setScissor()
+    if total==0 then
+        lg.setColor(.45,.47,.49,1)
+        lg.setFont(A.fonts.body)
+        lg.printf(A.galleryFilter=='folders' and 'Nenhuma pasta' or
             A.galleryFilter=='works' and 'Nenhum desenho' or
-            'Sua galeria está vazia',mx-104,425,'body','muted')
-        button('Criar desenho',mx-91,489,182,38,
-            function()modal('new')end,true,not Native.available)
+            'A Minha Galeria está vazia',
+            0,math.floor((l.top+l.bottom)/2)-24,w,'center')
+    end
+    -- Rodape escuro documentado: "+" abre escolha de tela/pasta.
+    lg.setColor(.18,.19,.20,1)
+    lg.rectangle('fill',0,l.footerY,w,h-l.footerY)
+    lg.setColor(.36,.66,.95,1)
+    lg.setFont(A.fonts.title)
+    lg.print('+',20,l.footerY+7)
+    A.buttons[#A.buttons+1]={x=9,y=l.footerY,w=63,h=52,
+        fn=function()
+            A.galleryCreateMenu=true
+        end}
+    lg.setColor(.74,.77,.81,1)
+    lg.setFont(A.fonts.small)
+    lg.print(A.folder=='' and 'A Minha Galeria' or 'Pasta atual',
+        85,l.footerY+18)
+    if total>0 then
+        lg.printf(('Itens: %d'):format(total),
+            w-165,l.footerY+18,146,'right')
+    end
+    if A.galleryScroll>0 and
+        GalleryShell.maxScroll(w,h,total)>0 then
+        lg.setColor(.38,.57,.75,1)
+        lg.rectangle('fill',w-5,l.top+math.floor(
+            A.galleryScroll/GalleryShell.maxScroll(w,h,total)*
+            (l.bottom-l.top-42)),3,42,1,1)
+    end
+end
+local function drawGalleryCreateMenu(w,h)
+    local lg=love.graphics
+    lg.setColor(0,0,0,.36)
+    lg.rectangle('fill',0,0,w,h)
+    local p=GalleryShell.newMenu(w,h)
+    lg.setColor(.23,.25,.28,1)
+    lg.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+    for i,label in ipairs({'Nova tela','Nova pasta','Cancelar'}) do
+        local r=GalleryShell.newOption(p,i)
+        button(label,r.x,r.y,r.w,r.h,function()
+            A.galleryCreateMenu=false
+            if i==1 then modal('new')
+            elseif i==2 then modal('folder') end
+        end,i==1)
     end
 end
 -- A true renderer-produced single dab, composited over the canvas as
@@ -7748,23 +7889,19 @@ local function drawIbisSettings(w,h)
         function()A.settingsOpen=false end,true)
 end
 function love.draw()
-    A.buttons={};A.galleryPreviewBudget=1
+    A.buttons={};A.galleryPreviewBudget=A.screen=='gallery' and 5 or 1
     local w,h=love.graphics.getDimensions()
     local theme=A.screen=='gallery' and galleryPalette
         or (A.compactUi and compactPalette or palette)
     love.graphics.clear(theme.bg)
-    if not (A.screen=='editor' and A.compactUi) then
+    if A.screen=='editor' and not A.compactUi then
         box(0,0,w,64,'panel')
         c('accent');love.graphics.rectangle('fill',0,62,w,2)
-        text(A.screen=='gallery' and 'Ibis Rebuild · Galeria'
-            or 'Ibis Rebuild',24,15,'title')
+        text('Ibis Rebuild',24,15,'title')
     end
     if A.screen=='editor' and not A.compactUi and A.doc and w>=1120 then
         fitted(A.doc.name,232,24,'body','muted',
             Visual.headerNameWidth(w))
-    end
-    if A.screen=='gallery' then
-        text('PROJETOS LOCAIS · LUA',w-213,24,'small','muted')
     end
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     -- Faixa lateral e overlay visual sobre o canvas, fora da funcao
@@ -7774,17 +7911,18 @@ function love.draw()
     end
     -- O rodape legado cobre os icones inferiores do editor compacto.
     -- Seu fundo ja e desenhado por drawEditor: nao sobrepor controles.
-    if A.screen~='editor' or not A.compactUi then
+    if A.screen=='editor' and not A.compactUi then
         box(0,h-48,w,48,'panel')
-    end
-    if A.screen~='editor' or not A.compactUi then
         fitted(A.message or '',20,h-33,'small','muted',w-260)
     end
     if A.testReport and (A.screen~='editor' or not A.compactUi) then
         text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',
             w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')
     end
-    if A.settingsOpen then
+    if A.galleryCreateMenu and A.screen=='gallery' then
+        A.buttons={}
+        drawGalleryCreateMenu(w,h)
+    elseif A.settingsOpen then
         A.buttons={}
         drawIbisSettings(w,h)
     elseif A.backMenu then
@@ -7818,6 +7956,17 @@ function love.draw()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
+    if A.galleryCreateMenu and A.screen=='gallery' then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w and
+                    y>=b.y and y<b.y+b.h then b.fn();return end
+            end
+            A.galleryCreateMenu=false
+        end
+        return -- Fechar nao dispara clique na obra sob o popup.
+    end
     if A.backMenu or A.settingsOpen then
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
@@ -8358,6 +8507,16 @@ function love.focus(focused)
     end
 end
 function love.wheelmoved(x,y)
+    if A.screen=='gallery' then
+        if A.modal or A.galleryCreateMenu then return end
+        local total=(GalleryUI.filter(A.galleryFilter,'folder')
+            and #A.folders or 0)+(GalleryUI.filter(A.galleryFilter,'work')
+            and #A.projects or 0)
+        A.galleryScroll=GalleryShell.scroll(
+            love.graphics.getDimensions(),total,
+            A.galleryScroll or 0,y)
+        return
+    end
     if A.backMenu or A.settingsOpen then return end
     if A.screen=='editor' and A.compactUi and
         A.compactPanel=='layers' and not A.modal and
@@ -8421,6 +8580,21 @@ function love.textinput(t)
     end
 end
 function love.keypressed(key)
+    if A.screen=='gallery' and key=='escape' then
+        if A.modal then
+            A.modal=nil;love.keyboard.setTextInput(false)
+        elseif A.galleryCreateMenu then A.galleryCreateMenu=false
+        elseif A.gallerySelecting then
+            A.gallerySelecting=false;A.gallerySelected={}
+        elseif A.folder~='' then
+            local parent=''
+            for _,f in ipairs(A.store.catalog.folders) do
+                if f.id==A.folder then parent=f.parent;break end
+            end
+            setFolder(parent)
+        end
+        return
+    end
     if A.backMenu or A.settingsOpen then
         if key=='escape' then
             if A.settingsOpen then A.settingsOpen=false
