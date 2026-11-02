@@ -49,6 +49,7 @@ local VectorFrameUI=require('ibis_vector_frame_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local GalleryShell=require('ibis_gallery_shell')
+local GalleryDetail=require('ibis_gallery_detail')
 local SettingsUI=require('ibis_settings_ui')
 IbisPanels.stabilizer=require('ibis_stabilizer_ui')
 IbisPanels.trash=require('ibis_deleted_retention')
@@ -154,8 +155,11 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '118-alpha-lock-pintura-real.png',
     '119-alpha-lock-rbd2-reaberto.png',
     '120-ferramentas-direita.png',
-    '121-ferramentas-popup-sem-faixa.png'}
-local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+    '121-ferramentas-popup-sem-faixa.png',
+    '122-galeria-imagem-ampliada.png',
+    '123-galeria-proxima-obra.png',
+    '124-galeria-editar-obra.png'}
+local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
         A.wandOverlay:release()
@@ -282,6 +286,7 @@ local function refreshGallery()
 end
 local function setFolder(id)
     A.folder=id or '';A.galleryScroll=0
+    A.galleryDetailId=nil;A.galleryDetailSwipe=nil
     A.galleryGesture=nil
     A.galleryMoveMenu=nil;A.galleryDeleteMenu=nil
     A.galleryRestoreMenu=nil;A.galleryTrash=false
@@ -569,6 +574,7 @@ local function toGallery()
     A.backMenu=false;A.settingsOpen=false
     A.galleryCreateMenu=false;A.galleryMoveMenu=nil;A.galleryScroll=0
     A.galleryGesture=nil
+    A.galleryDetailId=nil;A.galleryDetailSwipe=nil
     A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil;A.galleryTrash=false
     A.galleryMoreMenu=false
     A.gallerySelecting=false;A.gallerySelected={}
@@ -6443,11 +6449,12 @@ function love.update(dt)
         end
     end
 end
-local function galleryPreview(doc)
+local function galleryPreview(doc,maxWidth,maxHeight)
+    maxWidth,maxHeight=maxWidth or 140,maxHeight or 130
     if not Native.available then return nil end
     A.galleryPreviewCache=A.galleryPreviewCache or {order={},entries={}}
     local cache=A.galleryPreviewCache
-    local key=GalleryThumb.key(doc)
+    local key=GalleryThumb.key(doc)..':'..maxWidth..'x'..maxHeight
     if cache.entries[key] then
         return cache.entries[key].image
     end
@@ -6457,7 +6464,8 @@ local function galleryPreview(doc)
         local saved=doc.deleted and A.store:_readProject(doc.id,true)
             or A.store:openProject(doc.id)
         local session=Layers.open(A.store,saved)
-        local width,height=GalleryThumb.size(saved.width,saved.height,140,130)
+        local width,height=GalleryThumb.size(saved.width,saved.height,
+            maxWidth,maxHeight)
         local data=love.image.newImageData(width,height,'rgba8')
         GalleryThumb.sample(Native.bytes(session.composite),
             saved.width,saved.height,width,height,function(r,g,b,a,x,y)
@@ -6486,6 +6494,80 @@ local function releaseGalleryPreviews()
     end
     A.galleryPreviewCache=nil
 end
+-- Visualizacao ampliada entre a galeria e o editor.
+-- O raster de preview vem dos dados RBD2, nao de imagens ficticias.
+local function drawGalleryExpanded(w,h)
+    local doc,index,total=GalleryDetail.find(A.galleryItems or {},
+        A.galleryDetailId,A.galleryFilter)
+    if not doc then A.galleryDetailId=nil;return false end
+    local lg=love.graphics
+    local image=GalleryDetail.imageRect(w,h,doc.width,doc.height)
+    lg.setColor(.94,.94,.92,1)
+    lg.rectangle('fill',image.x-2,image.y-2,
+        image.w+4,image.h+4)
+    local preview=galleryPreview(doc,
+        math.min(768,math.floor(image.w)),
+        math.min(768,math.floor(image.h)))
+    if preview then
+        local pw,ph=preview:getDimensions()
+        lg.setColor(1,1,1,1)
+        lg.draw(preview,image.x,image.y,0,
+            image.w/pw,image.h/ph)
+    else
+        lg.setColor(.55,.57,.59,1)
+        lg.rectangle('line',image.x,image.y,image.w,image.h)
+    end
+    local label=GalleryDetail.caption(w,h)
+    lg.setColor(.19,.20,.22,1)
+    lg.setFont(A.fonts.small)
+    local title=TextFit.truncate('Título: '..doc.name,
+        math.max(1,label.w-165),function(t)
+            return A.fonts.small:getWidth(t) end)
+    lg.print(title,label.x,label.y)
+    lg.printf(('%d × %d'):format(doc.width,doc.height),
+        label.x+label.w-158,label.y,158,'right')
+    for _,direction in ipairs({-1,1}) do
+        local available=direction==-1 and index>1 or index<total
+        local nav=GalleryDetail.nav(w,h,direction)
+        lg.setColor(available and .31 or .78,
+            available and .34 or .79,
+            available and .38 or .80,1)
+        lg.rectangle('fill',nav.x,nav.y,nav.w,nav.h,5,5)
+        lg.setColor(1,1,1,1)
+        lg.setFont(A.fonts.title)
+        lg.printf(direction==-1 and '‹' or '›',
+            nav.x,nav.y+10,nav.w,'center')
+        if available then
+            A.buttons[#A.buttons+1]={x=nav.x,y=nav.y,
+                w=nav.w,h=nav.h,fn=function()
+                    A.galleryDetailId=GalleryDetail.step(
+                        A.galleryItems,A.galleryDetailId,
+                        A.galleryFilter,direction)
+                end}
+        end
+    end
+    local footerY=h-52
+    lg.setColor(.17,.18,.19,1)
+    lg.rectangle('fill',0,footerY,w,52)
+    -- Funcoes ainda ausentes sao meras marcas visuais, nao hitboxes.
+    lg.setColor(.54,.57,.60,1)
+    lg.setFont(A.fonts.small)
+    lg.print('i',82,footerY+17)
+    lg.print('▶',149,footerY+17)
+    lg.print('↥',216,footerY+17)
+    lg.print('⋯',282,footerY+17)
+    local edit=GalleryDetail.edit(w,h)
+    lg.setColor(.36,.70,1,1)
+    lg.setFont(A.fonts.body)
+    lg.printf('Editar',edit.x,edit.y+14,edit.w,'center')
+    A.buttons[#A.buttons+1]={x=edit.x,y=edit.y,w=edit.w,h=edit.h,
+        fn=guard(function()
+            local target=A.galleryDetailId
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+            openDoc(A.store:openProject(target))
+        end)}
+    return true
+end
 local function drawGallery(w,h)
     -- Galeria com barra escura, miniaturas rolaveis e rodape proprio.
     -- Os arquivos permanecem no Store/RBD2; sem ordenacao inventada.
@@ -6511,7 +6593,12 @@ local function drawGallery(w,h)
         math.floor((w-390)/2),16,390,'center')
     lg.setColor(.45,.74,.94,1)
     lg.print('‹ Voltar',18,17)
-    if A.galleryTrash then
+    if A.galleryDetailId then
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=function()
+                A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+            end}
+    elseif A.galleryTrash then
         A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
             fn=function()
                 A.galleryTrash=false
@@ -6535,9 +6622,10 @@ local function drawGallery(w,h)
     A.buttons[#A.buttons+1]={x=w-166,y=7,w=152,h=42,
         fn=function()
             A.gallerySelecting=not A.gallerySelecting
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
             A.gallerySelected={}
         end}
-    if not A.galleryTrash then
+    if not A.galleryTrash and not A.galleryDetailId then
         lg.setFont(A.fonts.title)
         lg.print('⋯',154,10)
         A.buttons[#A.buttons+1]={x=138,y=6,w=64,h=42,
@@ -6555,6 +6643,7 @@ local function drawGallery(w,h)
             A.galleryGesture.px,A.galleryGesture.py,
             love.timer.getTime())
     end
+    if A.galleryDetailId and drawGalleryExpanded(w,h) then return end
     local index=0
     lg.setScissor(0,l.top,w,l.bottom-l.top)
     local function card(label,sub,folder,fn,project,identifier)
@@ -6640,7 +6729,8 @@ local function drawGallery(w,h)
                     local doc=entry.value
                     card(doc.name,doc.width..'×'..doc.height,
                         false,function()
-                            openDoc(A.store:openProject(doc.id))
+                            A.galleryDetailId=doc.id
+                            A.galleryDetailSwipe=nil
                         end,doc,entry.key)
                 end
             end
