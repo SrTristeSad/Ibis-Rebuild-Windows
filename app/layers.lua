@@ -210,7 +210,13 @@ function Layers:_applyStructural(entry,undoing)
         assert(entry.field=='name' or entry.field=='visible' or
             entry.field=='opacity' or entry.field=='alpha_lock',
             'Propriedade de histórico inválida')
-        layer[entry.field]=undoing and entry.before or entry.after
+        -- Lua's `condition and false or value` cannot restore false.
+        -- Keep explicit branching for boolean layer metadata in undo.
+        if undoing then
+            layer[entry.field]=entry.before
+        else
+            layer[entry.field]=entry.after
+        end
         if entry.field=='alpha_lock' then
             for i,candidate in ipairs(self.doc.layers) do
                 if candidate.id==entry.id then
