@@ -10495,8 +10495,8 @@ local function pointerMoved(x,y,dx,dy,pressure)
         if A.modal and A.modal.kind=='new' then
             local w,h=love.graphics.getDimensions()
             local axis=A.canvasDimensionDrag
-            local track=GalleryUI.dimensionSlider(
-                GalleryUI.dialog(w,h),axis)
+            local track=IbisPanels.canvasReference.slider(
+                IbisPanels.canvasReference.layout(w,h),axis)
             A.modal.values[axis]=GalleryUI.sliderValue(track,x)
         else
             A.canvasDimensionDrag=nil
