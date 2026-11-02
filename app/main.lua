@@ -9836,6 +9836,17 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         end
         return -- Navegacao nunca transmite cliques para a tela.
     end
+    if A.screen=='gallery' and A.galleryDetailId then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w and
+                    y>=b.y and y<b.y+b.h then b.fn();return end
+            end
+            A.galleryDetailSwipe={x=x,y=y}
+        end
+        return -- Nenhum clique ampliado alcança canvas ou arrasto.
+    end
     pressure=Pressure.normalize(pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactUi and A.compactPanel then
@@ -10149,6 +10160,20 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.screen=='gallery' and b==1 and A.galleryDetailSwipe then
+        local swipe=A.galleryDetailSwipe
+        A.galleryDetailSwipe=nil
+        if A.galleryDetailId then
+            local direction=GalleryDetail.swipe(swipe.x,swipe.y,x,y)
+            if direction==0 then A.galleryDetailId=nil
+            elseif direction then
+                A.galleryDetailId=GalleryDetail.step(
+                    A.galleryItems,A.galleryDetailId,
+                    A.galleryFilter,direction)
+            end
+        end
+        return
+    end
     if A.screen=='gallery' and b==1 and A.galleryGesture then
         local gesture=A.galleryGesture
         A.galleryGesture=nil
@@ -10437,7 +10462,7 @@ function love.focus(focused)
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
         A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
-        A.galleryGesture=nil
+        A.galleryGesture=nil;A.galleryDetailSwipe=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil
         navigateCompactPanel(nil)
@@ -10448,6 +10473,7 @@ function love.focus(focused)
 end
 function love.wheelmoved(x,y)
     if A.screen=='gallery' then
+        if A.galleryDetailId then return end
         A.galleryGesture=nil
         if A.modal or A.galleryCreateMenu or A.galleryMoveMenu
             or A.galleryMoreMenu or A.galleryDeleteMenu
@@ -10531,6 +10557,22 @@ function love.textinput(t)
     end
 end
 function love.keypressed(key)
+    if A.screen=='gallery' and A.galleryDetailId then
+        if key=='escape' or key=='backspace' then
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+        elseif key=='left' or key=='right' then
+            A.galleryDetailId=GalleryDetail.step(
+                A.galleryItems,A.galleryDetailId,A.galleryFilter,
+                key=='left' and -1 or 1)
+        elseif key=='return' or key=='kpenter' then
+            local target=A.galleryDetailId
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+            guard(function()
+                openDoc(A.store:openProject(target))
+            end)()
+        end
+        return
+    end
     if A.screen=='gallery' and A.galleryMoveMenu and
         A.galleryMoveMenu.creating then
         local state=A.galleryMoveMenu
@@ -10585,6 +10627,7 @@ function love.keypressed(key)
         elseif A.gallerySelecting then
             A.gallerySelecting=false;A.gallerySelected={}
         elseif A.galleryTrash then
+            A.galleryDetailId=nil
             A.galleryTrash=false
             A.galleryFilter=A.galleryBeforeTrash or 'all'
             A.galleryBeforeTrash=nil;A.galleryScroll=0
