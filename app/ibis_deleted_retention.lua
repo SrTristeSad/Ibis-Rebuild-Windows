@@ -22,6 +22,14 @@ function M.label(deletedAt,now)
     if s.remainingDays==1 then return '1 dia restante' end
     return ('%d dias restantes'):format(s.remainingDays)
 end
+function M.trashAction(w,h,id)
+    assert(type(w)=='number' and w>=960 and
+        type(h)=='number' and h>=640,'Viewport invalida')
+    local x={all=w-436,clear=w-326,recover=w-216}
+    local widths={all=102,clear=102,recover=202}
+    assert(x[id],'Acao de recuperacao desconhecida')
+    return {x=x[id],y=h-46,w=widths[id],h=36}
+end
 function M.morePopup(w,h)
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Viewport invalida')
