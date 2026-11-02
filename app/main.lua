@@ -149,7 +149,10 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '113-agrupar-com-nome-duplicado.png',
     '114-arrasto-rolagem-para-baixo.png',
     '115-arrasto-rolagem-para-cima.png',
-    '116-arrasto-rolagem-cancelado.png'}
+    '116-arrasto-rolagem-cancelado.png',
+    '117-alpha-lock-camada-ativado.png',
+    '118-alpha-lock-pintura-real.png',
+    '119-alpha-lock-rbd2-reaberto.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -4256,6 +4259,73 @@ local function advanceShowcase()
                 A.showcaseScrollRBD,
             'Rolagem modificou bytes RBD')
         status('Arrasto cancelado: catalogo e RBD preservados')
+    elseif sh.stage==117 then
+        openDoc(A.store:openProject(sh.projectId))
+        A.compactUi=true;A.compactPanel='layers'
+        A.layerSession:select(1)
+        local ls=A.layerSession
+        ls:beginEdit()
+        ls:pixel(1,1,0x23456780)
+        ls:pixel(4,4,0x00000000)
+        assert(ls:finishEdit(),'Alpha Lock demo requires source pixels')
+        A.showcaseAlphaBase=Native.readPixel(
+            ls:activeBuffer(),1,1)
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local p=Compact.popup(w,h,'layers')
+        local slot=LayerChrome.footerControls(p)[2]
+        assert(slot.available and slot.id=='alpha',
+            'Alpha Lock visual still disabled')
+        love.mousepressed(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        assert(A.doc.layers[1].alpha_lock and
+            ls.buffers[1].alphaLock and A.compactPanel=='layers',
+            'Alpha Lock button did not toggle actual layer state')
+        status('Camadas: Alpha Lock real ativado pelo rodape')
+    elseif sh.stage==118 then
+        local ls=A.layerSession
+        ls:beginEdit()
+        ls:beginStrokeAccum()
+        ls:pressureStroke(1.5,1.5,4.5,4.5,
+            8,8,0xff0000ff,1,1,1,0,0,0,true)
+        assert(ls:finishEdit(),'Alpha Lock brush made no RGB edit')
+        ls:recompose()
+        A.dirty=true;rebuildImage()
+        local changed=Native.readPixel(ls:activeBuffer(),1,1)
+        local untouched=Native.readPixel(ls:activeBuffer(),4,4)
+        assert(changed%256==128 and changed~=A.showcaseAlphaBase
+            and untouched==0,
+            'Alpha Lock changed original alpha or painted empty area')
+        A.showcaseAlphaPainted=changed
+        assert(ls:undo(),'Alpha Lock stroke undo unavailable')
+        assert(Native.readPixel(ls:activeBuffer(),1,1)==
+            A.showcaseAlphaBase and
+            ls.doc.layers[1].alpha_lock,
+            'Undo did not restore RGB or lock state')
+        assert(ls:redo(),'Alpha Lock stroke redo unavailable')
+        assert(Native.readPixel(ls:activeBuffer(),1,1)==
+            A.showcaseAlphaPainted,
+            'Redo did not restore locked brush')
+        A.dirty=true;rebuildImage()
+        status('Alpha Lock: RGB pintado, alfa 128 preservado')
+    elseif sh.stage==119 then
+        saveDoc()
+        local reread=Store.open(A.store.root):openProject(
+            A.doc.id)
+        assert(reread.format==2 and reread.layers[1].alpha_lock
+            and reread.layers[1].pixels:sub(8,8):byte()==128,
+            'RBD2 saved layer lock or original alpha incorrectly')
+        local reopened=Layers.open(A.store,reread)
+        assert(reopened.buffers[1].alphaLock and
+            Native.readPixel(reopened:activeBuffer(),1,1)==
+                A.showcaseAlphaPainted and
+            Native.readPixel(reopened:activeBuffer(),4,4)==0,
+            'Reopening RBD2 lost Alpha Lock or transparent pixels')
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        status('Alpha Lock reaberto em RBD2 com pixels intactos')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,

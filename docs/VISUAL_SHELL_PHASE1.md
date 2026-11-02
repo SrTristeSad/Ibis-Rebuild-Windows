@@ -787,3 +787,43 @@ geometria provisória, **sem alegar precisão 1:1**:
 
 Os limiares e velocidades devem ser calibrados contra a
 versão Android 14.1.2 quando houver medições confiáveis.
+
+## Alpha Lock funcional: painel, rasterizador, histórico e RBD2
+
+A [aula oficial Alpha Lock](https://ibispaint.com/lecture/index.jsp?no=31)
+explica que o bloqueio de transparência impede pinceladas fora da
+área já pintada. A
+[referência de controles das camadas](https://ibispaint.com/lecture/index.jsp?no=156)
+especifica que **a opacidade original de cada pixel é mantida**.
+
+- O botão `Alpha Lock` no rodapé da janela de camadas agora é
+  clicável, sinaliza visualmente o estado e utiliza
+  `Layers:setAlphaLock(index,enabled)` com undo/redo real.
+  `Clipping` permanece desabilitado; ele não foi simulado.
+- `raster_stroke.lua` realiza a mistura de **RGB** apenas
+  em pixels com alfa preexistente maior que zero. A
+  opacidade é preservada exatamente, inclusive alfa parcial.
+  A cobertura de pinceladas acumuladas utiliza o baseline
+  anterior ao gesto, evitando acumular opacidade irregular.
+  Borracha não altera pixels bloqueados.
+- Pixel, balde e formas também respeitam o bloqueio, sem
+  preencher pixels transparentes e sem alterar alfa.
+- `Store` serializa um booleano `alpha_lock` por camada
+  RBD2 e aceita documentos anteriores sem o campo como
+  desbloqueados. `Layers` propaga o estado a buffers,
+  duplicação, reconstrução, undo/redo e merge. A camada
+  resultante de merge usa o padrão desbloqueado.
+- Corrigido bug de histórico booleano: propriedades
+  anteriores com valor `false` agora são restauradas,
+  em vez de ficarem `true` após undo.
+- Testes de integração cobrem alfa 255, 128 e 0,
+  pincel acumulado, pixel, borracha, forma, balde,
+  histórico, RBD2 e interface.
+  Capturas reais Windows **117–119** verificam toque no
+  botão, pintura real e reabertura de projeto com Alpha Lock.
+
+**Sem reivindicação de equivalência integral:** Clipping,
+mesclagens especiais, máscaras e pastas de camadas ainda
+não foram implementados. As fórmulas RGB do rebuild
+devem ser comparadas pixel a pixel com a versão
+Android 14.1.2 antes de declarar fidelidade.
