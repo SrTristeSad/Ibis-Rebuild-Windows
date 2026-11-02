@@ -110,7 +110,43 @@ function T.run()
         eq(not G.filter(kind=='work' and 'folders' or 'works',kind),
             'Filtro especializado nao pode misturar categorias')
     end
+    local Chrome=require('ibis_gallery_card_chrome')
     local sizes={{960,640},{1220,800},{1920,1080}}
+    for _,size in ipairs(sizes) do
+        local w,h=size[1],size[2]
+        local grid=Shell.layout(w,h)
+        local rect=Shell.card(w,h,1,0)
+        local original={x=rect.x,y=rect.y,w=rect.w,h=rect.h}
+        local idle=Chrome.geometry(rect,false,false)
+        local hover=Chrome.geometry(rect,false,true)
+        local picked=Chrome.geometry(rect,true,false)
+        eq(not idle.outerFrame and idle.backdrop=='none'
+            and idle.imageOutline=='subtle',
+            'Galeria ainda apresenta contorno de cartao desktop')
+        eq(hover.backdrop=='hover' and
+            picked.backdrop=='selected' and
+            picked.imageOutline=='selection',
+            'Estados de foco e selecao perderam contraste')
+        eq(idle.title.x>=rect.x and
+            idle.title.x+idle.title.w<=rect.x+rect.w and
+            idle.title.y>=rect.preview.y+rect.preview.h and
+            idle.metadata.y+14<=rect.y+rect.h,
+            'Titulo centralizado e metadados extrapolam cartao')
+        eq(idle.image.x==rect.preview.x and
+            idle.image.y==rect.preview.y and
+            idle.image.w==rect.preview.w and
+            idle.image.h==rect.preview.h,
+            'Fidelidade visual mudou a origem da miniatura real')
+        eq(rect.x==original.x and rect.y==original.y
+            and rect.w==original.w and rect.h==original.h
+            and Shell.hit(w,h,1,0,rect.x+10,rect.y+10),
+            'Alteracao visual mudou hitbox ou scroll da galeria')
+        eq(grid.cols>=1 and rect.visible,
+            'Grade nao se ajusta a resolucao')
+        eq(not pcall(Chrome.geometry,
+            {x=0,y=0,w=10,h=10,preview={x=9,y=9,w=20,h=20}},
+            false,false),'Geometria invalida foi aceita')
+    end
     for _,size in ipairs(sizes) do
         local r=G.dialog(size[1],size[2])
         eq(r.x>=0 and r.y>=0 and r.x+r.w<=size[1]

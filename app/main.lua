@@ -37,6 +37,7 @@ local EditorRail=require('ibis_editor_rail')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 IbisPanels.galleryDetail=require('ibis_gallery_detail')
+IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
 local FilterUI=require('ibis_filter_ui')
@@ -6732,19 +6733,9 @@ local function drawGallery(w,h)
         local px,py=love.mouse.getPosition()
         local hovered=GalleryShell.hit(w,h,index,A.galleryScroll,px,py)
         local selected=A.gallerySelected and A.gallerySelected[identifier]
-        lg.setColor(selected and .66 or .98,
-            selected and .79 or .98,
-            selected and .96 or .97,1)
-        lg.rectangle('fill',r.x,r.y,r.w,r.h,3,3)
-        lg.setColor(selected and .22 or hovered and .32 or .71,
-            selected and .54 or hovered and .52 or .71,
-            selected and .91 or hovered and .79 or .70,1)
-        lg.setLineWidth(selected and 3 or 1)
-        lg.rectangle('line',r.x+.5,r.y+.5,r.w-1,r.h-1,3,3)
-        -- O fundo da prévia não é pintura, edição nem arquivo novo.
-        lg.setColor(.89,.88,.86,1)
-        lg.rectangle('fill',r.preview.x,r.preview.y,
-            r.preview.w,r.preview.h)
+        -- A26: hierarquia simples da galeria, sem caixa desktop
+        -- ao redor de cada titulo; hitboxes permanecem inalteradas.
+        IbisPanels.galleryCardChrome.drawBacking(r,selected,hovered)
         if folder then
             lg.setColor(.58,.70,.82,1)
             lg.rectangle('fill',r.preview.x+35,r.preview.y+42,
@@ -6765,8 +6756,8 @@ local function drawGallery(w,h)
                     r.preview.y+39,56,52)
             end
         end
-        fitted(label,r.titleX,r.titleY,'small','text',r.w-18)
-        fitted(sub,r.metaX,r.metaY,'micro','muted',r.w-18)
+        IbisPanels.galleryCardChrome.drawCaption(
+            r,label,sub,A.fonts.small,A.fonts.micro,A.galleryTrash)
         if selected then
             lg.setColor(.14,.43,.80,1)
             lg.circle('fill',r.x+r.w-13,r.y+14,9)
