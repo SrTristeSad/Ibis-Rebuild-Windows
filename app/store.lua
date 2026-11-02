@@ -419,6 +419,38 @@ function Store:reorderGallery(folder,sourceKey,targetKey)
     self.galleryOrder=draft
     return true
 end
+-- Dragging an artwork over another creates a folder containing both.
+-- Validate both documents first. Each RBD move is atomic, while the
+-- overall folder+two-files operation is not: report partial I/O failure.
+function Store:groupArtworks(sourceId,targetId,sourceFolder)
+    validId(sourceId,'p')
+    validId(targetId,'p')
+    assert(sourceId~=targetId,'store: cannot group artwork with itself')
+    sourceFolder=self:_folder(sourceFolder)
+    local source=self:openProject(sourceId)
+    local target=self:openProject(targetId)
+    assert(source.folder==sourceFolder and target.folder==sourceFolder,
+        'store: grouped artworks must be in current folder')
+    local names={}
+    for _,f in ipairs(self:folders(sourceFolder)) do
+        names[f.name]=true
+    end
+    local name='Nova pasta'
+    local suffix=2
+    while names[name] do
+        name=('Nova pasta (%d)'):format(suffix)
+        suffix=suffix+1
+        assert(suffix<=10000,'store: unable to name grouped folder')
+    end
+    local folderId=self:createFolder(name,sourceFolder)
+    -- The drop target is ordered first in the new folder, followed by
+    -- the artwork being dragged.
+    local report=self:moveProjects({targetId,sourceId},
+        folderId,sourceFolder)
+    return {folder=folderId,name=name,moved=report.moved,
+        total=report.total,ids=report.ids,
+        failedId=report.failedId,error=report.error}
+end
 -- Move artwork between local gallery folders without modifying raster bytes.
 -- Every project is validated before the first write. Individual documents
 -- use FS.writeAtomic, but a batch of files cannot be committed atomically;
