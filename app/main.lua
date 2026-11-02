@@ -152,7 +152,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '116-arrasto-rolagem-cancelado.png',
     '117-alpha-lock-camada-ativado.png',
     '118-alpha-lock-pintura-real.png',
-    '119-alpha-lock-rbd2-reaberto.png'}
+    '119-alpha-lock-rbd2-reaberto.png',
+    '120-ferramentas-direita.png',
+    '121-ferramentas-popup-sem-faixa.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -589,7 +591,8 @@ local function openBackMenu()
     A.backMenu=true;A.settingsOpen=false
 end
 local function saveToolPreference(key,value)
-    assert(key=='toolPopupColumns' or key=='toolPopupLabels',
+    assert(key=='toolPopupColumns' or key=='toolPopupLabels'
+        or key=='toolRailPosition',
         'Preferencia de interface invalida')
     local prefs={}
     for k,v in pairs(A.preferences or {}) do prefs[k]=v end
@@ -599,6 +602,9 @@ local function saveToolPreference(key,value)
     if key=='toolPopupColumns' then
         A.toolPopupColumns=SettingsUI.normalizeColumns(value)
         A.toolPopupPage=1
+    elseif key=='toolRailPosition' then
+        A.toolRailPosition=SettingsUI.normalizePosition(value)
+        A.toolRailPage=1
     else
         A.toolPopupLabels=SettingsUI.labelsVisible(value)
     end
@@ -4327,6 +4333,51 @@ local function advanceShowcase()
         local w,h=love.graphics.getDimensions()
         love.draw()
         status('Alpha Lock reaberto em RBD2 com pixels intactos')
+    elseif sh.stage==120 then
+        assert(A.screen=='editor' and A.compactUi and A.layerSession,
+            'Faixa direita exige editor compacto')
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        saveToolPreference('toolRailPosition','right')
+        A.compactPanel=nil;A.toolRailPage=1
+        love.draw()
+        local w,h=love.graphics.getDimensions()
+        local entries=EditorRail.entries(w,h,1,
+            IbisTools.entries,'right')
+        assert(entries[1].x>w-80 and entries[1].y>=64,
+            'Faixa direita sobrepoe barra superior')
+        local found=false
+        for _,button in ipairs(A.buttons) do
+            if button.x==entries[1].x and
+                button.y==entries[1].y then found=true end
+        end
+        assert(found,'Ferramenta direita nao possui hitbox real')
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Mudar faixa alterou obra ou historico')
+        status('Ferramentas na direita: hitboxes ativas e obra intacta')
+    elseif sh.stage==121 then
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        saveToolPreference('toolRailPosition','popup')
+        A.compactPanel=nil
+        love.draw()
+        local w,h=love.graphics.getDimensions()
+        local right=EditorRail.entries(w,h,1,
+            IbisTools.entries,'right')
+        for _,button in ipairs(A.buttons) do
+            for _,entry in ipairs(right) do
+                assert(not (button.x==entry.x and button.y==entry.y
+                    and button.w==entry.w and button.h==entry.h),
+                    'Popup manteve hitbox invisivel da faixa')
+            end
+        end
+        A.compactPanel='tools'
+        love.draw()
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Seletor popup alterou obra ou historico')
+        status('Seletor em popup: sem faixa lateral invisivel')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -4870,6 +4921,8 @@ function love.load(args)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
     local cols=A.preferences.toolPopupColumns
     A.toolPopupColumns=SettingsUI.normalizeColumns(cols)
+    A.toolRailPosition=SettingsUI.normalizePosition(
+        A.preferences.toolRailPosition)
     A.toolPopupLabels=SettingsUI.labelsVisible(A.preferences.toolPopupLabels)
     A.toolPopupPage=1
     A.savedColors={}
@@ -7120,12 +7173,14 @@ local function activateIbisTool(tool)
 end
 local function drawEditorToolRail(w,h)
     local count=#IbisTools.entries
-    local rect=EditorRail.layout(w,h,A.toolRailPage or 1,count)
+    local position=A.toolRailPosition or 'left'
+    local rect=EditorRail.layout(w,h,A.toolRailPage or 1,count,position)
     c('panel',.78)
     love.graphics.rectangle('fill',rect.x-1,rect.y-4,
         rect.w+2,(rect.stop-rect.start+1)*rect.row+
         (rect.pages>1 and 31 or 8),6,6)
-    for _,item in ipairs(EditorRail.entries(w,h,rect.page,IbisTools.entries)) do
+    for _,item in ipairs(EditorRail.entries(w,h,rect.page,
+        IbisTools.entries,position)) do
         local tool=IbisTools.get(item.id)
         local active=(not A.visualPendingTool and tool.backend~=nil
             and tool.backend==A.tool)
@@ -7146,7 +7201,7 @@ local function drawEditorToolRail(w,h)
         A.buttons[#A.buttons+1]={x=item.x,y=item.y,w=item.w,h=item.h,
             fn=guard(function()activateIbisTool(tool)end)}
     end
-    local page=EditorRail.navigation(w,h,rect.page,count)
+    local page=EditorRail.navigation(w,h,rect.page,count,position)
     if page then
         box(page.x+1,page.y,page.w-2,page.h,'card')
         fitted(('%d/%d'):format(rect.page,rect.pages),
@@ -7161,7 +7216,7 @@ local function drawEditorToolRail(w,h)
                 A.buttons[#A.buttons+1]={x=item.x,y=page.y,w=30,h=page.h,
                     fn=guard(function()
                         A.toolRailPage=EditorRail.nextPage(w,h,
-                            A.toolRailPage,count,delta)
+                            A.toolRailPage,count,delta,position)
                     end)}
             end
         end
@@ -9553,7 +9608,9 @@ local function drawIbisSettings(w,h)
         {id='popup',label='Popup'}}) do
         local choice=item
         drawNavigationChoice(item.label,SettingsUI.positionRect(p,i),
-            function()end,item.id=='popup',
+            function()
+                saveToolPreference('toolRailPosition',choice.id)
+            end,A.toolRailPosition==choice.id,
             not SettingsUI.positionAvailable(choice.id))
     end
     lg.setColor(.29,.33,.37,1)
@@ -9578,7 +9635,7 @@ local function drawIbisSettings(w,h)
     end
     lg.setColor(.45,.48,.52,1)
     lg.setFont(A.fonts.small)
-    lg.print('Posições laterais: interface pendente.',
+    lg.print('Esquerda/Direita: faixa; Popup: barra inferior.',
         p.x+29,p.y+370)
     drawNavigationChoice('Concluir',SettingsUI.closeRect(p),
         function()A.settingsOpen=false end,true)
@@ -9601,7 +9658,8 @@ function love.draw()
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     -- Faixa lateral e overlay visual sobre o canvas, fora da funcao
     -- monolitica drawEditor (limite LuaJIT de 60 upvalues).
-    if A.screen=='editor' and A.compactUi and not A.focusMode then
+    if A.screen=='editor' and A.compactUi and not A.focusMode
+        and (A.toolRailPosition or 'left')~='popup' then
         drawEditorToolRail(w,h)
     end
     -- O rodape legado cobre os icones inferiores do editor compacto.
