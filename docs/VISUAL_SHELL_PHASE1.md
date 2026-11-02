@@ -342,3 +342,35 @@ a ordem ou seus backends Lua.
 - Não é declarada paridade pixel a pixel com o APK 14.1.2:
   escala, iconografia e o controle no cabeçalho dependem de
   validação visual do criador.
+
+## Ajuste de fidelidade — Voltar → Configurações
+
+A referência [03. Toolbar and Tool Selection](https://ibispaint.com/lecture/index.jsp?no=4)
+e [184. Settings window details](https://ibispaint.com/lecture/index.jsp?no=81)
+indica que o número de colunas do popup fica em **Voltar →
+Configurações → Interface**, e não no cabeçalho da paleta de ferramentas.
+
+- A barra compacta agora abre o menu Voltar com **Voltar para A
+  Minha Galeria / Configurações / Cancelar**, preservando a antiga
+  ação de retornar à galeria e o salvamento RBD2.
+- O painel de Configurações mostra **Posição da seleção de
+  ferramentas**, com Popup ativo e Esquerda/Direita explicitamente
+  indisponíveis enquanto não houver implementação visual dessas
+  variantes. Não há rota falsa para layout lateral.
+- **Número de colunas** (1/2/3) e **Mostrar nomes das ferramentas**
+  (Ativado/Desativado) atualizam somente a apresentação da paleta e
+  persistem com `Store:setPreferences` (`toolPopupColumns` e
+  `toolPopupLabels`). Valores ausentes usam 2 e verdadeiro.
+- Os três botões temporários de coluna no cabeçalho da janela de
+  ferramentas foram retirados. A opção de nomes tem impacto
+  visual verificável no popup de ferramentas.
+- `app/ibis_settings_ui.lua` expõe geometria Lua pura;
+  `tests/test_ibis_settings_ui.lua` e a suíte Windows verificam
+  limites, não colisão, preservação das preferências e ausência
+  de edição do raster durante cliques reais.
+- Capturas Windows **60–62** ilustram menu, painel e catálogo sem
+  rótulos. A captura 59 passa a trocar colunas pelo caminho oficial.
+
+**Evidência:** a hierarquia foi obtida dos tutoriais publicados,
+não medida diretamente no APK Android 14.1.2. A disposição exata,
+as cores e fontes exigem conferência contra imagens autênticas do APK.

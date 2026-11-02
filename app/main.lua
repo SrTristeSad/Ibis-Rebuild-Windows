@@ -48,6 +48,7 @@ local EffectUI=require('ibis_effect_tools_ui')
 local VectorFrameUI=require('ibis_vector_frame_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
+local SettingsUI=require('ibis_settings_ui')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -90,7 +91,9 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '56-ferramenta-pendente-nao-pinta.png',
     '57-ferramentas-uma-coluna.png',
     '58-ferramentas-uma-coluna-pagina2.png',
-    '59-ferramentas-tres-colunas.png'}
+    '59-ferramentas-tres-colunas.png',
+    '60-menu-voltar.png','61-configuracoes-ibis.png',
+    '62-ferramentas-sem-rotulos.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -491,6 +494,7 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
+    A.backMenu=false;A.settingsOpen=false
     clearWandSelection()
     A.visualPendingTool=nil
     A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.colorDrag=nil;navigateCompactPanel(nil)
@@ -498,6 +502,31 @@ local function toGallery()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
+end
+-- No ibisPaint o botao Voltar abre um menu com Configuracoes
+-- e retorno para A Minha Galeria. Nenhuma acao edita o documento.
+local function openBackMenu()
+    assert(A.screen=='editor' and A.doc,'Menu indisponivel')
+    finishStroke()
+    A.shapePreview=nil;A.quickDrag=nil
+    A.panning=false;A.panButton=nil;A.colorDrag=nil
+    navigateCompactPanel(nil)
+    A.backMenu=true;A.settingsOpen=false
+end
+local function saveToolPreference(key,value)
+    assert(key=='toolPopupColumns' or key=='toolPopupLabels',
+        'Preferencia de interface invalida')
+    local prefs={}
+    for k,v in pairs(A.preferences or {}) do prefs[k]=v end
+    prefs[key]=value
+    A.store:setPreferences(prefs)
+    A.preferences=prefs
+    if key=='toolPopupColumns' then
+        A.toolPopupColumns=SettingsUI.normalizeColumns(value)
+        A.toolPopupPage=1
+    else
+        A.toolPopupLabels=SettingsUI.labelsVisible(value)
+    end
 end
 local function exportPNG()
     assert(A.doc,'Nenhum projeto aberto')
@@ -2976,20 +3005,70 @@ local function advanceShowcase()
         local old=Native.bytes(A.layerSession.composite)
         local undo=A.layerSession:historyStats().undo
         local w,h=love.graphics.getDimensions()
-        local p=Compact.popup(w,h,'tools',1)
-        local three=IbisTools.columnRect(p,3)
+        openBackMenu()
         love.draw()
+        local menu=SettingsUI.menuItem(SettingsUI.menu(w,h),2)
+        love.mousepressed(menu.x+menu.w/2,menu.y+menu.h/2,1,false)
+        assert(A.settingsOpen and not A.backMenu,
+            'Voltar nao abriu Configuracoes')
+        love.draw()
+        local p=SettingsUI.panel(w,h)
+        local three=SettingsUI.columnRect(p,3)
         love.mousepressed(three.x+three.w/2,
-            three.y+three.h/2,1,false)
-        love.mousereleased(three.x+three.w/2,
             three.y+three.h/2,1,false)
         assert(A.toolPopupColumns==3 and A.toolPopupPage==1
             and A.store:getPreferences().toolPopupColumns==3,
             'Tres colunas nao foram aplicadas/persistidas')
+        local close=SettingsUI.closeRect(p)
+        love.draw()
+        love.mousepressed(close.x+close.w/2,
+            close.y+close.h/2,1,false)
+        assert(not A.settingsOpen,'Concluir nao fechou Configuracoes')
+        A.compactPanel='tools'
         assert(Native.bytes(A.layerSession.composite)==old and
             A.layerSession:historyStats().undo==undo,
             'Configuracao visual nao pode alterar o raster')
         status('Ferramentas · tres colunas, quinze categorias')
+    elseif sh.stage==60 then
+        openBackMenu()
+        assert(A.backMenu and not A.compactPanel,
+            'Botao Voltar deve ter menu independente')
+        status('Menu Voltar: Galeria, Configurações e Cancelar')
+    elseif sh.stage==61 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local item=SettingsUI.menuItem(SettingsUI.menu(w,h),2)
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        assert(A.settingsOpen and not A.backMenu,
+            'Opcao Configuracoes nao abriu')
+        assert(Native.bytes(A.layerSession.composite)==old
+            and A.layerSession:historyStats().undo==undo,
+            'Abrir Configuracoes alterou documento')
+        status('Configurações: Popup e número de colunas')
+    elseif sh.stage==62 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local p=SettingsUI.panel(w,h)
+        local off=SettingsUI.labelRect(p,2)
+        love.draw()
+        love.mousepressed(off.x+off.w/2,off.y+off.h/2,1,false)
+        assert(not A.toolPopupLabels and
+            A.store:getPreferences().toolPopupLabels==false,
+            'Opcao Mostrar Nomes nao persistiu')
+        local close=SettingsUI.closeRect(p)
+        love.draw()
+        love.mousepressed(close.x+close.w/2,
+            close.y+close.h/2,1,false)
+        assert(not A.settingsOpen,'Configuracoes nao fechou')
+        A.compactPanel='tools'
+        assert(Native.bytes(A.layerSession.composite)==old and
+            A.layerSession:historyStats().undo==undo,
+            'Mudanca visual de rotulos alterou raster')
+        status('Ferramentas: nomes desativados, ícones mantidos')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -3532,7 +3611,8 @@ function love.load(args)
     A.root=options.data or (base..'/user-data');A.store=Store.open(A.root)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
     local cols=A.preferences.toolPopupColumns
-    A.toolPopupColumns=(cols==1 or cols==2 or cols==3) and cols or 2
+    A.toolPopupColumns=SettingsUI.normalizeColumns(cols)
+    A.toolPopupLabels=SettingsUI.labelsVisible(A.preferences.toolPopupLabels)
     A.toolPopupPage=1
     A.savedColors={}
     if type(A.preferences.colorPalette)=='table' then
@@ -6046,7 +6126,7 @@ local function drawEditor(w,h)
                     elseif slot.id=='fullscreen' then toggleFocusMode()
                     elseif slot.id=='undo' then undoDoc()
                     elseif slot.id=='redo' then redoDoc()
-                    elseif slot.id=='back' then toGallery() end
+                    elseif slot.id=='back' then openBackMenu() end
                 end)}
             end
             if slot.id=='color' then
@@ -6665,25 +6745,8 @@ local function drawCompactPopup(w,h)
         end)
     end
     if kind=='tools' then
-        -- As opcoes de coluna sao documentadas pelo ibisPaint. O
-        -- controle no cabecalho e uma adaptacao para Windows: o original
-        -- coloca esta configuracao na tela de ajustes.
-        for index=1,3 do
-            local count=index
-            local selector=IbisTools.columnRect(p,count)
-            button(tostring(count),selector.x,selector.y,selector.w,
-                selector.h,function()
-                    local prefs={}
-                    for key,value in pairs(A.preferences or {}) do
-                        prefs[key]=value
-                    end
-                    prefs.toolPopupColumns=count
-                    A.store:setPreferences(prefs)
-                    A.preferences=prefs
-                    A.toolPopupColumns=count
-                    A.toolPopupPage=1
-                end,A.toolPopupColumns==count)
-        end
+        -- Colunas e exibicao dos nomes agora ficam no menu oficial
+        -- Voltar > Configuracoes. O popup volta a ter cabecalho limpo.
         local columns=A.toolPopupColumns or 2
         local page=A.toolPopupPage or 1
         local mx,my=love.mouse.getPosition()
@@ -6702,16 +6765,19 @@ local function drawCompactPopup(w,h)
             end
             c(active and 'accent' or
                 tool.backend and 'text' or 'muted')
-            if columns==1 then
+            if columns==1 and A.toolPopupLabels then
                 Icons.draw(tool.icon,r.x+24,r.y+19,20)
                 fitted(tool.label,r.x+49,r.y+12,
                     'small','text',r.w-54)
             else
-                Icons.draw(tool.icon,r.x+r.w/2,r.y+12,19)
-                love.graphics.setFont(A.fonts.micro)
-                c(active and 'accent' or 'text')
-                love.graphics.printf(tool.label,r.x+3,
-                    r.y+25,r.w-6,'center')
+                Icons.draw(tool.icon,r.x+r.w/2,
+                    r.y+(A.toolPopupLabels and 12 or 19),19)
+                if A.toolPopupLabels then
+                    love.graphics.setFont(A.fonts.micro)
+                    c(active and 'accent' or 'text')
+                    love.graphics.printf(tool.label,r.x+3,
+                        r.y+25,r.w-6,'center')
+                end
             end
             A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w,h=r.h,
                 fn=guard(function()activateIbisTool(tool)end)}
@@ -7577,6 +7643,102 @@ local function drawCompactPopup(w,h)
         end
     end
 end
+-- Painel de navegacao do botao Voltar e Definicoes.
+-- Controle de selecao configuravel sem manipular canvas ou historico.
+local function drawNavigationChoice(label,r,callback,active,disabled)
+    local lg=love.graphics
+    if disabled then lg.setColor(.80,.82,.84,1)
+    elseif active then lg.setColor(.64,.78,.95,1)
+    else lg.setColor(.96,.97,.98,1) end
+    lg.rectangle('fill',r.x,r.y,r.w,r.h,5,5)
+    lg.setColor(.62,.66,.70,1)
+    lg.rectangle('line',r.x+.5,r.y+.5,r.w-1,r.h-1,5,5)
+    lg.setColor(disabled and .54 or .13,
+        disabled and .55 or .17,disabled and .56 or .22,1)
+    lg.setFont(A.fonts.body)
+    lg.printf(label,r.x+4,r.y+(r.h-A.fonts.body:getHeight())/2,
+        r.w-8,'center')
+    if not disabled then
+        A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w,h=r.h,
+            fn=guard(callback)}
+    end
+end
+local function drawBackMenu(w,h)
+    local lg=love.graphics
+    lg.setColor(0,0,0,.68)
+    lg.rectangle('fill',0,0,w,h)
+    local p=SettingsUI.menu(w,h)
+    lg.setColor(.91,.92,.94,1)
+    lg.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+    lg.setColor(.19,.21,.24,1)
+    lg.rectangle('fill',p.x,p.y,p.w,50,7,7)
+    lg.setColor(1,1,1,1)
+    lg.setFont(A.fonts.title)
+    lg.print('Voltar',p.x+22,p.y+11)
+    drawNavigationChoice('Voltar para A Minha Galeria',
+        SettingsUI.menuItem(p,1),toGallery)
+    drawNavigationChoice('Configurações',
+        SettingsUI.menuItem(p,2),function()
+            A.backMenu=false;A.settingsOpen=true
+        end)
+    drawNavigationChoice('Cancelar',
+        SettingsUI.menuItem(p,3),function()
+            A.backMenu=false
+        end)
+end
+local function drawIbisSettings(w,h)
+    local lg=love.graphics
+    lg.setColor(0,0,0,.75)
+    lg.rectangle('fill',0,0,w,h)
+    local p=SettingsUI.panel(w,h)
+    lg.setColor(.92,.93,.95,1)
+    lg.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+    lg.setColor(.19,.21,.24,1)
+    lg.rectangle('fill',p.x,p.y,p.w,55,7,7)
+    lg.setColor(1,1,1,1)
+    lg.setFont(A.fonts.title)
+    lg.print('Configurações',p.x+24,p.y+11)
+    lg.setFont(A.fonts.small)
+    lg.setColor(.29,.33,.37,1)
+    lg.print('INTERFACE DO USUÁRIO',p.x+29,p.y+69)
+    lg.print('Posição da seleção de ferramentas',
+        p.x+29,p.y+96)
+    for i,item in ipairs({
+        {id='left',label='Esquerda'},
+        {id='right',label='Direita'},
+        {id='popup',label='Popup'}}) do
+        local choice=item
+        drawNavigationChoice(item.label,SettingsUI.positionRect(p,i),
+            function()end,item.id=='popup',
+            not SettingsUI.positionAvailable(choice.id))
+    end
+    lg.setColor(.29,.33,.37,1)
+    lg.print('Número de colunas no seletor popup',
+        p.x+29,p.y+192)
+    for i=1,3 do
+        local count=i
+        drawNavigationChoice(tostring(count),
+            SettingsUI.columnRect(p,i),function()
+                saveToolPreference('toolPopupColumns',count)
+            end,A.toolPopupColumns==count)
+    end
+    lg.setColor(.29,.33,.37,1)
+    lg.print('Mostrar nomes das ferramentas',
+        p.x+29,p.y+285)
+    for i=1,2 do
+        local show=(i==1)
+        drawNavigationChoice(show and 'Ativado' or 'Desativado',
+            SettingsUI.labelRect(p,i),function()
+                saveToolPreference('toolPopupLabels',show)
+            end,A.toolPopupLabels==show)
+    end
+    lg.setColor(.45,.48,.52,1)
+    lg.setFont(A.fonts.small)
+    lg.print('Posições laterais: interface pendente.',
+        p.x+29,p.y+370)
+    drawNavigationChoice('Concluir',SettingsUI.closeRect(p),
+        function()A.settingsOpen=false end,true)
+end
 function love.draw()
     A.buttons={};A.galleryPreviewBudget=1
     local w,h=love.graphics.getDimensions()
@@ -7614,7 +7776,13 @@ function love.draw()
         text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',
             w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')
     end
-    if A.modal then A.buttons={};drawModal(w,h)
+    if A.settingsOpen then
+        A.buttons={}
+        drawIbisSettings(w,h)
+    elseif A.backMenu then
+        A.buttons={}
+        drawBackMenu(w,h)
+    elseif A.modal then A.buttons={};drawModal(w,h)
     elseif A.toolHelp and A.screen=='editor' then
         A.buttons={}
         drawToolHelp(w,h)
@@ -7642,6 +7810,18 @@ function love.draw()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
+    if A.backMenu or A.settingsOpen then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w
+                    and y>=b.y and y<b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        return -- Navegacao nunca transmite cliques para a tela.
+    end
     pressure=Pressure.normalize(pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactUi and A.compactPanel then
@@ -8170,6 +8350,7 @@ function love.focus(focused)
     end
 end
 function love.wheelmoved(x,y)
+    if A.backMenu or A.settingsOpen then return end
     if A.screen=='editor' and A.compactUi and
         A.compactPanel=='layers' and not A.modal and
         not A.toolHelp and not A.contextMenu and not A.brushLibrary then
@@ -8232,6 +8413,13 @@ function love.textinput(t)
     end
 end
 function love.keypressed(key)
+    if A.backMenu or A.settingsOpen then
+        if key=='escape' then
+            if A.settingsOpen then A.settingsOpen=false
+            else A.backMenu=false end
+        end
+        return -- Nenhum atalho pode editar pixels sob Configuracoes.
+    end
     if A.desktopLayerOpacityDrag then
         if key=='escape' then
             A.desktopLayerOpacityDrag=nil

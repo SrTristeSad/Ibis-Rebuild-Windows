@@ -175,7 +175,9 @@ jobs:
             '56-ferramenta-pendente-nao-pinta.png',
             '57-ferramentas-uma-coluna.png',
             '58-ferramentas-uma-coluna-pagina2.png',
-            '59-ferramentas-tres-colunas.png')
+            '59-ferramentas-tres-colunas.png',
+            '60-menu-voltar.png','61-configuracoes-ibis.png',
+            '62-ferramentas-sem-rotulos.png')
           foreach ($name in $expected) {
             $path = Join-Path $screens $name
             if (!(Test-Path $path)) { throw "Falta captura: $name" }
