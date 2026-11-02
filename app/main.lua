@@ -4314,8 +4314,9 @@ local function advanceShowcase()
         saveDoc()
         local reread=Store.open(A.store.root):openProject(
             A.doc.id)
+        local alphaOffset=(reread.width+1)*4+4
         assert(reread.format==2 and reread.layers[1].alpha_lock
-            and reread.layers[1].pixels:sub(8,8):byte()==128,
+            and reread.layers[1].pixels:byte(alphaOffset)==128,
             'RBD2 saved layer lock or original alpha incorrectly')
         local reopened=Layers.open(A.store,reread)
         assert(reopened.buffers[1].alphaLock and
