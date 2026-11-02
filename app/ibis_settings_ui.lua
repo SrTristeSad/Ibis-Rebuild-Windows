@@ -42,5 +42,12 @@ function M.normalizeColumns(value)
     return (value==1 or value==2 or value==3) and value or 2
 end
 function M.labelsVisible(value) return value~=false end
-function M.positionAvailable(id) return id=='popup' end
+-- O comportamento inicial acompanha a faixa esquerda ja existente;
+-- direita e popup reutilizam os mesmos callbacks e o mesmo catalogo.
+function M.normalizePosition(id)
+    return (id=='left' or id=='right' or id=='popup') and id or 'left'
+end
+function M.positionAvailable(id)
+    return id=='left' or id=='right' or id=='popup'
+end
 return M
