@@ -6207,16 +6207,45 @@ local function drawGallery(w,h)
             for i,item in ipairs(A.galleryItems or {}) do
                 if item.key==key then
                     local r=GalleryShell.card(w,h,i,A.galleryScroll)
-                    lg.setColor(.20,.51,.92,.95)
+                    local intoFolder=gesture.key:sub(1,2)=='p:'
+                        and key:sub(1,2)=='f:'
+                    if intoFolder then
+                        lg.setColor(.12,.65,.38,.95)
+                    else
+                        lg.setColor(.20,.51,.92,.95)
+                    end
                     lg.setLineWidth(4)
                     lg.rectangle('line',r.x+2,r.y+2,
                         r.w-4,r.h-4,5,5)
+                    if intoFolder then
+                        lg.setColor(.07,.34,.19,.96)
+                        lg.rectangle('fill',r.x+8,r.y+r.h-39,
+                            r.w-16,27,4,4)
+                        lg.setColor(1,1,1,1)
+                        lg.setFont(A.fonts.micro)
+                        lg.printf('Mover para pasta',r.x+10,
+                            r.y+r.h-32,r.w-20,'center')
+                    end
                     break
                 end
             end
         end
     end
     lg.setScissor()
+    if A.galleryGesture and A.galleryGesture.active
+        and A.galleryGesture.key:sub(1,2)=='p:'
+        and A.folder~='' and
+        GalleryShell.parentDrop(w,h,
+            A.galleryGesture.px,A.galleryGesture.py) then
+        lg.setColor(.12,.65,.38,1)
+        lg.setLineWidth(3)
+        lg.rectangle('line',11,8,110,39,5,5)
+        lg.setColor(.12,.43,.28,1)
+        lg.rectangle('fill',125,8,232,39,5,5)
+        lg.setColor(1,1,1,1)
+        lg.setFont(A.fonts.small)
+        lg.printf('Mover à pasta superior',130,20,222,'center')
+    end
     if total==0 then
         lg.setColor(.45,.47,.49,1)
         lg.setFont(A.fonts.body)
@@ -9564,9 +9593,27 @@ local function pointerReleased(x,y,b,pressure)
             local w,h=love.graphics.getDimensions()
             local target=GalleryShell.dragTarget(w,h,A.galleryScroll,
                 A.galleryItems or {},x,y)
-            if target and target~=gesture.key then
+            local parent
+            if A.folder~='' then
+                for _,folder in ipairs(A.store.catalog.folders) do
+                    if folder.id==A.folder then
+                        parent=folder.parent;break
+                    end
+                end
+            end
+            local action=GalleryShell.dropAction(
+                A.folder,parent,gesture.key,target,w,h,x,y)
+            if action then
                 guard(function()
-                    if A.store:reorderGallery(A.folder,gesture.key,target) then
+                    if action.kind=='move' then
+                        local report=A.store:moveProjects(
+                            {gesture.key:sub(3)},action.folder,A.folder)
+                        assert(report.moved==1 and not report.error,
+                            report.error or 'Falha ao mover obra')
+                        refreshGallery()
+                        status('Obra movida para a pasta de destino')
+                    elseif A.store:reorderGallery(
+                        A.folder,gesture.key,action.target) then
                         refreshGallery()
                         status('Ordem das obras salva na galeria')
                     end
