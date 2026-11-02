@@ -181,6 +181,26 @@ glyphs['top-material']={
     {op='rectangle',mode='line',x=-5.5,y=-5.5,w=11,h=11},
     {op='circle',mode='fill',x=2.5,y=-2.5,r=1.4},
     {op='line',points={-4,3,-1,-1,1,1,3,-1,5,3}}}
+
+-- Galeria ampliada: geometria vetorial para evitar caracteres
+-- ausentes nas fontes do Windows/LÖVE. Sem assets externos.
+glyphs['gallery-add']={
+    {op='line',points={-6,0,6,0}},
+    {op='line',points={0,-6,0,6}}}
+glyphs['gallery-info']={
+    {op='circle',mode='line',x=0,y=0,r=6.2},
+    {op='circle',mode='fill',x=0,y=-3.5,r=.9},
+    {op='line',points={0,-.5,0,4}}}
+glyphs['gallery-play']={
+    {op='polygon',mode='fill',points={-4.3,-6,5.8,0,-4.3,6}}}
+glyphs['gallery-share']={
+    {op='rectangle',mode='line',x=-5.6,y=-1.7,w=11.2,h=7.6},
+    {op='line',points={0,2,0,-7}},
+    {op='line',points={-3,-4,0,-7,3,-4}}}
+glyphs['gallery-more']={
+    {op='circle',mode='fill',x=-5,y=0,r=1.5},
+    {op='circle',mode='fill',x=0,y=0,r=1.5},
+    {op='circle',mode='fill',x=5,y=0,r=1.5}}
 function Icons.commands(id)
     return glyphs[id]
 end

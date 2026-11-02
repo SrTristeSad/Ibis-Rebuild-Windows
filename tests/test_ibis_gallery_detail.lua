@@ -65,6 +65,25 @@ function T.run()
             back.y+back.h<h-52,
             'Setas nao cabem na janela')
     end
+    -- Icones do rodape nao dependem de caracteres Unicode ausentes.
+    local Icons=require('ui_icons')
+    for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
+        local w,h=size[1],size[2]
+        local footer=Detail.footerIcons(w,h)
+        ok(#footer==5 and footer[1].actionable==true,
+            'Rodape ampliado perdeu Criar ou a ordem oficial')
+        for i,entry in ipairs(footer) do
+            local shapes=Icons.commands(entry.id)
+            ok(type(shapes)=='table' and #shapes>0,
+                'Icone vetorial ausente no rodape ampliado')
+            ok(entry.x>=16 and entry.x<=w-16 and
+                entry.y>=h-52 and entry.y<h and
+                entry.x<Detail.edit(w,h).x,
+                'Icone do rodape colide com o botao Editar')
+            ok(i==1 or entry.actionable==nil,
+                'Funcao pendente ganhou hitbox falsa')
+        end
+    end
     local Thumb=require('gallery_thumbnails')
     local rgba=string.char(11,22,33,44, 210,190,170,150,
         17,34,51,68, 255,0,128,240)

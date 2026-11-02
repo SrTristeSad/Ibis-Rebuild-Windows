@@ -62,6 +62,20 @@ function M.caption(w,h)
     viewport(w,h)
     return {x=110,y=h-126,w=w-220,h=26}
 end
+
+-- Os cinco controles seguem a ordem da barra inferior mostrada
+-- no tutorial oficial #20. Apenas Criar tem callback existente.
+-- Os demais sao indicacoes visuais enquanto faltarem os motores.
+function M.footerIcons(w,h)
+    viewport(w,h)
+    return {
+        {id='gallery-add',x=30,y=h-26,actionable=true},
+        {id='gallery-info',x=85,y=h-26},
+        {id='gallery-play',x=152,y=h-26},
+        {id='gallery-share',x=219,y=h-26},
+        {id='gallery-more',x=286,y=h-26}
+    }
+end
 function M.swipe(startX,startY,endX,endY)
     for _,v in ipairs({startX,startY,endX,endY}) do
         assert(type(v)=='number' and v==v,'Gesto de galeria invalido')

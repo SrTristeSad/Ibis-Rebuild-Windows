@@ -6614,13 +6614,19 @@ function IbisPanels.drawGalleryExpanded(w,h)
     local footerY=h-52
     lg.setColor(.17,.18,.19,1)
     lg.rectangle('fill',0,footerY,w,52)
-    -- Funcoes ainda ausentes sao meras marcas visuais, nao hitboxes.
-    lg.setColor(.54,.57,.60,1)
-    lg.setFont(A.fonts.small)
-    lg.print('i',82,footerY+17)
-    lg.print('▶',149,footerY+17)
-    lg.print('↥',216,footerY+17)
-    lg.print('⋯',282,footerY+17)
+    -- Acoes pendentes sao vetores cinza sem hitboxes; Criar
+    -- reutiliza o menu funcional da grade sem tocar no RBD2.
+    for _,entry in ipairs(IbisPanels.galleryDetail.footerIcons(w,h)) do
+        if entry.actionable then
+            lg.setColor(.36,.70,1,1)
+            A.buttons[#A.buttons+1]={
+                x=entry.x-22,y=footerY,w=44,h=52,
+                fn=function() A.galleryCreateMenu=true end}
+        else
+            lg.setColor(.54,.57,.60,1)
+        end
+        Icons.draw(entry.id,entry.x,entry.y,19)
+    end
     local edit=IbisPanels.galleryDetail.edit(w,h)
     lg.setColor(.36,.70,1,1)
     lg.setFont(A.fonts.body)
