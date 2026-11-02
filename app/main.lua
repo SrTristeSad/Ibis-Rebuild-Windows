@@ -50,7 +50,7 @@ local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local GalleryShell=require('ibis_gallery_shell')
 local SettingsUI=require('ibis_settings_ui')
-local StabilizerUI=require('ibis_stabilizer_ui')
+IbisPanels.stabilizer=require('ibis_stabilizer_ui')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -3128,7 +3128,7 @@ local function advanceShowcase()
         A.compactUi=true
         selectTool('brush')
         A.stabilization=2
-        A.stabilizerVisual=StabilizerUI.new()
+        A.stabilizerVisual=IbisPanels.stabilizer.new()
         A.compactPanel='stabilizer'
         status('14.1 · Tempo real com Constante e Traços rápidos')
     elseif sh.stage==67 then
@@ -3137,7 +3137,7 @@ local function advanceShowcase()
         -- Usa a geometria real do popup da barra superior.
         local w,h=love.graphics.getDimensions()
         local p=Compact.popup(w,h,'stabilizer')
-        local tab=StabilizerUI.tabRect(p,2)
+        local tab=IbisPanels.stabilizer.tabRect(p,2)
         love.draw()
         love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
         assert(A.stabilizerVisual.tab=='fade',
@@ -3152,12 +3152,12 @@ local function advanceShowcase()
         local previous=A.stabilization
         local w,h=love.graphics.getDimensions()
         local p=Compact.popup(w,h,'stabilizer')
-        local tab=StabilizerUI.tabRect(p,1)
+        local tab=IbisPanels.stabilizer.tabRect(p,1)
         love.draw()
         love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
         assert(A.stabilizerVisual.tab=='stabilization')
         for i=1,2 do
-            local step=StabilizerUI.draftButton(p,i,1)
+            local step=IbisPanels.stabilizer.draftButton(p,i,1)
             love.draw()
             love.mousepressed(step.x+step.w/2,
                 step.y+step.h/2,1,false)
@@ -3172,7 +3172,7 @@ local function advanceShowcase()
     elseif sh.stage==69 then
         local w,h=love.graphics.getDimensions()
         local p=Compact.popup(w,h,'stabilizer')
-        local legacy=StabilizerUI.legacyRow(p)
+        local legacy=IbisPanels.stabilizer.legacyRow(p)
         local before=Native.bytes(A.layerSession.composite)
         local history=A.layerSession:historyStats().undo
         local old=A.stabilization
@@ -7489,30 +7489,30 @@ local function drawCompactPopup(w,h)
     elseif kind=='stabilizer' then
         -- ibisPaint 14.1: Real Time Constant/Fast Strokes e Fade.
         -- So a regulagem Legado Lua 0..5 e conectada ao raster.
-        local draft=A.stabilizerVisual or StabilizerUI.new()
+        local draft=A.stabilizerVisual or IbisPanels.stabilizer.new()
         A.stabilizerVisual=draft
-        for i,tab in ipairs(StabilizerUI.tabs) do
-            local r=StabilizerUI.tabRect(p,i)
+        for i,tab in ipairs(IbisPanels.stabilizer.tabs) do
+            local r=IbisPanels.stabilizer.tabRect(p,i)
             button(tab.label,r.x,r.y,r.w,r.h,function()
-                StabilizerUI.tab(draft,tab.id)
+                IbisPanels.stabilizer.tab(draft,tab.id)
             end,draft.tab==tab.id)
         end
-        local scope=StabilizerUI.scopeRect(p)
+        local scope=IbisPanels.stabilizer.scopeRect(p)
         local scopeKey=draft.tab=='fade' and 'fadeScope' or 'scope'
         button('Apenas para este pincel · prévia',
             scope.x,scope.y,scope.w,scope.h,function()
-                StabilizerUI.toggle(draft,scopeKey)
+                IbisPanels.stabilizer.toggle(draft,scopeKey)
                 status('Escopo por pincel: apenas estado visual')
             end,draft[scopeKey])
         if draft.tab=='stabilization' then
             for i,method in ipairs({
                 {label='Tempo real',id='realtime'},
                 {label='Após · pendente',id='after'}}) do
-                local r=StabilizerUI.methodRect(p,i)
+                local r=IbisPanels.stabilizer.methodRect(p,i)
                 button(method.label,r.x,r.y,r.w,r.h,
                     function()end,i==1,i==2)
             end
-            local legacy=StabilizerUI.legacyRow(p)
+            local legacy=IbisPanels.stabilizer.legacyRow(p)
             text('MOTOR LUA · ESTABILIZAÇÃO LEGADA',
                 legacy.x,legacy.y,'small','muted')
             button('−',legacy.x,legacy.y+17,36,27,function()
@@ -7529,43 +7529,43 @@ local function drawCompactPopup(w,h)
             for i,field in ipairs({
                 {id='constant',label='Constante'},
                 {id='fast',label='Traços rápidos'}}) do
-                local r=StabilizerUI.draftRow(p,i)
+                local r=IbisPanels.stabilizer.draftRow(p,i)
                 fitted(field.label..' · prévia',
                     r.x,r.y,'small','text',r.w-90)
                 fitted(draft[field.id]==0 and 'OFF'
                     or tostring(draft[field.id]),
                     r.x+175,r.y+6,'small','muted',55)
                 for _,delta in ipairs({-1,1}) do
-                    local b=StabilizerUI.draftButton(p,i,delta)
+                    local b=IbisPanels.stabilizer.draftButton(p,i,delta)
                     button(delta==-1 and '−' or '+',
                         b.x,b.y,b.w,b.h,function()
-                        StabilizerUI.step(draft,field.id,delta)
+                        IbisPanels.stabilizer.step(draft,field.id,delta)
                     end,false,delta==-1 and draft[field.id]==0
                         or delta==1 and draft[field.id]==100)
                 end
             end
-            local note=StabilizerUI.footerRect(p)
+            local note=IbisPanels.stabilizer.footerRect(p)
             fitted('Modos 14.1: sem efeito no motor atual',
                 note.x,note.y,'small','warn',note.w)
         else
-            local toggle=StabilizerUI.fadeToggleRect(p)
+            local toggle=IbisPanels.stabilizer.fadeToggleRect(p)
             button('Forçar Fade · prévia',
                 toggle.x,toggle.y,toggle.w,toggle.h,
-                function()StabilizerUI.toggle(draft,'fadeEnabled')end,
+                function()IbisPanels.stabilizer.toggle(draft,'fadeEnabled')end,
                 draft.fadeEnabled)
             for i,field in ipairs({
                 {id='start',label='Comprimento inicial'},
                 {id='end',label='Comprimento final'}}) do
-                local r=StabilizerUI.fadeRow(p,i)
+                local r=IbisPanels.stabilizer.fadeRow(p,i)
                 fitted(field.label,r.x,r.y,
                     'small','text',r.w-90)
                 fitted(tostring(draft[field.id]),
                     r.x+175,r.y+5,'small','muted',55)
                 for _,delta in ipairs({-1,1}) do
-                    local b=StabilizerUI.fadeButton(p,i,delta)
+                    local b=IbisPanels.stabilizer.fadeButton(p,i,delta)
                     button(delta==-1 and '−' or '+',
                         b.x,b.y,b.w,b.h,function()
-                        StabilizerUI.step(draft,field.id,delta)
+                        IbisPanels.stabilizer.step(draft,field.id,delta)
                     end,false,delta==-1 and draft[field.id]==0
                         or delta==1 and draft[field.id]==100)
                 end
@@ -7573,12 +7573,12 @@ local function drawCompactPopup(w,h)
             for i,item in ipairs({
                 {id='smooth',label='Suave'},
                 {id='linear',label='Linear'}}) do
-                local r=StabilizerUI.shapeRect(p,i)
+                local r=IbisPanels.stabilizer.shapeRect(p,i)
                 button(item.label,r.x,r.y,r.w,r.h,function()
-                    StabilizerUI.shape(draft,item.id)
+                    IbisPanels.stabilizer.shape(draft,item.id)
                 end,draft.shape==item.id)
             end
-            local note=StabilizerUI.footerRect(p)
+            local note=IbisPanels.stabilizer.footerRect(p)
             fitted('Fade: somente controles visuais',
                 note.x,note.y,'small','warn',note.w)
         end
