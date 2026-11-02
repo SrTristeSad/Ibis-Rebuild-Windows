@@ -107,6 +107,36 @@ function UI.stepDimension(value,direction)
     if nextValue==n then return nil end
     return tostring(nextValue)
 end
+-- Barras de dimensao do formulario (adaptacao de mouse para Windows).
+-- Apenas valores inteiros; nenhum objeto de documento e criado aqui.
+function UI.dimensionSlider(rect,index)
+    assert(index==2 or index==3,'Eixo de slider de dimensao invalido')
+    local field=UI.fields(rect)[index]
+    return {x=field.x+8,y=field.y+40,w=field.w-16,h=20}
+end
+function UI.sliderValue(track,mouseX)
+    assert(type(track)=='table' and
+        type(track.x)=='number' and type(track.y)=='number' and
+        type(track.w)=='number' and track.w>0 and
+        type(track.h)=='number' and track.h>0 and
+        type(mouseX)=='number' and mouseX==mouseX and
+        mouseX~=math.huge and mouseX~=-math.huge,
+        'Slider de dimensao invalido')
+    local fraction=math.max(0,math.min(1,(mouseX-track.x)/track.w))
+    return tostring(math.floor(UI.DIMENSION_MIN+
+        fraction*(UI.DIMENSION_MAX-UI.DIMENSION_MIN)+.5))
+end
+function UI.sliderPosition(track,value)
+    local n=tonumber(value)
+    if not n or n~=n or n%1~=0 or
+        n<UI.DIMENSION_MIN or n>UI.DIMENSION_MAX then return nil end
+    return track.x+track.w*
+        (n-UI.DIMENSION_MIN)/(UI.DIMENSION_MAX-UI.DIMENSION_MIN)
+end
+function UI.sliderHit(track,x,y)
+    return x>=track.x and x<=track.x+track.w and
+        y>=track.y and y<=track.y+track.h
+end
 function UI.preview(rect)
     return {x=rect.x+468,y=rect.y+82,w=144,h=124}
 end

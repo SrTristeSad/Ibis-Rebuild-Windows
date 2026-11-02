@@ -227,6 +227,43 @@ function T.run()
             and not pcall(G.dimensionStepper,r,2,0)
             and not pcall(G.stepDimension,'512',0),
             'Ajuste de dimensao aceitou eixo/direcao invalidos')
+        for _,axis in ipairs({2,3}) do
+            local track=G.dimensionSlider(r,axis)
+            local field=fields[axis]
+            eq(track.x>=field.x and
+                track.x+track.w<=field.x+field.w and
+                track.y>=field.y+field.h and
+                track.y+track.h<tabs[1].y,
+                'Slider invade campo ou abas de formato')
+            eq(G.sliderHit(track,track.x,track.y+track.h/2)
+                and G.sliderHit(track,track.x+track.w,
+                    track.y+track.h/2)
+                and not G.sliderHit(track,track.x-1,track.y),
+                'Area clicavel da barra nao bate com a geometria')
+            eq(G.sliderValue(track,track.x)=='1' and
+                G.sliderValue(track,track.x+track.w)=='2048',
+                'Barras nao alcançam limites reais 1..2048')
+            eq(G.sliderValue(track,track.x-500)=='1' and
+                G.sliderValue(track,track.x+track.w+500)=='2048',
+                'Arrasto de slider ultrapassou os extremos')
+            local halfway=G.sliderValue(track,track.x+track.w/2)
+            eq(tonumber(halfway)>=1024 and
+                tonumber(halfway)<=1025,
+                'Slider nao possui escala linear')
+            local start=G.sliderPosition(track,512)
+            eq(start and
+                G.sliderValue(track,start)=='512',
+                'Slider nao representa os valores de presets')
+            eq(G.sliderPosition(track,'abc')==nil and
+                G.sliderPosition(track,0)==nil and
+                G.sliderPosition(track,2049)==nil,
+                'Slider de dimensoes mostrou valor invalido')
+        end
+        eq(not pcall(G.dimensionSlider,r,1) and
+            not pcall(G.sliderValue,{x=0,y=0,w=0,h=20},3)
+            and not pcall(G.sliderValue,
+                {x=0,y=0,w=100,h=20},0/0),
+            'Sliders aceitaram geometria/eixo/NaN invalidos')
         eq(fields[3].x+fields[3].w<preview.x and
             preview.y+preview.h<firstRow.y,
             'Campos ou previa invadem lista de formatos')

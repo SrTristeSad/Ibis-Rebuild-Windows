@@ -39,6 +39,7 @@ local IbisPanels=require('ibis_visual_panels')
 IbisPanels.galleryDetail=require('ibis_gallery_detail')
 IbisPanels.canvasPresetRows=require('ibis_canvas_preset_rows')
 IbisPanels.canvasDimensionControls=require('ibis_canvas_dimension_controls')
+IbisPanels.canvasDimensionSlider=require('ibis_canvas_dimension_slider')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -3303,7 +3304,34 @@ local function advanceShowcase()
             and A.layerSession:historyStats().undo==
                 A.showcaseCanvasProof.undo,
             'Ajuste da largura alterou projeto ou historico')
-        status('Nova tela · +/- funcionais, raster intacto')
+        -- A32: prova GUI do clique, arrasto e soltar em ambos
+        -- os eixos. Restaura exatamente 512×512 para a etapa 71.
+        for _,axis in ipairs({2,3}) do
+            local track=GalleryUI.dimensionSlider(dialog,axis)
+            local cy=track.y+track.h/2
+            love.draw()
+            love.mousepressed(track.x+track.w,cy,1,false)
+            assert(A.canvasDimensionDrag==axis
+                and A.modal.values[axis]=='2048',
+                'Clique no fim do slider nao atingiu 2048')
+            love.mousemoved(track.x-30,cy,0,0,false)
+            assert(A.modal.values[axis]=='1',
+                'Arrasto do slider nao limitou a 1 pixel')
+            local restore=GalleryUI.sliderPosition(track,'512')
+            love.mousemoved(restore,cy,0,0,false)
+            love.mousereleased(restore,cy,1,false)
+            assert(A.canvasDimensionDrag==nil
+                and A.modal.values[axis]=='512'
+                and A.modal.values[axis==2 and 3 or 2]=='512',
+                'Soltar slider nao preservou 512 nos dois eixos')
+        end
+        assert(#A.projects==A.showcaseCanvasProof.count
+            and Native.bytes(A.layerSession.composite)==
+                A.showcaseCanvasProof.pixels
+            and A.layerSession:historyStats().undo==
+                A.showcaseCanvasProof.undo,
+            'Sliders modificaram Store, raster ou historico')
+        status('Nova tela · +/- e sliders funcionais; raster intacto')
     elseif sh.stage==71 then
         local w,h=love.graphics.getDimensions()
         local r=GalleryUI.dialog(w,h)
@@ -8215,6 +8243,15 @@ local function drawNewCanvasDialog(w,h)
             end
         end
     end
+    -- Sliders diretamente abaixo das caixas; ajustes no formulario,
+    -- nao no documento, com arrasto capturado na camada de entrada.
+    for _,axis in ipairs({2,3}) do
+        local track=GalleryUI.dimensionSlider(r,axis)
+        local mx,my=love.mouse.getPosition()
+        IbisPanels.canvasDimensionSlider.draw(track,m.values[axis],
+            GalleryUI.sliderHit(track,mx,my),
+            A.canvasDimensionDrag==axis,GalleryUI)
+    end
     local preview=GalleryUI.preview(r)
     box(preview.x,preview.y,preview.w,preview.h,'card')
     text('PROPORÇÃO',preview.x+10,preview.y+8,'small','muted')
@@ -10017,6 +10054,19 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         end
         return -- Nenhum clique ampliado alcança canvas ou arrasto.
     end
+    if buttonNumber==1 and A.modal and A.modal.kind=='new' then
+        local w,h=love.graphics.getDimensions()
+        local rect=GalleryUI.dialog(w,h)
+        for _,axis in ipairs({2,3}) do
+            local track=GalleryUI.dimensionSlider(rect,axis)
+            if GalleryUI.sliderHit(track,x,y) then
+                A.canvasDimensionDrag=axis
+                A.modal.values[axis]=GalleryUI.sliderValue(track,x)
+                A.modal.focus=axis
+                return -- O slider jamais alcanca canvas nem galeria.
+            end
+        end
+    end
     pressure=Pressure.normalize(pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactUi and A.compactPanel then
@@ -10330,6 +10380,16 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if b==1 and A.canvasDimensionDrag then
+        local axis=A.canvasDimensionDrag
+        A.canvasDimensionDrag=nil
+        if A.modal and A.modal.kind=='new' then
+            local w,h=love.graphics.getDimensions()
+            local track=GalleryUI.dimensionSlider(GalleryUI.dialog(w,h),axis)
+            A.modal.values[axis]=GalleryUI.sliderValue(track,x)
+        end
+        return
+    end
     if A.screen=='gallery' and b==1 and A.galleryDetailSwipe then
         local swipe=A.galleryDetailSwipe
         A.galleryDetailSwipe=nil
@@ -10487,6 +10547,18 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.canvasDimensionDrag then
+        if A.modal and A.modal.kind=='new' then
+            local w,h=love.graphics.getDimensions()
+            local axis=A.canvasDimensionDrag
+            local track=GalleryUI.dimensionSlider(
+                GalleryUI.dialog(w,h),axis)
+            A.modal.values[axis]=GalleryUI.sliderValue(track,x)
+        else
+            A.canvasDimensionDrag=nil
+        end
+        return
+    end
     if A.screen=='gallery' and A.galleryGesture then
         GalleryShell.dragAdvance(A.galleryGesture,x,y,
             love.timer.getTime())
