@@ -5181,7 +5181,7 @@ local function galleryPreview(doc)
     local ok,item=pcall(function()
         local saved=A.store:openProject(doc.id)
         local session=Layers.open(A.store,saved)
-        local width,height=GalleryThumb.size(saved.width,saved.height,176,126)
+        local width,height=GalleryThumb.size(saved.width,saved.height,140,130)
         local data=love.image.newImageData(width,height,'rgba8')
         GalleryThumb.sample(Native.bytes(session.composite),
             saved.width,saved.height,width,height,function(r,g,b,a,x,y)
@@ -5281,7 +5281,6 @@ local function drawGallery(w,h)
         index=index+1
         local r=GalleryShell.card(w,h,index,A.galleryScroll)
         if not r.visible then return end
-        local mx,my=lg.getDimensions() -- default, avoids mutable hit geometry
         local px,py=love.mouse.getPosition()
         local hovered=GalleryShell.hit(w,h,index,A.galleryScroll,px,py)
         local selected=A.gallerySelected and A.gallerySelected[identifier]
@@ -8512,8 +8511,8 @@ function love.wheelmoved(x,y)
         local total=(GalleryUI.filter(A.galleryFilter,'folder')
             and #A.folders or 0)+(GalleryUI.filter(A.galleryFilter,'work')
             and #A.projects or 0)
-        A.galleryScroll=GalleryShell.scroll(
-            love.graphics.getDimensions(),total,
+        local w,h=love.graphics.getDimensions()
+        A.galleryScroll=GalleryShell.scroll(w,h,total,
             A.galleryScroll or 0,y)
         return
     end
