@@ -3559,6 +3559,118 @@ local function advanceShowcase()
             and #A.store.catalog.folders==count,
             'Cancelar digitacao criou pasta ou fechou movimento')
         status('Criacao cancelada sem alterar catalogo')
+    elseif sh.stage==88 then
+        A.galleryMoveMenu=nil
+        A.gallerySelected={}
+        A.gallerySelecting=true
+        A.galleryScroll=0
+        local id=assert(A.projects[1] and A.projects[1].id,
+            'Obra para exclusao nao encontrada')
+        A.showcaseTrashId=id
+        A.showcaseTrashFile=A.store.fs:read(
+            'projects/'..id..'.rbd')
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local item=GalleryShell.card(w,h,1,0)
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        love.draw()
+        local del=GalleryShell.selectionAction(w,h,'delete')
+        love.mousepressed(del.x+del.w/2,
+            del.y+del.h/2,1,false)
+        assert(A.galleryDeleteMenu and
+            #A.galleryDeleteMenu.ids==1,
+            'Selecionar Excluir nao abre confirmacao')
+        assert(A.store:openProject(id).folder==A.folder,
+            'Abrir confirmacao alterou projeto')
+        status('Exclusão recuperável: confirmação obrigatória')
+    elseif sh.stage==89 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.confirmPopup(w,h)
+        local cancel=GalleryShell.confirmCancel(p)
+        love.draw()
+        love.mousepressed(cancel.x+cancel.w/2,
+            cancel.y+cancel.h/2,1,false)
+        assert(not A.galleryDeleteMenu
+            and A.store:openProject(A.showcaseTrashId).folder==A.folder,
+            'Cancelar exclusao alterou projeto')
+        status('Cancelar não exclui a obra')
+    elseif sh.stage==90 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local del=GalleryShell.selectionAction(w,h,'delete')
+        love.mousepressed(del.x+del.w/2,
+            del.y+del.h/2,1,false)
+        assert(A.galleryDeleteMenu)
+        local p=GalleryShell.confirmPopup(w,h)
+        local confirm=GalleryShell.confirmAction(p)
+        love.draw()
+        love.mousepressed(confirm.x+confirm.w/2,
+            confirm.y+confirm.h/2,1,false)
+        assert(not A.galleryDeleteMenu and not A.gallerySelecting,
+            'Confirmacao de exclusao nao encerrou selecao')
+        for _,entry in ipairs(A.projects) do
+            assert(entry.id~=A.showcaseTrashId,
+                'Obra excluida permanece visivel na galeria')
+        end
+        assert(A.store.fs:read('projects/'..
+            A.showcaseTrashId..'.rbd')==A.showcaseTrashFile,
+            'Exclusao mudou arquivo RBD')
+        status('Obra oculta, bytes RBD preservados')
+    elseif sh.stage==91 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(193,27,1,false)
+        assert(A.galleryTrash and #A.trashProjects>=1,
+            'Excluídos recentemente não abriu')
+        local found=false
+        for _,entry in ipairs(A.trashProjects) do
+            if entry.id==A.showcaseTrashId then
+                found=true;break end
+        end
+        assert(found,'Obra não encontrada na recuperação')
+        status('Excluídos recentemente · obra recuperável')
+    elseif sh.stage==92 then
+        local w,h=love.graphics.getDimensions()
+        local index
+        for i,entry in ipairs(A.trashProjects) do
+            if entry.id==A.showcaseTrashId then index=i;break end
+        end
+        assert(index,'Obra não está na lista de recuperação')
+        A.galleryScroll=0
+        love.draw()
+        local item=GalleryShell.card(w,h,index,0)
+        assert(item.visible,'Obra de recuperação fora da viewport')
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        assert(A.galleryRestoreMenu and
+            A.galleryRestoreMenu.id==A.showcaseTrashId,
+            'Clique não abriu confirmação de recuperar')
+        status('Recuperação exige confirmação')
+    elseif sh.stage==93 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.confirmPopup(w,h)
+        local yes=GalleryShell.confirmAction(p)
+        love.draw()
+        love.mousepressed(yes.x+yes.w/2,
+            yes.y+yes.h/2,1,false)
+        assert(not A.galleryRestoreMenu and
+            A.store.fs:read('projects/'..
+            A.showcaseTrashId..'.rbd')==A.showcaseTrashFile,
+            'Recuperação alterou bytes do arquivo')
+        love.draw()
+        love.mousepressed(48,27,1,false)
+        assert(not A.galleryTrash,
+            'Voltar não saiu da pasta de excluídos')
+        local found=false
+        for _,entry in ipairs(A.projects) do
+            if entry.id==A.showcaseTrashId then
+                found=true;break end
+        end
+        assert(found and
+            A.store:openProject(A.showcaseTrashId).folder==A.folder,
+            'Obra recuperada não aparece na pasta anterior')
+        status('Recuperação concluída · RBD intacto')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,

@@ -573,3 +573,35 @@ do seletor de destinos.
 
 Ainda não existe equivalência visual pixel a pixel
 com a APK alvo. Exclusão em lote continua indisponível.
+
+## Exclusão recuperável (ibisPaint 14.1) e recuperação manual
+
+O ibisPaint 14.1.0 passou a preservar obras excluídas na área
+`Recently Deleted Artworks` por até 30 dias, conforme
+[New Feature](https://ibispaint.com/newFeature.jsp?lang=en-GB).
+
+- `Store:deleteProjects` valida antes da gravação e registra
+  todos os IDs num único `deleted.json`, gravado atomicamente,
+  sem modificar qualquer byte dos projetos RBD1/RBD2.
+  `listProjects` oculta as obras marcadas como excluídas, e
+  `openProject` rejeita abertura de um item não recuperado.
+- `Store:deletedProjects` lista documentos preservados, com
+  o timestamp da exclusão, inclusive de pastas diferentes.
+  `Store:restoreProjects` remove os registros do índice,
+  reexibindo a obra na sua pasta original sem alterar
+  histórico de raster ou revisão RBD.
+- A ação **Excluir** do rodapé permite seleção múltipla
+  **somente de obras** e exige confirmação explícita.
+  **Excluídos** no cabeçalho abre a área de recuperação.
+  Cada item pode ser restaurado mediante confirmação.
+- `tests/test_store.lua` verifica exclusão RBD1/RBD2,
+  integridade byte a byte, reinicialização do Store,
+  rejeição de abertura indevida, falha de escrita simulada
+  e restauração íntegra. Showcase gráfico Windows
+  **88–93** testa cancelamento, exclusão e recuperação
+  por cliques reais, incluindo o retorno à pasta anterior.
+
+**Limite importante:** o prazo automático de 30 dias e a
+eliminação definitiva não foram implementados. A exclusão
+permanece recuperável indefinidamente por segurança.
+Não há sincronização com o armazenamento em nuvem.
