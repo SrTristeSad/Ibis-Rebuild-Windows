@@ -262,6 +262,86 @@ function Test.run(rootPath)
         and Store.open(rootPath):openProject(
             layeredDeleted.id).layers[1].opacity==.65,
         'Recovery not persisted or lost layer properties')
+    -- Official gallery: artwork on artwork creates a new folder.
+    local groupParent=store:createFolder('Agrupamento de teste','')
+    local groupTarget=store:createProject('Grupo alvo',2,2,
+        groupParent,pixels)
+    local groupSource=store:createProject('Grupo origem',2,2,
+        groupParent,pixels)
+    groupSource.layers=JSON.array({{
+        id=store:newLayerId(),name='Camada preservada',
+        visible=true,opacity=.6,pixels=pixels}})
+    groupSource.active_layer=1
+    groupSource.pixels=nil
+    store:saveProject(groupSource)
+    local sourceRevision=groupSource.revision
+    local targetRevision=groupTarget.revision
+    local groupBefore=store:openProject(groupSource.id)
+    rejects(function()
+        store:groupArtworks(groupSource.id,groupSource.id,groupParent)
+    end,'Self grouping accepted')
+    rejects(function()
+        store:groupArtworks(groupSource.id,'p_missing',groupParent)
+    end,'Grouping with missing target created folder')
+    rejects(function()
+        store:groupArtworks(groupSource.id,groupTarget.id,'')
+    end,'Grouping with wrong source folder accepted')
+    check(#store:folders(groupParent)==0,
+        'Invalid grouping created a folder')
+    local groupResult=store:groupArtworks(
+        groupSource.id,groupTarget.id,groupParent)
+    check(groupResult.moved==2 and groupResult.total==2
+        and groupResult.name=='Nova pasta' and not groupResult.error,
+        'Grouping failed to move both artworks')
+    local grouped=Store.open(rootPath)
+    local groupArtworks=grouped:listProjects(groupResult.folder)
+    check(#groupArtworks==2 and
+        #grouped:listProjects(groupParent)==0,
+        'Grouped artworks not relocated after reopen')
+    local groupedSource=grouped:openProject(groupSource.id)
+    local groupedTarget=grouped:openProject(groupTarget.id)
+    check(groupedSource.format==2 and
+        groupedSource.revision==sourceRevision+1 and
+        groupedSource.layers[1].pixels==groupBefore.layers[1].pixels
+        and groupedSource.layers[1].opacity==.6
+        and groupedTarget.pixels==pixels and
+        groupedTarget.revision==targetRevision+1,
+        'Grouping damaged RBD1/RBD2 pixels or revision')
+    local named=store:createProject('Outros grupos',2,2,groupParent,pixels)
+    local named2=store:createProject('Outros grupos 2',2,2,groupParent,pixels)
+    local secondGroup=store:groupArtworks(
+        named.id,named2.id,groupParent)
+    check(secondGroup.name=='Nova pasta (2)' and
+        secondGroup.moved==2,'Duplicate grouping name was not numbered')
+    -- Simulated crash on the second RBD write: a partial move must be
+    -- reported; the old RBD is kept and can be moved on retry.
+    local failureA=store:createProject('Falha A',2,2,groupParent,pixels)
+    local failureB=store:createProject('Falha B',2,2,groupParent,pixels)
+    local failingAtomic=store.fs.writeAtomic
+    local projectWrites=0
+    store.fs.writeAtomic=function(self,path,data)
+        if path:match('^projects/') then
+            projectWrites=projectWrites+1
+            if projectWrites==2 then error('simulated RBD write failure') end
+        end
+        return failingAtomic(self,path,data)
+    end
+    local failedGroup=store:groupArtworks(
+        failureA.id,failureB.id,groupParent)
+    store.fs.writeAtomic=failingAtomic
+    check(failedGroup.moved==1 and failedGroup.total==2 and
+        failedGroup.failedId==failureA.id and
+        type(failedGroup.error)=='string',
+        'Partial grouping failure falsely claimed success')
+    check(store:openProject(failureB.id).folder==failedGroup.folder
+        and store:openProject(failureA.id).folder==groupParent
+        and store:openProject(failureA.id).pixels==pixels,
+        'Partial grouping lost an original artwork')
+    local retry=store:moveProjects(
+        {failureA.id},failedGroup.folder,groupParent)
+    check(retry.moved==1 and
+        #Store.open(rootPath):listProjects(failedGroup.folder)==2,
+        'Partial grouping could not be recovered')
     -- Keep the legacy corruption fixture isolated to its sole document.
     local archived=store:moveProjects(
         {recoverable.id,layeredDeleted.id},parent,child)
