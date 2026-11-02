@@ -2990,13 +2990,13 @@ local function advanceShowcase()
         local p=Compact.popup(w,h,'layers')
         local footer=LayerChrome.footerControls(p)
         assert(#footer==3 and not footer[1].available
-            and not footer[2].available and footer[3].available,
-            'Clipping e Alpha Lock nao podem simular motores')
+            and footer[2].available and footer[3].available,
+            'Alpha Lock deve estar habilitado; Clipping continua pendente')
         local before=Native.bytes(A.layerSession.composite)
         A.showcaseFooterProof={pixels=before,
             history=A.layerSession:historyStats().undo,
             layers=#A.doc.layers,active=A.doc.active_layer}
-        status('Rodape: controles desabilitados e mesclagem Normal')
+        status('Rodape: Alpha Lock disponivel; Clipping pendente')
     elseif sh.stage==54 then
         local old=assert(A.showcaseFooterProof)
         local w,h=love.graphics.getDimensions()
@@ -9352,8 +9352,22 @@ local function drawCompactPopup(w,h)
             end
         end
         for _,slot in ipairs(LayerChrome.footerControls(p)) do
+            slot.selected=slot.id=='alpha' and
+                A.doc.layers[A.doc.active_layer].alpha_lock==true
             LayerChrome.paintFooterControl(slot,A.fonts.small)
-            if slot.available and slot.id=='blend' then
+            if slot.available and slot.id=='alpha' then
+                A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
+                    w=slot.w,h=slot.h,fn=guard(function()
+                    finishStroke()
+                    local index=A.doc.active_layer
+                    local enabled=A.doc.layers[index].alpha_lock~=true
+                    if ls:setAlphaLock(index,enabled) then
+                        A.dirty=true
+                        status(enabled and 'Alpha Lock ativado'
+                            or 'Alpha Lock desativado')
+                    end
+                end)}
+            elseif slot.available and slot.id=='blend' then
                 A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
                     w=slot.w,h=slot.h,
                     fn=guard(function()A.compactPanel='blends'end)}

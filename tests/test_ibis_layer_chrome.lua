@@ -39,9 +39,9 @@ function T.run()
         local foot=Chrome.footerControls(p)
         check(#foot==3 and foot[3].id=='blend',
             'Rodape deve conter Clipping, Alpha Lock, Normal')
-        check(not foot[1].available and not foot[2].available
+        check(not foot[1].available and foot[2].available
             and foot[3].available,
-            'Ferramentas sem motor nao podem estar ativas')
+            'Alpha Lock real deve estar habilitado; Clipping nao')
         for i,slot in ipairs(foot) do
             check(slot.y>=reg.footer.y and
                 slot.y+slot.h<=reg.footer.y+37,
