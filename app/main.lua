@@ -5262,7 +5262,8 @@ local function drawEditorToolRail(w,h)
         (rect.pages>1 and 31 or 8),6,6)
     for _,item in ipairs(EditorRail.entries(w,h,rect.page,IbisTools.entries)) do
         local tool=IbisTools.get(item.id)
-        local active=(tool.backend~=nil and tool.backend==A.tool)
+        local active=(not A.visualPendingTool and tool.backend~=nil
+            and tool.backend==A.tool)
             or A.visualPendingTool==item.id
         local mx,my=love.mouse.getPosition()
         local hover=mx>=item.x and mx<item.x+item.w
@@ -5928,11 +5929,24 @@ local function drawEditor(w,h)
         c('line')
         love.graphics.rectangle('fill',0,h-61,w,1)
         -- Barra de regulagens menos intrusiva, proxima do original.
-        local activeName=EditorTools.fromId(A.tool).label
+        local activeName=A.visualPendingTool and
+            (A.visualPendingTool=='wand' and 'Varinha Mágica'
+            or A.visualPendingTool=='lasso' and 'Laço'
+            or 'Ferramenta pendente')
+            or EditorTools.fromId(A.tool).label
         fitted(activeName,22,h-113,'small','muted',170)
-        if A.tool=='brush' or A.tool=='erase' then
+        if not A.visualPendingTool and
+            (A.tool=='brush' or A.tool=='erase') then
             drawCompactQuick('diameter',w,h,A.brushDiameter)
             drawCompactQuick('opacity',w,h,A.brushOpacity)
+        elseif A.visualPendingTool=='wand' then
+            text('Clique no desenho para selecionar por cor',
+                (w-450)/2,h-110,'small','text')
+            text('A máscara ainda não restringe a pintura',
+                (w-450)/2,h-84,'small','muted')
+        elseif A.visualPendingTool then
+            text('Ferramenta sem motor de edição',
+                (w-360)/2,h-106,'small','muted')
         else
             text(('Zoom %.0f%% · %s'):format(A.zoom*100,
                 EditorTools.fromId(A.tool).label),
@@ -5941,8 +5955,8 @@ local function drawEditor(w,h)
         c('line')
         love.graphics.rectangle('fill',w/2-352,h-62,704,1)
         for _,slot in ipairs(Compact.toolbar(w,h)) do
-            local active=(slot.id=='brush' and
-                (A.tool=='brush' or A.tool=='erase')) or
+            local active=(slot.id=='brush' and not A.visualPendingTool
+                and (A.tool=='brush' or A.tool=='erase')) or
                 (slot.id=='tools' and A.compactPanel=='tools') or
                 (slot.id=='layers' and A.compactPanel=='layers') or
                 (slot.id=='properties' and A.compactPanel=='properties')
