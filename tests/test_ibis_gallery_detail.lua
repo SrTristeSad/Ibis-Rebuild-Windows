@@ -65,6 +65,26 @@ function T.run()
             back.y+back.h<h-52,
             'Setas nao cabem na janela')
     end
+    local Thumb=require('gallery_thumbnails')
+    local rgba=string.char(11,22,33,44, 210,190,170,150,
+        17,34,51,68, 255,0,128,240)
+    local smallFirst,largeLast
+    Thumb.sample(rgba,2,2,2,2,function(r,g,b,a,x,y)
+        if x==0 and y==0 then smallFirst={r,g,b,a} end
+    end)
+    local sampled=0
+    Thumb.sampleLarge(rgba,2,2,176,180,function(r,g,b,a,x,y)
+        sampled=sampled+1
+        if x==175 and y==179 then largeLast={r,g,b,a} end
+    end)
+    ok(sampled==176*180 and
+        smallFirst[1]==11 and smallFirst[4]==44 and
+        largeLast[1]==255 and largeLast[4]==240,
+        'Sampler maior mudou RGBA ou omitiu o ultimo pixel')
+    ok(not pcall(Thumb.sample,rgba,2,2,176,180,function()end),
+        'Miniatura original passou a aceitar limite expandido')
+    ok(not pcall(Thumb.sampleLarge,rgba,2,2,769,2,function()end),
+        'Sampler ampliado ignorou limite de memoria')
     ok(not pcall(Detail.imageRect,500,400,512,512),
         'Dimensao nao suportada passou')
     ok(not pcall(Detail.step,source,'a','all',2),
