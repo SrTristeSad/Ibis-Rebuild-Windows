@@ -6703,8 +6703,10 @@ local function drawGallery(w,h)
             A.gallerySelected={}
         end}
     if not A.galleryTrash and not A.galleryDetailId then
-        lg.setFont(A.fonts.title)
-        lg.print('⋯',154,10)
+        -- O glifo de reticencias da fonte Windows virava quadrado.
+        -- Preservar hitbox e callback do menu existente.
+        lg.setColor(.45,.74,.94,1)
+        Icons.draw('gallery-more',168,26,22)
         A.buttons[#A.buttons+1]={x=138,y=6,w=64,h=42,
             fn=function()A.galleryMoreMenu=true end}
     end
