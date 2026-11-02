@@ -34,3 +34,10 @@ são medições pixel a pixel da versão Android 14.1.2.
 O corpo permanece com layout adaptado a Windows, não uma cópia
 integral da lista original do Android. É necessário verificar CI
 e captura GUI real antes da aprovação visual; sem alegação 1:1.
+
+## Prova GUI adicional
+A captura 75 do showcase agora executa o clique no X através de
+`love.draw` e `love.mousepressed`, confirmando `A.modal==nil`
+e a preservação da contagem de projetos, do composite RGBA e do
+histórico undo antes de continuar a seleção da galeria. A
+validação precisa ser confirmada no CI do novo commit.

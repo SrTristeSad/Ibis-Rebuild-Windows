@@ -3346,13 +3346,24 @@ local function advanceShowcase()
             'Navegacao do dialogo criou obra ou alterou o raster')
         status('Nova tela · compatibilidade dos presets legados')
     elseif sh.stage==75 then
-        A.modal=nil
+        -- Verificar o X novo pela GUI real, sem cancelar por atribuicao.
+        assert(A.modal and A.modal.kind=='new',
+            'Nova tela desapareceu antes da prova de fechar')
+        local w,h=love.graphics.getDimensions()
+        local close=GalleryUI.dialogClose(GalleryUI.dialog(w,h))
+        local proof=assert(A.showcaseCanvasProof)
+        love.draw()
+        love.mousepressed(close.x+close.w/2,
+            close.y+close.h/2,1,false)
+        assert(A.modal==nil and #A.projects==proof.count
+            and Native.bytes(A.layerSession.composite)==proof.pixels
+            and A.layerSession:historyStats().undo==proof.undo,
+            'Fechar X nao encerrou Nova tela ou alterou RBD2')
         love.keyboard.setTextInput(false)
         A.galleryScroll=0
         A.galleryFilter='all'
         A.gallerySelecting=true
         A.gallerySelected={}
-        local w,h=love.graphics.getDimensions()
         local r=GalleryShell.card(w,h,1,0)
         A.showcaseGallerySelection={
             projects=#A.projects,
