@@ -6126,7 +6126,15 @@ local function drawEditor(w,h)
                     elseif slot.id=='fullscreen' then toggleFocusMode()
                     elseif slot.id=='undo' then undoDoc()
                     elseif slot.id=='redo' then redoDoc()
-                    elseif slot.id=='back' then openBackMenu() end
+                    elseif slot.id=='back' then
+                        -- Inline para nao exceder o limite de 60
+                        -- upvalues do drawEditor no LuaJIT 2.1.
+                        finishStroke()
+                        A.shapePreview=nil;A.quickDrag=nil
+                        A.panning=false;A.panButton=nil
+                        A.colorDrag=nil;A.compactPanel=nil
+                        A.backMenu=true;A.settingsOpen=false
+                    end
                 end)}
             end
             if slot.id=='color' then
