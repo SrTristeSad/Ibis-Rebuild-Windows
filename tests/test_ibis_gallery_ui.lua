@@ -200,6 +200,33 @@ function T.run()
         eq(fields[2].y==fields[3].y and
             fields[2].x+fields[2].w<fields[3].x,
             'Largura e altura nao estao lado a lado')
+        for _,index in ipairs({2,3}) do
+            local field=fields[index]
+            local minus=G.dimensionStepper(r,index,-1)
+            local plus=G.dimensionStepper(r,index,1)
+            eq(minus.x>=field.x+field.w-66 and
+                plus.x>=minus.x+minus.w and
+                plus.x+plus.w<=field.x+field.w and
+                plus.y==minus.y and
+                minus.y>=field.y and
+                plus.y+plus.h<=field.y+field.h,
+                'Ajustes +/- escapam do campo numerico')
+        end
+        eq(G.stepDimension('512',1)=='528' and
+            G.stepDimension('528',-1)=='512',
+            'Ajuste +/- nao altera a dimensao no formulario')
+        eq(G.stepDimension('2040',1)=='2048' and
+            G.stepDimension('16',-1)=='1',
+            'Ajuste ultrapassou limites do motor Lua')
+        eq(G.stepDimension('1',-1)==nil and
+            G.stepDimension('2048',1)==nil and
+            G.stepDimension('x',1)==nil and
+            G.stepDimension('22.5',-1)==nil,
+            'Ajuste aceitou input invalido ou extremo ultrapassado')
+        eq(not pcall(G.dimensionStepper,r,1,1)
+            and not pcall(G.dimensionStepper,r,2,0)
+            and not pcall(G.stepDimension,'512',0),
+            'Ajuste de dimensao aceitou eixo/direcao invalidos')
         eq(fields[3].x+fields[3].w<preview.x and
             preview.y+preview.h<firstRow.y,
             'Campos ou previa invadem lista de formatos')

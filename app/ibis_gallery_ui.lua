@@ -80,6 +80,33 @@ function UI.fields(rect)
     end
     return result
 end
+-- Windows: pequenas teclas laterais de ajuste numerico, como
+-- adaptacao visual das acoes +/- de largura/altura do tutorial #02.
+-- Nao usa DPI nem cria/edita projetos. Passo de 16 px no Windows.
+UI.DIMENSION_STEP=16
+UI.DIMENSION_MIN=1
+UI.DIMENSION_MAX=2048
+function UI.dimensionStepper(rect,index,direction)
+    assert((index==2 or index==3) and
+        (direction==-1 or direction==1),
+        'Ajuste de dimensao desconhecido')
+    local field=UI.fields(rect)[index]
+    return {x=field.x+field.w+(direction==-1 and -65 or -33),
+        y=field.y+2,w=30,h=30}
+end
+function UI.stepDimension(value,direction)
+    assert(direction==-1 or direction==1,
+        'Direcao de ajuste invalida')
+    local n=tonumber(value)
+    if not n or n~=n or n%1~=0 or
+        n<UI.DIMENSION_MIN or n>UI.DIMENSION_MAX then
+        return nil
+    end
+    local nextValue=math.min(UI.DIMENSION_MAX,
+        math.max(UI.DIMENSION_MIN,n+direction*UI.DIMENSION_STEP))
+    if nextValue==n then return nil end
+    return tostring(nextValue)
+end
 function UI.preview(rect)
     return {x=rect.x+468,y=rect.y+82,w=144,h=124}
 end

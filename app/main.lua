@@ -38,6 +38,7 @@ local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 IbisPanels.galleryDetail=require('ibis_gallery_detail')
 IbisPanels.canvasPresetRows=require('ibis_canvas_preset_rows')
+IbisPanels.canvasDimensionControls=require('ibis_canvas_dimension_controls')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -3275,7 +3276,34 @@ local function advanceShowcase()
             count=#A.projects,
             pixels=Native.bytes(A.layerSession.composite),
             undo=A.layerSession:historyStats().undo}
-        status('Nova tela · tamanhos basicos preservados')
+        -- A31: clique real no + e no - de largura. A obra
+        -- persistida e o undo nao podem mudar por interacao no modal.
+        local w,h=love.graphics.getDimensions()
+        local dialog=GalleryUI.dialog(w,h)
+        local plus=GalleryUI.dimensionStepper(dialog,2,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,
+            plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,
+            plus.y+plus.h/2,1,false)
+        assert(A.modal.values[2]=='528'
+            and GalleryUI.aspectViewport(dialog,
+                A.modal.values[2],A.modal.values[3]),
+            'Botao + nao mudou largura da Nova tela')
+        local minus=GalleryUI.dimensionStepper(dialog,2,-1)
+        love.draw()
+        love.mousepressed(minus.x+minus.w/2,
+            minus.y+minus.h/2,1,false)
+        love.mousereleased(minus.x+minus.w/2,
+            minus.y+minus.h/2,1,false)
+        assert(A.modal.values[2]=='512'
+            and #A.projects==A.showcaseCanvasProof.count
+            and Native.bytes(A.layerSession.composite)==
+                A.showcaseCanvasProof.pixels
+            and A.layerSession:historyStats().undo==
+                A.showcaseCanvasProof.undo,
+            'Ajuste da largura alterou projeto ou historico')
+        status('Nova tela · +/- funcionais, raster intacto')
     elseif sh.stage==71 then
         local w,h=love.graphics.getDimensions()
         local r=GalleryUI.dialog(w,h)
@@ -8156,9 +8184,36 @@ local function drawNewCanvasDialog(w,h)
                 field.w-1,field.h-1,5,5)
         end
         fitted(m.values[i]..(m.focus==i and '|' or ''),
-            field.x+12,field.y+8,'body','text',field.w-22)
+            field.x+12,field.y+8,'body','text',
+            i==1 and field.w-22 or field.w-90)
         A.buttons[#A.buttons+1]={x=field.x,y=field.y,w=field.w,h=field.h,
             fn=function()m.focus=i end}
+        if i==2 or i==3 then
+            for _,direction in ipairs({-1,1}) do
+                local rect=GalleryUI.dimensionStepper(r,i,direction)
+                local nextValue=GalleryUI.stepDimension(
+                    m.values[i],direction)
+                local mx,my=love.mouse.getPosition()
+                IbisPanels.canvasDimensionControls.draw(rect,
+                    direction,nextValue~=nil,
+                    mx>=rect.x and mx<rect.x+rect.w
+                    and my>=rect.y and my<rect.y+rect.h)
+                if nextValue then
+                    -- Hitbox adicionada apos a do campo: mouse
+                    -- despacha em ordem reversa, sem editar o raster.
+                    A.buttons[#A.buttons+1]={
+                        x=rect.x,y=rect.y,w=rect.w,h=rect.h,
+                        fn=function()
+                            local updated=GalleryUI.stepDimension(
+                                m.values[i],direction)
+                            if updated then
+                                m.values[i]=updated
+                                m.focus=i
+                            end
+                        end}
+                end
+            end
+        end
     end
     local preview=GalleryUI.preview(r)
     box(preview.x,preview.y,preview.w,preview.h,'card')
