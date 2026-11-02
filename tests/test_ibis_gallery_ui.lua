@@ -21,6 +21,25 @@ function T.run()
         'Prazo vencido nao sinalizado')
     eq(not pcall(Retention.status,-1,clock),
         'Timestamp invalido foi aceito')
+    local drag=Shell.dragBegin('p:p_first',40,77,10)
+    eq(not Shell.dragAdvance(drag,44,80,10.1)
+        and not drag.active and not drag.moved,
+        'Short click cannot become a drag')
+    eq(Shell.dragAdvance(drag,44,80,10.6) and drag.active,
+        'Long hold did not activate dragging')
+    local moving=Shell.dragBegin('f:f_folder',40,77,10)
+    eq(not Shell.dragAdvance(moving,200,77,10.1)
+        and moving.moved and not moving.active,
+        'Early movement should not activate reorder')
+    local items={{key='p:p_a'},{key='f:f_b'},{key='p:p_c'}}
+    local rect=Shell.card(960,640,2,0)
+    eq(Shell.dragTarget(960,640,0,items,
+        rect.x+8,rect.y+8)=='f:f_b',
+        'Drop hit test lost mixed-order folder')
+    eq(Shell.dragTarget(960,640,0,items,5,5)==nil,
+        'Drop outside grid accepted')
+    eq(not pcall(Shell.dragBegin,'bad',1,2,0),
+        'Invalid gallery key accepted')
     eq(#G.FILTERS==3,'Galeria precisa de tres filtros')
     eq(#G.PRESETS==4,'Dialogo precisa preservar quatro formatos')
     eq(#G.OFFICIAL_PRESETS==4,
