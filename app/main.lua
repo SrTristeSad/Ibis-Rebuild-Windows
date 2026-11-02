@@ -8107,9 +8107,30 @@ local function drawNewCanvasDialog(w,h)
     local r=GalleryUI.dialog(w,h)
     local m=A.modal
     box(r.x,r.y,r.w,r.h,'panel')
-    c('accent')
-    love.graphics.rectangle('fill',r.x,r.y,r.w,3)
-    text('Nova tela',r.x+28,r.y+17,'title')
+    -- A29: barra de titulo escura do ibisPaint e fechar vermelho.
+    -- O dialogo continua com seus campos, presets e callbacks Lua.
+    local bar=GalleryUI.dialogHeader(r)
+    local close=GalleryUI.dialogClose(r)
+    love.graphics.push('all')
+    love.graphics.setColor(.17,.18,.19,1)
+    love.graphics.rectangle('fill',bar.x,bar.y,bar.w,bar.h)
+    love.graphics.setColor(.96,.96,.97,1)
+    love.graphics.setFont(A.fonts.body)
+    love.graphics.printf('Nova tela',bar.x+48,bar.y+12,
+        bar.w-96,'center')
+    love.graphics.setColor(.91,.23,.25,1)
+    love.graphics.setLineWidth(2.4)
+    love.graphics.line(close.x+11,close.y+10,
+        close.x+27,close.y+26)
+    love.graphics.line(close.x+27,close.y+10,
+        close.x+11,close.y+26)
+    love.graphics.pop()
+    A.buttons[#A.buttons+1]={
+        x=close.x,y=close.y,w=close.w,h=close.h,
+        fn=function()
+            A.modal=nil
+            love.keyboard.setTextInput(false)
+        end}
     text('Escolha as dimensões da sua obra',
         r.x+28,r.y+56,'small','muted')
     local labels={'Nome','Largura (px)','Altura (px)'}

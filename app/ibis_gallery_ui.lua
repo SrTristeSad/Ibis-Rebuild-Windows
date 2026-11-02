@@ -52,6 +52,20 @@ function UI.dialog(w,h)
     return {x=math.floor((w-width)/2),y=math.floor((h-height)/2),
         w=width,h=height}
 end
+-- Chrome visual inspirado no cabecalho da janela New Canvas.
+-- Apenas geometria; nao cria, altera ou salva um desenho.
+function UI.dialogHeader(rect)
+    assert(type(rect)=='table' and
+        type(rect.x)=='number' and type(rect.y)=='number' and
+        type(rect.w)=='number' and rect.w>=640 and
+        type(rect.h)=='number' and rect.h>=482,
+        'Dialogo de criacao invalido')
+    return {x=rect.x,y=rect.y,w=rect.w,h=44}
+end
+function UI.dialogClose(rect)
+    local head=UI.dialogHeader(rect)
+    return {x=head.x+head.w-43,y=head.y+4,w=38,h=36}
+end
 function UI.fields(rect)
     assert(type(rect)=='table' and rect.w>=640 and rect.h>=482,
         'Dialogo de tela invalido')

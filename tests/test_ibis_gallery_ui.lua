@@ -151,7 +151,19 @@ function T.run()
         local r=G.dialog(size[1],size[2])
         eq(r.x>=0 and r.y>=0 and r.x+r.w<=size[1]
             and r.y+r.h<=size[2],'Dialogo de tela fora da janela')
+        local header=G.dialogHeader(r)
+        local close=G.dialogClose(r)
+        eq(header.x==r.x and header.y==r.y and
+            header.w==r.w and header.h==44,
+            'Cabecalho da nova tela nao acompanha painel')
+        eq(close.x>=header.x+header.w-48 and
+            close.x+close.w<=header.x+header.w and
+            close.y>=header.y and
+            close.y+close.h<=header.y+header.h,
+            'Fechar da nova tela extrapola cabecalho')
         local fields=G.fields(r)
+        eq(header.y+header.h<fields[1].y,
+            'Cabecalho interfere com o campo Nome')
         eq(#fields==3,'Nome largura altura exigidos')
         for i,field in ipairs(fields) do
             eq(field.x>=r.x and field.x+field.w<=r.x+r.w and
