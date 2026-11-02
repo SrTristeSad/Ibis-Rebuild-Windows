@@ -62,7 +62,7 @@ function M.newOption(p,index)
     return {x=p.x+12,y=p.y+12+(index-1)*51,w=p.w-24,h=43}
 end
 -- Modo de selecao multipla na galeria.
--- Os botoes Mover e Excluir nao possuem backend: sem efeitos de arquivo.
+-- Mover aceita apenas projetos; Excluir ainda nao possui backend.
 -- IDs de pasta e obra sao mantidos distintos, como no catalogo existente.
 function M.selectionKeys(folders,projects,filter)
     assert(type(folders)=='table' and type(projects)=='table' and
@@ -98,6 +98,88 @@ function M.selectAll(keys)
     for _,key in ipairs(keys) do result[key]=true end
     return result
 end
+function M.selectedProjectIds(selected,keys)
+    assert(type(selected)=='table' and type(keys)=='table',
+        'Estado de selecao invalido')
+    local ids={}
+    for _,key in ipairs(keys) do
+        if selected[key]==true then
+            if key:sub(1,2)~='p:' then return nil end
+            ids[#ids+1]=key:sub(3)
+        end
+    end
+    if #ids==0 then return nil end
+    return ids
+end
+-- The chooser uses the complete local hierarchy, including nested folders.
+function M.folderChoices(folders,current)
+    assert(type(folders)=='table' and type(current)=='string',
+        'Arvore de pastas invalida')
+    local byId={}
+    for _,folder in ipairs(folders) do byId[folder.id]=folder end
+    local result={}
+    if current~='' then
+        result[#result+1]={id='',label='A Minha Galeria'}
+    end
+    for _,folder in ipairs(folders) do
+        if folder.id~=current then
+            local parts={folder.name}
+            local seen={[folder.id]=true}
+            local parent=folder.parent
+            while parent~='' do
+                assert(not seen[parent] and byId[parent],
+                    'Arvore de pastas quebrada')
+                seen[parent]=true
+                local entry=byId[parent]
+                table.insert(parts,1,entry.name)
+                parent=entry.parent
+            end
+            result[#result+1]={id=folder.id,
+                label=table.concat(parts,' / ')}
+        end
+    end
+    table.sort(result,function(a,b)
+        if a.label==b.label then return a.id<b.id end
+        return a.label<b.label
+    end)
+    return result
+end
+function M.movePopup(w,h)
+    M.layout(w,h)
+    return {x=math.floor((w-540)/2),y=math.floor((h-470)/2),
+        w=540,h=470}
+end
+function M.moveRow(p,index)
+    assert(type(p)=='table' and p.w==540 and p.h==470
+        and type(index)=='number' and index%1==0
+        and index>=1 and index<=6,'Linha de destino invalida')
+    return {x=p.x+24,y=p.y+91+(index-1)*47,w=p.w-48,h=39}
+end
+function M.movePageCount(n)
+    assert(type(n)=='number' and n>=0 and n%1==0,
+        'Quantidade de pastas invalida')
+    return math.max(1,math.ceil(n/6))
+end
+function M.movePage(page,pages,delta)
+    assert(type(page)=='number' and type(pages)=='number'
+        and page%1==0 and pages%1==0 and pages>=1
+        and (delta==-1 or delta==1),'Pagina de destino invalida')
+    return math.max(1,math.min(pages,page+delta))
+end
+function M.moveNavRect(p,index)
+    assert(type(p)=='table' and p.w==540 and p.h==470
+        and (index==1 or index==2),'Navegacao de destino invalida')
+    return {x=p.x+(index==1 and 24 or p.w-69),
+        y=p.y+p.h-91,w=45,h=29}
+end
+function M.moveConfirmRect(p)
+    assert(type(p)=='table' and p.w==540 and p.h==470)
+    return {x=p.x+p.w-182,y=p.y+p.h-50,w=158,h=38}
+end
+function M.moveCancelRect(p)
+    assert(type(p)=='table' and p.w==540 and p.h==470)
+    return {x=p.x+24,y=p.y+p.h-50,w=133,h=38}
+end
 function M.selectionAction(w,h,id)
     M.layout(w,h)
     local x={
@@ -111,6 +193,6 @@ end
 function M.selectionAvailable(id)
     assert(id=='all' or id=='clear' or id=='move' or id=='delete',
         'Acao de selecao desconhecida')
-    return id=='all' or id=='clear'
+    return id~='delete'
 end
 return M

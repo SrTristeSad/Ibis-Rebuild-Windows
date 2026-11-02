@@ -151,9 +151,31 @@ function T.run()
     eq(Shell.selectionCount(Shell.selectAll({}),{})==0)
     eq(Shell.selectionAvailable('all') and
         Shell.selectionAvailable('clear') and
-        not Shell.selectionAvailable('move') and
+        Shell.selectionAvailable('move') and
         not Shell.selectionAvailable('delete'),
-        'Acoes destrutivas foram declaradas funcionais')
+        'Disponibilidade da movimentacao nao acompanha backend')
+    local ids=Shell.selectedProjectIds(
+        {['p:c']=true,['p:e']=true},keys)
+    eq(#ids==2 and ids[1]=='c' and ids[2]=='e',
+        'Selecao de projetos nao manteve ordem do catalogo')
+    eq(Shell.selectedProjectIds({['f:a']=true},keys)==nil,
+        'Pasta selecionada aceita para mover desenhos')
+    eq(Shell.selectedProjectIds({},keys)==nil,
+        'Mover aceitou selecao vazia')
+    local choices=Shell.folderChoices({
+        {id='f_root',name='Projetos',parent=''},
+        {id='f_child',name='Finalizados',parent='f_root'},
+        {id='f_other',name='Rascunhos',parent=''}
+    },'f_root')
+    eq(#choices==3,'Seletor nao excluiu a pasta atual')
+    local named={}
+    for _,choice in ipairs(choices) do named[choice.id]=choice.label end
+    eq(named['']=='A Minha Galeria' and
+        named.f_child=='Projetos / Finalizados' and
+        named.f_other=='Rascunhos',
+        'Seletor nao apresentou hierarquia completa')
+    eq(#Shell.folderChoices({},'')==0,
+        'Seletor nao devia inventar pasta destino')
     eq(not pcall(Shell.selectionAvailable,'unknown'))
     for _,size in ipairs(sizes) do
         local w,h=size[1],size[2]
@@ -171,6 +193,32 @@ function T.run()
             previous=rect
         end
     end
+    for _,dim in ipairs(sizes) do
+        local p=Shell.movePopup(dim[1],dim[2])
+        local bar=Shell.layout(dim[1],dim[2])
+        eq(p.x>=0 and p.y>=0 and p.x+p.w<=dim[1] and
+            p.y+p.h<bar.footerY,
+            'Popup de destino invade janela')
+        local prev
+        for i=1,6 do
+            local row=Shell.moveRow(p,i)
+            eq(row.x>=p.x and row.x+row.w<=p.x+p.w and
+                row.y>=p.y and row.y+row.h<=p.y+p.h,
+                'Destino fora do popup')
+            if prev then eq(prev.y+prev.h<row.y,
+                'Destinos sobrepostos') end
+            prev=row
+        end
+        eq(Shell.moveConfirmRect(p).y>prev.y+prev.h,
+            'Confirmacao sobreposta ao ultimo destino')
+        eq(Shell.moveCancelRect(p).y==Shell.moveConfirmRect(p).y)
+    end
+    eq(Shell.movePageCount(0)==1 and
+        Shell.movePageCount(7)==2 and Shell.movePageCount(13)==3,
+        'Paginacao do seletor de destinos incorreta')
+    eq(Shell.movePage(1,3,1)==2 and
+        Shell.movePage(3,3,1)==3 and
+        Shell.movePage(1,3,-1)==1,'Paginacao fora dos limites')
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
     eq(G.preset('ibis-square').w==768)
     eq(G.preset('ibis-portrait').w==768

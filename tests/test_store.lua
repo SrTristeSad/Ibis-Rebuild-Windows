@@ -44,9 +44,89 @@ function Test.run(rootPath)
     check(doc.revision==2 and store:openProject(doc.id).pixels==doc.pixels,'same-ID save/reopen')
     rejects(function() store:saveProject(reopened) end,'stale revision overwrote project')
     check(store:openProject(doc.id).revision==2,'failed stale save changed revision')
-    local invalidFolder={id=doc.id,name=doc.name,width=2,height=2,pixels=doc.pixels,revision=2}
+    -- RBD1 and RBD2 both move by header, retaining exact raster bytes.
+    local originalPixels=doc.pixels
+    local layered=store:createProject('Camadas em movimento',
+        2,2,child,pixels)
+    layered.layers=JSON.array({{id=store:newLayerId(),name='Base',
+        visible=true,opacity=1,pixels=pixels}})
+    layered.active_layer=1
+    layered.pixels=nil
+    store:saveProject(layered)
+    local layeredRevision=layered.revision
+    local before=fs:read('projects/'..layered.id..'.rbd')
+    local stale=store:openProject(doc.id)
+    rejects(function()
+        store:moveProjects({doc.id,doc.id},parent,child)
+    end,'Duplicate project IDs accepted for move')
+    rejects(function()
+        store:moveProjects({doc.id,'p_does_not_exist'},parent,child)
+    end,'Missing project was accepted in move preflight')
+    rejects(function()
+        store:moveProjects({doc.id},child,child)
+    end,'Move accepted same source and destination')
+    rejects(function()
+        store:moveProjects({doc.id},'f_missing',child)
+    end,'Move accepted nonexistent destination folder')
+    check(store:openProject(doc.id).folder==child and
+        store:openProject(layered.id).folder==child,
+        'Failed move validation changed folder membership')
+    local moved=store:moveProjects({doc.id,layered.id},parent,child)
+    check(moved.moved==2 and moved.total==2 and not moved.error,
+        'RBD1 and RBD2 batch movement failed')
+    local reopenedOld=Store.open(rootPath):openProject(doc.id)
+    local reopenedLayered=Store.open(rootPath):openProject(layered.id)
+    check(reopenedOld.folder==parent and
+        reopenedOld.pixels==originalPixels and
+        reopenedOld.revision==3,'Moved RBD1 lost pixels/revision')
+    check(reopenedLayered.folder==parent and
+        reopenedLayered.format==2 and
+        reopenedLayered.revision==layeredRevision+1 and
+        #reopenedLayered.layers==1 and
+        reopenedLayered.layers[1].pixels==pixels,
+        'Moved RBD2 lost layer metadata or pixels')
+    check(#store:listProjects(child)==0 and
+        #store:listProjects(parent)==2,
+        'Move changed wrong folder listing')
+    check(fs:read('projects/'..layered.id..'.rbd')~=before,
+        'Layered project header did not update after move')
+    rejects(function()store:saveProject(stale)end,
+        'Stale editor session overwrote a moved project')
+    -- Simulate a later batch I/O failure: report partial success,
+    -- never silently report all files moved.
+    local extra=store:createProject('Parcial A',2,2,child,pixels)
+    local last=store:createProject('Parcial B',2,2,child,pixels)
+    local writeAtomic=store.fs.writeAtomic
+    local writes=0
+    store.fs.writeAtomic=function(self,path,data)
+        if path:match('^projects/') then
+            writes=writes+1
+            if writes==2 then error('simulated disk failure') end
+        end
+        return writeAtomic(self,path,data)
+    end
+    local partial=store:moveProjects({extra.id,last.id},parent,child)
+    store.fs.writeAtomic=writeAtomic
+    check(partial.moved==1 and partial.total==2
+        and partial.ids[1]==extra.id and partial.failedId==last.id
+        and type(partial.error)=='string',
+        'Partial batch failure not reported')
+    check(store:openProject(extra.id).folder==parent
+        and store:openProject(last.id).folder==child,
+        'Batch I/O failure corrupted unaffected file')
+    local retry=store:moveProjects({last.id},parent,child)
+    check(retry.moved==1 and store:openProject(last.id).folder==parent,
+        'Failed move cannot be retried safely')
+    -- Return original fixture to child for following corruption tests.
+    doc=store:openProject(doc.id)
+    store:moveProjects({doc.id},child,parent)
+    doc=store:openProject(doc.id)
+    check(doc.pixels==originalPixels and doc.folder==child,
+        'RBD1 restoration after move failed')
+    local invalidFolder={id=doc.id,name=doc.name,width=2,height=2,pixels=doc.pixels,revision=doc.revision}
     rejects(function() store:saveProject(invalidFolder) end,'missing folder wrote unreadable document')
-    check(store:openProject(doc.id).revision==2,'invalid metadata changed project')
+    check(store:openProject(doc.id).revision==doc.revision,
+        'invalid metadata changed project')
     rejects(function() store:createProject('Too wide',2049,1,'','') end,'oversized dimensions accepted')
     rejects(function() store:createProject('No bytes',1,1,'','') end,'pixel size mismatch accepted')
     rejects(function() store:openProject('../escape') end,'project traversal accepted')

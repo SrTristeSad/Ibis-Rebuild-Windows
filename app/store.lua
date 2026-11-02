@@ -248,6 +248,40 @@ function Store:listProjects(folder)
     table.sort(rows,function(a,b) if a.saved_at==b.saved_at then return a.id<b.id else return a.saved_at>b.saved_at end end)
     self.lastErrors=errors; return rows,errors
 end
+-- Move artwork between local gallery folders without modifying raster bytes.
+-- Every project is validated before the first write. Individual documents
+-- use FS.writeAtomic, but a batch of files cannot be committed atomically;
+-- on an I/O failure the result reports exactly which files moved.
+function Store:moveProjects(ids,targetFolder,sourceFolder)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: project move requires 1..512 identifiers')
+    targetFolder=self:_folder(targetFolder)
+    sourceFolder=self:_folder(sourceFolder)
+    assert(targetFolder~=sourceFolder,'store: destination is current folder')
+    local seen,prepared={},{}
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(not seen[id],'store: duplicate project in move')
+        seen[id]=true
+        local doc=self:openProject(id)
+        assert(doc.folder==sourceFolder,
+            'store: selected project is no longer in source folder')
+        prepared[#prepared+1]=doc
+    end
+    local result={moved=0,total=#prepared,ids={}}
+    for _,doc in ipairs(prepared) do
+        doc.folder=targetFolder
+        local ok,err=pcall(self.saveProject,self,doc)
+        if not ok then
+            result.failedId=doc.id
+            result.error=tostring(err)
+            return result
+        end
+        result.moved=result.moved+1
+        result.ids[#result.ids+1]=doc.id
+    end
+    return result
+end
 function Store:setPreferences(values)
     object(values)
     self.fs:writeAtomic('preferences.json',JSON.encode({version=1,values=values})); return true
