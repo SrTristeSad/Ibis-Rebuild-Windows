@@ -36,6 +36,7 @@ local IbisTools=require('ibis_visual_tools')
 local EditorRail=require('ibis_editor_rail')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
+IbisPanels.galleryDetail=require('ibis_gallery_detail')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
 local FilterUI=require('ibis_filter_ui')
@@ -49,7 +50,6 @@ local VectorFrameUI=require('ibis_vector_frame_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
 local GalleryShell=require('ibis_gallery_shell')
-local GalleryDetail=require('ibis_gallery_detail')
 local SettingsUI=require('ibis_settings_ui')
 IbisPanels.stabilizer=require('ibis_stabilizer_ui')
 IbisPanels.trash=require('ibis_deleted_retention')
@@ -4387,7 +4387,7 @@ local function advanceShowcase()
         status('Seletor em popup: sem faixa lateral invisivel')
     elseif sh.stage==122 then
         toGallery();A.galleryFilter='works';A.galleryScroll=0
-        local selected=GalleryDetail.artworks(A.galleryItems,'works')
+        local selected=IbisPanels.galleryDetail.artworks(A.galleryItems,'works')
         assert(#selected>=2,
             'Showcase precisa de duas obras para ampliar')
         A.galleryExpandedProof={
@@ -4412,7 +4412,7 @@ local function advanceShowcase()
     elseif sh.stage==123 then
         local old=assert(A.galleryExpandedProof)
         local w,h=love.graphics.getDimensions()
-        local nextButton=GalleryDetail.nav(w,h,1)
+        local nextButton=IbisPanels.galleryDetail.nav(w,h,1)
         love.draw()
         love.mousepressed(nextButton.x+nextButton.w/2,
             nextButton.y+nextButton.h/2,1,false)
@@ -4439,7 +4439,7 @@ local function advanceShowcase()
     elseif sh.stage==125 then
         local old=assert(A.galleryExpandedProof)
         local w,h=love.graphics.getDimensions()
-        local edit=GalleryDetail.edit(w,h)
+        local edit=IbisPanels.galleryDetail.edit(w,h)
         love.draw()
         love.mousepressed(edit.x+edit.w/2,edit.y+edit.h/2,1,false)
         love.mousereleased(edit.x+edit.w/2,edit.y+edit.h/2,1,false)
@@ -6561,12 +6561,12 @@ local function releaseGalleryPreviews()
 end
 -- Visualizacao ampliada entre a galeria e o editor.
 -- O raster de preview vem dos dados RBD2, nao de imagens ficticias.
-local function drawGalleryExpanded(w,h)
-    local doc,index,total=GalleryDetail.find(A.galleryItems or {},
+function IbisPanels.drawGalleryExpanded(w,h)
+    local doc,index,total=IbisPanels.galleryDetail.find(A.galleryItems or {},
         A.galleryDetailId,A.galleryFilter)
     if not doc then A.galleryDetailId=nil;return false end
     local lg=love.graphics
-    local image=GalleryDetail.imageRect(w,h,doc.width,doc.height)
+    local image=IbisPanels.galleryDetail.imageRect(w,h,doc.width,doc.height)
     lg.setColor(.94,.94,.92,1)
     lg.rectangle('fill',image.x-2,image.y-2,
         image.w+4,image.h+4)
@@ -6582,7 +6582,7 @@ local function drawGalleryExpanded(w,h)
         lg.setColor(.55,.57,.59,1)
         lg.rectangle('line',image.x,image.y,image.w,image.h)
     end
-    local label=GalleryDetail.caption(w,h)
+    local label=IbisPanels.galleryDetail.caption(w,h)
     lg.setColor(.19,.20,.22,1)
     lg.setFont(A.fonts.small)
     local title=TextFit.truncate('Título: '..doc.name,
@@ -6593,7 +6593,7 @@ local function drawGalleryExpanded(w,h)
         label.x+label.w-158,label.y,158,'right')
     for _,direction in ipairs({-1,1}) do
         local available=direction==-1 and index>1 or index<total
-        local nav=GalleryDetail.nav(w,h,direction)
+        local nav=IbisPanels.galleryDetail.nav(w,h,direction)
         lg.setColor(available and .31 or .78,
             available and .34 or .79,
             available and .38 or .80,1)
@@ -6605,7 +6605,7 @@ local function drawGalleryExpanded(w,h)
         if available then
             A.buttons[#A.buttons+1]={x=nav.x,y=nav.y,
                 w=nav.w,h=nav.h,fn=function()
-                    A.galleryDetailId=GalleryDetail.step(
+                    A.galleryDetailId=IbisPanels.galleryDetail.step(
                         A.galleryItems,A.galleryDetailId,
                         A.galleryFilter,direction)
                 end}
@@ -6621,7 +6621,7 @@ local function drawGalleryExpanded(w,h)
     lg.print('▶',149,footerY+17)
     lg.print('↥',216,footerY+17)
     lg.print('⋯',282,footerY+17)
-    local edit=GalleryDetail.edit(w,h)
+    local edit=IbisPanels.galleryDetail.edit(w,h)
     lg.setColor(.36,.70,1,1)
     lg.setFont(A.fonts.body)
     lg.printf('Editar',edit.x,edit.y+14,edit.w,'center')
@@ -6708,7 +6708,7 @@ local function drawGallery(w,h)
             A.galleryGesture.px,A.galleryGesture.py,
             love.timer.getTime())
     end
-    if A.galleryDetailId and drawGalleryExpanded(w,h) then return end
+    if A.galleryDetailId and IbisPanels.drawGalleryExpanded(w,h) then return end
     local index=0
     lg.setScissor(0,l.top,w,l.bottom-l.top)
     local function card(label,sub,folder,fn,project,identifier)
@@ -10229,10 +10229,10 @@ local function pointerReleased(x,y,b,pressure)
         local swipe=A.galleryDetailSwipe
         A.galleryDetailSwipe=nil
         if A.galleryDetailId then
-            local direction=GalleryDetail.swipe(swipe.x,swipe.y,x,y)
+            local direction=IbisPanels.galleryDetail.swipe(swipe.x,swipe.y,x,y)
             if direction==0 then A.galleryDetailId=nil
             elseif direction then
-                A.galleryDetailId=GalleryDetail.step(
+                A.galleryDetailId=IbisPanels.galleryDetail.step(
                     A.galleryItems,A.galleryDetailId,
                     A.galleryFilter,direction)
             end
@@ -10626,7 +10626,7 @@ function love.keypressed(key)
         if key=='escape' or key=='backspace' then
             A.galleryDetailId=nil;A.galleryDetailSwipe=nil
         elseif key=='left' or key=='right' then
-            A.galleryDetailId=GalleryDetail.step(
+            A.galleryDetailId=IbisPanels.galleryDetail.step(
                 A.galleryItems,A.galleryDetailId,A.galleryFilter,
                 key=='left' and -1 or 1)
         elseif key=='return' or key=='kpenter' then
