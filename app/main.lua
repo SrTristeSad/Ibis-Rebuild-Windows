@@ -138,7 +138,11 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '102-galeria-ordem-alterada.png',
     '103-galeria-ordem-persistida.png',
     '104-galeria-arrasto-curto-cancelado.png',
-    '105-galeria-pastas-e-obras-reordenadas.png'}
+    '105-galeria-pastas-e-obras-reordenadas.png',
+    '106-arrastar-desenho-para-pasta.png',
+    '107-desenho-dentro-da-pasta.png',
+    '108-arrastar-desenho-para-voltar.png',
+    '109-desenho-movido-para-pasta-pai.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -3946,6 +3950,126 @@ local function advanceShowcase()
         assert(found and not A.galleryGesture,
             'Ordem mista de pasta e obra nao persistiu')
         status('Galeria: pastas e desenhos reordenados juntos')
+    elseif sh.stage==106 then
+        -- The gallery contains mixed artworks and folders after stage 105.
+        A.gallerySelecting=false;A.gallerySelected={}
+        A.galleryScroll=0;A.galleryFilter='all'
+        refreshGallery()
+        local folderIndex,projectIndex
+        for i,entry in ipairs(A.galleryItems) do
+            if entry.type=='folder' and not folderIndex then
+                folderIndex=i
+            elseif entry.type=='project' and not projectIndex then
+                projectIndex=i
+            end
+        end
+        assert(folderIndex and projectIndex and
+            folderIndex<=5 and projectIndex<=5,
+            'Prova requer pasta e desenho visiveis na galeria')
+        local folder=A.galleryItems[folderIndex]
+        local project=A.galleryItems[projectIndex]
+        A.showcaseFolderDropId=project.value.id
+        A.showcaseFolderDropFolder=folder.value.id
+        local opened=A.store:openProject(project.value.id)
+        A.showcaseFolderDropRev=opened.revision
+        A.showcaseFolderDropPixels=opened.pixels or
+            opened.layers[1].pixels
+        local w,h=love.graphics.getDimensions()
+        local src=GalleryShell.card(w,h,projectIndex,0)
+        local dest=GalleryShell.card(w,h,folderIndex,0)
+        love.draw()
+        love.mousepressed(src.x+src.w/2,src.y+src.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==project.key,
+            'Pressionar obra nao iniciou gesto')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(dest.x+dest.w/2,dest.y+dest.h/2,
+            dest.x-src.x,dest.y-src.y,false)
+        local action=GalleryShell.dropAction(A.folder,nil,
+            A.galleryGesture.key,folder.key,w,h,
+            dest.x+dest.w/2,dest.y+dest.h/2)
+        assert(A.galleryGesture.active and
+            action.kind=='move' and action.folder==folder.value.id,
+            'Soltar sobre pasta nao oferece destino correto')
+        status('Arrastar desenho sobre pasta: alvo de movimentacao')
+    elseif sh.stage==107 then
+        local w,h=love.graphics.getDimensions()
+        local index
+        for i,entry in ipairs(A.galleryItems) do
+            if entry.key=='f:'..A.showcaseFolderDropFolder then
+                index=i;break
+            end
+        end
+        assert(index,'Pasta alvo nao esta visivel')
+        local dest=GalleryShell.card(w,h,index,0)
+        love.draw()
+        love.mousereleased(dest.x+dest.w/2,
+            dest.y+dest.h/2,1,false)
+        local opened=A.store:openProject(A.showcaseFolderDropId)
+        assert(opened.folder==A.showcaseFolderDropFolder and
+            opened.revision==A.showcaseFolderDropRev+1,
+            'Soltar sobre pasta nao moveu desenho')
+        assert((opened.pixels or opened.layers[1].pixels)==
+            A.showcaseFolderDropPixels,
+            'Movimento para pasta alterou pixels')
+        local reopened=Store.open(A.store.root):openProject(
+            A.showcaseFolderDropId)
+        assert(reopened.folder==opened.folder and
+            reopened.revision==opened.revision,
+            'Mover para pasta nao persistiu apos reinicio')
+        status('Desenho movido e preservado dentro da pasta')
+    elseif sh.stage==108 then
+        setFolder(A.showcaseFolderDropFolder)
+        local index
+        for i,entry in ipairs(A.galleryItems) do
+            if entry.key=='p:'..A.showcaseFolderDropId then
+                index=i;break
+            end
+        end
+        assert(index and index<=5,
+            'Desenho movido nao esta visivel na pasta destino')
+        local w,h=love.graphics.getDimensions()
+        local src=GalleryShell.card(w,h,index,0)
+        love.draw()
+        love.mousepressed(src.x+src.w/2,src.y+src.h/2,1,false)
+        assert(A.galleryGesture and A.galleryGesture.key==
+            'p:'..A.showcaseFolderDropId,
+            'Pressionar desenho na pasta nao iniciou gesto')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(46,27,46-src.x-src.w/2,
+            27-src.y-src.h/2,false)
+        local parent=''
+        for _,entry in ipairs(A.store.catalog.folders) do
+            if entry.id==A.folder then parent=entry.parent;break end
+        end
+        A.showcaseParentDropFolder=parent
+        local action=GalleryShell.dropAction(A.folder,parent,
+            A.galleryGesture.key,nil,w,h,46,27)
+        assert(A.galleryGesture.active and
+            action.kind=='move' and action.folder==parent,
+            'Arrastar sobre Voltar nao selecionou pasta pai')
+        status('Arrastar desenho sobre Voltar: mover a pasta superior')
+    elseif sh.stage==109 then
+        love.draw()
+        love.mousereleased(46,27,1,false)
+        local moved=A.store:openProject(A.showcaseFolderDropId)
+        assert(moved.folder==A.showcaseParentDropFolder and
+            moved.revision==A.showcaseFolderDropRev+2,
+            'Soltar sobre Voltar nao moveu obra a pasta pai')
+        assert((moved.pixels or moved.layers[1].pixels)==
+            A.showcaseFolderDropPixels,
+            'Mover a pasta superior alterou os pixels')
+        setFolder(A.showcaseParentDropFolder)
+        local found=false
+        for _,entry in ipairs(A.galleryItems) do
+            if entry.key=='p:'..A.showcaseFolderDropId then
+                found=true;break
+            end
+        end
+        assert(found and Store.open(A.store.root):openProject(
+            A.showcaseFolderDropId).folder==A.folder,
+            'Obra nao reapareceu na pasta pai apos reiniciar')
+        status('Obra devolvida a pasta pai; dados RBD intactos')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,

@@ -702,3 +702,36 @@ inclusive para pastas. Esta implementação adiciona:
 nela, arrastar para a barra Voltar para mover à pasta pai,
 rolagem automática durante o gesto e comparação visual
 pixel a pixel com a versão Android 14.1.2.
+
+## Corrigir o destino do gesto de arrastar na galeria
+
+Referência: [ibisPaint #30: Artworks Folder Feature](https://ibispaint.com/lecture/index.jsp?no=193).
+O tutorial oficial estabelece dois comportamentos diferentes
+do simples rearranjo em grade: segurar uma obra e soltá-la
+**sobre uma pasta** move a obra para dentro; soltá-la
+**sobre Voltar** dentro de uma pasta move a obra à pasta pai.
+
+- `GalleryShell.dropAction` classifica o alvo sem adivinhar
+  a ação: obra → pasta é `move`; obra → botão Voltar na
+  subpasta é `move` à pasta pai; outros pares de miniaturas
+  mantêm `reorder`. Gestos sem alvo não alteram arquivos.
+- A interface chama o backend **real** `Store:moveProjects`,
+  validando a pasta e persistindo o RBD1/RBD2 pelo mesmo
+  mecanismo de armazenamento usado na movimentação em lote.
+  Não é apenas troca visual de cartões.
+- O alvo pasta passa a mostrar uma moldura verde e a ação
+  `Mover para pasta`; o botão Voltar ganha marcação verde
+  durante o arrasto de uma obra, diferenciando movimentação
+  de ordenação (moldura azul).
+- Testes em `test_ibis_gallery_ui.lua` verificam alvos
+  de pasta, raiz, pai, soltura inválida, reordenação comum
+  e restrição a obras para operações de movimento.
+  As capturas Windows **106–109** cobrem arrastar,
+  mover ao destino, persistência após reinício, voltar
+  à pasta pai e preservação de pixels e camadas.
+
+**Diferenças ainda abertas:** soltar obra sobre outra
+para criar automaticamente uma pasta, autoscroll durante
+arraste e paridade visual pixel a pixel Android 14.1.2.
+A implementação nova não altera regras de autoria dos
+documentos nem substitui a interface inteira.
