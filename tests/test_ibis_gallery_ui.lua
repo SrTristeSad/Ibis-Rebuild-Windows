@@ -219,6 +219,61 @@ function T.run()
     eq(Shell.movePage(1,3,1)==2 and
         Shell.movePage(3,3,1)==3 and
         Shell.movePage(1,3,-1)==1,'Paginacao fora dos limites')
+    local fakeStore={
+        catalog={folders={}},
+        createFolder=function(self,name,parent)
+            if name=='duplicada' then
+                error('store: folder name already exists')
+            end
+            assert(type(name)=='string' and name~='')
+            assert(parent=='f_child','Criou pasta no pai incorreto')
+            local id='f_new'..tostring(#self.catalog.folders+1)
+            self.catalog.folders[#self.catalog.folders+1]={
+                id=id,name=name,parent=parent}
+            return id
+        end
+    }
+    local draft={ids={'p_project'},page=1,target='f_child'}
+    Shell.openNewFolder(draft,'f_root')
+    eq(draft.creating and draft.createParent=='f_child'
+        and draft.createName=='','Nova pasta perdeu pai selecionado')
+    Shell.appendFolderName(draft,'Coleção 🎨')
+    eq(Shell.backspaceFolderName(draft)=='Coleção ',
+        'Backspace cortou byte de UTF-8')
+    Shell.appendFolderName(draft,'nova')
+    local ok,created=Shell.createDestination(
+        fakeStore,draft,'f_root')
+    eq(ok and created=='f_new1' and draft.target==created
+        and not draft.creating,'Criacao de pasta nao selecionou destino')
+    eq(fakeStore.catalog.folders[1].parent=='f_child',
+        'Nova pasta nao foi criada na hierarquia escolhida')
+    Shell.openNewFolder(draft,'f_root')
+    Shell.appendFolderName(draft,'duplicada')
+    local accepted=Shell.createDestination(fakeStore,draft,'f_root')
+    eq(not accepted and draft.creating
+        and type(draft.createError)=='string'
+        and #fakeStore.catalog.folders==1,
+        'Falha de criacao nao foi mantida no formulario')
+    Shell.cancelNewFolder(draft)
+    eq(not draft.creating and not draft.createError
+        and #fakeStore.catalog.folders==1,
+        'Cancelar criou pastas indevidas')
+    Shell.openNewFolder(draft,'f_root')
+    Shell.appendFolderName(draft,string.rep('z',250))
+    eq(#draft.createName==0,'Limite de 240 bytes nao respeitado')
+    Shell.cancelNewFolder(draft)
+    for _,size in ipairs(sizes) do
+        local p=Shell.movePopup(size[1],size[2])
+        local new=Shell.moveNewFolderRect(p)
+        local name=Shell.moveFolderNameRect(p)
+        local first=Shell.moveRow(p,1)
+        eq(new.x>=p.x and new.x+new.w<=p.x+p.w
+            and new.y>=p.y and new.y+new.h<first.y,
+            'Botao Nova pasta encobre os destinos')
+        eq(name.x>=p.x and name.x+name.w<=p.x+p.w
+            and name.y>first.y and name.y+name.h<p.y+p.h-50,
+            'Campo do nome encobre confirmacao')
+    end
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
     eq(G.preset('ibis-square').w==768)
     eq(G.preset('ibis-portrait').w==768

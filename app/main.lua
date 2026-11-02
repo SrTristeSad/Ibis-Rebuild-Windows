@@ -114,7 +114,12 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '79-galeria-mover-abrir.png',
     '80-galeria-mover-escolher-pasta.png',
     '81-galeria-obra-movida.png',
-    '82-galeria-destino-verificado.png'}
+    '82-galeria-destino-verificado.png',
+    '83-mover-criar-pasta.png',
+    '84-mover-nova-pasta-criada.png',
+    '85-mover-obra-para-pasta-nova.png',
+    '86-mover-pasta-nova-verificada.png',
+    '87-mover-criacao-cancelada.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -3435,6 +3440,113 @@ local function advanceShowcase()
         assert(reopened.folder==A.folder,
             'Documento reaberto nao preservou localizacao')
         status('Destino verificado · obra RBD2 preservada')
+    elseif sh.stage==83 then
+        local w,h=love.graphics.getDimensions()
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        A.galleryScroll=0
+        love.draw()
+        local r=GalleryShell.card(w,h,1,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.gallerySelected['p:'..A.showcaseMoveId],
+            'Projeto da pasta atual nao foi selecionado')
+        love.draw()
+        local move=GalleryShell.selectionAction(w,h,'move')
+        love.mousepressed(move.x+move.w/2,move.y+move.h/2,1,false)
+        local p=GalleryShell.movePopup(w,h)
+        love.draw()
+        local action=GalleryShell.moveNewFolderRect(p)
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.galleryMoveMenu and A.galleryMoveMenu.creating
+            and A.galleryMoveMenu.createParent==A.folder,
+            'Nova pasta nao foi aberta sob a pasta de origem')
+        A.showcaseSecondMoveRevision=
+            A.store:openProject(A.showcaseMoveId).revision
+        status('Criar pasta durante a movimentação')
+    elseif sh.stage==84 then
+        local state=assert(A.galleryMoveMenu)
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        love.textinput('Pasta Nova 🎨')
+        assert(state.createName=='Pasta Nova 🎨')
+        love.draw()
+        love.keypressed('return')
+        local folderId=state.target
+        assert(folderId and not state.creating and
+            A.store:_folder(folderId)==folderId,
+            'Pasta nao foi persistida no catalogo')
+        A.showcaseNewDestination=folderId
+        local found=false
+        for _,f in ipairs(A.store.catalog.folders) do
+            if f.id==folderId and f.parent==A.folder then
+                found=true;break
+            end
+        end
+        assert(found and
+            A.store:openProject(A.showcaseMoveId).revision==
+                A.showcaseSecondMoveRevision and
+            A.store:openProject(A.showcaseMoveId).folder==A.folder,
+            'Criar pasta mudou prematuramente o documento')
+        status('Pasta criada, obra ainda na origem')
+    elseif sh.stage==85 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        local btn=GalleryShell.moveConfirmRect(p)
+        local before=A.store:openProject(A.showcaseMoveId)
+        love.draw()
+        love.mousepressed(btn.x+btn.w/2,
+            btn.y+btn.h/2,1,false)
+        local moved=A.store:openProject(A.showcaseMoveId)
+        assert(moved.folder==A.showcaseNewDestination
+            and moved.revision==before.revision+1
+            and not A.galleryMoveMenu,
+            'Nova pasta nao recebeu a obra')
+        assert(moved.pixels==before.pixels or
+            (moved.layers and before.layers
+            and moved.layers[1].pixels==before.layers[1].pixels),
+            'Movimentar para nova pasta mudou pixels')
+        status('Obra movida para pasta criada no seletor')
+    elseif sh.stage==86 then
+        local w,h=love.graphics.getDimensions()
+        local folderIndex
+        for i,folder in ipairs(A.folders) do
+            if folder.id==A.showcaseNewDestination then
+                folderIndex=i;break
+            end
+        end
+        assert(folderIndex,'Pasta nova nao aparece na origem')
+        love.draw()
+        local r=GalleryShell.card(w,h,folderIndex,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.folder==A.showcaseNewDestination
+            and #A.projects==1
+            and A.projects[1].id==A.showcaseMoveId,
+            'Projeto nao aparece ao entrar na nova pasta')
+        status('Novo destino verificado na galeria')
+    elseif sh.stage==87 then
+        local w,h=love.graphics.getDimensions()
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        love.draw()
+        local r=GalleryShell.card(w,h,1,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.draw()
+        local move=GalleryShell.selectionAction(w,h,'move')
+        love.mousepressed(move.x+move.w/2,move.y+move.h/2,1,false)
+        local p=GalleryShell.movePopup(w,h)
+        love.draw()
+        local create=GalleryShell.moveNewFolderRect(p)
+        love.mousepressed(create.x+create.w/2,
+            create.y+create.h/2,1,false)
+        local count=#A.store.catalog.folders
+        love.textinput('Nao salvar')
+        love.keypressed('escape')
+        assert(A.galleryMoveMenu and not A.galleryMoveMenu.creating
+            and A.galleryMoveMenu.target==nil
+            and #A.store.catalog.folders==count,
+            'Cancelar digitacao criou pasta ou fechou movimento')
+        status('Criacao cancelada sem alterar catalogo')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5775,6 +5887,57 @@ local function drawGalleryCreateMenu(w,h)
         lg.setFont(A.fonts.small)
         lg.setColor(.4,.45,.49,1)
         lg.print('Selecione a pasta de destino:',p.x+24,p.y+65)
+        if state.creating then
+            lg.setColor(.19,.24,.30,1)
+            lg.setFont(A.fonts.body)
+            lg.print('Nova pasta',p.x+24,p.y+101)
+            lg.setFont(A.fonts.small)
+            lg.setColor(.39,.44,.49,1)
+            lg.print('Criada dentro da pasta escolhida (ou da origem).',
+                p.x+24,p.y+125)
+            local nameRect=GalleryShell.moveFolderNameRect(p)
+            button('',nameRect.x,nameRect.y,nameRect.w,nameRect.h,
+                function()love.keyboard.setTextInput(true)end,true)
+            fitted(state.createName..'|',
+                nameRect.x+11,nameRect.y+12,'body','text',
+                nameRect.w-22)
+            lg.setColor(.42,.47,.51,1)
+            lg.setFont(A.fonts.small)
+            lg.printf('Informe um nome de 1 a 240 bytes.',
+                p.x+24,p.y+206,p.w-48,'left')
+            if state.createError then
+                lg.setColor(.82,.27,.23,1)
+                lg.printf(state.createError,
+                    p.x+24,p.y+249,p.w-48,'left')
+            end
+            local cancel=GalleryShell.moveCancelRect(p)
+            button('Voltar',cancel.x,cancel.y,
+                cancel.w,cancel.h,function()
+                    GalleryShell.cancelNewFolder(state)
+                    love.keyboard.setTextInput(false)
+                end)
+            local confirm=GalleryShell.moveConfirmRect(p)
+            button('Criar pasta',confirm.x,confirm.y,
+                confirm.w,confirm.h,function()
+                    local ok,id=GalleryShell.createDestination(
+                        A.store,state,A.folder)
+                    if ok then
+                        love.keyboard.setTextInput(false)
+                        refreshGallery()
+                        status('Pasta criada e selecionada para mover')
+                    else
+                        status('Não foi possível criar a pasta: '..
+                            tostring(id))
+                    end
+                end,true,state.createName=='')
+            return
+        end
+        local create=GalleryShell.moveNewFolderRect(p)
+        button('+ Nova pasta',create.x,create.y,
+            create.w,create.h,function()
+                GalleryShell.openNewFolder(state,A.folder)
+                love.keyboard.setTextInput(true)
+            end)
         if #choices==0 then
             lg.setColor(.63,.44,.20,1)
             lg.printf('Nenhuma outra pasta disponível. Crie uma pasta na galeria.',
@@ -5805,7 +5968,10 @@ local function drawGalleryCreateMenu(w,h)
         end
         local cancel=GalleryShell.moveCancelRect(p)
         button('Cancelar',cancel.x,cancel.y,cancel.w,cancel.h,
-            function()A.galleryMoveMenu=nil end)
+            function()
+                A.galleryMoveMenu=nil
+                love.keyboard.setTextInput(false)
+            end)
         local confirm=GalleryShell.moveConfirmRect(p)
         button('Mover',confirm.x,confirm.y,confirm.w,confirm.h,
             function()
@@ -8490,7 +8656,12 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     y>=b.y and y<b.y+b.h then b.fn();return end
             end
             A.galleryCreateMenu=false
-            A.galleryMoveMenu=nil
+            if A.galleryMoveMenu then
+                if A.galleryMoveMenu.creating then
+                    GalleryShell.cancelNewFolder(A.galleryMoveMenu)
+                else A.galleryMoveMenu=nil end
+                love.keyboard.setTextInput(false)
+            end
         end
         return -- Fechar nao dispara clique na obra sob o popup.
     end
@@ -9095,6 +9266,12 @@ function love.wheelmoved(x,y)
     end
 end
 function love.textinput(t)
+    if A.screen=='gallery' and A.galleryMoveMenu and
+        A.galleryMoveMenu.creating then
+        GalleryShell.appendFolderName(A.galleryMoveMenu,t)
+        A.galleryMoveMenu.createError=nil
+        return
+    end
     if A.modal then
         local i=A.modal.focus
         A.modal.values[i]=A.modal.values[i]..t
@@ -9107,6 +9284,29 @@ function love.textinput(t)
     end
 end
 function love.keypressed(key)
+    if A.screen=='gallery' and A.galleryMoveMenu and
+        A.galleryMoveMenu.creating then
+        local state=A.galleryMoveMenu
+        if key=='escape' then
+            GalleryShell.cancelNewFolder(state)
+            love.keyboard.setTextInput(false)
+        elseif key=='backspace' then
+            GalleryShell.backspaceFolderName(state)
+            state.createError=nil
+        elseif key=='return' or key=='kpenter' then
+            if state.createName~='' then
+                local ok,id=GalleryShell.createDestination(
+                    A.store,state,A.folder)
+                if ok then
+                    love.keyboard.setTextInput(false)
+                    refreshGallery()
+                    status('Pasta criada e selecionada para mover')
+                else status('Não foi possível criar a pasta: '..
+                    tostring(id)) end
+            end
+        end
+        return -- Nenhum atalho do editor durante edicao de nome.
+    end
     if A.screen=='gallery' and A.gallerySelecting and
         not A.modal and not A.galleryCreateMenu
         and not A.galleryMoveMenu and
@@ -9125,7 +9325,9 @@ function love.keypressed(key)
         if A.modal then
             A.modal=nil;love.keyboard.setTextInput(false)
         elseif A.galleryCreateMenu then A.galleryCreateMenu=false
-        elseif A.galleryMoveMenu then A.galleryMoveMenu=nil
+        elseif A.galleryMoveMenu then
+            A.galleryMoveMenu=nil
+            love.keyboard.setTextInput(false)
         elseif A.gallerySelecting then
             A.gallerySelecting=false;A.gallerySelected={}
         elseif A.folder~='' then

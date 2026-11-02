@@ -172,6 +172,73 @@ function M.moveNavRect(p,index)
     return {x=p.x+(index==1 and 24 or p.w-69),
         y=p.y+p.h-91,w=45,h=29}
 end
+function M.moveNewFolderRect(p)
+    assert(type(p)=='table' and p.w==540 and p.h==470,
+        'Popup de destino invalido')
+    return {x=p.x+p.w-189,y=p.y+52,w=165,h=31}
+end
+function M.moveFolderNameRect(p)
+    assert(type(p)=='table' and p.w==540 and p.h==470,
+        'Popup de destino invalido')
+    return {x=p.x+24,y=p.y+142,w=p.w-48,h=43}
+end
+function M.openNewFolder(state,current)
+    assert(type(state)=='table' and type(current)=='string',
+        'Seletor de pasta invalido')
+    state.creating=true
+    state.createName=''
+    state.createError=nil
+    state.createParent=state.target~=nil and state.target or current
+end
+function M.cancelNewFolder(state)
+    assert(type(state)=='table','Seletor de pasta invalido')
+    state.creating=false
+    state.createError=nil
+    state.createName=''
+    state.createParent=nil
+end
+function M.appendFolderName(state,value)
+    assert(type(state)=='table' and state.creating and
+        type(state.createName)=='string' and type(value)=='string',
+        'Entrada de pasta invalida')
+    if #state.createName+#value<=240 then
+        state.createName=state.createName..value
+    end
+    return state.createName
+end
+function M.backspaceFolderName(state)
+    assert(type(state)=='table' and state.creating,
+        'Entrada de pasta invalida')
+    local text=state.createName
+    local pos=require('utf8').offset(text,-1)
+    if pos then state.createName=text:sub(1,pos-1) end
+    return state.createName
+end
+function M.createDestination(store,state,current)
+    assert(type(store)=='table' and
+        type(store.createFolder)=='function' and
+        type(state)=='table' and state.creating and
+        type(state.createName)=='string' and
+        type(current)=='string','Criacao de pasta invalida')
+    local parent=state.createParent
+    assert(type(parent)=='string','Destino sem pasta pai')
+    local ok,created=pcall(store.createFolder,store,
+        state.createName,parent)
+    if not ok then
+        state.createError=tostring(created)
+        return false,created
+    end
+    state.target=created
+    M.cancelNewFolder(state)
+    local choices=M.folderChoices(store.catalog.folders,current)
+    for i,entry in ipairs(choices) do
+        if entry.id==created then
+            state.page=math.floor((i-1)/6)+1
+            break
+        end
+    end
+    return true,created
+end
 function M.moveConfirmRect(p)
     assert(type(p)=='table' and p.w==540 and p.h==470)
     return {x=p.x+p.w-182,y=p.y+p.h-50,w=158,h=38}

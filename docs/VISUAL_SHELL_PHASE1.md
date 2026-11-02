@@ -541,3 +541,35 @@ tem esse fluxo funcional **para desenhos**:
 
 A organização visual não foi comparada pixel a pixel com
 o Android 14.1.2, e o rebuild ainda não move pastas inteiras.
+
+## Criar pasta diretamente no seletor Mover (fase visual e Store)
+
+O tutorial oficial [30. Artworks Folder Feature](https://ibispaint.com/lecture/index.jsp?no=193)
+descreve `Select → Folder Icon → New Folder → Folder Name →
+OK → Move`. O rebuild agora oferece essa sequência sem sair
+do seletor de destinos.
+
+- **+ Nova pasta** abre um editor de nome embutido no seletor
+  `Mover`. O pai da pasta é o destino marcado no momento
+  da abertura, ou a pasta de origem quando não existe destino
+  previamente escolhido. Esta política é uma adaptação de
+  navegação do rebuild e não comprova a mesma semântica do
+  Android 14.1.2.
+- O nome admite caracteres UTF-8 e até 240 bytes, segue
+  `Store:createFolder` e mantém o formulário aberto quando
+  ocorre erro de validação, nome duplicado ou falha de I/O.
+  Ao criar, o novo destino fica **selecionado**, mas a obra
+  só muda de pasta após o clique independente em `Mover`.
+- `Voltar` e Escape retornam à lista de destinos sem criar
+  pasta; cliques fora do popup permanecem bloqueados da
+  galeria subjacente. A navegação existente, o raster,
+  camadas e histórico RBD2 não são tocados pela criação.
+- Contratos em `app/ibis_gallery_shell.lua`, com testes
+  de dimensões, validação, cancelamento e Unicode em
+  `tests/test_ibis_gallery_ui.lua`. Os estados **83–87**
+  da captura LÖVE Windows simulam criação por clique real,
+  digitação, confirmação de mudança, reabertura no novo
+  destino e cancelamento sem alteração no catálogo.
+
+Ainda não existe equivalência visual pixel a pixel
+com a APK alvo. Exclusão em lote continua indisponível.
