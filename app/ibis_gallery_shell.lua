@@ -61,4 +61,56 @@ function M.newOption(p,index)
         'Opcao de criacao invalida')
     return {x=p.x+12,y=p.y+12+(index-1)*51,w=p.w-24,h=43}
 end
+-- Modo de selecao multipla na galeria.
+-- Os botoes Mover e Excluir nao possuem backend: sem efeitos de arquivo.
+-- IDs de pasta e obra sao mantidos distintos, como no catalogo existente.
+function M.selectionKeys(folders,projects,filter)
+    assert(type(folders)=='table' and type(projects)=='table' and
+        (filter=='all' or filter=='works' or filter=='folders'),
+        'Catalogo da galeria invalido')
+    local keys={}
+    if filter~='works' then
+        for _,folder in ipairs(folders) do
+            assert(type(folder.id)=='string','Pasta sem identificador')
+            keys[#keys+1]='f:'..folder.id
+        end
+    end
+    if filter~='folders' then
+        for _,project in ipairs(projects) do
+            assert(type(project.id)=='string','Obra sem identificador')
+            keys[#keys+1]='p:'..project.id
+        end
+    end
+    return keys
+end
+function M.selectionCount(selected,keys)
+    assert(type(selected)=='table' and type(keys)=='table',
+        'Estado de selecao invalido')
+    local count=0
+    for _,key in ipairs(keys) do
+        if selected[key]==true then count=count+1 end
+    end
+    return count
+end
+function M.selectAll(keys)
+    assert(type(keys)=='table','Lista de selecao invalida')
+    local result={}
+    for _,key in ipairs(keys) do result[key]=true end
+    return result
+end
+function M.selectionAction(w,h,id)
+    M.layout(w,h)
+    local x={
+        all=w-436,clear=w-326,
+        move=w-216,delete=w-108
+    }
+    local widths={all=102,clear=102,move=100,delete=96}
+    assert(x[id],'Acao de selecao desconhecida')
+    return {x=x[id],y=h-46,w=widths[id],h=36}
+end
+function M.selectionAvailable(id)
+    assert(id=='all' or id=='clear' or id=='move' or id=='delete',
+        'Acao de selecao desconhecida')
+    return id=='all' or id=='clear'
+end
 return M

@@ -475,3 +475,34 @@ publica os tamanhos 1:1 (768×768), 3:4 (768×1024),
 O limite de 2048 pixels por dimensão é do motor do rebuild,
 não do ibisPaint original. Os screenshots oficiais
 não comprovam paridade pixel a pixel com o Android 14.1.2.
+
+## Seleção múltipla na galeria — rodapé funcional e ações pendentes
+
+As referências oficiais
+[30. Artworks Folder Feature](https://ibispaint.com/lecture/index.jsp?no=193)
+e [notas da versão 6.2.0](https://ibispaint.com/information.jsp?newsID=10696514)
+confirmam seleção múltipla para mover e excluir obras.
+
+- O modo **Selecionar** mantém as miniaturas e marcas existentes.
+  O rodapé mostra a **contagem de itens selecionados** e as ações
+  **Todos / Limpar / Mover / Excluir**; a ação `+` só existe fora
+  do modo de seleção.
+- **Todos** e **Limpar** estão ligados ao catálogo visível atual
+  (pastas e obras), respeitando filtros. Atalhos Ctrl+A e Ctrl+D
+  funcionam somente durante seleção; Escape/Concluir encerram
+  o modo e limpam as marcas.
+- **Mover** e **Excluir** permanecem visualmente indisponíveis.
+  Não existem permissões falsas nem deleções experimentais:
+  ambos exigem implementação e testes adicionais do Store.
+- `app/ibis_gallery_shell.lua` concentra as regras de chaves,
+  contagem e geometria sem chamadas a arquivos. A suíte
+  `tests/test_ibis_gallery_ui.lua` verifica filtros,
+  exclusão de IDs invisíveis, ações disponíveis e
+  hitboxes em três resoluções.
+- O showcase Windows captura **75–78**, incluindo cliques
+  reais em Todos/Limpar e clique num botão desabilitado,
+  com igualdade dos bytes RGBA, do histórico e da quantidade
+  de projetos e pastas antes/depois.
+
+A ordem, as dimensões e a aparência exatas dos controles
+continuam sem comparação direta com o APK Android 14.1.2.

@@ -127,6 +127,50 @@ function T.run()
                 'Menu de criacao sobrepoe rodape')
         end
     end
+    -- Seleção em lote: somente operações de estado são habilitadas.
+    local selectionFolders={{id='a'},{id='b'}}
+    local selectionProjects={{id='c'},{id='d'},{id='e'}}
+    local keys=Shell.selectionKeys(selectionFolders,
+        selectionProjects,'all')
+    eq(#keys==5 and keys[1]=='f:a' and keys[3]=='p:c',
+        'Pastas e obras precisam de namespaces diferentes')
+    eq(#Shell.selectionKeys(selectionFolders,
+        selectionProjects,'works')==3)
+    eq(#Shell.selectionKeys(selectionFolders,
+        selectionProjects,'folders')==2)
+    eq(not pcall(Shell.selectionKeys,{},{} ,'invalid'))
+    local selected=Shell.selectAll(keys)
+    eq(Shell.selectionCount(selected,keys)==5,
+        'Todos nao marcou o catalogo')
+    selected['p:c']=nil
+    eq(Shell.selectionCount(selected,keys)==4,
+        'Desmarcar item falhou')
+    eq(Shell.selectionCount({},keys)==0)
+    eq(Shell.selectionCount({['p:unseen']=true},keys)==0,
+        'Itens filtrados ou inexistentes nao podem ser contados')
+    eq(Shell.selectionCount(Shell.selectAll({}),{})==0)
+    eq(Shell.selectionAvailable('all') and
+        Shell.selectionAvailable('clear') and
+        not Shell.selectionAvailable('move') and
+        not Shell.selectionAvailable('delete'),
+        'Acoes destrutivas foram declaradas funcionais')
+    eq(not pcall(Shell.selectionAvailable,'unknown'))
+    for _,size in ipairs(sizes) do
+        local w,h=size[1],size[2]
+        local bar=Shell.layout(w,h)
+        local previous
+        for _,id in ipairs({'all','clear','move','delete'}) do
+            local rect=Shell.selectionAction(w,h,id)
+            eq(rect.x>=400 and rect.y>=bar.footerY and
+                rect.x+rect.w<=w-8 and rect.y+rect.h<=h,
+                'Comando de selecao fora do rodape')
+            if previous then
+                eq(rect.x>previous.x+previous.w,
+                    'Comandos de selecao sobrepostos')
+            end
+            previous=rect
+        end
+    end
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
     eq(G.preset('ibis-square').w==768)
     eq(G.preset('ibis-portrait').w==768

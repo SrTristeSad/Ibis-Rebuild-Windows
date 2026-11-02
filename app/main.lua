@@ -106,7 +106,11 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '71-nova-tela-formatos-oficiais.png',
     '72-nova-tela-proporcao-3-4.png',
     '73-nova-tela-a4-pixels.png',
-    '74-nova-tela-presets-preservados.png'}
+    '74-nova-tela-presets-preservados.png',
+    '75-galeria-selecao-rodape.png',
+    '76-galeria-selecionar-todos.png',
+    '77-galeria-limpar-selecao.png',
+    '78-galeria-mover-pendente.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -3273,6 +3277,78 @@ local function advanceShowcase()
             and A.layerSession:historyStats().undo==proof.undo,
             'Navegacao do dialogo criou obra ou alterou o raster')
         status('Nova tela · compatibilidade dos presets legados')
+    elseif sh.stage==75 then
+        A.modal=nil
+        love.keyboard.setTextInput(false)
+        A.galleryScroll=0
+        A.galleryFilter='all'
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryShell.card(w,h,1,0)
+        A.showcaseGallerySelection={
+            projects=#A.projects,
+            folders=#A.folders,
+            pixels=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo}
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1,
+            'Modo selecao nao marcou a miniatura')
+        status('Galeria: 1 selecionado; Mover/Excluir pendentes')
+    elseif sh.stage==76 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryShell.selectionAction(w,h,'all')
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(#keys>1 and GalleryShell.selectionCount(
+            A.gallerySelected,keys)==#keys,
+            'Selecionar Todos nao marcou o catalogo visivel')
+        local proof=assert(A.showcaseGallerySelection)
+        assert(#A.projects==proof.projects and
+            #A.folders==proof.folders and
+            Native.bytes(A.layerSession.composite)==proof.pixels and
+            A.layerSession:historyStats().undo==proof.undo,
+            'Selecao multipla alterou arquivos ou raster')
+        status('Galeria: todos os itens visiveis marcados')
+    elseif sh.stage==77 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryShell.selectionAction(w,h,'clear')
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==0
+            and A.gallerySelecting,
+            'Limpar selecao alterou o modo ou manteve marcas')
+        status('Galeria: selecao limpa sem perder o modo')
+    elseif sh.stage==78 then
+        local w,h=love.graphics.getDimensions()
+        local card=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(card.x+card.w/2,card.y+card.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1)
+        local disabled=GalleryShell.selectionAction(w,h,'move')
+        love.draw()
+        love.mousepressed(disabled.x+disabled.w/2,
+            disabled.y+disabled.h/2,1,false)
+        local proof=assert(A.showcaseGallerySelection)
+        assert(A.screen=='gallery' and A.gallerySelecting and
+            GalleryShell.selectionCount(A.gallerySelected,keys)==1
+            and not A.modal and not A.galleryCreateMenu,
+            'Acao Mover pendente nao pode abrir dialogo ficticio')
+        assert(#A.projects==proof.projects and
+            #A.folders==proof.folders and
+            Native.bytes(A.layerSession.composite)==proof.pixels and
+            A.layerSession:historyStats().undo==proof.undo,
+            'Acao desabilitada alterou documentos')
+        status('Galeria: Mover/Excluir indisponiveis e seguros')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5427,7 +5503,7 @@ local function drawGallery(w,h)
     lg.setColor(.34,.36,.37,1)
     lg.setFont(A.fonts.small)
     lg.printf(A.gallerySelecting and
-        'Seleção visual · ações em lote pendentes' or
+        'Selecione obras ou pastas' or
         ('Desenhos: %d   Pastas: %d'):format(#A.projects,#A.folders),
         w-420,80,402,'right')
     local index=0
@@ -5516,23 +5592,65 @@ local function drawGallery(w,h)
             'A Minha Galeria está vazia',
             0,math.floor((l.top+l.bottom)/2)-24,w,'center')
     end
-    -- Rodape escuro documentado: "+" abre escolha de tela/pasta.
+    -- Rodape dedicado ao modo de selecao. Nunca oferece uma
+    -- acao destrutiva ate existir backend de pastas/exclusao em lote.
     lg.setColor(.18,.19,.20,1)
     lg.rectangle('fill',0,l.footerY,w,h-l.footerY)
-    lg.setColor(.36,.66,.95,1)
-    lg.setFont(A.fonts.title)
-    lg.print('+',20,l.footerY+7)
-    A.buttons[#A.buttons+1]={x=9,y=l.footerY,w=63,h=52,
-        fn=function()
-            A.galleryCreateMenu=true
-        end}
-    lg.setColor(.74,.77,.81,1)
-    lg.setFont(A.fonts.small)
-    lg.print(A.folder=='' and 'A Minha Galeria' or 'Pasta atual',
-        85,l.footerY+18)
-    if total>0 then
-        lg.printf(('Itens: %d'):format(total),
-            w-165,l.footerY+18,146,'right')
+    if A.gallerySelecting then
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        local count=GalleryShell.selectionCount(
+            A.gallerySelected or {},keys)
+        lg.setColor(.89,.93,.97,1)
+        lg.setFont(A.fonts.small)
+        lg.print(('%d de %d selecionados'):format(count,#keys),
+            20,l.footerY+18)
+        for _,item in ipairs({
+            {id='all',label='Todos'},
+            {id='clear',label='Limpar'},
+            {id='move',label='Mover'},
+            {id='delete',label='Excluir'}}) do
+            local r=GalleryShell.selectionAction(w,h,item.id)
+            local enabled=GalleryShell.selectionAvailable(item.id)
+                and (item.id=='all' and count<#keys
+                    or item.id=='clear' and count>0)
+            local pending=not GalleryShell.selectionAvailable(item.id)
+            lg.setColor(pending and .27 or enabled and .24 or .23,
+                pending and .29 or enabled and .46 or .26,
+                pending and .31 or enabled and .72 or .29,1)
+            lg.rectangle('fill',r.x,r.y,r.w,r.h,4,4)
+            lg.setColor(pending and .53 or enabled and .96 or .57,
+                pending and .55 or enabled and .97 or .61,
+                pending and .57 or enabled and .99 or .66,1)
+            lg.setFont(A.fonts.small)
+            lg.printf(item.label,r.x,r.y+9,r.w,'center')
+            if enabled then
+                local command=item.id
+                A.buttons[#A.buttons+1]={x=r.x,y=r.y,
+                    w=r.w,h=r.h,fn=function()
+                    if command=='all' then
+                        A.gallerySelected=GalleryShell.selectAll(keys)
+                    elseif command=='clear' then
+                        A.gallerySelected={}
+                    end
+                end}
+            end
+        end
+    else
+        -- Fluxo normal preservado: "+" abre nova tela/pasta.
+        lg.setColor(.36,.66,.95,1)
+        lg.setFont(A.fonts.title)
+        lg.print('+',20,l.footerY+7)
+        A.buttons[#A.buttons+1]={x=9,y=l.footerY,w=63,h=52,
+            fn=function()A.galleryCreateMenu=true end}
+        lg.setColor(.74,.77,.81,1)
+        lg.setFont(A.fonts.small)
+        lg.print(A.folder=='' and 'A Minha Galeria' or 'Pasta atual',
+            85,l.footerY+18)
+        if total>0 then
+            lg.printf(('Itens: %d'):format(total),
+                w-165,l.footerY+18,146,'right')
+        end
     end
     if A.galleryScroll>0 and
         GalleryShell.maxScroll(w,h,total)>0 then
@@ -8819,6 +8937,19 @@ function love.textinput(t)
     end
 end
 function love.keypressed(key)
+    if A.screen=='gallery' and A.gallerySelecting and
+        not A.modal and not A.galleryCreateMenu and
+        love.keyboard.isDown('lctrl','rctrl') then
+        if key=='a' then
+            A.gallerySelected=GalleryShell.selectAll(
+                GalleryShell.selectionKeys(
+                    A.folders,A.projects,A.galleryFilter))
+            return
+        elseif key=='d' then
+            A.gallerySelected={}
+            return
+        end
+    end
     if A.screen=='gallery' and key=='escape' then
         if A.modal then
             A.modal=nil;love.keyboard.setTextInput(false)
