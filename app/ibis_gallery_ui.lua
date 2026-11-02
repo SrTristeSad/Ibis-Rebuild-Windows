@@ -28,8 +28,8 @@ function UI.tabRect(rect,i)
     assert(type(rect)=='table' and rect.w>=640 and rect.h>=482,
         'Dialogo invalido para abas')
     assert(i==1 or i==2,'Aba de formatos desconhecida')
-    return {x=rect.x+312+(i-1)*150,
-        y=rect.y+317,w=137,h=29}
+    return {x=rect.x+28+(i-1)*147,
+        y=rect.y+231,w=137,h=29}
 end
 function UI.filter(id,kind)
     assert(kind=='work' or kind=='folder','Tipo de galeria invalido')
@@ -71,16 +71,22 @@ function UI.fields(rect)
         'Dialogo de tela invalido')
     local result={}
     for i,key in ipairs({'name','width','height'}) do
-        result[i]={key=key,x=rect.x+28,y=rect.y+112+(i-1)*69,w=264,h=36}
+        if i==1 then
+            result[i]={key=key,x=rect.x+28,y=rect.y+98,w=360,h=34}
+        else
+            result[i]={key=key,x=rect.x+(i==2 and 28 or 236),
+                y=rect.y+166,w=180,h=34}
+        end
     end
     return result
 end
 function UI.preview(rect)
-    return {x=rect.x+324,y=rect.y+93,w=284,h=238}
+    return {x=rect.x+468,y=rect.y+82,w=144,h=124}
 end
 function UI.presetButton(rect,i)
     assert(i%1==0 and i>=1 and i<=#UI.PRESETS,'Preset desconhecido')
-    return {x=rect.x+28+(i-1)*148,y=rect.y+351,w=136,h=40}
+    -- Quatro linhas verticais, no lugar dos botoes horizontais.
+    return {x=rect.x+28,y=rect.y+266+(i-1)*39,w=584,h=36}
 end
 function UI.aspectViewport(rect,width,height)
     local area=UI.preview(rect)

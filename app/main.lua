@@ -37,6 +37,7 @@ local EditorRail=require('ibis_editor_rail')
 local TopToolbar=require('ibis_top_toolbar')
 local IbisPanels=require('ibis_visual_panels')
 IbisPanels.galleryDetail=require('ibis_gallery_detail')
+IbisPanels.canvasPresetRows=require('ibis_canvas_preset_rows')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -8161,7 +8162,7 @@ local function drawNewCanvasDialog(w,h)
     end
     local preview=GalleryUI.preview(r)
     box(preview.x,preview.y,preview.w,preview.h,'card')
-    text('PRÉVIA DE PROPORÇÃO',preview.x+15,preview.y+9,'small','muted')
+    text('PROPORÇÃO',preview.x+10,preview.y+8,'small','muted')
     local area=GalleryUI.aspectViewport(r,m.values[2],m.values[3])
     if area then
         local tile=12
@@ -8181,7 +8182,7 @@ local function drawNewCanvasDialog(w,h)
         text('Dimensões inválidas',preview.x+34,
             preview.y+104,'body','warn')
     end
-    text('TAMANHOS RÁPIDOS',r.x+28,r.y+326,'small','muted')
+    text('TAMANHOS',r.x+342,r.y+237,'small','muted')
     -- Dois catalogos no mesmo espaco. A troca nao toca no tamanho
     -- digitado nem cria obra ate o clique explicito em Criar tela.
     local selectedTab=m.presetTab or 'basic'
@@ -8193,22 +8194,29 @@ local function drawNewCanvasDialog(w,h)
     end
     for i,preset in ipairs(GalleryUI.presetList(selectedTab)) do
         local btn=GalleryUI.presetButton(r,i)
-        button(preset.name,btn.x,btn.y,btn.w,btn.h,function()
-            m.values[2]=tostring(preset.w)
-            m.values[3]=tostring(preset.h)
-            m.focus=1
-        end,m.values[2]==tostring(preset.w)
-            and m.values[3]==tostring(preset.h))
+        local selected=m.values[2]==tostring(preset.w)
+            and m.values[3]==tostring(preset.h)
+        local mx,my=love.mouse.getPosition()
+        IbisPanels.canvasPresetRows.draw(btn,preset,selected,
+            mx>=btn.x and mx<btn.x+btn.w and
+            my>=btn.y and my<btn.y+btn.h,
+            A.fonts.body,A.fonts.small)
+        A.buttons[#A.buttons+1]={x=btn.x,y=btn.y,w=btn.w,h=btn.h,
+            fn=function()
+                m.values[2]=tostring(preset.w)
+                m.values[3]=tostring(preset.h)
+                m.focus=1
+            end}
     end
     text(selectedTab=='formats'
         and 'Formatos ibisPaint em pixels · DPI não gravado'
         or 'RGBA transparente · máximo 2048 × 2048',
-        r.x+28,r.y+398,'small','muted')
-    button('Cancelar',r.x+28,r.y+427,236,38,function()
+        r.x+28,r.y+422,'small','muted')
+    button('Cancelar',r.x+28,r.y+442,236,34,function()
         A.modal=nil
         love.keyboard.setTextInput(false)
     end)
-    button('Criar tela',r.x+278,r.y+427,334,38,
+    button('Criar tela',r.x+278,r.y+442,334,34,
         submitModal,true,not GalleryUI.aspectViewport(r,m.values[2],m.values[3]))
 end
 local function drawModal(w,h)

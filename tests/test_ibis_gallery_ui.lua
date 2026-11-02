@@ -170,7 +170,11 @@ function T.run()
                 field.y>=r.y and field.y+field.h<r.y+r.h-120,
                 'Campo de tela fora do painel')
             if i>1 then
-                eq(field.y>=fields[i-1].y+fields[i-1].h,
+                local prev=fields[i-1]
+                eq(field.y>=prev.y+prev.h or
+                    prev.y>=field.y+field.h or
+                    field.x>=prev.x+prev.w or
+                    prev.x>=field.x+field.w,
                     'Campos de texto sobrepostos')
             end
         end
@@ -188,6 +192,25 @@ function T.run()
         end
         eq(tabs[1].x+tabs[1].w<tabs[2].x,
             'Abas se sobrepoem')
+        local firstRow=G.presetButton(r,1)
+        local lastRow=G.presetButton(r,4)
+        eq(firstRow.y>=tabs[1].y+tabs[1].h and
+            lastRow.y+lastRow.h<=r.y+422,
+            'Lista vertical invade abas ou rodape')
+        eq(fields[2].y==fields[3].y and
+            fields[2].x+fields[2].w<fields[3].x,
+            'Largura e altura nao estao lado a lado')
+        eq(fields[3].x+fields[3].w<preview.x and
+            preview.y+preview.h<firstRow.y,
+            'Campos ou previa invadem lista de formatos')
+        local VisualRows=require('ibis_canvas_preset_rows')
+        local landscape=VisualRows.symbol({w=1920,h=1080})
+        local portrait=VisualRows.symbol({w=1080,h=1920})
+        eq(landscape.w>landscape.h and
+            portrait.h>portrait.w and
+            landscape.w<=22 and portrait.h<=22,
+            'Icones de proporcao nao refletem formato')
+
         for _,category in ipairs({'basic','formats'}) do
         for index,preset in ipairs(G.presetList(category)) do
             local b=G.presetButton(r,index)
@@ -206,7 +229,9 @@ function T.run()
                 'Preset sobrepoe preview ou sai da janela')
             if index>1 then
                 local before=G.presetButton(r,index-1)
-                eq(before.x+before.w<b.x,'Presets se sobrepoem')
+                eq(before.y+before.h<=b.y and
+                    before.x==b.x and before.w==b.w,
+                    'Linhas de presets se sobrepoem ou mudam coluna')
             end
         end
         end
