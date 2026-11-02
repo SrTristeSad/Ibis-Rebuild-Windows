@@ -51,6 +51,7 @@ local GalleryUI=require('ibis_gallery_ui')
 local GalleryShell=require('ibis_gallery_shell')
 local SettingsUI=require('ibis_settings_ui')
 IbisPanels.stabilizer=require('ibis_stabilizer_ui')
+IbisPanels.trash=require('ibis_deleted_retention')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -254,6 +255,7 @@ local function setFolder(id)
     A.folder=id or '';A.galleryScroll=0
     A.galleryMoveMenu=nil;A.galleryDeleteMenu=nil
     A.galleryRestoreMenu=nil;A.galleryTrash=false
+    A.galleryMoreMenu=false
     A.gallerySelected={};A.gallerySelecting=false
     refreshGallery()
 end
@@ -537,6 +539,7 @@ local function toGallery()
     A.backMenu=false;A.settingsOpen=false
     A.galleryCreateMenu=false;A.galleryMoveMenu=nil;A.galleryScroll=0
     A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil;A.galleryTrash=false
+    A.galleryMoreMenu=false
     A.gallerySelecting=false;A.gallerySelected={}
     clearWandSelection()
     A.visualPendingTool=nil
@@ -5815,22 +5818,18 @@ local function drawGallery(w,h)
             end)}
     end
     lg.setColor(.45,.74,.94,1)
+    lg.printf(A.gallerySelecting and 'Concluir' or 'Selecionar',
+        w-156,17,136,'right')
+    A.buttons[#A.buttons+1]={x=w-166,y=7,w=152,h=42,
+        fn=function()
+            A.gallerySelecting=not A.gallerySelecting
+            A.gallerySelected={}
+        end}
     if not A.galleryTrash then
-        lg.printf(A.gallerySelecting and 'Concluir' or 'Selecionar',
-            w-156,17,136,'right')
-        A.buttons[#A.buttons+1]={x=w-166,y=7,w=152,h=42,
-            fn=function()
-                A.gallerySelecting=not A.gallerySelecting
-                A.gallerySelected={}
-            end}
-        lg.print('Excluídos',146,17)
-        A.buttons[#A.buttons+1]={x=137,y=7,w=120,h=42,
-            fn=function()
-                A.galleryBeforeTrash=A.galleryFilter
-                A.galleryTrash=true;A.galleryFilter='works'
-                A.gallerySelecting=false;A.gallerySelected={}
-                A.galleryScroll=0;refreshGallery()
-            end}
+        lg.setFont(A.fonts.title)
+        lg.print('⋯',154,10)
+        A.buttons[#A.buttons+1]={x=138,y=6,w=64,h=42,
+            fn=function()A.galleryMoreMenu=true end}
     end
     -- Filtros de catalogo locais: adicionais do rebuild, nao da APK.
     lg.setColor(.96,.95,.92,1)
@@ -5933,10 +5932,12 @@ local function drawGallery(w,h)
     if A.galleryTrash or GalleryUI.filter(A.galleryFilter,'work') then
         for _,doc in ipairs(A.galleryTrash and
             (A.trashProjects or {}) or A.projects) do
-            card(doc.name,doc.width..'×'..doc.height,false,
+            card(doc.name,A.galleryTrash and
+                IbisPanels.trash.label(doc.deleted_at,os.time())
+                or doc.width..'×'..doc.height,false,
                 function()
                     if A.galleryTrash then
-                        A.galleryRestoreMenu={id=doc.id}
+                        status('Use Selecionar para recuperar desenhos')
                     else openDoc(A.store:openProject(doc.id)) end
                 end,doc,'p:'..doc.id)
         end
@@ -5956,12 +5957,53 @@ local function drawGallery(w,h)
     lg.setColor(.18,.19,.20,1)
     lg.rectangle('fill',0,l.footerY,w,h-l.footerY)
     if A.galleryTrash then
+        local keys=GalleryShell.selectionKeys(
+            {},A.trashProjects or {},'works')
+        local count=GalleryShell.selectionCount(
+            A.gallerySelected or {},keys)
         lg.setColor(.84,.87,.91,1)
         lg.setFont(A.fonts.small)
-        lg.print('Selecione uma obra para recuperá-la',
-            20,l.footerY+18)
-        lg.printf(('%d arquivo(s) preservado(s)'):format(total),
-            w-250,l.footerY+18,230,'right')
+        if A.gallerySelecting then
+            lg.print(('%d de %d selecionados'):format(count,#keys),
+                20,l.footerY+18)
+            for _,item in ipairs({
+                {id='all',label='Todos'},
+                {id='clear',label='Limpar'},
+                {id='recover',label='Recuperar'}}) do
+                local r=IbisPanels.trash.trashAction(w,h,item.id)
+                local enabled=item.id=='all' and count<#keys
+                    or item.id=='clear' and count>0
+                    or item.id=='recover' and count>0
+                lg.setColor(enabled and .24 or .23,
+                    enabled and .46 or .26,
+                    enabled and .72 or .29,1)
+                lg.rectangle('fill',r.x,r.y,r.w,r.h,4,4)
+                lg.setColor(enabled and .96 or .57,
+                    enabled and .97 or .61,
+                    enabled and .99 or .66,1)
+                lg.printf(item.label,r.x,r.y+9,r.w,'center')
+                if enabled then
+                    local command=item.id
+                    A.buttons[#A.buttons+1]={
+                        x=r.x,y=r.y,w=r.w,h=r.h,fn=function()
+                        if command=='all' then
+                            A.gallerySelected=GalleryShell.selectAll(keys)
+                        elseif command=='clear' then
+                            A.gallerySelected={}
+                        else
+                            local ids=GalleryShell.selectedProjectIds(
+                                A.gallerySelected,keys)
+                            if ids then A.galleryRestoreMenu={ids=ids} end
+                        end
+                    end}
+                end
+            end
+        else
+            lg.print('Selecione desenhos para recuperar',
+                20,l.footerY+18)
+            lg.printf('30 dias · limpeza automática pendente',
+                w-340,l.footerY+18,324,'right')
+        end
     elseif A.gallerySelecting then
         local keys=GalleryShell.selectionKeys(
             A.folders,A.projects,A.galleryFilter)
@@ -6041,6 +6083,23 @@ local function drawGallery(w,h)
 end
 local function drawGalleryCreateMenu(w,h)
     local lg=love.graphics
+    if A.galleryMoreMenu then
+        local p=IbisPanels.trash.morePopup(w,h)
+        local r=IbisPanels.trash.moreItem(p)
+        lg.setColor(0,0,0,.25)
+        lg.rectangle('fill',0,0,w,h)
+        lg.setColor(.22,.24,.27,1)
+        lg.rectangle('fill',p.x,p.y,p.w,p.h,5,5)
+        button('Excluídos recentemente',r.x,r.y,r.w,r.h,
+            function()
+                A.galleryMoreMenu=false
+                A.galleryBeforeTrash=A.galleryFilter
+                A.galleryTrash=true;A.galleryFilter='works'
+                A.gallerySelecting=false;A.gallerySelected={}
+                A.galleryScroll=0;refreshGallery()
+            end)
+        return
+    end
     if A.galleryDeleteMenu or A.galleryRestoreMenu then
         local deleting=A.galleryDeleteMenu~=nil
         local state=A.galleryDeleteMenu or A.galleryRestoreMenu
@@ -6052,12 +6111,13 @@ local function drawGalleryCreateMenu(w,h)
         lg.setColor(.18,.21,.25,1)
         lg.setFont(A.fonts.title)
         lg.print(deleting and 'Excluir desenhos?' or
-            'Recuperar desenho?',p.x+23,p.y+20)
+            'Recuperar desenhos?',p.x+23,p.y+20)
         lg.setFont(A.fonts.body)
         lg.printf(deleting and
             ('Enviar %d obra(s) para Excluídos recentemente?')
                 :format(#state.ids)
-            or 'Restaurar a obra à pasta original?',
+            or ('Restaurar %d obra(s) às pastas originais?')
+                :format(#state.ids),
             p.x+23,p.y+77,p.w-46,'left')
         lg.setFont(A.fonts.small)
         lg.setColor(.41,.44,.48,1)
@@ -6085,9 +6145,10 @@ local function drawGalleryCreateMenu(w,h)
                     status(('%d obra(s) excluída(s) recuperavelmente')
                         :format(report.deleted))
                 else
-                    local report=A.store:restoreProjects({state.id})
+                    local report=A.store:restoreProjects(state.ids)
                     A.galleryRestoreMenu=nil
                     A.galleryScroll=0
+                    A.gallerySelecting=false;A.gallerySelected={}
                     refreshGallery()
                     status(('%d obra(s) recuperada(s)')
                         :format(report.restored))
@@ -8836,7 +8897,8 @@ function love.draw()
             w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')
     end
     if (A.galleryCreateMenu or A.galleryMoveMenu
-        or A.galleryDeleteMenu or A.galleryRestoreMenu)
+        or A.galleryDeleteMenu or A.galleryRestoreMenu
+        or A.galleryMoreMenu)
         and A.screen=='gallery' then
         A.buttons={}
         drawGalleryCreateMenu(w,h)
@@ -8875,7 +8937,8 @@ function love.draw()
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
     if (A.galleryCreateMenu or A.galleryMoveMenu
-        or A.galleryDeleteMenu or A.galleryRestoreMenu)
+        or A.galleryDeleteMenu or A.galleryRestoreMenu
+        or A.galleryMoreMenu)
         and A.screen=='gallery' then
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
@@ -8884,6 +8947,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     y>=b.y and y<b.y+b.h then b.fn();return end
             end
             A.galleryCreateMenu=false
+            A.galleryMoreMenu=false
             A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil
             if A.galleryMoveMenu then
                 if A.galleryMoveMenu.creating then
@@ -9436,10 +9500,13 @@ end
 function love.wheelmoved(x,y)
     if A.screen=='gallery' then
         if A.modal or A.galleryCreateMenu or A.galleryMoveMenu
-            or A.galleryDeleteMenu or A.galleryRestoreMenu then return end
-        local total=(GalleryUI.filter(A.galleryFilter,'folder')
-            and #A.folders or 0)+(GalleryUI.filter(A.galleryFilter,'work')
-            and #A.projects or 0)
+            or A.galleryMoreMenu or A.galleryDeleteMenu
+            or A.galleryRestoreMenu then return end
+        local total=A.galleryTrash and #(A.trashProjects or {})
+            or ((GalleryUI.filter(A.galleryFilter,'folder')
+                and #A.folders or 0)+
+                (GalleryUI.filter(A.galleryFilter,'work')
+                and #A.projects or 0))
         local w,h=love.graphics.getDimensions()
         A.galleryScroll=GalleryShell.scroll(w,h,total,
             A.galleryScroll or 0,y)
@@ -9539,7 +9606,7 @@ function love.keypressed(key)
     end
     if A.screen=='gallery' and A.gallerySelecting and
         not A.modal and not A.galleryCreateMenu
-        and not A.galleryMoveMenu
+        and not A.galleryMoveMenu and not A.galleryMoreMenu
         and not A.galleryDeleteMenu and not A.galleryRestoreMenu and
         love.keyboard.isDown('lctrl','rctrl') then
         if key=='a' then
@@ -9556,18 +9623,19 @@ function love.keypressed(key)
         if A.modal then
             A.modal=nil;love.keyboard.setTextInput(false)
         elseif A.galleryCreateMenu then A.galleryCreateMenu=false
+        elseif A.galleryMoreMenu then A.galleryMoreMenu=false
         elseif A.galleryDeleteMenu then A.galleryDeleteMenu=nil
         elseif A.galleryRestoreMenu then A.galleryRestoreMenu=nil
-        elseif A.galleryTrash then
-            A.galleryTrash=false
-            A.galleryFilter=A.galleryBeforeTrash or 'all'
-            A.galleryBeforeTrash=nil;A.galleryScroll=0
-            refreshGallery()
         elseif A.galleryMoveMenu then
             A.galleryMoveMenu=nil
             love.keyboard.setTextInput(false)
         elseif A.gallerySelecting then
             A.gallerySelecting=false;A.gallerySelected={}
+        elseif A.galleryTrash then
+            A.galleryTrash=false
+            A.galleryFilter=A.galleryBeforeTrash or 'all'
+            A.galleryBeforeTrash=nil;A.galleryScroll=0
+            refreshGallery()
         elseif A.folder~='' then
             local parent=''
             for _,f in ipairs(A.store.catalog.folders) do
