@@ -3369,8 +3369,6 @@ local function advanceShowcase()
         local first=A.projects[1]
         assert(first,'Nenhuma obra de teste para mover')
         A.showcaseMoveId=first.id
-        A.showcaseMovePixels=Native.bytes(A.store:openProject(first.id).pixels or
-            A.store:openProject(first.id).layers[1].pixels)
         love.draw()
         love.mousepressed(item.x+item.w/2,item.y+item.h/2,1,false)
         assert(A.gallerySelected['p:'..first.id],
