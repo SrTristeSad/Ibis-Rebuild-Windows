@@ -74,6 +74,26 @@ function T.run()
         not Shell.parentDrop(960,640,25,65) and
         Shell.parentDrop(960,640,25,25),
         'Parent drop hitbox outside real Back control')
+    local groupRect=Shell.card(960,640,2,0)
+    local gx,gy=groupRect.x+groupRect.w/2,
+        groupRect.y+groupRect.h/2
+    eq(Shell.groupHit(groupRect,gx,gy)
+        and not Shell.groupHit(groupRect,groupRect.x+5,gy),
+        'Grouping should require thumbnail central area')
+    local group=Shell.dropAction('','',
+        'p:p_a','p:p_b',960,640,gx,gy,groupRect)
+    eq(group and group.kind=='group' and group.target=='p:p_b',
+        'Artwork-on-artwork central drop did not create a group')
+    local edge=Shell.dropAction('','',
+        'p:p_a','p:p_b',960,640,groupRect.x+5,gy,groupRect)
+    eq(edge and edge.kind=='reorder',
+        'Artwork edge drops must preserve ordinary reordering')
+    local folderInstead=Shell.dropAction('','',
+        'f:f_a','p:p_b',960,640,gx,gy,groupRect)
+    eq(folderInstead.kind=='reorder',
+        'Dragging a folder over artwork must not group or nest it')
+    eq(not pcall(Shell.groupHit,{x='bad',y=1,w=160,h=175},gx,gy),
+        'Invalid artwork rectangle accepted')
     eq(#G.FILTERS==3,'Galeria precisa de tres filtros')
     eq(#G.PRESETS==4,'Dialogo precisa preservar quatro formatos')
     eq(#G.OFFICIAL_PRESETS==4,
