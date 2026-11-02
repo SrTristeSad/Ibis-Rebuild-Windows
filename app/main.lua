@@ -257,9 +257,11 @@ local function refreshGallery()
     A.folders=A.store:folders(A.folder)
     A.projects=A.store:listProjects(A.folder)
     A.trashProjects=A.store:deletedProjects()
+    A.galleryItems=A.store:galleryItems(A.folder)
 end
 local function setFolder(id)
     A.folder=id or '';A.galleryScroll=0
+    A.galleryGesture=nil
     A.galleryMoveMenu=nil;A.galleryDeleteMenu=nil
     A.galleryRestoreMenu=nil;A.galleryTrash=false
     A.galleryMoreMenu=false
@@ -545,6 +547,7 @@ end
 local function toGallery()
     A.backMenu=false;A.settingsOpen=false
     A.galleryCreateMenu=false;A.galleryMoveMenu=nil;A.galleryScroll=0
+    A.galleryGesture=nil
     A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil;A.galleryTrash=false
     A.galleryMoreMenu=false
     A.gallerySelecting=false;A.gallerySelected={}
@@ -5985,6 +5988,11 @@ local function drawGallery(w,h)
     lg.rectangle('fill',0,54,w,l.footerY-54)
     lg.setColor(.71,.70,.68,1)
     lg.rectangle('fill',0,53,w,1)
+    if A.galleryGesture then
+        GalleryShell.dragAdvance(A.galleryGesture,
+            A.galleryGesture.px,A.galleryGesture.py,
+            love.timer.getTime())
+    end
     local index=0
     lg.setScissor(0,l.top,w,l.bottom-l.top)
     local function card(label,sub,folder,fn,project,identifier)
@@ -6039,7 +6047,8 @@ local function drawGallery(w,h)
         local hitTop=math.max(r.y,l.top)
         local hitBottom=math.min(r.y+r.h,l.bottom)
         A.buttons[#A.buttons+1]={x=r.x,y=hitTop,w=r.w,
-            h=hitBottom-hitTop,fn=guard(function()
+            h=hitBottom-hitTop,galleryKey=identifier,
+            fn=guard(function()
                 if A.gallerySelecting then
                     A.gallerySelected=A.gallerySelected or {}
                     A.gallerySelected[identifier]=not
@@ -6049,24 +6058,47 @@ local function drawGallery(w,h)
                 end
             end)}
     end
-    if not A.galleryTrash and
-        GalleryUI.filter(A.galleryFilter,'folder') then
-        for _,folder in ipairs(A.folders) do
-            card(folder.name,'Pasta',true,
-                function()setFolder(folder.id)end,nil,'f:'..folder.id)
+    if A.galleryTrash then
+        for _,doc in ipairs(A.trashProjects or {}) do
+            card(doc.name,IbisPanels.trash.label(
+                doc.deleted_at,os.time()),false,function()
+                status('Use Selecionar para recuperar desenhos')
+            end,doc,'p:'..doc.id)
+        end
+    else
+        for _,entry in ipairs(A.galleryItems or {}) do
+            if GalleryUI.filter(A.galleryFilter,
+                entry.type=='folder' and 'folder' or 'work') then
+                if entry.type=='folder' then
+                    local folder=entry.value
+                    card(folder.name,'Pasta',true,
+                        function()setFolder(folder.id)end,
+                        nil,entry.key)
+                else
+                    local doc=entry.value
+                    card(doc.name,doc.width..'×'..doc.height,
+                        false,function()
+                            openDoc(A.store:openProject(doc.id))
+                        end,doc,entry.key)
+                end
+            end
         end
     end
-    if A.galleryTrash or GalleryUI.filter(A.galleryFilter,'work') then
-        for _,doc in ipairs(A.galleryTrash and
-            (A.trashProjects or {}) or A.projects) do
-            card(doc.name,A.galleryTrash and
-                IbisPanels.trash.label(doc.deleted_at,os.time())
-                or doc.width..'×'..doc.height,false,
-                function()
-                    if A.galleryTrash then
-                        status('Use Selecionar para recuperar desenhos')
-                    else openDoc(A.store:openProject(doc.id)) end
-                end,doc,'p:'..doc.id)
+    if A.galleryGesture and A.galleryGesture.active then
+        local gesture=A.galleryGesture
+        local key=GalleryShell.dragTarget(w,h,A.galleryScroll,
+            A.galleryItems or {},gesture.px,gesture.py)
+        if key then
+            for i,item in ipairs(A.galleryItems or {}) do
+                if item.key==key then
+                    local r=GalleryShell.card(w,h,i,A.galleryScroll)
+                    lg.setColor(.20,.51,.92,.95)
+                    lg.setLineWidth(4)
+                    lg.rectangle('line',r.x+2,r.y+2,
+                        r.w-4,r.h-4,5,5)
+                    break
+                end
+            end
         end
     end
     lg.setScissor()
@@ -6079,8 +6111,7 @@ local function drawGallery(w,h)
             'A Minha Galeria está vazia',
             0,math.floor((l.top+l.bottom)/2)-24,w,'center')
     end
-    -- Rodape dedicado ao modo de selecao: mover apenas projetos.
-    -- Excluir continua desabilitado, sem backend nem perda de arquivos.
+    -- Rodape dedicado ao modo de selecao; nao altera bytes RBD.
     lg.setColor(.18,.19,.20,1)
     lg.rectangle('fill',0,l.footerY,w,h-l.footerY)
     if A.galleryTrash then
