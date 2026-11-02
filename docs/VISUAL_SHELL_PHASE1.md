@@ -763,3 +763,27 @@ declara que arrastar um desenho sobre outro cria uma pasta.
   falha simulada na segunda gravação e recuperação manual.
   Capturas Windows **110–113** exercitam arrastar, soltar,
   reabrir pasta e criar nova pasta com nome numerado.
+
+## Rolagem automática durante arrasto — implementação em Lua
+
+O [tutorial #29](https://ibispaint.com/lecture/index.jsp?no=103)
+confirma pressionar, arrastar e soltar, mas não especifica
+métricas de rolagem nas bordas. Por isso, o rebuild adota
+geometria provisória, **sem alegar precisão 1:1**:
+
+- `GalleryShell.dragAutoScroll` calcula rolagem em faixas de
+  72 px nas bordas superior e inferior da grade, com velocidade
+  entre 160–660 px/s, limitada por `maxScroll`.
+- O LÖVE atualiza a rolagem em `love.update(dt)` quando há
+  arrasto ativo, movimento efetivo e ausência de menus/seleção.
+  Assim, o ponteiro pode ficar parado na borda.
+- Fora da grade (inclusive Voltar e rodapé), não há scroll;
+  também não há scroll sem conteúdo suficiente nem após
+  cancelamento. O delta de frame é limitado a 50 ms.
+- Testes de geometria cobrem três resoluções, sentidos,
+  limites, gradiente de velocidade e quadros com pausa.
+  Capturas Windows **114–116** verificam rolagem inferior,
+  superior e cancelamento, sem mutação de RBD ou ordem.
+
+Os limiares e velocidades devem ser calibrados contra a
+versão Android 14.1.2 quando houver medições confiáveis.

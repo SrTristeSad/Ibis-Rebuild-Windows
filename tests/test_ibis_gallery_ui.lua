@@ -407,6 +407,40 @@ function T.run()
     end
     eq(not pcall(Retention.trashAction,960,640,'delete'),
         'Exclusao definitiva nao pode ser exposta')
+    for _,dim in ipairs(sizes) do
+        local w,h=dim[1],dim[2]
+        local l=Shell.layout(w,h)
+        local count=l.cols*8
+        local max=Shell.maxScroll(w,h,count)
+        eq(max>0,'Fixture must allow scrolling')
+        local down,dir=Shell.dragAutoScroll(
+            w,h,count,0,l.bottom-1,.016)
+        eq(down>0 and dir==1,'Bottom drag did not scroll')
+        local slow=Shell.dragAutoScroll(
+            w,h,count,0,l.bottom-68,.016)
+        eq(slow>0 and slow<down,'Edge speed gradient failed')
+        local up,back=Shell.dragAutoScroll(
+            w,h,count,max,l.top+1,.016)
+        eq(up<max and back==-1,'Top drag did not scroll')
+        eq(Shell.dragAutoScroll(w,h,count,down,
+            (l.top+l.bottom)/2,.016)==down,
+            'Center drag unexpectedly scrolled')
+        eq(Shell.dragAutoScroll(w,h,count,down,20,.016)==down,
+            'Back-button drag unexpectedly scrolled')
+        eq(Shell.dragAutoScroll(w,h,count,down,h-10,.016)==down,
+            'Footer drag unexpectedly scrolled')
+        eq(Shell.dragAutoScroll(w,h,count,0,l.top+1,.016)==0,
+            'Top limit crossed')
+        eq(Shell.dragAutoScroll(w,h,count,max,l.bottom-1,.016)==max,
+            'Bottom limit crossed')
+        eq(Shell.dragAutoScroll(w,h,l.cols,0,l.bottom-1,.016)==0,
+            'Small gallery must not scroll')
+        eq(Shell.dragAutoScroll(w,h,count,0,l.bottom-1,10)==
+            Shell.dragAutoScroll(w,h,count,0,l.bottom-1,.05),
+            'Frame time spike caused excessive scrolling')
+    end
+    eq(not pcall(Shell.dragAutoScroll,960,640,50,0,600,-.1),
+        'Negative delta time was accepted')
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
     eq(G.preset('ibis-square').w==768)
     eq(G.preset('ibis-portrait').w==768

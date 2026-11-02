@@ -146,7 +146,10 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '110-agrupar-desenho-sobre-outro.png',
     '111-pasta-criada-com-dois-desenhos.png',
     '112-conteudo-da-pasta-agrupada.png',
-    '113-agrupar-com-nome-duplicado.png'}
+    '113-agrupar-com-nome-duplicado.png',
+    '114-arrasto-rolagem-para-baixo.png',
+    '115-arrasto-rolagem-para-cima.png',
+    '116-arrasto-rolagem-cancelado.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -4186,6 +4189,73 @@ local function advanceShowcase()
             and A.store:openProject(two.id).folder==A.folders[2].id,
             'Segundo grupo nao moveu os dois projetos')
         status('Agrupar obras: pastas com nomes unicos')
+    elseif sh.stage==114 then
+        toGallery();setFolder('');A.galleryFilter='all'
+        A.galleryScroll=0
+        local w,h=love.graphics.getDimensions()
+        local l=GalleryShell.layout(w,h)
+        while GalleryShell.maxScroll(
+            w,h,#A.galleryItems)<240 do
+            A.store:createProject('Rolagem extra '..#A.galleryItems,
+                2,2,'',string.rep(string.char(31,90,150,255),4))
+            refreshGallery()
+        end
+        local index
+        for i,item in ipairs(A.galleryItems) do
+            if item.type=='project' and
+                GalleryShell.card(w,h,i,0).visible then
+                index=i;break
+            end
+        end
+        assert(index,'Rolagem precisa de uma obra visivel')
+        local project=A.galleryItems[index]
+        A.showcaseScrollKey=project.key
+        A.showcaseScrollRBD=A.store.fs:read(
+            'projects/'..project.value.id..'.rbd')
+        A.showcaseScrollOrder=A.galleryItems[1].key
+        love.draw()
+        local r=GalleryShell.card(w,h,index,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==project.key,
+            'Pressionar obra nao iniciou arrasto')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(5,l.bottom-3,
+            5-r.x-r.w/2,l.bottom-3-r.y-r.h/2,false)
+        assert(A.galleryGesture.active and
+            A.galleryGesture.moved,
+            'Arrasto nao ativou antes da rolagem')
+        A.showcaseScrollMax=GalleryShell.maxScroll(
+            w,h,#A.galleryItems)
+        status('Arrasto ativo: rolagem na borda inferior')
+    elseif sh.stage==115 then
+        assert(A.galleryScroll>0 and
+            A.galleryScroll<=A.showcaseScrollMax,
+            'Arrasto parado na borda inferior nao rolou')
+        local w,h=love.graphics.getDimensions()
+        local l=GalleryShell.layout(w,h)
+        A.galleryScroll=A.showcaseScrollMax
+        love.mousemoved(5,l.top+3,0,
+            l.top+3-A.galleryGesture.py,false)
+        assert(A.galleryGesture and A.galleryGesture.active,
+            'Rolagem perdeu o arrasto')
+        status('Arrasto ativo: rolagem na borda superior')
+    elseif sh.stage==116 then
+        assert(A.galleryScroll<A.showcaseScrollMax and
+            A.galleryScroll>=0,
+            'Arrasto parado na borda superior nao rolou')
+        local w,h=love.graphics.getDimensions()
+        local l=GalleryShell.layout(w,h)
+        love.draw()
+        love.mousereleased(5,l.top+3,1,false)
+        assert(not A.galleryGesture and
+            A.galleryItems[1].key==A.showcaseScrollOrder,
+            'Soltar fora da grade alterou a ordem')
+        assert(A.store.fs:read('projects/'..
+            A.showcaseScrollKey:sub(3)..'.rbd')==
+                A.showcaseScrollRBD,
+            'Rolagem modificou bytes RBD')
+        status('Arrasto cancelado: catalogo e RBD preservados')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
