@@ -210,8 +210,15 @@ function M.backspaceFolderName(state)
     assert(type(state)=='table' and state.creating,
         'Entrada de pasta invalida')
     local text=state.createName
-    local pos=require('utf8').offset(text,-1)
-    if pos then state.createName=text:sub(1,pos-1) end
+    -- LuaJIT 2.1 puro nao inclui modulo utf8. Um caractere valido
+    -- termina no ultimo byte ASCII ou inicial de sequencia UTF-8.
+    local pos=#text
+    while pos>1 do
+        local byte=text:byte(pos)
+        if byte<128 or byte>=192 then break end
+        pos=pos-1
+    end
+    if pos>0 then state.createName=text:sub(1,pos-1) end
     return state.createName
 end
 function M.createDestination(store,state,current)
