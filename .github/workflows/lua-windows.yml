@@ -214,7 +214,12 @@ jobs:
             '97-excluidos-lote-recuperado.png',
             '98-galeria-sem-abas-inventadas.png',
             '99-galeria-rolagem-sem-abas.png',
-            '100-galeria-selecao-sem-abas.png')
+            '100-galeria-selecao-sem-abas.png',
+            '101-galeria-arrasto-pressionado.png',
+            '102-galeria-ordem-alterada.png',
+            '103-galeria-ordem-persistida.png',
+            '104-galeria-arrasto-curto-cancelado.png',
+            '105-galeria-pastas-e-obras-reordenadas.png')
           foreach ($name in $expected) {
             $path = Join-Path $screens $name
             if (!(Test-Path $path)) { throw "Falta captura: $name" }
@@ -247,7 +252,7 @@ jobs:
             $b = (Get-FileHash (Join-Path $screens $pair[1]) -Algorithm SHA256).Hash
             if ($a -eq $b) { throw "Estados visuais identicos: $($pair[0]) e $($pair[1])" }
           }
-          Write-Host "100 capturas reais verificadas"
+          Write-Host "105 capturas reais verificadas"
       - name: Publish real Lua editor screenshots
         uses: actions/upload-artifact@v4
         with:

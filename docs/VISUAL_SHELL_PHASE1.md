@@ -665,3 +665,40 @@ Ainda é necessário comparar os desenhos de ícones,
 tipografia, proporções e cores pixel a pixel com o
 material do Android 14.1.2; a retirada dos filtros
 não deve ser confundida com paridade completa.
+
+## Reorganização de pastas e obras por pressão longa (fase A)
+
+O tutorial oficial [29. Rearrange artworks](https://ibispaint.com/lecture/index.jsp?no=103)
+confirma **pressionar e segurar → arrastar → soltar**,
+inclusive para pastas. Esta implementação adiciona:
+
+- `Store:galleryItems(folder)` com **ordem mista** de
+  pastas e desenhos na mesma grade. Ao abrir um catálogo
+  sem índice de ordenação, preserva a ordem preexistente,
+  sem tocar nos projetos RBD.
+- `Store:reorderGallery(folder,sourceKey,targetKey)`
+  valida ambos os itens na pasta corrente, altera a ordem
+  e grava uma única atualização atômica em
+  `gallery-order.json`. Os bytes, revisões e timestamps
+  dos RBD1/RBD2 permanecem iguais.
+- Gesto de mouse/touch usa pressionamento longo de 0,48 s
+  e zona morta de 9 pixels. Movimento antecipado cancela
+  o clique, e somente soltar sobre outra miniatura válida
+  altera a ordenação. Soltar fora da grade é inofensivo.
+- A galeria fornece um contorno azul para o destino
+  enquanto o arrasto está ativo. A seleção múltipla,
+  recuperação, diálogos e edição de raster continuam
+  isolados do gesto de reordenação.
+- `tests/test_store.lua` verifica persistência após
+  reinício, exclusão de drop fora da pasta, falha de
+  I/O do índice e identidade dos bytes RBD.
+  `tests/test_ibis_gallery_ui.lua` verifica duração,
+  hitboxes e movimentos prematuros.
+  Capturas Windows **101–105** exercitam pressionamento,
+  arrastar, soltar, persistência, cancelamento e ordem
+  conjunta de pastas e desenhos.
+
+**Pendente:** arrastar uma obra sobre pasta para **entrar**
+nela, arrastar para a barra Voltar para mover à pasta pai,
+rolagem automática durante o gesto e comparação visual
+pixel a pixel com a versão Android 14.1.2.

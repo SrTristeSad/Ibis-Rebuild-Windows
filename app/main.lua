@@ -133,7 +133,12 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '97-excluidos-lote-recuperado.png',
     '98-galeria-sem-abas-inventadas.png',
     '99-galeria-rolagem-sem-abas.png',
-    '100-galeria-selecao-sem-abas.png'}
+    '100-galeria-selecao-sem-abas.png',
+    '101-galeria-arrasto-pressionado.png',
+    '102-galeria-ordem-alterada.png',
+    '103-galeria-ordem-persistida.png',
+    '104-galeria-arrasto-curto-cancelado.png',
+    '105-galeria-pastas-e-obras-reordenadas.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -3831,6 +3836,116 @@ local function advanceShowcase()
             and not A.galleryDeleteMenu and not A.galleryMoveMenu,
             'Marcar miniatura abriu operacao indevida')
         status('Galeria oficial: selecao intacta sem filtros locais')
+    elseif sh.stage==101 then
+        A.gallerySelecting=false;A.gallerySelected={}
+        A.galleryScroll=0;A.galleryFilter='all'
+        refreshGallery()
+        local w,h=love.graphics.getDimensions()
+        local first=#A.folders+1
+        local second=first+1
+        local source=A.galleryItems[second]
+        local target=A.galleryItems[first]
+        assert(source and target and
+            source.type=='project' and target.type=='project',
+            'Prova de arrasto precisa de duas obras')
+        A.showcaseReorderSource=source.key
+        A.showcaseReorderTarget=target.key
+        A.showcaseReorderPixels=Native.bytes(A.layerSession.composite)
+        A.showcaseReorderUndo=A.layerSession:historyStats().undo
+        A.showcaseReorderRBD=A.store.fs:read(
+            'projects/'..source.value.id..'.rbd')
+        love.draw()
+        local start=GalleryShell.card(w,h,second,0)
+        love.mousepressed(start.x+start.w/2,
+            start.y+start.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==source.key,
+            'Galeria abriu imagem antes de pressao prolongada')
+        A.galleryGesture.started=love.timer.getTime()-1
+        local dest=GalleryShell.card(w,h,first,0)
+        love.mousemoved(dest.x+dest.w/2,dest.y+dest.h/2,
+            dest.x-start.x,dest.y-start.y,false)
+        assert(A.galleryGesture and A.galleryGesture.active,
+            'Pressao prolongada nao ativou arrasto')
+        status('Galeria: arrastando miniatura sobre outra')
+    elseif sh.stage==102 then
+        local w,h=love.graphics.getDimensions()
+        local target=GalleryShell.card(w,h,#A.folders+1,0)
+        love.mousereleased(target.x+target.w/2,
+            target.y+target.h/2,1,false)
+        assert(not A.galleryGesture
+            and A.galleryItems[#A.folders+1].key==
+                A.showcaseReorderSource,
+            'Soltar nao mudou a ordem')
+        assert(A.store.fs:read('projects/'..
+            A.showcaseReorderSource:sub(3)..'.rbd')==
+                A.showcaseReorderRBD,
+            'Arrasto regravou bytes RBD')
+        assert(Native.bytes(A.layerSession.composite)==
+                A.showcaseReorderPixels and
+            A.layerSession:historyStats().undo==
+                A.showcaseReorderUndo,
+            'Arrasto alterou raster ou historico')
+        status('Galeria: ordem de obras alterada sem regravar RBD')
+    elseif sh.stage==103 then
+        local reopened=Store.open(A.store.root)
+        local items=reopened:galleryItems(A.folder)
+        assert(items[#A.folders+1].key==A.showcaseReorderSource,
+            'Ordem nao sobreviveu a reinicializacao do Store')
+        assert(A.store.fs:read('projects/'..
+            A.showcaseReorderSource:sub(3)..'.rbd')==
+                A.showcaseReorderRBD,
+            'Reabrir ordem alterou projeto')
+        status('Galeria: ordem persistida apos reabrir')
+    elseif sh.stage==104 then
+        local w,h=love.graphics.getDimensions()
+        local before=A.galleryItems[#A.folders+1].key
+        local source=GalleryShell.card(w,h,#A.folders+1,0)
+        local target=GalleryShell.card(w,h,#A.folders+2,0)
+        love.draw()
+        love.mousepressed(source.x+source.w/2,
+            source.y+source.h/2,1,false)
+        love.mousemoved(target.x+target.w/2,target.y+target.h/2,
+            160,0,false)
+        love.mousereleased(target.x+target.w/2,
+            target.y+target.h/2,1,false)
+        assert(not A.galleryGesture and
+            A.galleryItems[#A.folders+1].key==before and
+            A.screen=='gallery',
+            'Arrasto curto deve cancelar sem abrir obra')
+        status('Galeria: movimento precoce nao altera ordem')
+    elseif sh.stage==105 then
+        local w,h=love.graphics.getDimensions()
+        assert(#A.folders>0,'Falta pasta para arrasto misto')
+        local folderIndex
+        for i,item in ipairs(A.galleryItems) do
+            if item.type=='folder' then folderIndex=i;break end
+        end
+        assert(folderIndex,'Pasta nao encontrada na grade')
+        local folderKey=A.galleryItems[folderIndex].key
+        local other=#A.folders+1
+        local targetKey=A.galleryItems[other].key
+        assert(targetKey~=folderKey and
+            A.galleryItems[other].type=='project',
+            'Arrasto precisa de pasta e obra distintas')
+        local start=GalleryShell.card(w,h,folderIndex,0)
+        local dest=GalleryShell.card(w,h,other,0)
+        love.draw()
+        love.mousepressed(start.x+start.w/2,
+            start.y+start.h/2,1,false)
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(dest.x+dest.w/2,dest.y+dest.h/2,
+            dest.x-start.x,dest.y-start.y,false)
+        love.mousereleased(dest.x+dest.w/2,
+            dest.y+dest.h/2,1,false)
+        local found=false
+        for i,item in ipairs(Store.open(A.store.root):galleryItems('')) do
+            if item.key==folderKey and i==other then
+                found=true;break end
+        end
+        assert(found and not A.galleryGesture,
+            'Ordem mista de pasta e obra nao persistiu')
+        status('Galeria: pastas e desenhos reordenados juntos')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
