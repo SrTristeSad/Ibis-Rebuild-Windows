@@ -26,7 +26,7 @@ jobs:
       - name: Lua ibisPaint visual panel geometry (no raster changes)
         run: luajit -e "local t=loadfile('tests/test_ibis_visual_panels.lua')(); assert(t.run().passed)"
       - name: Lua ibis settings navigation and geometry
-        run: luajit -e "package.path='app/?.lua;'..package.path; local t=loadfile('tests/test_ibis_settings_ui.lua')(); assert(t.run('/tmp/ibis-settings-ui-test').passed)"
+        run: luajit -e "package.path='app/?.lua;'..package.path; local t=loadfile('tests/test_ibis_settings_ui.lua')(); assert(t.run().passed)"
       - name: Lua gallery tabs and new-canvas preview
         run: luajit -e "local t=loadfile('tests/test_ibis_gallery_ui.lua')(); assert(t.run().passed)"
       - name: Lua top-right ibis toolbar safety and layout

@@ -1,5 +1,4 @@
 local UI=require('ibis_settings_ui')
-local Store=require('store')
 local T={}
 function T.run(root)
     local count=0
@@ -49,14 +48,19 @@ function T.run(root)
         and not UI.positionAvailable('left')
         and not UI.positionAvailable('right'))
     check(not pcall(UI.columnRect,{x=0,y=0,w=540,h=438},4))
-    local store=Store.open(root)
-    local prefs=store:getPreferences()
-    prefs.toolPopupColumns=1
-    prefs.toolPopupLabels=false
-    store:setPreferences(prefs)
-    local saved=Store.open(root):getPreferences()
-    check(saved.toolPopupColumns==1 and saved.toolPopupLabels==false,
-        'Preferencias do seletor nao persistem no Store')
+    if root then
+        -- O Store atual usa LuaJIT FFI Win32; a prova de
+        -- persistencia roda no runner Windows com diretorio isolado.
+        local Store=require('store')
+        local store=Store.open(root)
+        local prefs=store:getPreferences()
+        prefs.toolPopupColumns=1
+        prefs.toolPopupLabels=false
+        store:setPreferences(prefs)
+        local saved=Store.open(root):getPreferences()
+        check(saved.toolPopupColumns==1 and saved.toolPopupLabels==false,
+            'Preferencias do seletor nao persistem no Store')
+    end
     return {suite='ibis-settings-ui',passed=true,assertions=count}
 end
 return T
