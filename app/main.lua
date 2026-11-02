@@ -4413,14 +4413,12 @@ local function advanceShowcase()
     elseif sh.stage==123 then
         local old=assert(A.galleryExpandedProof)
         local w,h=love.graphics.getDimensions()
-        local nextButton=IbisPanels.galleryDetail.nav(w,h,1)
+        -- As setas de mouse so existem sob hover. O showcase de
+        -- navegacao usa a tecla real, sem forcar click invisivel.
         love.draw()
-        love.mousepressed(nextButton.x+nextButton.w/2,
-            nextButton.y+nextButton.h/2,1,false)
-        love.mousereleased(nextButton.x+nextButton.w/2,
-            nextButton.y+nextButton.h/2,1,false)
+        love.keypressed('right')
         assert(A.galleryDetailId==old.second,
-            'Seta nao navegou para a segunda obra da galeria')
+            'Tecla direita nao navegou para a segunda obra')
         assert(Native.bytes(A.layerSession.composite)==old.bytes
             and A.layerSession:historyStats().undo==old.undo,
             'Navegacao da galeria alterou documento')

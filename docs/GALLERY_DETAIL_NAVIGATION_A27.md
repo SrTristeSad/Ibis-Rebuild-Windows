@@ -24,3 +24,13 @@ A referência oficial orienta o comportamento, mas não autentica
 geometria da versão Android 14.1.2. A navegação por hover é
 adaptação específica para Windows. Exige execução do CI e inspeção
 das capturas do commit. Sem alegação de reprodução pixel a pixel.
+
+## Correção após o primeiro CI
+A primeira execução do Windows passou nos testes LuaJIT, mas falhou
+na captura 123: o showcase ainda clicava num botão fixo, agora
+intencionalmente oculto quando o ponteiro está longe. O log reportou
+`Seta nao navegou para a segunda obra da galeria`.
+O showcase usa agora `love.keypressed('right')`, uma entrada existente
+na A24, para confirmar a troca de obras. Os testes puros verificam o
+hover das duas setas e a ausência da hitbox quando ocultas. Não há
+mudança no motor, nos gestos ou no comportamento de edição.
