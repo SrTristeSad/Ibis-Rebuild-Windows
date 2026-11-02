@@ -147,6 +147,56 @@ function T.run()
             {x=0,y=0,w=10,h=10,preview={x=9,y=9,w=20,h=20}},
             false,false),'Geometria invalida foi aceita')
     end
+    -- A34: contrato visual sem inserir dados inventados como reais.
+    local Reference=require('ibis_canvas_reference')
+    eq(Reference.item('square-sd').w==1280 and
+        Reference.item('square-sd').h==1280,
+        'Formato 1:1 SD difere da captura oficial')
+    eq(Reference.item('sd').w==621 and
+        Reference.item('sd').h==1344 and
+        Reference.item('portrait-sd').w==768 and
+        Reference.item('portrait-sd').h==1024,
+        'Formatos SD e 3:4 nao correspondem ao tutorial')
+    eq(not Reference.allowed(Reference.item('vertical')) and
+        Reference.item('vertical').h==4096,
+        'Formato acima da capacidade nao pode funcionar falsamente')
+    eq(not Reference.allowed(Reference.item('printing')) and
+        not Reference.choose({kind='new',values={'x','512','512'}},
+            'vertical'),
+        'Cabecalhos e formatos excessivos nao podem alterar projeto')
+    for _,size in ipairs(sizes) do
+        local r=Reference.layout(size[1],size[2])
+        local v=Reference.listViewport(r)
+        eq(r.x>=0 and r.y>=0 and
+            r.x+r.w<=size[1] and r.y+r.h<=size[2],
+            'Nova lista extrapola janela')
+        eq(v.y>r.y+200 and v.y+v.h<=r.y+r.h-80
+            and v.h>=250,
+            'Lista invade controles ou botao de criar')
+        local a=Reference.slider(r,2)
+        local b=Reference.slider(r,3)
+        eq(a.y+a.h<b.y and
+            a.x+a.w<Reference.field(r,2).x and
+            b.x+b.w<Reference.field(r,3).x,
+            'Sliders cruzam controles ou campo numerico')
+        local old=Reference.maxScroll(r)
+        eq(old>0 and Reference.scroll(r,0,-999)==old and
+            Reference.scroll(r,old,999)==0,
+            'Rolagem nao respeita extremos da lista')
+        local m={kind='new',focus=1,values={'Teste','512','512'}}
+        eq(Reference.choose(m,'portrait-sd') and
+            m.values[2]=='768' and m.values[3]=='1024' and
+            m.focus==1,'Selecionar formato nao alterou so valores')
+        local copy={kind='new',focus=1,values={'Teste','768','1024'}}
+        eq(not Reference.choose(copy,'vertical') and
+            copy.values[2]=='768' and copy.values[3]=='1024',
+            'Formato inviavel alterou os pixels selecionados')
+        local last,visible=Reference.row(r,'legacy-square',old)
+        eq(last~=nil and visible,
+            'Preset legado inacessivel na rolagem final')
+        eq(Reference.close(r).x>r.x+r.w-50,
+            'Fechar deixou de acompanhar cabecalho')
+    end
     for _,size in ipairs(sizes) do
         local r=G.dialog(size[1],size[2])
         eq(r.x>=0 and r.y>=0 and r.x+r.w<=size[1]

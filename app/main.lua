@@ -41,6 +41,7 @@ IbisPanels.canvasPresetRows=require('ibis_canvas_preset_rows')
 IbisPanels.canvasDimensionControls=require('ibis_canvas_dimension_controls')
 IbisPanels.canvasDimensionSlider=require('ibis_canvas_dimension_slider')
 IbisPanels.canvasDialogChrome=require('ibis_canvas_dialog_chrome')
+IbisPanels.canvasReferenceDraw=require('ibis_canvas_reference_draw')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -54,6 +55,7 @@ local EffectUI=require('ibis_effect_tools_ui')
 local VectorFrameUI=require('ibis_vector_frame_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
+local CanvasReference=require('ibis_canvas_reference')
 local GalleryShell=require('ibis_gallery_shell')
 local SettingsUI=require('ibis_settings_ui')
 IbisPanels.stabilizer=require('ibis_stabilizer_ui')
@@ -696,7 +698,10 @@ local function modal(kind)
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
     A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
         kind=='color' and {Colors.format(A.color)} or {''}}
-    if kind=='new' then A.modal.presetTab='basic' end
+    if kind=='new' then
+        A.modal.canvasListScroll=0
+        A.modal.presetTab='basic' -- Preservado para dados de builds antigos.
+    end
     love.keyboard.setTextInput(true)
 end
 local function openLayerRename()
@@ -3272,143 +3277,118 @@ local function advanceShowcase()
         A.galleryFilter='all'
         modal('new')
         assert(A.modal and A.modal.kind=='new' and
-            A.modal.presetTab=='basic',
-            'Nova tela nao iniciou nos formatos existentes')
+            A.modal.canvasListScroll==0,
+            'A lista original nao abriu no topo')
         A.showcaseCanvasProof={
             count=#A.projects,
             pixels=Native.bytes(A.layerSession.composite),
             undo=A.layerSession:historyStats().undo}
-        -- A31: clique real no + e no - de largura. A obra
-        -- persistida e o undo nao podem mudar por interacao no modal.
         local w,h=love.graphics.getDimensions()
-        local dialog=GalleryUI.dialog(w,h)
-        local plus=GalleryUI.dimensionStepper(dialog,2,1)
+        local rect=CanvasReference.layout(w,h)
+        -- Clique e arraste no W/H; mesmos controles funcionais
+        -- do formulario anterior, mas na geometria da lista.
+        local plus=CanvasReference.stepper(rect,2,1)
         love.draw()
-        love.mousepressed(plus.x+plus.w/2,
-            plus.y+plus.h/2,1,false)
-        love.mousereleased(plus.x+plus.w/2,
-            plus.y+plus.h/2,1,false)
-        assert(A.modal.values[2]=='528'
-            and GalleryUI.aspectViewport(dialog,
-                A.modal.values[2],A.modal.values[3]),
-            'Botao + nao mudou largura da Nova tela')
-        local minus=GalleryUI.dimensionStepper(dialog,2,-1)
+        love.mousepressed(plus.x+15,plus.y+14,1,false)
+        assert(A.modal.values[2]=='528','W + nao atualizou largura')
+        local minus=CanvasReference.stepper(rect,2,-1)
         love.draw()
-        love.mousepressed(minus.x+minus.w/2,
-            minus.y+minus.h/2,1,false)
-        love.mousereleased(minus.x+minus.w/2,
-            minus.y+minus.h/2,1,false)
-        assert(A.modal.values[2]=='512'
-            and #A.projects==A.showcaseCanvasProof.count
-            and Native.bytes(A.layerSession.composite)==
-                A.showcaseCanvasProof.pixels
-            and A.layerSession:historyStats().undo==
-                A.showcaseCanvasProof.undo,
-            'Ajuste da largura alterou projeto ou historico')
-        -- A32: prova GUI do clique, arrasto e soltar em ambos
-        -- os eixos. Restaura exatamente 512×512 para a etapa 71.
+        love.mousepressed(minus.x+15,minus.y+14,1,false)
+        assert(A.modal.values[2]=='512','W - nao restaurou largura')
         for _,axis in ipairs({2,3}) do
-            local track=GalleryUI.dimensionSlider(dialog,axis)
+            local track=CanvasReference.slider(rect,axis)
             local cy=track.y+track.h/2
             love.draw()
             love.mousepressed(track.x+track.w,cy,1,false)
-            assert(A.canvasDimensionDrag==axis
-                and A.modal.values[axis]=='2048',
-                'Clique no fim do slider nao atingiu 2048')
+            assert(A.canvasDimensionDrag==axis and
+                A.modal.values[axis]=='2048',
+                'Slider nao alcancou o limite do motor Lua')
             love.mousemoved(track.x-30,cy,0,0,false)
             assert(A.modal.values[axis]=='1',
-                'Arrasto do slider nao limitou a 1 pixel')
-            local restore=GalleryUI.sliderPosition(track,'512')
+                'Slider nao respeitou o minimo de 1 pixel')
+            local restore=GalleryUI.sliderPosition(track,512)
             love.mousemoved(restore,cy,0,0,false)
             love.mousereleased(restore,cy,1,false)
             assert(A.canvasDimensionDrag==nil
-                and A.modal.values[axis]=='512'
-                and A.modal.values[axis==2 and 3 or 2]=='512',
-                'Soltar slider nao preservou 512 nos dois eixos')
+                and A.modal.values[axis]=='512',
+                'Slider nao restaurou o tamanho inicial')
         end
         assert(#A.projects==A.showcaseCanvasProof.count
             and Native.bytes(A.layerSession.composite)==
                 A.showcaseCanvasProof.pixels
             and A.layerSession:historyStats().undo==
                 A.showcaseCanvasProof.undo,
-            'Sliders modificaram Store, raster ou historico')
-        status('Nova tela · +/- e sliders funcionais; raster intacto')
+            'Escolher tamanho alterou Store, raster ou undo')
+        status('Nova tela: lista de formatos do tutorial publico')
     elseif sh.stage==71 then
         local w,h=love.graphics.getDimensions()
-        local r=GalleryUI.dialog(w,h)
-        local tab=GalleryUI.tabRect(r,2)
+        local r=CanvasReference.layout(w,h)
         local proof=assert(A.showcaseCanvasProof)
         love.draw()
-        love.mousepressed(tab.x+tab.w/2,
-            tab.y+tab.h/2,1,false)
-        love.mousereleased(tab.x+tab.w/2,
-            tab.y+tab.h/2,1,false)
-        assert(A.modal.presetTab=='formats'
-            and A.modal.values[2]=='512'
-            and A.modal.values[3]=='512',
-            'Trocar de aba nao pode alterar dimensoes editadas')
+        assert(CanvasReference.item('square-sd').w==1280
+            and CanvasReference.item('sd').h==1344
+            and not CanvasReference.allowed(
+                CanvasReference.item('vertical')),
+            'Lista oficial nao possui formatos e limites corretos')
+        local row,visible=CanvasReference.row(
+            r,'square-sd',A.modal.canvasListScroll)
+        assert(visible,'Formato 1:1 nao aparece no inicio')
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.modal.values[2]=='1280'
+            and A.modal.values[3]=='1280',
+            'Formato 1:1 SD nao atualizou o formulario')
         assert(#A.projects==proof.count,
-            'Trocar de aba nao pode criar projeto')
-        status('Formatos ibisPaint · 1:1, 3:4, 9:16 e A4')
+            'Escolha de formato criou projeto sem confirmacao')
+        status('Nova tela: formato 1:1 SD 1280×1280')
     elseif sh.stage==72 then
         local w,h=love.graphics.getDimensions()
-        local r=GalleryUI.dialog(w,h)
-        local btn=GalleryUI.presetButton(r,2)
+        local r=CanvasReference.layout(w,h)
+        local row,visible=CanvasReference.row(
+            r,'portrait-sd',A.modal.canvasListScroll)
+        assert(visible,'Formato 3:4 fora da lista visivel')
         love.draw()
-        love.mousepressed(btn.x+btn.w/2,
-            btn.y+btn.h/2,1,false)
-        love.mousereleased(btn.x+btn.w/2,
-            btn.y+btn.h/2,1,false)
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
         assert(A.modal.values[2]=='768'
             and A.modal.values[3]=='1024',
-            'Formato 3:4 nao atualizou campos e preview')
-        status('Nova tela · formato 3:4 768×1024')
+            'Formato 3:4 SD nao atualizou largura/altura')
+        status('Nova tela: formato 3:4 SD 768×1024')
     elseif sh.stage==73 then
         local w,h=love.graphics.getDimensions()
-        local r=GalleryUI.dialog(w,h)
-        local btn=GalleryUI.presetButton(r,4)
+        local r=CanvasReference.layout(w,h)
+        A.modal.canvasListScroll=CanvasReference.maxScroll(r)
+        local row,visible=CanvasReference.row(
+            r,'a4',A.modal.canvasListScroll)
+        assert(visible,'A4 nao ficou visivel apos rolagem')
         love.draw()
-        love.mousepressed(btn.x+btn.w/2,
-            btn.y+btn.h/2,1,false)
-        love.mousereleased(btn.x+btn.w/2,
-            btn.y+btn.h/2,1,false)
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
         assert(A.modal.values[2]=='1240'
             and A.modal.values[3]=='1754',
-            'Formato A4 nao atualizou proporcao')
-        assert(GalleryUI.aspectViewport(r,
-            A.modal.values[2],A.modal.values[3]),
-            'A4 excedeu limites atuais do motor Lua')
-        status('Nova tela · A4 1240×1754 pixels, sem DPI')
+            'A4 nao atualizou dimensoes')
+        status('Nova tela: A4 1240×1754, sem DPI operacional')
     elseif sh.stage==74 then
         local w,h=love.graphics.getDimensions()
-        local r=GalleryUI.dialog(w,h)
+        local r=CanvasReference.layout(w,h)
         local proof=assert(A.showcaseCanvasProof)
+        A.modal.canvasListScroll=CanvasReference.maxScroll(r)
+        local row,visible=CanvasReference.row(
+            r,'legacy-square',A.modal.canvasListScroll)
+        assert(visible,'Preset legado nao visivel no fim da lista')
         love.draw()
-        local tab=GalleryUI.tabRect(r,1)
-        love.mousepressed(tab.x+tab.w/2,
-            tab.y+tab.h/2,1,false)
-        assert(A.modal.presetTab=='basic'
-            and A.modal.values[2]=='1240'
-            and A.modal.values[3]=='1754',
-            'Voltar aos basicos perdeu dimensoes inseridas')
-        local btn=GalleryUI.presetButton(r,1)
-        love.draw()
-        love.mousepressed(btn.x+btn.w/2,
-            btn.y+btn.h/2,1,false)
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
         assert(A.modal.values[2]=='512'
             and A.modal.values[3]=='512',
-            'Preset legado foi alterado')
-        assert(#A.projects==proof.count and
-            Native.bytes(A.layerSession.composite)==proof.pixels
+            'Preset legado 512×512 deixou de funcionar')
+        assert(#A.projects==proof.count
+            and Native.bytes(A.layerSession.composite)==proof.pixels
             and A.layerSession:historyStats().undo==proof.undo,
-            'Navegacao do dialogo criou obra ou alterou o raster')
-        status('Nova tela · compatibilidade dos presets legados')
+            'Navegacao de formatos alterou raster ou historico')
+        status('Nova tela: formatos anteriores preservados')
     elseif sh.stage==75 then
         -- Verificar o X novo pela GUI real, sem cancelar por atribuicao.
         assert(A.modal and A.modal.kind=='new',
             'Nova tela desapareceu antes da prova de fechar')
         local w,h=love.graphics.getDimensions()
-        local close=GalleryUI.dialogClose(GalleryUI.dialog(w,h))
+        local close=CanvasReference.close(CanvasReference.layout(w,h))
         local proof=assert(A.showcaseCanvasProof)
         love.draw()
         love.mousepressed(close.x+close.w/2,
@@ -8173,151 +8153,106 @@ local function drawEditor(w,h)
     end
 end
 local function drawNewCanvasDialog(w,h)
-    local r=GalleryUI.dialog(w,h)
+    local r=CanvasReference.layout(w,h)
     local m=A.modal
-    IbisPanels.canvasDialogChrome.body(r)
-    -- A29: barra de titulo escura do ibisPaint e fechar vermelho.
-    -- O dialogo continua com seus campos, presets e callbacks Lua.
-    local bar=GalleryUI.dialogHeader(r)
-    local close=GalleryUI.dialogClose(r)
-    love.graphics.push('all')
-    love.graphics.setColor(.17,.18,.19,1)
-    love.graphics.rectangle('fill',bar.x,bar.y,bar.w,bar.h)
-    love.graphics.setColor(.96,.96,.97,1)
-    love.graphics.setFont(A.fonts.body)
-    love.graphics.printf('Nova tela',bar.x+48,bar.y+12,
-        bar.w-96,'center')
-    love.graphics.setColor(.91,.23,.25,1)
-    love.graphics.setLineWidth(2.4)
-    love.graphics.line(close.x+11,close.y+10,
-        close.x+27,close.y+26)
-    love.graphics.line(close.x+27,close.y+10,
-        close.x+11,close.y+26)
-    love.graphics.pop()
+    IbisPanels.canvasReferenceDraw.panel(r,A.fonts.body,A.fonts.small)
+    local close=CanvasReference.close(r)
     A.buttons[#A.buttons+1]={
         x=close.x,y=close.y,w=close.w,h=close.h,
         fn=function()
+            A.canvasDimensionDrag=nil
             A.modal=nil
             love.keyboard.setTextInput(false)
         end}
-    -- Separador de ilustracao com hierarquia cinza/escura oficial.
-    IbisPanels.canvasDialogChrome.section(r,A.fonts.small)
-    local labels={'Nome','Largura (px)','Altura (px)'}
-    for i,field in ipairs(GalleryUI.fields(r)) do
-        text(labels[i],field.x,field.y-24,'small','muted')
+    -- W/H diretamente no inicio da lista, como na referencia.
+    for _,axis in ipairs({2,3}) do
+        local field=CanvasReference.field(r,axis)
         box(field.x,field.y,field.w,field.h,'card')
-        if m.focus==i then
+        if m.focus==axis then
             c('accent')
-            love.graphics.setLineWidth(2)
-            love.graphics.rectangle('line',field.x+.5,field.y+.5,
-                field.w-1,field.h-1,5,5)
+            love.graphics.rectangle('line',
+                field.x+.5,field.y+.5,field.w-1,field.h-1)
         end
-        fitted(m.values[i]..(m.focus==i and '|' or ''),
-            field.x+12,field.y+8,'body','text',
-            i==1 and field.w-22 or field.w-90)
-        A.buttons[#A.buttons+1]={x=field.x,y=field.y,w=field.w,h=field.h,
-            fn=function()m.focus=i end}
-        if i==2 or i==3 then
-            for _,direction in ipairs({-1,1}) do
-                local rect=GalleryUI.dimensionStepper(r,i,direction)
-                local nextValue=GalleryUI.stepDimension(
-                    m.values[i],direction)
-                local mx,my=love.mouse.getPosition()
-                IbisPanels.canvasDimensionControls.draw(rect,
-                    direction,nextValue~=nil,
-                    mx>=rect.x and mx<rect.x+rect.w
-                    and my>=rect.y and my<rect.y+rect.h)
-                if nextValue then
-                    -- Hitbox adicionada apos a do campo: mouse
-                    -- despacha em ordem reversa, sem editar o raster.
-                    A.buttons[#A.buttons+1]={
-                        x=rect.x,y=rect.y,w=rect.w,h=rect.h,
-                        fn=function()
-                            local updated=GalleryUI.stepDimension(
-                                m.values[i],direction)
-                            if updated then
-                                m.values[i]=updated
-                                m.focus=i
-                            end
-                        end}
-                end
+        fitted(m.values[axis]..(m.focus==axis and '|' or ''),
+            field.x+9,field.y+5,'body','text',field.w-13)
+        A.buttons[#A.buttons+1]={
+            x=field.x,y=field.y,w=field.w,h=field.h,
+            fn=function()m.focus=axis end}
+        for _,direction in ipairs({-1,1}) do
+            local bt=CanvasReference.stepper(r,axis,direction)
+            local nextValue=GalleryUI.stepDimension(
+                m.values[axis],direction)
+            local mx,my=love.mouse.getPosition()
+            IbisPanels.canvasDimensionControls.draw(bt,direction,
+                nextValue~=nil,mx>=bt.x and mx<bt.x+bt.w
+                    and my>=bt.y and my<bt.y+bt.h)
+            if nextValue then
+                A.buttons[#A.buttons+1]={
+                    x=bt.x,y=bt.y,w=bt.w,h=bt.h,
+                    fn=function()
+                        local value=GalleryUI.stepDimension(
+                            m.values[axis],direction)
+                        if value then m.values[axis]=value end
+                        m.focus=axis
+                    end}
             end
         end
-    end
-    -- Sliders diretamente abaixo das caixas; ajustes no formulario,
-    -- nao no documento, com arrasto capturado na camada de entrada.
-    for _,axis in ipairs({2,3}) do
-        local track=GalleryUI.dimensionSlider(r,axis)
+        local track=CanvasReference.slider(r,axis)
         local mx,my=love.mouse.getPosition()
         IbisPanels.canvasDimensionSlider.draw(track,m.values[axis],
             GalleryUI.sliderHit(track,mx,my),
             A.canvasDimensionDrag==axis,GalleryUI)
     end
-    local preview=GalleryUI.preview(r)
-    box(preview.x,preview.y,preview.w,preview.h,'card')
-    text('PROPORÇÃO',preview.x+10,preview.y+8,'small','muted')
-    local area=GalleryUI.aspectViewport(r,m.values[2],m.values[3])
-    if area then
-        local tile=12
-        for yy=0,area.h-1,tile do
-            for xx=0,area.w-1,tile do
-                local v=(math.floor(xx/tile)+math.floor(yy/tile))%2==0
-                    and .87 or .71
-                love.graphics.setColor(v,v,v,1)
-                love.graphics.rectangle('fill',area.x+xx,area.y+yy,
-                    math.min(tile,area.w-xx),
-                    math.min(tile,area.h-yy))
+    -- Lista propria do screenshot, com rolagem e recorte reais.
+    local viewport=CanvasReference.listViewport(r)
+    love.graphics.push('all')
+    love.graphics.setScissor(viewport.x,viewport.y,viewport.w,viewport.h)
+    for _,row in ipairs(CanvasReference.rows(
+        r,m.canvasListScroll or 0)) do
+        if row.y<viewport.y+viewport.h and
+            row.y+row.h>viewport.y then
+            if row.item.kind=='heading' then
+                IbisPanels.canvasReferenceDraw.heading(
+                    row,A.fonts.small)
+            elseif CanvasReference.allowed(row.item) then
+                local selected=m.values[2]==tostring(row.item.w)
+                    and m.values[3]==tostring(row.item.h)
+                local mx,my=love.mouse.getPosition()
+                IbisPanels.canvasPresetRows.draw(
+                    {x=row.x,y=row.y,w=row.w,h=row.h-2},
+                    row.item,selected,
+                    row.visible and mx>=row.x and mx<row.x+row.w
+                        and my>=row.y and my<row.y+row.h,
+                    A.fonts.body,A.fonts.small)
+                if row.visible then
+                    local id=row.item.id
+                    A.buttons[#A.buttons+1]={
+                        x=row.x,y=row.y,w=row.w,h=row.h-2,
+                        fn=function()CanvasReference.choose(m,id) end}
+                end
+            else
+                IbisPanels.canvasReferenceDraw.disabled(
+                    row,A.fonts.small)
             end
         end
-        c('line')
-        love.graphics.rectangle('line',area.x,area.y,area.w,area.h)
-    else
-        text('Dimensões inválidas',preview.x+34,
-            preview.y+104,'body','warn')
     end
-    text('TAMANHOS',r.x+342,r.y+237,'small','muted')
-    -- Dois catalogos no mesmo espaco. A troca nao toca no tamanho
-    -- digitado nem cria obra ate o clique explicito em Criar tela.
-    local selectedTab=m.presetTab or 'basic'
-    for i,tab in ipairs(GalleryUI.PRESET_TABS) do
-        local rTab=GalleryUI.tabRect(r,i)
-        local mx,my=love.mouse.getPosition()
-        IbisPanels.canvasDialogChrome.tab(rTab,tab.name,
-            selectedTab==tab.id,
-            mx>=rTab.x and mx<rTab.x+rTab.w
-                and my>=rTab.y and my<rTab.y+rTab.h,
-            A.fonts.body)
-        -- Mesma area e mesmo callback de troca de aba da A30.
-        A.buttons[#A.buttons+1]={
-            x=rTab.x,y=rTab.y,w=rTab.w,h=rTab.h,
-            fn=function() m.presetTab=tab.id end}
-    end
-    for i,preset in ipairs(GalleryUI.presetList(selectedTab)) do
-        local btn=GalleryUI.presetButton(r,i)
-        local selected=m.values[2]==tostring(preset.w)
-            and m.values[3]==tostring(preset.h)
-        local mx,my=love.mouse.getPosition()
-        IbisPanels.canvasPresetRows.draw(btn,preset,selected,
-            mx>=btn.x and mx<btn.x+btn.w and
-            my>=btn.y and my<btn.y+btn.h,
-            A.fonts.body,A.fonts.small)
-        A.buttons[#A.buttons+1]={x=btn.x,y=btn.y,w=btn.w,h=btn.h,
-            fn=function()
-                m.values[2]=tostring(preset.w)
-                m.values[3]=tostring(preset.h)
-                m.focus=1
-            end}
-    end
-    text(selectedTab=='formats'
-        and 'Formatos ibisPaint em pixels · DPI não gravado'
-        or 'RGBA transparente · máximo 2048 × 2048',
-        r.x+28,r.y+422,'small','muted')
-    button('Cancelar',r.x+28,r.y+442,236,34,function()
+    love.graphics.pop()
+    IbisPanels.canvasReferenceDraw.footer(r,A.fonts.small)
+    -- Nome permanece editavel como adaptacao ao armazenamento RBD2.
+    local field=CanvasReference.field(r,1)
+    box(field.x,field.y,field.w,field.h,'card')
+    fitted(m.values[1]..(m.focus==1 and '|' or ''),
+        field.x+9,field.y+5,'body','text',field.w-15)
+    A.buttons[#A.buttons+1]={x=field.x,y=field.y,
+        w=field.w,h=field.h,fn=function()m.focus=1 end}
+    button('Cancelar',r.x+10,r.y+r.h-39,165,32,function()
+        A.canvasDimensionDrag=nil
         A.modal=nil
         love.keyboard.setTextInput(false)
     end)
-    button('Criar tela',r.x+278,r.y+442,334,34,
-        submitModal,true,not GalleryUI.aspectViewport(r,m.values[2],m.values[3]))
+    button('Criar tela',r.x+181,r.y+r.h-39,r.w-191,32,
+        submitModal,true,not GalleryUI.aspectViewport(
+            GalleryUI.dialog(w,h),m.values[2],m.values[3]))
 end
 local function drawModal(w,h)
     if A.modal.kind=='new' then
@@ -10066,7 +10001,8 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         local w,h=love.graphics.getDimensions()
         local rect=GalleryUI.dialog(w,h)
         for _,axis in ipairs({2,3}) do
-            local track=GalleryUI.dimensionSlider(rect,axis)
+            local track=CanvasReference.slider(
+                CanvasReference.layout(w,h),axis)
             if GalleryUI.sliderHit(track,x,y) then
                 A.canvasDimensionDrag=axis
                 A.modal.values[axis]=GalleryUI.sliderValue(track,x)
@@ -10393,7 +10329,7 @@ local function pointerReleased(x,y,b,pressure)
         A.canvasDimensionDrag=nil
         if A.modal and A.modal.kind=='new' then
             local w,h=love.graphics.getDimensions()
-            local track=GalleryUI.dimensionSlider(GalleryUI.dialog(w,h),axis)
+            local track=CanvasReference.slider(CanvasReference.layout(w,h),axis)
             A.modal.values[axis]=GalleryUI.sliderValue(track,x)
         end
         return
@@ -10722,6 +10658,13 @@ function love.focus(focused)
     end
 end
 function love.wheelmoved(x,y)
+    if A.modal and A.modal.kind=='new' then
+        local w,h=love.graphics.getDimensions()
+        local rect=CanvasReference.layout(w,h)
+        A.modal.canvasListScroll=CanvasReference.scroll(
+            rect,A.modal.canvasListScroll or 0,y)
+        return -- Nao rolar galeria nem zoom por baixo da janela.
+    end
     if A.screen=='gallery' then
         if A.galleryDetailId then return end
         A.galleryGesture=nil
