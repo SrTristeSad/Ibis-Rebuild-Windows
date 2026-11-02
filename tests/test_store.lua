@@ -32,6 +32,52 @@ function Test.run(rootPath)
     local parent=store:createFolder('Estudos de cor 🎨','')
     local child=store:createFolder('Ação / 形',parent)
     check(#store:folders('')==1 and store:folders(parent)[1].id==child,'folder hierarchy')
+    -- Artwork and folder reordering is an index-only transaction.
+    local orderedA=store:createProject('Order A',2,2,'',
+        string.rep(string.char(3,5,7,255),4))
+    local orderedB=store:createProject('Order B',2,2,'',
+        string.rep(string.char(4,6,8,255),4))
+    local imageA=fs:read('projects/'..orderedA.id..'.rbd')
+    local imageB=fs:read('projects/'..orderedB.id..'.rbd')
+    local originalOrder=store:galleryItems('')
+    check(#originalOrder==3 and originalOrder[1].key=='f:'..parent,
+        'Initial mixed gallery order changed')
+    check(store:reorderGallery('','p:'..orderedB.id,'f:'..parent),
+        'Mixed drag did not reorder')
+    check(store:galleryItems('')[1].key=='p:'..orderedB.id,
+        'Artwork failed to move before folder')
+    local reopened=Store.open(rootPath):galleryItems('')
+    check(reopened[1].key=='p:'..orderedB.id and
+        reopened[2].key=='f:'..parent,
+        'Reorder did not survive reopen')
+    check(fs:read('projects/'..orderedA.id..'.rbd')==imageA and
+        fs:read('projects/'..orderedB.id..'.rbd')==imageB,
+        'Reordering rewrote original RBD data')
+    rejects(function()
+        store:reorderGallery('','p:'..orderedA.id,'p:p_missing')
+    end,'Unknown drop target accepted')
+    rejects(function()
+        store:reorderGallery(parent,'p:'..orderedA.id,
+            'p:'..orderedB.id)
+    end,'Cross-folder reorder accepted')
+    check(not store:reorderGallery('','p:'..orderedB.id,
+        'p:'..orderedB.id),'Self-drop changed order')
+    local storedOrder=fs:read('gallery-order.json')
+    local oldAtomic=store.fs.writeAtomic
+    store.fs.writeAtomic=function(self,path,data)
+        if path=='gallery-order.json' then error('disk full') end
+        return oldAtomic(self,path,data)
+    end
+    rejects(function()
+        store:reorderGallery('','f:'..parent,'p:'..orderedA.id)
+    end,'Failed gallery order write was accepted')
+    store.fs.writeAtomic=oldAtomic
+    check(fs:read('gallery-order.json')==storedOrder and
+        store:galleryItems('')[1].key=='p:'..orderedB.id,
+        'Failed index write mutated gallery order')
+    -- Preserve other tests that need a single project in the child
+    -- folder: these dedicated reorder fixtures remain at gallery root.
+
     rejects(function() store:createFolder('Estudos de cor 🎨','') end,'duplicate folder accepted')
     rejects(function() store:createFolder('Nope','f_missing') end,'missing parent accepted')
     local pixels=string.char(255,0,0,255,0,255,0,128,0,0,255,64,10,20,30,0)
