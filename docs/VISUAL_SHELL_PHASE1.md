@@ -637,3 +637,31 @@ remove o acesso de recuperação após 30 dias. Este rebuild
 apenas calcula e sinaliza a data; não apaga arquivos
 automaticamente nem desabilita a restauração vencida.
 Essa diferença continua explícita na interface e na documentação.
+
+## Remoção das abas locais inexistentes na galeria oficial
+
+Comparação com a interface de **A Minha Galeria** no
+[tutorial oficial #30](https://ibispaint.com/lecture/index.jsp?no=193)
+e [tutorial #20](https://ibispaint.com/lecture/index.jsp?no=20).
+
+- Removida da **interface** a faixa artificial de 66 pixels
+  com os botões `Tudo / Desenhos / Pastas`, ausentes
+  nas capturas de referência. As miniaturas agora começam
+  em y=66, diretamente sob o cabeçalho de 54 px.
+- O catálogo interno ainda suporta filtros em
+  `ibis_gallery_ui.lua` para compatibilidade com os testes
+  e dados locais, porém os filtros **não aparecem como controles**
+  e novas navegações partem do filtro `all`.
+- Preservados prévias RGBA, pastas, rolagem, seleção,
+  exclusão recuperável, restauração, opção de nova tela,
+  fluxo RBD2 e histórico do editor.
+- Os testes `tests/test_ibis_gallery_ui.lua` cobrem as
+  dimensões da grade em 960×640, 1220×800 e 1920×1080.
+  As capturas reais Windows **98–100** verificam o novo
+  cabeçalho, o scrolling e a seleção por clique, inclusive
+  ausência de hitboxes invisíveis das abas antigas.
+
+Ainda é necessário comparar os desenhos de ícones,
+tipografia, proporções e cores pixel a pixel com o
+material do Android 14.1.2; a retirada dos filtros
+não deve ser confundida com paridade completa.

@@ -6,11 +6,14 @@ M.CARD_W=160
 M.CARD_H=175
 M.STEP_X=174
 M.STEP_Y=188
+-- Official gallery has no dedicated local category-tab strip. Keep the
+-- artwork grid directly below the 54 px title bar (12 px spacing).
+M.GRID_TOP=66
 function M.layout(w,h)
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela de galeria pequena')
     local n=math.max(1,math.floor((w-44+14)/M.STEP_X))
-    return {cols=n,top=124,bottom=h-58,
+    return {cols=n,top=M.GRID_TOP,bottom=h-58,
         left=math.floor((w-(n*M.CARD_W+(n-1)*14))/2),
         footerY=h-52}
 end

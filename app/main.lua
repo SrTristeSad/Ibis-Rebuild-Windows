@@ -130,7 +130,10 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '94-galeria-menu-tres-pontos.png',
     '95-excluidos-prazo-recuperacao.png',
     '96-excluidos-selecao-em-lote.png',
-    '97-excluidos-lote-recuperado.png'}
+    '97-excluidos-lote-recuperado.png',
+    '98-galeria-sem-abas-inventadas.png',
+    '99-galeria-rolagem-sem-abas.png',
+    '100-galeria-selecao-sem-abas.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -3776,6 +3779,55 @@ local function advanceShowcase()
                 'Recuperacao lote alterou arquivo RBD')
         end
         status('Duas obras recuperadas em lote · RBD intactos')
+    elseif sh.stage==98 then
+        toGallery()
+        setFolder('')
+        A.galleryFilter='all'
+        A.galleryScroll=0
+        local w,h=love.graphics.getDimensions()
+        local layout=GalleryShell.layout(w,h)
+        assert(layout.top==66
+            and GalleryShell.card(w,h,1,0).y==66,
+            'Miniaturas nao ocupam faixa antes reservada aos filtros')
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        love.draw()
+        for _,hit in ipairs(A.buttons) do
+            assert(not (hit.y==70 and hit.w==101
+                and hit.h==33),
+                'Abas inventadas ainda recebem cliques invisiveis')
+        end
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Retirar filtros alterou raster ou historico')
+        status('Galeria oficial: miniaturas sob a barra superior')
+    elseif sh.stage==99 then
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        love.wheelmoved(0,-7)
+        assert(A.galleryScroll>0,
+            'Galeria sem abas nao rolou')
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Rolagem da galeria alterou os pixels')
+        status('Galeria oficial: rolagem com grade expandida')
+    elseif sh.stage==100 then
+        A.galleryScroll=0
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting,
+            'Selecionar deixou de funcionar sem abas')
+        local first=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(first.x+first.w/2,
+            first.y+first.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,'all')
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1
+            and not A.galleryDeleteMenu and not A.galleryMoveMenu,
+            'Marcar miniatura abriu operacao indevida')
+        status('Galeria oficial: selecao intacta sem filtros locais')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5926,33 +5978,13 @@ local function drawGallery(w,h)
         A.buttons[#A.buttons+1]={x=138,y=6,w=64,h=42,
             fn=function()A.galleryMoreMenu=true end}
     end
-    -- Filtros de catalogo locais: adicionais do rebuild, nao da APK.
+    -- A galeria original vai diretamente da barra de titulo para
+    -- as miniaturas. As abas Tudo/Desenhos/Pastas eram particulares
+    -- do rebuild e nao existem na referencia oficial.
     lg.setColor(.96,.95,.92,1)
-    lg.rectangle('fill',0,54,w,66)
-    lg.setColor(.75,.75,.72,1)
-    lg.rectangle('fill',0,119,w,1)
-    for i,item in ipairs(A.galleryTrash and {} or GalleryUI.FILTERS) do
-        local x=18+(i-1)*110
-        local active=A.galleryFilter==item.id
-        lg.setColor(active and .69 or .89,
-            active and .80 or .89,active and .94 or .89,1)
-        lg.rectangle('fill',x,70,101,33,5,5)
-        lg.setColor(.23,.26,.30,1)
-        lg.setFont(A.fonts.small)
-        lg.printf(item.name,x,79,101,'center')
-        A.buttons[#A.buttons+1]={x=x,y=70,w=101,h=33,
-            fn=function()
-                A.galleryFilter=item.id
-                A.galleryScroll=0;A.gallerySelected={}
-            end}
-    end
-    lg.setColor(.34,.36,.37,1)
-    lg.setFont(A.fonts.small)
-    lg.printf(A.galleryTrash and
-        'Arquivos locais · recuperação disponível' or
-        A.gallerySelecting and 'Selecione obras ou pastas' or
-        ('Desenhos: %d   Pastas: %d'):format(#A.projects,#A.folders),
-        w-420,80,402,'right')
+    lg.rectangle('fill',0,54,w,l.footerY-54)
+    lg.setColor(.71,.70,.68,1)
+    lg.rectangle('fill',0,53,w,1)
     local index=0
     lg.setScissor(0,l.top,w,l.bottom-l.top)
     local function card(label,sub,folder,fn,project,identifier)

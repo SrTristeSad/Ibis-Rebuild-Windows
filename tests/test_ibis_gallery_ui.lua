@@ -103,8 +103,12 @@ function T.run()
     for _,size in ipairs(sizes) do
         local w,h=size[1],size[2]
         local l=Shell.layout(w,h)
-        eq(l.top>54 and l.bottom==h-58,
-            'Galeria invade cabecalho ou rodape')
+        eq(l.top==66 and l.bottom==h-58,
+            'Galeria nao alinha miniaturas sob cabecalho oficial')
+        eq(Shell.GRID_TOP==66,
+            'Layout depende da antiga faixa de filtros')
+        eq(Shell.card(w,h,1,0).y==66,
+            'Primeira miniatura ainda esta deslocada pelas abas')
         local seen={}
         for i=1,l.cols*4 do
             local r=Shell.card(w,h,i,0)
