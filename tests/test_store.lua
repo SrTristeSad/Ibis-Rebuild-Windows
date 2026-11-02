@@ -204,6 +204,10 @@ function Test.run(rootPath)
         and Store.open(rootPath):openProject(
             layeredDeleted.id).layers[1].opacity==.65,
         'Recovery not persisted or lost layer properties')
+    -- Keep the legacy corruption fixture isolated to its sole document.
+    local archived=store:moveProjects(
+        {recoverable.id,layeredDeleted.id},parent,child)
+    check(archived.moved==2,'Recovery fixtures not archived')
     local goodPath='projects/'..doc.id..'.rbd'; local original=fs:read(goodPath)
     fs:writeAtomic(goodPath,original:sub(1,-2))
     rejects(function() store:openProject(doc.id) end,'truncated document accepted')
