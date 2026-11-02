@@ -220,7 +220,9 @@ function T.run()
         Shell.movePage(3,3,1)==3 and
         Shell.movePage(1,3,-1)==1,'Paginacao fora dos limites')
     local fakeStore={
-        catalog={folders={}},
+        catalog={folders={
+            {id='f_root',name='Raiz',parent=''},
+            {id='f_child',name='Interior',parent='f_root'}}},
         createFolder=function(self,name,parent)
             if name=='duplicada' then
                 error('store: folder name already exists')
@@ -243,20 +245,20 @@ function T.run()
     Shell.appendFolderName(draft,'nova')
     local ok,created=Shell.createDestination(
         fakeStore,draft,'f_root')
-    eq(ok and created=='f_new1' and draft.target==created
+    eq(ok and created=='f_new3' and draft.target==created
         and not draft.creating,'Criacao de pasta nao selecionou destino')
-    eq(fakeStore.catalog.folders[1].parent=='f_child',
+    eq(fakeStore.catalog.folders[3].parent=='f_child',
         'Nova pasta nao foi criada na hierarquia escolhida')
     Shell.openNewFolder(draft,'f_root')
     Shell.appendFolderName(draft,'duplicada')
     local accepted=Shell.createDestination(fakeStore,draft,'f_root')
     eq(not accepted and draft.creating
         and type(draft.createError)=='string'
-        and #fakeStore.catalog.folders==1,
+        and #fakeStore.catalog.folders==3,
         'Falha de criacao nao foi mantida no formulario')
     Shell.cancelNewFolder(draft)
     eq(not draft.creating and not draft.createError
-        and #fakeStore.catalog.folders==1,
+        and #fakeStore.catalog.folders==3,
         'Cancelar criou pastas indevidas')
     Shell.openNewFolder(draft,'f_root')
     Shell.appendFolderName(draft,string.rep('z',250))
