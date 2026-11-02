@@ -6530,7 +6530,9 @@ local function galleryPreview(doc,maxWidth,maxHeight)
         local width,height=GalleryThumb.size(saved.width,saved.height,
             maxWidth,maxHeight)
         local data=love.image.newImageData(width,height,'rgba8')
-        GalleryThumb.sample(Native.bytes(session.composite),
+        local sampler=(width>176 or height>126)
+            and GalleryThumb.sampleLarge or GalleryThumb.sample
+        sampler(Native.bytes(session.composite),
             saved.width,saved.height,width,height,function(r,g,b,a,x,y)
                 data:setPixel(x,y,r/255,g/255,b/255,a/255)
             end)
