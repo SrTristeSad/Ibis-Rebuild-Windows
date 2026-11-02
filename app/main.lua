@@ -158,7 +158,8 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '121-ferramentas-popup-sem-faixa.png',
     '122-galeria-imagem-ampliada.png',
     '123-galeria-proxima-obra.png',
-    '124-galeria-editar-obra.png'}
+    '124-galeria-gesto-voltar.png',
+    '125-galeria-editar-obra.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -4384,6 +4385,68 @@ local function advanceShowcase()
             A.layerSession:historyStats().undo==undo,
             'Seletor popup alterou obra ou historico')
         status('Seletor em popup: sem faixa lateral invisivel')
+    elseif sh.stage==122 then
+        toGallery();A.galleryFilter='works';A.galleryScroll=0
+        local selected=GalleryDetail.artworks(A.galleryItems,'works')
+        assert(#selected>=2,
+            'Showcase precisa de duas obras para ampliar')
+        A.galleryExpandedProof={
+            bytes=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo,
+            first=selected[1].id,second=selected[2].id
+        }
+        local w,h=love.graphics.getDimensions()
+        local card=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(card.x+card.w/2,card.y+card.h/2,1,false)
+        love.mousereleased(card.x+card.w/2,card.y+card.h/2,1,false)
+        assert(A.galleryDetailId==selected[1].id and
+            A.screen=='gallery',
+            'Clique na miniatura deve ampliar antes de editar')
+        assert(Native.bytes(A.layerSession.composite)==
+            A.galleryExpandedProof.bytes and
+            A.layerSession:historyStats().undo==
+                A.galleryExpandedProof.undo,
+            'Abrir ampliacao alterou os pixels')
+        status('Galeria ampliada: thumbnail real, editor ainda fechado')
+    elseif sh.stage==123 then
+        local old=assert(A.galleryExpandedProof)
+        local w,h=love.graphics.getDimensions()
+        local nextButton=GalleryDetail.nav(w,h,1)
+        love.draw()
+        love.mousepressed(nextButton.x+nextButton.w/2,
+            nextButton.y+nextButton.h/2,1,false)
+        love.mousereleased(nextButton.x+nextButton.w/2,
+            nextButton.y+nextButton.h/2,1,false)
+        assert(A.galleryDetailId==old.second,
+            'Seta nao navegou para a segunda obra da galeria')
+        assert(Native.bytes(A.layerSession.composite)==old.bytes
+            and A.layerSession:historyStats().undo==old.undo,
+            'Navegacao da galeria alterou documento')
+        status('Galeria: segunda obra, navegacao sem alterar RBD2')
+    elseif sh.stage==124 then
+        local old=assert(A.galleryExpandedProof)
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(w-280,h/2,1,false)
+        love.mousereleased(w-100,h/2+5,1,false)
+        assert(A.galleryDetailId==old.first,
+            'Gesto horizontal nao retornou para a primeira obra')
+        assert(Native.bytes(A.layerSession.composite)==old.bytes
+            and A.layerSession:historyStats().undo==old.undo,
+            'Gesto visual alterou pixels ou historico')
+        status('Galeria: gesto horizontal real para obra anterior')
+    elseif sh.stage==125 then
+        local old=assert(A.galleryExpandedProof)
+        local w,h=love.graphics.getDimensions()
+        local edit=GalleryDetail.edit(w,h)
+        love.draw()
+        love.mousepressed(edit.x+edit.w/2,edit.y+edit.h/2,1,false)
+        love.mousereleased(edit.x+edit.w/2,edit.y+edit.h/2,1,false)
+        assert(A.screen=='editor' and A.doc.id==old.first
+            and not A.galleryDetailId,
+            'Editar nao abriu a obra ampliada no editor real')
+        status('Galeria: Editar abriu projeto RBD2 no motor Lua')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
