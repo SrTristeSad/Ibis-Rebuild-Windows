@@ -62,7 +62,7 @@ function M.footerControls(p)
         {id='clipping',label='Clipping',x=p.x+8,y=y,w=88,h=32,
             available=false},
         {id='alpha',label='Alpha Lock',x=p.x+101,y=y,w=91,h=32,
-            available=false},
+            available=true},
         {id='blend',label='Normal',x=p.x+197,y=y,w=93,h=32,
             available=true}
     }
@@ -81,15 +81,17 @@ function M.paintFooterControl(slot,font)
     assert(type(slot)=='table' and type(slot.available)=='boolean')
     local lg=love.graphics
     local active=slot.available
-    lg.setColor(active and .93 or .33,active and .94 or .35,
-        active and .95 or .37,1)
+    lg.setColor(slot.selected and .48 or active and .93 or .33,
+        slot.selected and .74 or active and .94 or .35,
+        slot.selected and .98 or active and .95 or .37,1)
     lg.rectangle('fill',slot.x,slot.y,slot.w,slot.h,2,2)
     lg.setColor(active and .70 or .43,active and .72 or .44,
         active and .75 or .45,1)
     lg.rectangle('line',slot.x+.5,slot.y+.5,
         slot.w-1,slot.h-1,2,2)
-    lg.setColor(active and .17 or .65,active and .18 or .67,
-        active and .20 or .69,1)
+    lg.setColor(slot.selected and .06 or active and .17 or .65,
+        slot.selected and .18 or active and .18 or .67,
+        slot.selected and .35 or active and .20 or .69,1)
     lg.setFont(font)
     lg.printf(slot.label,slot.x+2,slot.y+
         (slot.h-font:getHeight())/2,slot.w-4,'center')

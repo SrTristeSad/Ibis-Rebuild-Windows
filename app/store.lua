@@ -172,6 +172,9 @@ local function validateHeader(h,id,layered)
         assert(not ids[layer.id],'store: duplicate layer id')
         ids[layer.id]=true
         assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+        assert(layer.alpha_lock==nil or
+            type(layer.alpha_lock)=='boolean',
+            'store: invalid alpha lock metadata')
         assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
             layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
     end
@@ -197,7 +200,7 @@ function Store:_readProject(id,withPixels)
         doc.active_layer=header.active_layer
         for i,layer in ipairs(header.layers) do
             local item={id=layer.id,name=layer.name,visible=layer.visible,
-                opacity=layer.opacity}
+                opacity=layer.opacity,alpha_lock=layer.alpha_lock==true}
             if withPixels then
                 item.pixels=self.fs:readRange(path,12+length+(i-1)*perPlane,perPlane,
                     MAX_PROJECT_BYTES)
@@ -242,8 +245,11 @@ function Store:saveProject(doc)
                 layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
             assert(type(layer.pixels)=='string' and #layer.pixels==perPlane,
                 'store: invalid RGBA layer payload')
+            assert(layer.alpha_lock==nil or
+                type(layer.alpha_lock)=='boolean',
+                'store: alpha lock must be boolean')
             headerLayers[i]={id=layer.id,name=layer.name,visible=layer.visible,
-                opacity=layer.opacity}
+                opacity=layer.opacity,alpha_lock=layer.alpha_lock==true}
             payload[i]=layer.pixels
         end
     else

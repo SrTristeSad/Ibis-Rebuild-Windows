@@ -17,7 +17,7 @@ function Layers.open(store,doc)
     if not doc.layers then
         -- Promote RBD1 in memory. A disk migration occurs ONLY on save.
         doc.layers={{id=store:newLayerId(),name='Raster 1',pixels=doc.pixels,
-            opacity=1,visible=true}}
+            opacity=1,visible=true,alpha_lock=false}}
         doc.active_layer=1
         doc.pixels=nil
     end
@@ -26,6 +26,7 @@ function Layers.open(store,doc)
         undoStack={},redoStack={},historyBytes=0,pending=nil},Layers)
     for i,layer in ipairs(doc.layers) do
         self.buffers[i]=Native.buffer(doc.width,doc.height,layer.pixels)
+        self.buffers[i].alphaLock=layer.alpha_lock==true
     end
     self:recompose()
     return self
@@ -83,11 +84,13 @@ function Layers:_pushHistory(entry)
 end
 local function layerSnapshot(layer,buffer)
     return {id=layer.id,name=layer.name,visible=layer.visible,
-        opacity=layer.opacity,pixels=Native.bytes(buffer)}
+        opacity=layer.opacity,alpha_lock=layer.alpha_lock==true,
+        pixels=Native.bytes(buffer)}
 end
 local function layerFromSnapshot(snapshot)
     return {id=snapshot.id,name=snapshot.name,visible=snapshot.visible,
-        opacity=snapshot.opacity,pixels=snapshot.pixels}
+        opacity=snapshot.opacity,alpha_lock=snapshot.alpha_lock==true,
+        pixels=snapshot.pixels}
 end
 function Layers:_structInsert(index,snapshot,active)
     assert(#self.doc.layers<Store.MAX_LAYERS,'Limite de camadas no histórico')
@@ -96,6 +99,7 @@ function Layers:_structInsert(index,snapshot,active)
         assert(layer.id~=snapshot.id,'Camada duplicada no histórico')
     end
     local buffer=Native.buffer(self.doc.width,self.doc.height,snapshot.pixels)
+    buffer.alphaLock=snapshot.alpha_lock==true
     table.insert(self.doc.layers,index,layerFromSnapshot(snapshot))
     table.insert(self.buffers,index,buffer)
     self.doc.active_layer=active
@@ -133,7 +137,7 @@ local function flattenedPair(self,below,above,belowBuffer,aboveBuffer)
 end
 local function finalMergedLayer(below,pixels)
     return {id=below.id,name=below.name,opacity=1,
-        visible=true,pixels=pixels}
+        visible=true,alpha_lock=false,pixels=pixels}
 end
 function Layers:_undoMerge(entry)
     local lowerIndex=entry.index
@@ -146,6 +150,8 @@ function Layers:_undoMerge(entry)
     local upperBuffer=Native.buffer(self.doc.width,self.doc.height,
         entry.above.pixels)
     self.doc.layers[lowerIndex]=layerFromSnapshot(entry.below)
+    lowerBuffer.alphaLock=entry.below.alpha_lock==true
+    upperBuffer.alphaLock=entry.above.alpha_lock==true
     self.buffers[lowerIndex]=lowerBuffer
     table.insert(self.doc.layers,lowerIndex+1,layerFromSnapshot(entry.above))
     table.insert(self.buffers,lowerIndex+1,upperBuffer)
@@ -164,6 +170,7 @@ function Layers:_redoMerge(entry)
         self.buffers[lowerIndex],self.buffers[lowerIndex+1])
     self.doc.layers[lowerIndex]=finalMergedLayer(entry.below,
         Native.bytes(merged))
+    merged.alphaLock=false
     self.buffers[lowerIndex]=merged
     table.remove(self.doc.layers,lowerIndex+1)
     table.remove(self.buffers,lowerIndex+1)
@@ -201,8 +208,17 @@ function Layers:_applyStructural(entry,undoing)
         end
         assert(layer,'Camada das propriedades não existe no histórico')
         assert(entry.field=='name' or entry.field=='visible' or
-            entry.field=='opacity','Propriedade de histórico inválida')
+            entry.field=='opacity' or entry.field=='alpha_lock',
+            'Propriedade de histórico inválida')
         layer[entry.field]=undoing and entry.before or entry.after
+        if entry.field=='alpha_lock' then
+            for i,candidate in ipairs(self.doc.layers) do
+                if candidate.id==entry.id then
+                    self.buffers[i].alphaLock=layer.alpha_lock==true
+                    break
+                end
+            end
+        end
     else
         error('Ação estrutural inválida')
     end
@@ -242,6 +258,7 @@ function Layers:_restore(entry,which)
     end
     assert(index,'Camada original não existe')
     self.buffers[index]=Native.buffer(self.doc.width,self.doc.height,entry[which])
+    self.buffers[index].alphaLock=self.doc.layers[index].alpha_lock==true
     self.doc.active_layer=index
     self:recompose()
 end
@@ -277,7 +294,8 @@ function Layers:add(name)
     local before=self.doc.active_layer
     local index=before+1
     local new={id=self.store:newLayerId(),name=name or 'Nova camada',
-        visible=true,opacity=1,pixels=string.rep('\0',self.doc.width*self.doc.height*4)}
+        visible=true,opacity=1,alpha_lock=false,
+        pixels=string.rep('\0',self.doc.width*self.doc.height*4)}
     local buffer=Native.buffer(self.doc.width,self.doc.height,new.pixels)
     table.insert(layers,index,new)
     table.insert(self.buffers,index,buffer)
@@ -310,9 +328,10 @@ function Layers:duplicate(index)
     local name=copyLayerName(source.name)
     local bytes=Native.bytes(self.buffers[index])
     local newBuffer=Native.buffer(self.doc.width,self.doc.height,bytes)
+    newBuffer.alphaLock=source.alpha_lock==true
     local newId=self.store:newLayerId()
     local new={id=newId,name=name,visible=source.visible,
-        opacity=source.opacity,pixels=bytes}
+        opacity=source.opacity,alpha_lock=source.alpha_lock==true,pixels=bytes}
     if self.pending then self:finishEdit() end
     local before=self.doc.active_layer
     local target=index+1
@@ -359,7 +378,12 @@ function Layers:_changeProperty(index,field,value)
     if previous==value then return false end
     if self.pending then self:finishEdit() end
     layer[field]=value
-    if field~='name' then self:recompose() end
+    if field=='alpha_lock' then
+        self.buffers[index].alphaLock=value
+    end
+    if field~='name' and field~='alpha_lock' then
+        self:recompose()
+    end
     self:_pushHistory({kind='property',id=layer.id,field=field,
         before=previous,after=value,
         size=128+(type(value)=='string' and #value or 0)+
@@ -381,6 +405,11 @@ function Layers:setOpacity(index,opacity)
     assert(type(opacity)=='number' and opacity==opacity and
         opacity>=0 and opacity<=1,'Opacidade inválida')
     return self:_changeProperty(index,'opacity',opacity)
+end
+function Layers:setAlphaLock(index,enabled)
+    assertIndex(self,index)
+    assert(type(enabled)=='boolean','Alpha Lock exige booleano')
+    return self:_changeProperty(index,'alpha_lock',enabled)
 end
 function Layers:move(index,to)
     assertIndex(self,index);assertIndex(self,to)
@@ -414,6 +443,7 @@ function Layers:mergeDown(index)
     local before=self.doc.active_layer
     local merged=flattenedPair(self,below,above,
         self.buffers[belowIndex],self.buffers[index])
+    merged.alphaLock=false
     local pixels=Native.bytes(merged)
     -- A pair costs at most 32 MiB at the current 2048² RGBA8 limit;
     -- record this before structural mutation to keep undo guaranteed.
