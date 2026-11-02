@@ -343,6 +343,55 @@ function Store:listProjects(folder)
     table.sort(rows,function(a,b) if a.saved_at==b.saved_at then return a.id<b.id else return a.saved_at>b.saved_at end end)
     self.lastErrors=errors; return rows,errors
 end
+-- Folder and artwork thumbnails share a single persistent display order.
+-- Order writes never modify RBD layer bytes, timestamps or revisions.
+function Store:galleryItems(folder)
+    folder=self:_folder(folder)
+    local base={}
+    for _,entry in ipairs(self:folders(folder)) do
+        base[#base+1]={key='f:'..entry.id,type='folder',value=entry}
+    end
+    for _,entry in ipairs(self:listProjects(folder)) do
+        base[#base+1]={key='p:'..entry.id,type='project',value=entry}
+    end
+    local known={}
+    for _,entry in ipairs(base) do known[entry.key]=entry end
+    local saved=self.galleryOrder.folders[
+        folder=='' and 'root' or folder] or {}
+    local result={}
+    for _,key in ipairs(saved) do
+        if known[key] then
+            result[#result+1]=known[key]
+            known[key]=nil
+        end
+    end
+    for _,entry in ipairs(base) do
+        if known[entry.key] then result[#result+1]=entry end
+    end
+    return result
+end
+function Store:reorderGallery(folder,sourceKey,targetKey)
+    folder=self:_folder(folder)
+    assert(type(sourceKey)=='string' and
+        type(targetKey)=='string','store: missing gallery keys')
+    local items=self:galleryItems(folder)
+    local from,to
+    for i,entry in ipairs(items) do
+        if entry.key==sourceKey then from=i end
+        if entry.key==targetKey then to=i end
+    end
+    assert(from and to,'store: gallery items not in current folder')
+    if from==to then return false end
+    local moving=table.remove(items,from)
+    table.insert(items,to,moving)
+    local draft=clone(self.galleryOrder)
+    local order=JSON.array()
+    for i,entry in ipairs(items) do order[i]=entry.key end
+    draft.folders[folder=='' and 'root' or folder]=order
+    self.fs:writeAtomic('gallery-order.json',JSON.encode(draft))
+    self.galleryOrder=draft
+    return true
+end
 -- Move artwork between local gallery folders without modifying raster bytes.
 -- Every project is validated before the first write. Individual documents
 -- use FS.writeAtomic, but a batch of files cannot be committed atomically;
