@@ -267,6 +267,21 @@ function T.run()
         eq(fields[3].x+fields[3].w<preview.x and
             preview.y+preview.h<firstRow.y,
             'Campos ou previa invadem lista de formatos')
+        local ChromeModal=require('ibis_canvas_dialog_chrome')
+        eq(ChromeModal.rowStyle(true,false)=='rowSelected'
+            and ChromeModal.rowStyle(false,true)=='rowHover'
+            and ChromeModal.rowStyle(false,false)=='rowNormal',
+            'Estados dos formatos nao acompanham estilo discreto')
+        local sectionLight=select(1,ChromeModal.color('sectionText'))
+        local sectionDark=select(1,ChromeModal.color('section'))
+        local bodyGray=select(1,ChromeModal.color('body'))
+        local selectedRow=select(1,ChromeModal.color('rowSelected'))
+        local idleRow=select(1,ChromeModal.color('rowNormal'))
+        eq(sectionLight>sectionDark and
+            idleRow>bodyGray and selectedRow<idleRow,
+            'Hierarquia e contraste do dialogo nao preservados')
+        eq(not pcall(ChromeModal.color,'unknown'),
+            'Cor de UI desconhecida foi aceita')
         local VisualRows=require('ibis_canvas_preset_rows')
         local landscape=VisualRows.symbol({w=1920,h=1080})
         local portrait=VisualRows.symbol({w=1080,h=1920})

@@ -40,6 +40,7 @@ IbisPanels.galleryDetail=require('ibis_gallery_detail')
 IbisPanels.canvasPresetRows=require('ibis_canvas_preset_rows')
 IbisPanels.canvasDimensionControls=require('ibis_canvas_dimension_controls')
 IbisPanels.canvasDimensionSlider=require('ibis_canvas_dimension_slider')
+IbisPanels.canvasDialogChrome=require('ibis_canvas_dialog_chrome')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -8174,7 +8175,7 @@ end
 local function drawNewCanvasDialog(w,h)
     local r=GalleryUI.dialog(w,h)
     local m=A.modal
-    box(r.x,r.y,r.w,r.h,'panel')
+    IbisPanels.canvasDialogChrome.body(r)
     -- A29: barra de titulo escura do ibisPaint e fechar vermelho.
     -- O dialogo continua com seus campos, presets e callbacks Lua.
     local bar=GalleryUI.dialogHeader(r)
@@ -8199,8 +8200,8 @@ local function drawNewCanvasDialog(w,h)
             A.modal=nil
             love.keyboard.setTextInput(false)
         end}
-    text('Escolha as dimensões da sua obra',
-        r.x+28,r.y+56,'small','muted')
+    -- Separador de ilustracao com hierarquia cinza/escura oficial.
+    IbisPanels.canvasDialogChrome.section(r,A.fonts.small)
     local labels={'Nome','Largura (px)','Altura (px)'}
     for i,field in ipairs(GalleryUI.fields(r)) do
         text(labels[i],field.x,field.y-24,'small','muted')
@@ -8280,9 +8281,16 @@ local function drawNewCanvasDialog(w,h)
     local selectedTab=m.presetTab or 'basic'
     for i,tab in ipairs(GalleryUI.PRESET_TABS) do
         local rTab=GalleryUI.tabRect(r,i)
-        button(tab.name,rTab.x,rTab.y,rTab.w,rTab.h,function()
-            m.presetTab=tab.id
-        end,selectedTab==tab.id)
+        local mx,my=love.mouse.getPosition()
+        IbisPanels.canvasDialogChrome.tab(rTab,tab.name,
+            selectedTab==tab.id,
+            mx>=rTab.x and mx<rTab.x+rTab.w
+                and my>=rTab.y and my<rTab.y+rTab.h,
+            A.fonts.body)
+        -- Mesma area e mesmo callback de troca de aba da A30.
+        A.buttons[#A.buttons+1]={
+            x=rTab.x,y=rTab.y,w=rTab.w,h=rTab.h,
+            fn=function() m.presetTab=tab.id end}
     end
     for i,preset in ipairs(GalleryUI.presetList(selectedTab)) do
         local btn=GalleryUI.presetButton(r,i)

@@ -2,6 +2,7 @@
 -- Somente desenho: o Store, o editor e os callbacks ficam fora.
 -- Icones de proporcao sao formas vetoriais proprias, sem assets do APK.
 local M={}
+local Chrome=require('ibis_canvas_dialog_chrome')
 
 function M.symbol(preset)
     assert(type(preset)=='table' and
@@ -21,14 +22,11 @@ function M.draw(rect,preset,selected,hovered,titleFont,metaFont)
     local g=assert(love and love.graphics,'LÖVE necessario')
     local s=M.symbol(preset)
     g.push('all')
-    if selected then g.setColor(.81,.88,.96,1)
-    elseif hovered then g.setColor(.92,.93,.94,1)
-    else g.setColor(.96,.96,.96,1) end
+    g.setColor(Chrome.color(Chrome.rowStyle(selected,hovered)))
     g.rectangle('fill',rect.x,rect.y,rect.w,rect.h)
-    g.setColor(selected and .25 or .72,
-        selected and .51 or .72,
-        selected and .84 or .72,1)
-    g.setLineWidth(selected and 1.8 or 1)
+    g.setColor(Chrome.color(selected and 'rowSelectedBorder'
+        or 'rowBorder'))
+    g.setLineWidth(selected and 1.5 or 1)
     g.rectangle('line',rect.x+.5,rect.y+.5,
         rect.w-1,rect.h-1)
     local cx,cy=rect.x+22,rect.y+rect.h/2
