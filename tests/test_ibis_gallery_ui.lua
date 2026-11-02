@@ -152,7 +152,7 @@ function T.run()
     eq(Shell.selectionAvailable('all') and
         Shell.selectionAvailable('clear') and
         Shell.selectionAvailable('move') and
-        not Shell.selectionAvailable('delete'),
+        Shell.selectionAvailable('delete'),
         'Disponibilidade da movimentacao nao acompanha backend')
     local ids=Shell.selectedProjectIds(
         {['p:c']=true,['p:e']=true},keys)
@@ -275,6 +275,18 @@ function T.run()
         eq(name.x>=p.x and name.x+name.w<=p.x+p.w
             and name.y>first.y and name.y+name.h<p.y+p.h-50,
             'Campo do nome encobre confirmacao')
+    end
+    for _,size in ipairs(sizes) do
+        local p=Shell.confirmPopup(size[1],size[2])
+        local yes=Shell.confirmAction(p)
+        local no=Shell.confirmCancel(p)
+        eq(p.x>=0 and p.y>=0 and
+            p.x+p.w<=size[1] and p.y+p.h<=size[2],
+            'Confirmacao fora da viewport')
+        eq(no.x+no.w<yes.x and
+            yes.x+yes.w<=p.x+p.w and
+            yes.y==no.y and yes.y+yes.h<p.y+p.h,
+            'Controles de confirmacao sobrepostos')
     end
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
     eq(G.preset('ibis-square').w==768)

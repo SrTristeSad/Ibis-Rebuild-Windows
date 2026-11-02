@@ -119,7 +119,13 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '84-mover-nova-pasta-criada.png',
     '85-mover-obra-para-pasta-nova.png',
     '86-mover-pasta-nova-verificada.png',
-    '87-mover-criacao-cancelada.png'}
+    '87-mover-criacao-cancelada.png',
+    '88-excluir-confirmacao.png',
+    '89-excluir-cancelado.png',
+    '90-excluir-recuperavel.png',
+    '91-excluidos-recentemente.png',
+    '92-recuperar-confirmacao.png',
+    '93-desenho-recuperado.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -239,10 +245,15 @@ local function externalWrite(path,bytes)
     path=path:gsub('\\','/');local dir,name=path:match('^(.*)/([^/]+)$');assert(dir and name,'Caminho absoluto necessário')
     local fs=FS.new(dir);fs:writeAtomic(name,bytes)
 end
-local function refreshGallery() A.folders=A.store:folders(A.folder);A.projects=A.store:listProjects(A.folder) end
+local function refreshGallery()
+    A.folders=A.store:folders(A.folder)
+    A.projects=A.store:listProjects(A.folder)
+    A.trashProjects=A.store:deletedProjects()
+end
 local function setFolder(id)
     A.folder=id or '';A.galleryScroll=0
-    A.galleryMoveMenu=nil
+    A.galleryMoveMenu=nil;A.galleryDeleteMenu=nil
+    A.galleryRestoreMenu=nil;A.galleryTrash=false
     A.gallerySelected={};A.gallerySelecting=false
     refreshGallery()
 end
@@ -525,6 +536,7 @@ end
 local function toGallery()
     A.backMenu=false;A.settingsOpen=false
     A.galleryCreateMenu=false;A.galleryMoveMenu=nil;A.galleryScroll=0
+    A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil;A.galleryTrash=false
     A.gallerySelecting=false;A.gallerySelected={}
     clearWandSelection()
     A.visualPendingTool=nil
@@ -5608,7 +5620,8 @@ local function galleryPreview(doc)
     if (A.galleryPreviewBudget or 0)<=0 then return nil end
     A.galleryPreviewBudget=A.galleryPreviewBudget-1
     local ok,item=pcall(function()
-        local saved=A.store:openProject(doc.id)
+        local saved=doc.deleted and A.store:_readProject(doc.id,true)
+            or A.store:openProject(doc.id)
         local session=Layers.open(A.store,saved)
         local width,height=GalleryThumb.size(saved.width,saved.height,140,130)
         local data=love.image.newImageData(width,height,'rgba8')
@@ -5644,10 +5657,12 @@ local function drawGallery(w,h)
     -- Os arquivos permanecem no Store/RBD2; sem ordenacao inventada.
     local lg=love.graphics
     local l=GalleryShell.layout(w,h)
-    local folders=GalleryUI.filter(A.galleryFilter,'folder')
+    local folders=not A.galleryTrash and
+        GalleryUI.filter(A.galleryFilter,'folder')
         and #A.folders or 0
-    local works=GalleryUI.filter(A.galleryFilter,'work')
-        and #A.projects or 0
+    local works=A.galleryTrash and #(A.trashProjects or {})
+        or (GalleryUI.filter(A.galleryFilter,'work')
+        and #A.projects or 0)
     local total=folders+works
     A.galleryScroll=math.min(A.galleryScroll or 0,
         GalleryShell.maxScroll(w,h,total))
@@ -5656,11 +5671,21 @@ local function drawGallery(w,h)
     lg.rectangle('fill',0,0,w,54)
     lg.setColor(.95,.96,.97,1)
     lg.setFont(A.fonts.body)
-    lg.printf(('A Minha Galeria (%d)'):format(total),
+    lg.printf(A.galleryTrash and
+        ('Excluídos recentemente (%d)'):format(total)
+        or ('A Minha Galeria (%d)'):format(total),
         math.floor((w-390)/2),16,390,'center')
-    lg.setColor(A.folder~='' and .45 or .55,.74,.94,1)
+    lg.setColor(.45,.74,.94,1)
     lg.print('‹ Voltar',18,17)
-    if A.folder~='' then
+    if A.galleryTrash then
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=function()
+                A.galleryTrash=false
+                A.galleryFilter=A.galleryBeforeTrash or 'all'
+                A.galleryBeforeTrash=nil;A.galleryScroll=0
+                refreshGallery()
+            end}
+    elseif A.folder~='' then
         A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
             fn=guard(function()
                 local parent=''
@@ -5671,19 +5696,29 @@ local function drawGallery(w,h)
             end)}
     end
     lg.setColor(.45,.74,.94,1)
-    lg.printf(A.gallerySelecting and 'Concluir' or 'Selecionar',
-        w-156,17,136,'right')
-    A.buttons[#A.buttons+1]={x=w-166,y=7,w=152,h=42,
-        fn=function()
-            A.gallerySelecting=not A.gallerySelecting
-            A.gallerySelected={}
-        end}
+    if not A.galleryTrash then
+        lg.printf(A.gallerySelecting and 'Concluir' or 'Selecionar',
+            w-156,17,136,'right')
+        A.buttons[#A.buttons+1]={x=w-166,y=7,w=152,h=42,
+            fn=function()
+                A.gallerySelecting=not A.gallerySelecting
+                A.gallerySelected={}
+            end}
+        lg.print('Excluídos',146,17)
+        A.buttons[#A.buttons+1]={x=137,y=7,w=120,h=42,
+            fn=function()
+                A.galleryBeforeTrash=A.galleryFilter
+                A.galleryTrash=true;A.galleryFilter='works'
+                A.gallerySelecting=false;A.gallerySelected={}
+                A.galleryScroll=0;refreshGallery()
+            end}
+    end
     -- Filtros de catalogo locais: adicionais do rebuild, nao da APK.
     lg.setColor(.96,.95,.92,1)
     lg.rectangle('fill',0,54,w,66)
     lg.setColor(.75,.75,.72,1)
     lg.rectangle('fill',0,119,w,1)
-    for i,item in ipairs(GalleryUI.FILTERS) do
+    for i,item in ipairs(A.galleryTrash and {} or GalleryUI.FILTERS) do
         local x=18+(i-1)*110
         local active=A.galleryFilter==item.id
         lg.setColor(active and .69 or .89,
@@ -5700,8 +5735,9 @@ local function drawGallery(w,h)
     end
     lg.setColor(.34,.36,.37,1)
     lg.setFont(A.fonts.small)
-    lg.printf(A.gallerySelecting and
-        'Selecione obras ou pastas' or
+    lg.printf(A.galleryTrash and
+        'Arquivos locais · recuperação disponível' or
+        A.gallerySelecting and 'Selecione obras ou pastas' or
         ('Desenhos: %d   Pastas: %d'):format(#A.projects,#A.folders),
         w-420,80,402,'right')
     local index=0
@@ -5768,24 +5804,30 @@ local function drawGallery(w,h)
                 end
             end)}
     end
-    if GalleryUI.filter(A.galleryFilter,'folder') then
+    if not A.galleryTrash and
+        GalleryUI.filter(A.galleryFilter,'folder') then
         for _,folder in ipairs(A.folders) do
             card(folder.name,'Pasta',true,
                 function()setFolder(folder.id)end,nil,'f:'..folder.id)
         end
     end
-    if GalleryUI.filter(A.galleryFilter,'work') then
-        for _,doc in ipairs(A.projects) do
+    if A.galleryTrash or GalleryUI.filter(A.galleryFilter,'work') then
+        for _,doc in ipairs(A.galleryTrash and
+            (A.trashProjects or {}) or A.projects) do
             card(doc.name,doc.width..'×'..doc.height,false,
-                function()openDoc(A.store:openProject(doc.id))end,
-                doc,'p:'..doc.id)
+                function()
+                    if A.galleryTrash then
+                        A.galleryRestoreMenu={id=doc.id}
+                    else openDoc(A.store:openProject(doc.id)) end
+                end,doc,'p:'..doc.id)
         end
     end
     lg.setScissor()
     if total==0 then
         lg.setColor(.45,.47,.49,1)
         lg.setFont(A.fonts.body)
-        lg.printf(A.galleryFilter=='folders' and 'Nenhuma pasta' or
+        lg.printf(A.galleryTrash and 'Nenhuma obra excluída' or
+            A.galleryFilter=='folders' and 'Nenhuma pasta' or
             A.galleryFilter=='works' and 'Nenhum desenho' or
             'A Minha Galeria está vazia',
             0,math.floor((l.top+l.bottom)/2)-24,w,'center')
@@ -5794,7 +5836,14 @@ local function drawGallery(w,h)
     -- Excluir continua desabilitado, sem backend nem perda de arquivos.
     lg.setColor(.18,.19,.20,1)
     lg.rectangle('fill',0,l.footerY,w,h-l.footerY)
-    if A.gallerySelecting then
+    if A.galleryTrash then
+        lg.setColor(.84,.87,.91,1)
+        lg.setFont(A.fonts.small)
+        lg.print('Selecione uma obra para recuperá-la',
+            20,l.footerY+18)
+        lg.printf(('%d arquivo(s) preservado(s)'):format(total),
+            w-250,l.footerY+18,230,'right')
+    elseif A.gallerySelecting then
         local keys=GalleryShell.selectionKeys(
             A.folders,A.projects,A.galleryFilter)
         local count=GalleryShell.selectionCount(
@@ -5839,6 +5888,10 @@ local function drawGallery(w,h)
                         if ids then
                             A.galleryMoveMenu={ids=ids,page=1}
                         end
+                    elseif command=='delete' then
+                        local ids=GalleryShell.selectedProjectIds(
+                            A.gallerySelected,keys)
+                        if ids then A.galleryDeleteMenu={ids=ids} end
                     end
                 end}
             end

@@ -254,6 +254,19 @@ function M.moveCancelRect(p)
     assert(type(p)=='table' and p.w==540 and p.h==470)
     return {x=p.x+24,y=p.y+p.h-50,w=133,h=38}
 end
+function M.confirmPopup(w,h)
+    M.layout(w,h)
+    return {x=math.floor((w-440)/2),y=math.floor((h-238)/2),
+        w=440,h=238}
+end
+function M.confirmAction(p)
+    assert(type(p)=='table' and p.w==440 and p.h==238)
+    return {x=p.x+235,y=p.y+174,w=184,h=43}
+end
+function M.confirmCancel(p)
+    assert(type(p)=='table' and p.w==440 and p.h==238)
+    return {x=p.x+21,y=p.y+174,w=169,h=43}
+end
 function M.selectionAction(w,h,id)
     M.layout(w,h)
     local x={
@@ -267,6 +280,6 @@ end
 function M.selectionAvailable(id)
     assert(id=='all' or id=='clear' or id=='move' or id=='delete',
         'Acao de selecao desconhecida')
-    return id~='delete'
+    return true -- Exclusao recuperavel exige confirmacao.
 end
 return M
