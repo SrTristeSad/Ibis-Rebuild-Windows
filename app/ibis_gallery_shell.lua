@@ -90,6 +90,28 @@ function M.dragTarget(w,h,scroll,items,x,y)
     end
     return nil
 end
+-- Match the documented folder-management gesture:
+-- artwork over folder -> move into folder;
+-- artwork over Back within a folder -> move to parent;
+-- other valid drops -> reorder in the current gallery.
+function M.parentDrop(w,h,x,y)
+    M.layout(w,h)
+    return x>=10 and x<122 and y>=7 and y<49
+end
+function M.dropAction(current,parent,source,target,w,h,x,y)
+    assert(type(current)=='string' and
+        (parent==nil or type(parent)=='string') and
+        type(source)=='string','Galeria: destino de arrasto invalido')
+    if source:sub(1,2)=='p:' and current~='' and
+        parent~=nil and M.parentDrop(w,h,x,y) then
+        return {kind='move',folder=parent}
+    end
+    if not target or target==source then return nil end
+    if source:sub(1,2)=='p:' and target:sub(1,2)=='f:' then
+        return {kind='move',folder=target:sub(3)}
+    end
+    return {kind='reorder',target=target}
+end
 function M.newMenu(w,h)
     M.layout(w,h)
     return {x=18,y=h-230,w=292,h=172}
