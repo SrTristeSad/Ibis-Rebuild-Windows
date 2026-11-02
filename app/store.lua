@@ -52,6 +52,1241 @@ function Store.open(rootPath)
         object(self.catalog); assert(self.catalog.version==1,'store: unsupported catalog version')
         array(self.catalog.folders)
     else self.catalog={version=1,folders=JSON.array()} end
+    -- Separate metadata: legacy gallery order remains the default until
+    -- the first drag; no document is rewritten for an order change.
+    if self.fs:exists('gallery-order.json') then
+        self.galleryOrder=JSON.decode(
+            self.fs:read('gallery-order.json',1048576))
+        object(self.galleryOrder)
+        assert(self.galleryOrder.version==1,
+            'store: unsupported gallery order version')
+        object(self.galleryOrder.folders)
+        for key,items in pairs(self.galleryOrder.folders) do
+            assert(key=='root' or
+                (type(key)=='string' and
+                key:match('^f_[A-Za-z0-9_%-]+
+        object(folder); validId(folder.id,'f'); textName(folder.name)
+        assert(not map[folder.id],'store: duplicate folder id'); map[folder.id]=folder
+        assert(type(folder.parent)=='string','store: invalid folder parent')
+        if folder.parent~='' then validId(folder.parent,'f') end
+    end
+    for _,folder in ipairs(self.catalog.folders) do
+        local seen={}; local cur=folder
+        while cur.parent~='' do
+            assert(not seen[cur.id],'store: folder cycle'); seen[cur.id]=true
+            cur=assert(map[cur.parent],'store: missing folder parent')
+        end
+    end
+    if not self.fs:exists('catalog.json') then self.fs:writeAtomic('catalog.json',JSON.encode(self.catalog)) end
+    if not self.fs:exists('preferences.json') then self.fs:writeAtomic('preferences.json',JSON.encode({version=1,values={}})) end
+    if not self.fs:exists('brushes.json') then self.fs:writeAtomic('brushes.json',JSON.encode({version=1,items=JSON.array()})) end
+    -- Non-destructive deletion journal, introduced for 14.1 gallery recovery.
+    if self.fs:exists('deleted.json') then
+        self.deleted=JSON.decode(self.fs:read('deleted.json',1048576))
+        object(self.deleted)
+        assert(self.deleted.version==1,'store: unsupported deleted index')
+        array(self.deleted.items)
+    else
+        self.deleted={version=1,items=JSON.array()}
+        self.fs:writeAtomic('deleted.json',JSON.encode(self.deleted))
+    end
+    local deletedIds={}
+    for _,entry in ipairs(self.deleted.items) do
+        object(entry);validId(entry.id,'p')
+        assert(integer(entry.deleted_at,0,9007199254740991),
+            'store: invalid deleted timestamp')
+        assert(not deletedIds[entry.id],'store: duplicate deletion entry')
+        deletedIds[entry.id]=true
+    end
+    return self
+end
+function Store:_folder(id)
+    id=id or ''; if id=='' then return '' end; validId(id,'f')
+    for _,f in ipairs(self.catalog.folders) do if f.id==id then return id end end
+    error('store: folder does not exist',2)
+end
+function Store:_id(prefix)
+    for _=1,100 do
+        serial=serial+1
+        local id=string.format('%s_%08x_%08x_%08x',prefix,os.time(),FS.processId(),serial)
+        local found=false
+        if prefix=='p' then found=self.fs:exists('projects/'..id..'.rbd')
+        else for _,f in ipairs(self.catalog.folders) do if f.id==id then found=true; break end end end
+        if not found then return id end
+    end
+    error('store: failed to allocate identifier')
+end
+function Store:folders(parent)
+    parent=self:_folder(parent); local rows={}
+    for _,f in ipairs(self.catalog.folders) do if f.parent==parent then rows[#rows+1]={id=f.id,name=f.name,parent=f.parent} end end
+    table.sort(rows,function(a,b) if a.name==b.name then return a.id<b.id else return a.name<b.name end end)
+    return rows
+end
+function Store:createFolder(name,parent)
+    name=textName(name); parent=self:_folder(parent)
+    for _,f in ipairs(self.catalog.folders) do assert(f.parent~=parent or f.name~=name,'store: folder name already exists') end
+    local nextCatalog=clone(self.catalog); local id=self:_id('f')
+    nextCatalog.folders[#nextCatalog.folders+1]={id=id,name=name,parent=parent}
+    self.fs:writeAtomic('catalog.json',JSON.encode(nextCatalog)); self.catalog=nextCatalog
+    return id
+end
+function Store:_path(id) return 'projects/'..validId(id,'p')..'.rbd' end
+local function validateHeader(h,id,layered)
+    object(h)
+    assert(h.version==(layered and 2 or 1) and h.pixel_format=='RGBA8',
+        'store: unsupported document schema')
+    assert(h.id==id,'store: document identifier mismatch')
+    validId(h.id,'p'); textName(h.name)
+    local perPlane=dimensions(h.width,h.height)
+    assert(type(h.folder)=='string','store: invalid document folder')
+    if h.folder~='' then validId(h.folder,'f') end
+    assert(integer(h.revision,1,2147483647),'store: invalid revision')
+    assert(integer(h.saved_at,0,9007199254740991),'store: invalid saved timestamp')
+    if not layered then
+        assert(h.layer_count==1,'store: invalid RBD1 layer count')
+        return perPlane,1
+    end
+    assert(integer(h.layer_count,1,MAX_LAYERS) and type(h.layers)=='table',
+        'store: invalid RBD2 layers')
+    array(h.layers)
+    assert(#h.layers==h.layer_count,'store: RBD2 layer metadata count mismatch')
+    assert(integer(h.active_layer,1,h.layer_count),'store: invalid active layer')
+    local ids={}
+    for _,layer in ipairs(h.layers) do
+        object(layer)
+        validId(layer.id,'l');textName(layer.name)
+        assert(not ids[layer.id],'store: duplicate layer id')
+        ids[layer.id]=true
+        assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+        assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+            layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+    end
+    return perPlane,h.layer_count
+end
+function Store:_readProject(id,withPixels)
+    local path=self:_path(id)
+    local prefix=self.fs:readRange(path,0,12,MAX_PROJECT_BYTES)
+    local magic=prefix:sub(1,8)
+    assert(magic==MAGIC or magic==MAGIC2,'store: unsupported document magic')
+    local layered=magic==MAGIC2
+    local length=from32(prefix:sub(9,12))
+    assert(length>=2 and length<=HEADER_LIMIT,'store: invalid header length')
+    local header=JSON.decode(self.fs:readRange(path,12,length,MAX_PROJECT_BYTES),{maxBytes=HEADER_LIMIT})
+    local perPlane,count=validateHeader(header,id,layered)
+    assert(self.fs:size(path)==12+length+perPlane*count,
+        'store: incorrect pixel payload size')
+    local doc={id=header.id,name=header.name,width=header.width,height=header.height,
+        folder=header.folder,revision=header.revision,saved_at=header.saved_at,
+        layer_count=count,format=layered and 2 or 1}
+    if layered then
+        doc.layers=JSON.array()
+        doc.active_layer=header.active_layer
+        for i,layer in ipairs(header.layers) do
+            local item={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            if withPixels then
+                item.pixels=self.fs:readRange(path,12+length+(i-1)*perPlane,perPlane,
+                    MAX_PROJECT_BYTES)
+            end
+            doc.layers[i]=item
+        end
+    elseif withPixels then
+        doc.pixels=self.fs:readRange(path,12+length,perPlane,MAX_PROJECT_BYTES)
+    end
+    return doc
+end
+function Store:createProject(name,width,height,folder,rgbaBytes)
+    name=textName(name); local expected=dimensions(width,height); folder=self:_folder(folder)
+    assert(type(rgbaBytes)=='string' and #rgbaBytes==expected,'store: RGBA byte count mismatch')
+    local doc={id=self:_id('p'),name=name,width=width,height=height,folder=folder,pixels=rgbaBytes,revision=0}
+    self:saveProject(doc); return doc
+end
+-- RBD1 stays byte-for-byte compatible with old one-plane projects.
+-- Layered edits are stored in RBD2, an explicitly independent format.
+function Store:saveProject(doc)
+    object(doc); local path=self:_path(doc.id); textName(doc.name)
+    local perPlane=dimensions(doc.width,doc.height)
+    assert(type(doc.folder)=='string','store: invalid document folder')
+    self:_folder(doc.folder)
+    assert(integer(doc.revision,0,2147483646),'store: invalid revision')
+    local layered=doc.layers~=nil
+    local payload,headerLayers,count
+    if layered then
+        array(doc.layers)
+        count=#doc.layers
+        assert(count>=1 and count<=MAX_LAYERS,'store: layer count exceeds desktop limit')
+        assert(integer(doc.active_layer,1,count),'store: invalid active layer')
+        local seen={}
+        payload={}
+        headerLayers=JSON.array()
+        for i,layer in ipairs(doc.layers) do
+            object(layer);validId(layer.id,'l');textName(layer.name)
+            assert(not seen[layer.id],'store: duplicate layer ids')
+            seen[layer.id]=true
+            assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+            assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+                layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+            assert(type(layer.pixels)=='string' and #layer.pixels==perPlane,
+                'store: invalid RGBA layer payload')
+            headerLayers[i]={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            payload[i]=layer.pixels
+        end
+    else
+        count=1
+        assert(type(doc.pixels)=='string' and #doc.pixels==perPlane,
+            'store: RGBA byte count mismatch')
+        payload={doc.pixels}
+    end
+    if self.fs:exists(path) then
+        local old=self:_readProject(doc.id,false)
+        assert(old.revision==doc.revision,'store: stale project revision; reopen before saving')
+    else
+        assert(doc.revision==0,'store: missing project with nonzero revision')
+    end
+    local header={version=layered and 2 or 1,pixel_format='RGBA8',layer_count=count,
+        id=doc.id,name=doc.name,width=doc.width,height=doc.height,folder=doc.folder,
+        revision=doc.revision+1,saved_at=os.time()}
+    if layered then
+        header.layers=headerLayers
+        header.active_layer=doc.active_layer
+    end
+    local encoded=JSON.encode(header,{maxBytes=HEADER_LIMIT})
+    self.fs:writeAtomic(path,(layered and MAGIC2 or MAGIC)..le32(#encoded)..
+        encoded..table.concat(payload))
+    doc.revision=header.revision
+    doc.saved_at=header.saved_at
+    doc.format=layered and 2 or 1
+    doc.layer_count=count
+    return doc
+end
+-- IDs are generated by Store's existing process/timestamp/serial mechanism.
+function Store:newLayerId() return self:_id('l') end
+function Store:_deletedIds()
+    local ids={}
+    for _,entry in ipairs(self.deleted.items) do ids[entry.id]=true end
+    return ids
+end
+function Store:openProject(id)
+    assert(not self:_deletedIds()[id],
+        'store: project is recently deleted; recover it first')
+    return self:_readProject(id,true)
+end
+-- Atomic batch tombstone index: the original RBD bytes and layers remain.
+-- No automatic 30-day purge yet, avoiding irreversible data loss.
+function Store:deleteProjects(ids,sourceFolder)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: deletion requires 1..512 project IDs')
+    sourceFolder=self:_folder(sourceFolder)
+    local selected,existing={},self:_deletedIds()
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(not existing[id] and not selected[id],
+            'store: project already deleted or duplicate')
+        selected[id]=true
+        local doc=self:_readProject(id,false)
+        assert(doc.folder==sourceFolder,
+            'store: selected project not in current folder')
+    end
+    local nextIndex=clone(self.deleted)
+    for _,id in ipairs(ids) do
+        nextIndex.items[#nextIndex.items+1]={
+            id=id,deleted_at=os.time()}
+    end
+    self.fs:writeAtomic('deleted.json',JSON.encode(nextIndex))
+    self.deleted=nextIndex
+    return {deleted=#ids,ids=ids}
+end
+function Store:deletedProjects(now)
+    now=now or os.time()
+    local result={}
+    for _,entry in ipairs(self.deleted.items) do
+        local doc=self:_readProject(entry.id,false)
+        local remaining=Retention.status(entry.deleted_at,now)
+        doc.deleted=true
+        doc.deleted_at=entry.deleted_at
+        doc.retention_deadline=remaining.deadline
+        doc.retention_days=remaining.remainingDays
+        doc.retention_expired=remaining.expired
+        result[#result+1]=doc
+    end
+    table.sort(result,function(a,b)
+        if a.deleted_at==b.deleted_at then return a.id<b.id end
+        return a.deleted_at>b.deleted_at
+    end)
+    return result
+end
+function Store:restoreProjects(ids)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: recovery requires 1..512 project IDs')
+    local deleted=self:_deletedIds()
+    local recovered={}
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(deleted[id] and not recovered[id],
+            'store: project is not deleted or duplicate')
+        recovered[id]=true
+        local doc=self:_readProject(id,false)
+        self:_folder(doc.folder)
+    end
+    local nextIndex=clone(self.deleted)
+    local retained=JSON.array()
+    for _,entry in ipairs(nextIndex.items) do
+        if not recovered[entry.id] then retained[#retained+1]=entry end
+    end
+    nextIndex.items=retained
+    self.fs:writeAtomic('deleted.json',JSON.encode(nextIndex))
+    self.deleted=nextIndex
+    return {restored=#ids,ids=ids}
+end
+function Store:listProjects(folder)
+    folder=self:_folder(folder); local rows,errors={},{}
+    local deleted=self:_deletedIds()
+    for _,entry in ipairs(self.fs:list('projects')) do
+        if not entry.isDirectory and entry.name:match('%.rbd$') then
+            local id=entry.name:sub(1,-5)
+            local ok,doc=pcall(self._readProject,self,id,false)
+            if ok then if doc.folder==folder and not deleted[id] then
+                rows[#rows+1]=doc end
+            else errors[#errors+1]={file=entry.name,error=tostring(doc)} end
+        end
+    end
+    table.sort(rows,function(a,b) if a.saved_at==b.saved_at then return a.id<b.id else return a.saved_at>b.saved_at end end)
+    self.lastErrors=errors; return rows,errors
+end
+-- Folder and artwork thumbnails share a single persistent display order.
+-- Order writes never modify RBD layer bytes, timestamps or revisions.
+function Store:galleryItems(folder)
+    folder=self:_folder(folder)
+    local base={}
+    for _,entry in ipairs(self:folders(folder)) do
+        base[#base+1]={key='f:'..entry.id,type='folder',value=entry}
+    end
+    for _,entry in ipairs(self:listProjects(folder)) do
+        base[#base+1]={key='p:'..entry.id,type='project',value=entry}
+    end
+    local known={}
+    for _,entry in ipairs(base) do known[entry.key]=entry end
+    local saved=self.galleryOrder.folders[
+        folder=='' and 'root' or folder] or {}
+    local result={}
+    for _,key in ipairs(saved) do
+        if known[key] then
+            result[#result+1]=known[key]
+            known[key]=nil
+        end
+    end
+    for _,entry in ipairs(base) do
+        if known[entry.key] then result[#result+1]=entry end
+    end
+    return result
+end
+function Store:reorderGallery(folder,sourceKey,targetKey)
+    folder=self:_folder(folder)
+    assert(type(sourceKey)=='string' and
+        type(targetKey)=='string','store: missing gallery keys')
+    local items=self:galleryItems(folder)
+    local from,to
+    for i,entry in ipairs(items) do
+        if entry.key==sourceKey then from=i end
+        if entry.key==targetKey then to=i end
+    end
+    assert(from and to,'store: gallery items not in current folder')
+    if from==to then return false end
+    local moving=table.remove(items,from)
+    table.insert(items,to,moving)
+    local draft=clone(self.galleryOrder)
+    local order=JSON.array()
+    for i,entry in ipairs(items) do order[i]=entry.key end
+    draft.folders[folder=='' and 'root' or folder]=order
+    self.fs:writeAtomic('gallery-order.json',JSON.encode(draft))
+    self.galleryOrder=draft
+    return true
+end
+-- Move artwork between local gallery folders without modifying raster bytes.
+-- Every project is validated before the first write. Individual documents
+-- use FS.writeAtomic, but a batch of files cannot be committed atomically;
+-- on an I/O failure the result reports exactly which files moved.
+function Store:moveProjects(ids,targetFolder,sourceFolder)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: project move requires 1..512 identifiers')
+    targetFolder=self:_folder(targetFolder)
+    sourceFolder=self:_folder(sourceFolder)
+    assert(targetFolder~=sourceFolder,'store: destination is current folder')
+    local seen,prepared={},{}
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(not seen[id],'store: duplicate project in move')
+        seen[id]=true
+        local doc=self:openProject(id)
+        assert(doc.folder==sourceFolder,
+            'store: selected project is no longer in source folder')
+        prepared[#prepared+1]=doc
+    end
+    local result={moved=0,total=#prepared,ids={}}
+    for _,doc in ipairs(prepared) do
+        doc.folder=targetFolder
+        local ok,err=pcall(self.saveProject,self,doc)
+        if not ok then
+            result.failedId=doc.id
+            result.error=tostring(err)
+            return result
+        end
+        result.moved=result.moved+1
+        result.ids[#result.ids+1]=doc.id
+    end
+    return result
+end
+function Store:setPreferences(values)
+    object(values)
+    self.fs:writeAtomic('preferences.json',JSON.encode({version=1,values=values})); return true
+end
+function Store:getPreferences()
+    local data=JSON.decode(self.fs:read('preferences.json',1048576)); object(data)
+    assert(data.version==1,'store: unsupported preference version'); return object(data.values)
+end
+local function validateBrushes(items)
+    array(items); local ids={}
+    for _,b in ipairs(items) do
+        object(b); assert(type(b.id)=='string' and #b.id>=1 and #b.id<=80 and b.id:match('^[A-Za-z0-9_%-]+$'),'store: invalid brush identifier')
+        assert(not ids[b.id],'store: duplicate brush identifier'); ids[b.id]=true; textName(b.name)
+        if b.thicknessToPressure~=nil then assert(type(b.thicknessToPressure)=='number' and JSON.finite(b.thicknessToPressure) and math.abs(b.thicknessToPressure)<=2,'store: brush thicknessToPressure outside observed setter range') end
+    end
+    return items
+end
+function Store:saveBrushes(items)
+    validateBrushes(items)
+    self.fs:writeAtomic('brushes.json',JSON.encode({version=1,items=JSON.array(items)})); return true
+end
+function Store:getBrushes()
+    local data=JSON.decode(self.fs:read('brushes.json',1048576)); object(data)
+    assert(data.version==1,'store: unsupported brush library version'); return validateBrushes(data.items)
+end
+Store.MAX_AXIS=MAX_AXIS
+Store.MAX_LAYERS=MAX_LAYERS
+Store.MAGIC=MAGIC
+Store.MAGIC2=MAGIC2
+return Store
+)),
+                'store: invalid order folder')
+            array(items)
+            local seen={}
+            for _,value in ipairs(items) do
+                assert(type(value)=='string' and
+                    (value:match('^p:p_[A-Za-z0-9_%-]+
+        object(folder); validId(folder.id,'f'); textName(folder.name)
+        assert(not map[folder.id],'store: duplicate folder id'); map[folder.id]=folder
+        assert(type(folder.parent)=='string','store: invalid folder parent')
+        if folder.parent~='' then validId(folder.parent,'f') end
+    end
+    for _,folder in ipairs(self.catalog.folders) do
+        local seen={}; local cur=folder
+        while cur.parent~='' do
+            assert(not seen[cur.id],'store: folder cycle'); seen[cur.id]=true
+            cur=assert(map[cur.parent],'store: missing folder parent')
+        end
+    end
+    if not self.fs:exists('catalog.json') then self.fs:writeAtomic('catalog.json',JSON.encode(self.catalog)) end
+    if not self.fs:exists('preferences.json') then self.fs:writeAtomic('preferences.json',JSON.encode({version=1,values={}})) end
+    if not self.fs:exists('brushes.json') then self.fs:writeAtomic('brushes.json',JSON.encode({version=1,items=JSON.array()})) end
+    -- Non-destructive deletion journal, introduced for 14.1 gallery recovery.
+    if self.fs:exists('deleted.json') then
+        self.deleted=JSON.decode(self.fs:read('deleted.json',1048576))
+        object(self.deleted)
+        assert(self.deleted.version==1,'store: unsupported deleted index')
+        array(self.deleted.items)
+    else
+        self.deleted={version=1,items=JSON.array()}
+        self.fs:writeAtomic('deleted.json',JSON.encode(self.deleted))
+    end
+    local deletedIds={}
+    for _,entry in ipairs(self.deleted.items) do
+        object(entry);validId(entry.id,'p')
+        assert(integer(entry.deleted_at,0,9007199254740991),
+            'store: invalid deleted timestamp')
+        assert(not deletedIds[entry.id],'store: duplicate deletion entry')
+        deletedIds[entry.id]=true
+    end
+    return self
+end
+function Store:_folder(id)
+    id=id or ''; if id=='' then return '' end; validId(id,'f')
+    for _,f in ipairs(self.catalog.folders) do if f.id==id then return id end end
+    error('store: folder does not exist',2)
+end
+function Store:_id(prefix)
+    for _=1,100 do
+        serial=serial+1
+        local id=string.format('%s_%08x_%08x_%08x',prefix,os.time(),FS.processId(),serial)
+        local found=false
+        if prefix=='p' then found=self.fs:exists('projects/'..id..'.rbd')
+        else for _,f in ipairs(self.catalog.folders) do if f.id==id then found=true; break end end end
+        if not found then return id end
+    end
+    error('store: failed to allocate identifier')
+end
+function Store:folders(parent)
+    parent=self:_folder(parent); local rows={}
+    for _,f in ipairs(self.catalog.folders) do if f.parent==parent then rows[#rows+1]={id=f.id,name=f.name,parent=f.parent} end end
+    table.sort(rows,function(a,b) if a.name==b.name then return a.id<b.id else return a.name<b.name end end)
+    return rows
+end
+function Store:createFolder(name,parent)
+    name=textName(name); parent=self:_folder(parent)
+    for _,f in ipairs(self.catalog.folders) do assert(f.parent~=parent or f.name~=name,'store: folder name already exists') end
+    local nextCatalog=clone(self.catalog); local id=self:_id('f')
+    nextCatalog.folders[#nextCatalog.folders+1]={id=id,name=name,parent=parent}
+    self.fs:writeAtomic('catalog.json',JSON.encode(nextCatalog)); self.catalog=nextCatalog
+    return id
+end
+function Store:_path(id) return 'projects/'..validId(id,'p')..'.rbd' end
+local function validateHeader(h,id,layered)
+    object(h)
+    assert(h.version==(layered and 2 or 1) and h.pixel_format=='RGBA8',
+        'store: unsupported document schema')
+    assert(h.id==id,'store: document identifier mismatch')
+    validId(h.id,'p'); textName(h.name)
+    local perPlane=dimensions(h.width,h.height)
+    assert(type(h.folder)=='string','store: invalid document folder')
+    if h.folder~='' then validId(h.folder,'f') end
+    assert(integer(h.revision,1,2147483647),'store: invalid revision')
+    assert(integer(h.saved_at,0,9007199254740991),'store: invalid saved timestamp')
+    if not layered then
+        assert(h.layer_count==1,'store: invalid RBD1 layer count')
+        return perPlane,1
+    end
+    assert(integer(h.layer_count,1,MAX_LAYERS) and type(h.layers)=='table',
+        'store: invalid RBD2 layers')
+    array(h.layers)
+    assert(#h.layers==h.layer_count,'store: RBD2 layer metadata count mismatch')
+    assert(integer(h.active_layer,1,h.layer_count),'store: invalid active layer')
+    local ids={}
+    for _,layer in ipairs(h.layers) do
+        object(layer)
+        validId(layer.id,'l');textName(layer.name)
+        assert(not ids[layer.id],'store: duplicate layer id')
+        ids[layer.id]=true
+        assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+        assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+            layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+    end
+    return perPlane,h.layer_count
+end
+function Store:_readProject(id,withPixels)
+    local path=self:_path(id)
+    local prefix=self.fs:readRange(path,0,12,MAX_PROJECT_BYTES)
+    local magic=prefix:sub(1,8)
+    assert(magic==MAGIC or magic==MAGIC2,'store: unsupported document magic')
+    local layered=magic==MAGIC2
+    local length=from32(prefix:sub(9,12))
+    assert(length>=2 and length<=HEADER_LIMIT,'store: invalid header length')
+    local header=JSON.decode(self.fs:readRange(path,12,length,MAX_PROJECT_BYTES),{maxBytes=HEADER_LIMIT})
+    local perPlane,count=validateHeader(header,id,layered)
+    assert(self.fs:size(path)==12+length+perPlane*count,
+        'store: incorrect pixel payload size')
+    local doc={id=header.id,name=header.name,width=header.width,height=header.height,
+        folder=header.folder,revision=header.revision,saved_at=header.saved_at,
+        layer_count=count,format=layered and 2 or 1}
+    if layered then
+        doc.layers=JSON.array()
+        doc.active_layer=header.active_layer
+        for i,layer in ipairs(header.layers) do
+            local item={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            if withPixels then
+                item.pixels=self.fs:readRange(path,12+length+(i-1)*perPlane,perPlane,
+                    MAX_PROJECT_BYTES)
+            end
+            doc.layers[i]=item
+        end
+    elseif withPixels then
+        doc.pixels=self.fs:readRange(path,12+length,perPlane,MAX_PROJECT_BYTES)
+    end
+    return doc
+end
+function Store:createProject(name,width,height,folder,rgbaBytes)
+    name=textName(name); local expected=dimensions(width,height); folder=self:_folder(folder)
+    assert(type(rgbaBytes)=='string' and #rgbaBytes==expected,'store: RGBA byte count mismatch')
+    local doc={id=self:_id('p'),name=name,width=width,height=height,folder=folder,pixels=rgbaBytes,revision=0}
+    self:saveProject(doc); return doc
+end
+-- RBD1 stays byte-for-byte compatible with old one-plane projects.
+-- Layered edits are stored in RBD2, an explicitly independent format.
+function Store:saveProject(doc)
+    object(doc); local path=self:_path(doc.id); textName(doc.name)
+    local perPlane=dimensions(doc.width,doc.height)
+    assert(type(doc.folder)=='string','store: invalid document folder')
+    self:_folder(doc.folder)
+    assert(integer(doc.revision,0,2147483646),'store: invalid revision')
+    local layered=doc.layers~=nil
+    local payload,headerLayers,count
+    if layered then
+        array(doc.layers)
+        count=#doc.layers
+        assert(count>=1 and count<=MAX_LAYERS,'store: layer count exceeds desktop limit')
+        assert(integer(doc.active_layer,1,count),'store: invalid active layer')
+        local seen={}
+        payload={}
+        headerLayers=JSON.array()
+        for i,layer in ipairs(doc.layers) do
+            object(layer);validId(layer.id,'l');textName(layer.name)
+            assert(not seen[layer.id],'store: duplicate layer ids')
+            seen[layer.id]=true
+            assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+            assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+                layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+            assert(type(layer.pixels)=='string' and #layer.pixels==perPlane,
+                'store: invalid RGBA layer payload')
+            headerLayers[i]={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            payload[i]=layer.pixels
+        end
+    else
+        count=1
+        assert(type(doc.pixels)=='string' and #doc.pixels==perPlane,
+            'store: RGBA byte count mismatch')
+        payload={doc.pixels}
+    end
+    if self.fs:exists(path) then
+        local old=self:_readProject(doc.id,false)
+        assert(old.revision==doc.revision,'store: stale project revision; reopen before saving')
+    else
+        assert(doc.revision==0,'store: missing project with nonzero revision')
+    end
+    local header={version=layered and 2 or 1,pixel_format='RGBA8',layer_count=count,
+        id=doc.id,name=doc.name,width=doc.width,height=doc.height,folder=doc.folder,
+        revision=doc.revision+1,saved_at=os.time()}
+    if layered then
+        header.layers=headerLayers
+        header.active_layer=doc.active_layer
+    end
+    local encoded=JSON.encode(header,{maxBytes=HEADER_LIMIT})
+    self.fs:writeAtomic(path,(layered and MAGIC2 or MAGIC)..le32(#encoded)..
+        encoded..table.concat(payload))
+    doc.revision=header.revision
+    doc.saved_at=header.saved_at
+    doc.format=layered and 2 or 1
+    doc.layer_count=count
+    return doc
+end
+-- IDs are generated by Store's existing process/timestamp/serial mechanism.
+function Store:newLayerId() return self:_id('l') end
+function Store:_deletedIds()
+    local ids={}
+    for _,entry in ipairs(self.deleted.items) do ids[entry.id]=true end
+    return ids
+end
+function Store:openProject(id)
+    assert(not self:_deletedIds()[id],
+        'store: project is recently deleted; recover it first')
+    return self:_readProject(id,true)
+end
+-- Atomic batch tombstone index: the original RBD bytes and layers remain.
+-- No automatic 30-day purge yet, avoiding irreversible data loss.
+function Store:deleteProjects(ids,sourceFolder)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: deletion requires 1..512 project IDs')
+    sourceFolder=self:_folder(sourceFolder)
+    local selected,existing={},self:_deletedIds()
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(not existing[id] and not selected[id],
+            'store: project already deleted or duplicate')
+        selected[id]=true
+        local doc=self:_readProject(id,false)
+        assert(doc.folder==sourceFolder,
+            'store: selected project not in current folder')
+    end
+    local nextIndex=clone(self.deleted)
+    for _,id in ipairs(ids) do
+        nextIndex.items[#nextIndex.items+1]={
+            id=id,deleted_at=os.time()}
+    end
+    self.fs:writeAtomic('deleted.json',JSON.encode(nextIndex))
+    self.deleted=nextIndex
+    return {deleted=#ids,ids=ids}
+end
+function Store:deletedProjects(now)
+    now=now or os.time()
+    local result={}
+    for _,entry in ipairs(self.deleted.items) do
+        local doc=self:_readProject(entry.id,false)
+        local remaining=Retention.status(entry.deleted_at,now)
+        doc.deleted=true
+        doc.deleted_at=entry.deleted_at
+        doc.retention_deadline=remaining.deadline
+        doc.retention_days=remaining.remainingDays
+        doc.retention_expired=remaining.expired
+        result[#result+1]=doc
+    end
+    table.sort(result,function(a,b)
+        if a.deleted_at==b.deleted_at then return a.id<b.id end
+        return a.deleted_at>b.deleted_at
+    end)
+    return result
+end
+function Store:restoreProjects(ids)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: recovery requires 1..512 project IDs')
+    local deleted=self:_deletedIds()
+    local recovered={}
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(deleted[id] and not recovered[id],
+            'store: project is not deleted or duplicate')
+        recovered[id]=true
+        local doc=self:_readProject(id,false)
+        self:_folder(doc.folder)
+    end
+    local nextIndex=clone(self.deleted)
+    local retained=JSON.array()
+    for _,entry in ipairs(nextIndex.items) do
+        if not recovered[entry.id] then retained[#retained+1]=entry end
+    end
+    nextIndex.items=retained
+    self.fs:writeAtomic('deleted.json',JSON.encode(nextIndex))
+    self.deleted=nextIndex
+    return {restored=#ids,ids=ids}
+end
+function Store:listProjects(folder)
+    folder=self:_folder(folder); local rows,errors={},{}
+    local deleted=self:_deletedIds()
+    for _,entry in ipairs(self.fs:list('projects')) do
+        if not entry.isDirectory and entry.name:match('%.rbd$') then
+            local id=entry.name:sub(1,-5)
+            local ok,doc=pcall(self._readProject,self,id,false)
+            if ok then if doc.folder==folder and not deleted[id] then
+                rows[#rows+1]=doc end
+            else errors[#errors+1]={file=entry.name,error=tostring(doc)} end
+        end
+    end
+    table.sort(rows,function(a,b) if a.saved_at==b.saved_at then return a.id<b.id else return a.saved_at>b.saved_at end end)
+    self.lastErrors=errors; return rows,errors
+end
+-- Folder and artwork thumbnails share a single persistent display order.
+-- Order writes never modify RBD layer bytes, timestamps or revisions.
+function Store:galleryItems(folder)
+    folder=self:_folder(folder)
+    local base={}
+    for _,entry in ipairs(self:folders(folder)) do
+        base[#base+1]={key='f:'..entry.id,type='folder',value=entry}
+    end
+    for _,entry in ipairs(self:listProjects(folder)) do
+        base[#base+1]={key='p:'..entry.id,type='project',value=entry}
+    end
+    local known={}
+    for _,entry in ipairs(base) do known[entry.key]=entry end
+    local saved=self.galleryOrder.folders[
+        folder=='' and 'root' or folder] or {}
+    local result={}
+    for _,key in ipairs(saved) do
+        if known[key] then
+            result[#result+1]=known[key]
+            known[key]=nil
+        end
+    end
+    for _,entry in ipairs(base) do
+        if known[entry.key] then result[#result+1]=entry end
+    end
+    return result
+end
+function Store:reorderGallery(folder,sourceKey,targetKey)
+    folder=self:_folder(folder)
+    assert(type(sourceKey)=='string' and
+        type(targetKey)=='string','store: missing gallery keys')
+    local items=self:galleryItems(folder)
+    local from,to
+    for i,entry in ipairs(items) do
+        if entry.key==sourceKey then from=i end
+        if entry.key==targetKey then to=i end
+    end
+    assert(from and to,'store: gallery items not in current folder')
+    if from==to then return false end
+    local moving=table.remove(items,from)
+    table.insert(items,to,moving)
+    local draft=clone(self.galleryOrder)
+    local order=JSON.array()
+    for i,entry in ipairs(items) do order[i]=entry.key end
+    draft.folders[folder=='' and 'root' or folder]=order
+    self.fs:writeAtomic('gallery-order.json',JSON.encode(draft))
+    self.galleryOrder=draft
+    return true
+end
+-- Move artwork between local gallery folders without modifying raster bytes.
+-- Every project is validated before the first write. Individual documents
+-- use FS.writeAtomic, but a batch of files cannot be committed atomically;
+-- on an I/O failure the result reports exactly which files moved.
+function Store:moveProjects(ids,targetFolder,sourceFolder)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: project move requires 1..512 identifiers')
+    targetFolder=self:_folder(targetFolder)
+    sourceFolder=self:_folder(sourceFolder)
+    assert(targetFolder~=sourceFolder,'store: destination is current folder')
+    local seen,prepared={},{}
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(not seen[id],'store: duplicate project in move')
+        seen[id]=true
+        local doc=self:openProject(id)
+        assert(doc.folder==sourceFolder,
+            'store: selected project is no longer in source folder')
+        prepared[#prepared+1]=doc
+    end
+    local result={moved=0,total=#prepared,ids={}}
+    for _,doc in ipairs(prepared) do
+        doc.folder=targetFolder
+        local ok,err=pcall(self.saveProject,self,doc)
+        if not ok then
+            result.failedId=doc.id
+            result.error=tostring(err)
+            return result
+        end
+        result.moved=result.moved+1
+        result.ids[#result.ids+1]=doc.id
+    end
+    return result
+end
+function Store:setPreferences(values)
+    object(values)
+    self.fs:writeAtomic('preferences.json',JSON.encode({version=1,values=values})); return true
+end
+function Store:getPreferences()
+    local data=JSON.decode(self.fs:read('preferences.json',1048576)); object(data)
+    assert(data.version==1,'store: unsupported preference version'); return object(data.values)
+end
+local function validateBrushes(items)
+    array(items); local ids={}
+    for _,b in ipairs(items) do
+        object(b); assert(type(b.id)=='string' and #b.id>=1 and #b.id<=80 and b.id:match('^[A-Za-z0-9_%-]+$'),'store: invalid brush identifier')
+        assert(not ids[b.id],'store: duplicate brush identifier'); ids[b.id]=true; textName(b.name)
+        if b.thicknessToPressure~=nil then assert(type(b.thicknessToPressure)=='number' and JSON.finite(b.thicknessToPressure) and math.abs(b.thicknessToPressure)<=2,'store: brush thicknessToPressure outside observed setter range') end
+    end
+    return items
+end
+function Store:saveBrushes(items)
+    validateBrushes(items)
+    self.fs:writeAtomic('brushes.json',JSON.encode({version=1,items=JSON.array(items)})); return true
+end
+function Store:getBrushes()
+    local data=JSON.decode(self.fs:read('brushes.json',1048576)); object(data)
+    assert(data.version==1,'store: unsupported brush library version'); return validateBrushes(data.items)
+end
+Store.MAX_AXIS=MAX_AXIS
+Store.MAX_LAYERS=MAX_LAYERS
+Store.MAGIC=MAGIC
+Store.MAGIC2=MAGIC2
+return Store
+) or
+                    value:match('^f:f_[A-Za-z0-9_%-]+
+        object(folder); validId(folder.id,'f'); textName(folder.name)
+        assert(not map[folder.id],'store: duplicate folder id'); map[folder.id]=folder
+        assert(type(folder.parent)=='string','store: invalid folder parent')
+        if folder.parent~='' then validId(folder.parent,'f') end
+    end
+    for _,folder in ipairs(self.catalog.folders) do
+        local seen={}; local cur=folder
+        while cur.parent~='' do
+            assert(not seen[cur.id],'store: folder cycle'); seen[cur.id]=true
+            cur=assert(map[cur.parent],'store: missing folder parent')
+        end
+    end
+    if not self.fs:exists('catalog.json') then self.fs:writeAtomic('catalog.json',JSON.encode(self.catalog)) end
+    if not self.fs:exists('preferences.json') then self.fs:writeAtomic('preferences.json',JSON.encode({version=1,values={}})) end
+    if not self.fs:exists('brushes.json') then self.fs:writeAtomic('brushes.json',JSON.encode({version=1,items=JSON.array()})) end
+    -- Non-destructive deletion journal, introduced for 14.1 gallery recovery.
+    if self.fs:exists('deleted.json') then
+        self.deleted=JSON.decode(self.fs:read('deleted.json',1048576))
+        object(self.deleted)
+        assert(self.deleted.version==1,'store: unsupported deleted index')
+        array(self.deleted.items)
+    else
+        self.deleted={version=1,items=JSON.array()}
+        self.fs:writeAtomic('deleted.json',JSON.encode(self.deleted))
+    end
+    local deletedIds={}
+    for _,entry in ipairs(self.deleted.items) do
+        object(entry);validId(entry.id,'p')
+        assert(integer(entry.deleted_at,0,9007199254740991),
+            'store: invalid deleted timestamp')
+        assert(not deletedIds[entry.id],'store: duplicate deletion entry')
+        deletedIds[entry.id]=true
+    end
+    return self
+end
+function Store:_folder(id)
+    id=id or ''; if id=='' then return '' end; validId(id,'f')
+    for _,f in ipairs(self.catalog.folders) do if f.id==id then return id end end
+    error('store: folder does not exist',2)
+end
+function Store:_id(prefix)
+    for _=1,100 do
+        serial=serial+1
+        local id=string.format('%s_%08x_%08x_%08x',prefix,os.time(),FS.processId(),serial)
+        local found=false
+        if prefix=='p' then found=self.fs:exists('projects/'..id..'.rbd')
+        else for _,f in ipairs(self.catalog.folders) do if f.id==id then found=true; break end end end
+        if not found then return id end
+    end
+    error('store: failed to allocate identifier')
+end
+function Store:folders(parent)
+    parent=self:_folder(parent); local rows={}
+    for _,f in ipairs(self.catalog.folders) do if f.parent==parent then rows[#rows+1]={id=f.id,name=f.name,parent=f.parent} end end
+    table.sort(rows,function(a,b) if a.name==b.name then return a.id<b.id else return a.name<b.name end end)
+    return rows
+end
+function Store:createFolder(name,parent)
+    name=textName(name); parent=self:_folder(parent)
+    for _,f in ipairs(self.catalog.folders) do assert(f.parent~=parent or f.name~=name,'store: folder name already exists') end
+    local nextCatalog=clone(self.catalog); local id=self:_id('f')
+    nextCatalog.folders[#nextCatalog.folders+1]={id=id,name=name,parent=parent}
+    self.fs:writeAtomic('catalog.json',JSON.encode(nextCatalog)); self.catalog=nextCatalog
+    return id
+end
+function Store:_path(id) return 'projects/'..validId(id,'p')..'.rbd' end
+local function validateHeader(h,id,layered)
+    object(h)
+    assert(h.version==(layered and 2 or 1) and h.pixel_format=='RGBA8',
+        'store: unsupported document schema')
+    assert(h.id==id,'store: document identifier mismatch')
+    validId(h.id,'p'); textName(h.name)
+    local perPlane=dimensions(h.width,h.height)
+    assert(type(h.folder)=='string','store: invalid document folder')
+    if h.folder~='' then validId(h.folder,'f') end
+    assert(integer(h.revision,1,2147483647),'store: invalid revision')
+    assert(integer(h.saved_at,0,9007199254740991),'store: invalid saved timestamp')
+    if not layered then
+        assert(h.layer_count==1,'store: invalid RBD1 layer count')
+        return perPlane,1
+    end
+    assert(integer(h.layer_count,1,MAX_LAYERS) and type(h.layers)=='table',
+        'store: invalid RBD2 layers')
+    array(h.layers)
+    assert(#h.layers==h.layer_count,'store: RBD2 layer metadata count mismatch')
+    assert(integer(h.active_layer,1,h.layer_count),'store: invalid active layer')
+    local ids={}
+    for _,layer in ipairs(h.layers) do
+        object(layer)
+        validId(layer.id,'l');textName(layer.name)
+        assert(not ids[layer.id],'store: duplicate layer id')
+        ids[layer.id]=true
+        assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+        assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+            layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+    end
+    return perPlane,h.layer_count
+end
+function Store:_readProject(id,withPixels)
+    local path=self:_path(id)
+    local prefix=self.fs:readRange(path,0,12,MAX_PROJECT_BYTES)
+    local magic=prefix:sub(1,8)
+    assert(magic==MAGIC or magic==MAGIC2,'store: unsupported document magic')
+    local layered=magic==MAGIC2
+    local length=from32(prefix:sub(9,12))
+    assert(length>=2 and length<=HEADER_LIMIT,'store: invalid header length')
+    local header=JSON.decode(self.fs:readRange(path,12,length,MAX_PROJECT_BYTES),{maxBytes=HEADER_LIMIT})
+    local perPlane,count=validateHeader(header,id,layered)
+    assert(self.fs:size(path)==12+length+perPlane*count,
+        'store: incorrect pixel payload size')
+    local doc={id=header.id,name=header.name,width=header.width,height=header.height,
+        folder=header.folder,revision=header.revision,saved_at=header.saved_at,
+        layer_count=count,format=layered and 2 or 1}
+    if layered then
+        doc.layers=JSON.array()
+        doc.active_layer=header.active_layer
+        for i,layer in ipairs(header.layers) do
+            local item={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            if withPixels then
+                item.pixels=self.fs:readRange(path,12+length+(i-1)*perPlane,perPlane,
+                    MAX_PROJECT_BYTES)
+            end
+            doc.layers[i]=item
+        end
+    elseif withPixels then
+        doc.pixels=self.fs:readRange(path,12+length,perPlane,MAX_PROJECT_BYTES)
+    end
+    return doc
+end
+function Store:createProject(name,width,height,folder,rgbaBytes)
+    name=textName(name); local expected=dimensions(width,height); folder=self:_folder(folder)
+    assert(type(rgbaBytes)=='string' and #rgbaBytes==expected,'store: RGBA byte count mismatch')
+    local doc={id=self:_id('p'),name=name,width=width,height=height,folder=folder,pixels=rgbaBytes,revision=0}
+    self:saveProject(doc); return doc
+end
+-- RBD1 stays byte-for-byte compatible with old one-plane projects.
+-- Layered edits are stored in RBD2, an explicitly independent format.
+function Store:saveProject(doc)
+    object(doc); local path=self:_path(doc.id); textName(doc.name)
+    local perPlane=dimensions(doc.width,doc.height)
+    assert(type(doc.folder)=='string','store: invalid document folder')
+    self:_folder(doc.folder)
+    assert(integer(doc.revision,0,2147483646),'store: invalid revision')
+    local layered=doc.layers~=nil
+    local payload,headerLayers,count
+    if layered then
+        array(doc.layers)
+        count=#doc.layers
+        assert(count>=1 and count<=MAX_LAYERS,'store: layer count exceeds desktop limit')
+        assert(integer(doc.active_layer,1,count),'store: invalid active layer')
+        local seen={}
+        payload={}
+        headerLayers=JSON.array()
+        for i,layer in ipairs(doc.layers) do
+            object(layer);validId(layer.id,'l');textName(layer.name)
+            assert(not seen[layer.id],'store: duplicate layer ids')
+            seen[layer.id]=true
+            assert(type(layer.visible)=='boolean','store: invalid layer visibility')
+            assert(type(layer.opacity)=='number' and JSON.finite(layer.opacity) and
+                layer.opacity>=0 and layer.opacity<=1,'store: invalid layer opacity')
+            assert(type(layer.pixels)=='string' and #layer.pixels==perPlane,
+                'store: invalid RGBA layer payload')
+            headerLayers[i]={id=layer.id,name=layer.name,visible=layer.visible,
+                opacity=layer.opacity}
+            payload[i]=layer.pixels
+        end
+    else
+        count=1
+        assert(type(doc.pixels)=='string' and #doc.pixels==perPlane,
+            'store: RGBA byte count mismatch')
+        payload={doc.pixels}
+    end
+    if self.fs:exists(path) then
+        local old=self:_readProject(doc.id,false)
+        assert(old.revision==doc.revision,'store: stale project revision; reopen before saving')
+    else
+        assert(doc.revision==0,'store: missing project with nonzero revision')
+    end
+    local header={version=layered and 2 or 1,pixel_format='RGBA8',layer_count=count,
+        id=doc.id,name=doc.name,width=doc.width,height=doc.height,folder=doc.folder,
+        revision=doc.revision+1,saved_at=os.time()}
+    if layered then
+        header.layers=headerLayers
+        header.active_layer=doc.active_layer
+    end
+    local encoded=JSON.encode(header,{maxBytes=HEADER_LIMIT})
+    self.fs:writeAtomic(path,(layered and MAGIC2 or MAGIC)..le32(#encoded)..
+        encoded..table.concat(payload))
+    doc.revision=header.revision
+    doc.saved_at=header.saved_at
+    doc.format=layered and 2 or 1
+    doc.layer_count=count
+    return doc
+end
+-- IDs are generated by Store's existing process/timestamp/serial mechanism.
+function Store:newLayerId() return self:_id('l') end
+function Store:_deletedIds()
+    local ids={}
+    for _,entry in ipairs(self.deleted.items) do ids[entry.id]=true end
+    return ids
+end
+function Store:openProject(id)
+    assert(not self:_deletedIds()[id],
+        'store: project is recently deleted; recover it first')
+    return self:_readProject(id,true)
+end
+-- Atomic batch tombstone index: the original RBD bytes and layers remain.
+-- No automatic 30-day purge yet, avoiding irreversible data loss.
+function Store:deleteProjects(ids,sourceFolder)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: deletion requires 1..512 project IDs')
+    sourceFolder=self:_folder(sourceFolder)
+    local selected,existing={},self:_deletedIds()
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(not existing[id] and not selected[id],
+            'store: project already deleted or duplicate')
+        selected[id]=true
+        local doc=self:_readProject(id,false)
+        assert(doc.folder==sourceFolder,
+            'store: selected project not in current folder')
+    end
+    local nextIndex=clone(self.deleted)
+    for _,id in ipairs(ids) do
+        nextIndex.items[#nextIndex.items+1]={
+            id=id,deleted_at=os.time()}
+    end
+    self.fs:writeAtomic('deleted.json',JSON.encode(nextIndex))
+    self.deleted=nextIndex
+    return {deleted=#ids,ids=ids}
+end
+function Store:deletedProjects(now)
+    now=now or os.time()
+    local result={}
+    for _,entry in ipairs(self.deleted.items) do
+        local doc=self:_readProject(entry.id,false)
+        local remaining=Retention.status(entry.deleted_at,now)
+        doc.deleted=true
+        doc.deleted_at=entry.deleted_at
+        doc.retention_deadline=remaining.deadline
+        doc.retention_days=remaining.remainingDays
+        doc.retention_expired=remaining.expired
+        result[#result+1]=doc
+    end
+    table.sort(result,function(a,b)
+        if a.deleted_at==b.deleted_at then return a.id<b.id end
+        return a.deleted_at>b.deleted_at
+    end)
+    return result
+end
+function Store:restoreProjects(ids)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: recovery requires 1..512 project IDs')
+    local deleted=self:_deletedIds()
+    local recovered={}
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(deleted[id] and not recovered[id],
+            'store: project is not deleted or duplicate')
+        recovered[id]=true
+        local doc=self:_readProject(id,false)
+        self:_folder(doc.folder)
+    end
+    local nextIndex=clone(self.deleted)
+    local retained=JSON.array()
+    for _,entry in ipairs(nextIndex.items) do
+        if not recovered[entry.id] then retained[#retained+1]=entry end
+    end
+    nextIndex.items=retained
+    self.fs:writeAtomic('deleted.json',JSON.encode(nextIndex))
+    self.deleted=nextIndex
+    return {restored=#ids,ids=ids}
+end
+function Store:listProjects(folder)
+    folder=self:_folder(folder); local rows,errors={},{}
+    local deleted=self:_deletedIds()
+    for _,entry in ipairs(self.fs:list('projects')) do
+        if not entry.isDirectory and entry.name:match('%.rbd$') then
+            local id=entry.name:sub(1,-5)
+            local ok,doc=pcall(self._readProject,self,id,false)
+            if ok then if doc.folder==folder and not deleted[id] then
+                rows[#rows+1]=doc end
+            else errors[#errors+1]={file=entry.name,error=tostring(doc)} end
+        end
+    end
+    table.sort(rows,function(a,b) if a.saved_at==b.saved_at then return a.id<b.id else return a.saved_at>b.saved_at end end)
+    self.lastErrors=errors; return rows,errors
+end
+-- Folder and artwork thumbnails share a single persistent display order.
+-- Order writes never modify RBD layer bytes, timestamps or revisions.
+function Store:galleryItems(folder)
+    folder=self:_folder(folder)
+    local base={}
+    for _,entry in ipairs(self:folders(folder)) do
+        base[#base+1]={key='f:'..entry.id,type='folder',value=entry}
+    end
+    for _,entry in ipairs(self:listProjects(folder)) do
+        base[#base+1]={key='p:'..entry.id,type='project',value=entry}
+    end
+    local known={}
+    for _,entry in ipairs(base) do known[entry.key]=entry end
+    local saved=self.galleryOrder.folders[
+        folder=='' and 'root' or folder] or {}
+    local result={}
+    for _,key in ipairs(saved) do
+        if known[key] then
+            result[#result+1]=known[key]
+            known[key]=nil
+        end
+    end
+    for _,entry in ipairs(base) do
+        if known[entry.key] then result[#result+1]=entry end
+    end
+    return result
+end
+function Store:reorderGallery(folder,sourceKey,targetKey)
+    folder=self:_folder(folder)
+    assert(type(sourceKey)=='string' and
+        type(targetKey)=='string','store: missing gallery keys')
+    local items=self:galleryItems(folder)
+    local from,to
+    for i,entry in ipairs(items) do
+        if entry.key==sourceKey then from=i end
+        if entry.key==targetKey then to=i end
+    end
+    assert(from and to,'store: gallery items not in current folder')
+    if from==to then return false end
+    local moving=table.remove(items,from)
+    table.insert(items,to,moving)
+    local draft=clone(self.galleryOrder)
+    local order=JSON.array()
+    for i,entry in ipairs(items) do order[i]=entry.key end
+    draft.folders[folder=='' and 'root' or folder]=order
+    self.fs:writeAtomic('gallery-order.json',JSON.encode(draft))
+    self.galleryOrder=draft
+    return true
+end
+-- Move artwork between local gallery folders without modifying raster bytes.
+-- Every project is validated before the first write. Individual documents
+-- use FS.writeAtomic, but a batch of files cannot be committed atomically;
+-- on an I/O failure the result reports exactly which files moved.
+function Store:moveProjects(ids,targetFolder,sourceFolder)
+    assert(type(ids)=='table' and #ids>=1 and #ids<=512,
+        'store: project move requires 1..512 identifiers')
+    targetFolder=self:_folder(targetFolder)
+    sourceFolder=self:_folder(sourceFolder)
+    assert(targetFolder~=sourceFolder,'store: destination is current folder')
+    local seen,prepared={},{}
+    for _,id in ipairs(ids) do
+        validId(id,'p')
+        assert(not seen[id],'store: duplicate project in move')
+        seen[id]=true
+        local doc=self:openProject(id)
+        assert(doc.folder==sourceFolder,
+            'store: selected project is no longer in source folder')
+        prepared[#prepared+1]=doc
+    end
+    local result={moved=0,total=#prepared,ids={}}
+    for _,doc in ipairs(prepared) do
+        doc.folder=targetFolder
+        local ok,err=pcall(self.saveProject,self,doc)
+        if not ok then
+            result.failedId=doc.id
+            result.error=tostring(err)
+            return result
+        end
+        result.moved=result.moved+1
+        result.ids[#result.ids+1]=doc.id
+    end
+    return result
+end
+function Store:setPreferences(values)
+    object(values)
+    self.fs:writeAtomic('preferences.json',JSON.encode({version=1,values=values})); return true
+end
+function Store:getPreferences()
+    local data=JSON.decode(self.fs:read('preferences.json',1048576)); object(data)
+    assert(data.version==1,'store: unsupported preference version'); return object(data.values)
+end
+local function validateBrushes(items)
+    array(items); local ids={}
+    for _,b in ipairs(items) do
+        object(b); assert(type(b.id)=='string' and #b.id>=1 and #b.id<=80 and b.id:match('^[A-Za-z0-9_%-]+$'),'store: invalid brush identifier')
+        assert(not ids[b.id],'store: duplicate brush identifier'); ids[b.id]=true; textName(b.name)
+        if b.thicknessToPressure~=nil then assert(type(b.thicknessToPressure)=='number' and JSON.finite(b.thicknessToPressure) and math.abs(b.thicknessToPressure)<=2,'store: brush thicknessToPressure outside observed setter range') end
+    end
+    return items
+end
+function Store:saveBrushes(items)
+    validateBrushes(items)
+    self.fs:writeAtomic('brushes.json',JSON.encode({version=1,items=JSON.array(items)})); return true
+end
+function Store:getBrushes()
+    local data=JSON.decode(self.fs:read('brushes.json',1048576)); object(data)
+    assert(data.version==1,'store: unsupported brush library version'); return validateBrushes(data.items)
+end
+Store.MAX_AXIS=MAX_AXIS
+Store.MAX_LAYERS=MAX_LAYERS
+Store.MAGIC=MAGIC
+Store.MAGIC2=MAGIC2
+return Store
+)) and
+                    not seen[value],
+                    'store: duplicate or invalid order key')
+                seen[value]=true
+            end
+        end
+    else self.galleryOrder={version=1,folders={}} end
     local map={}
     for _,folder in ipairs(self.catalog.folders) do
         object(folder); validId(folder.id,'f'); textName(folder.name)
