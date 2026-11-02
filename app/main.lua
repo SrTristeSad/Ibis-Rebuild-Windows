@@ -55,7 +55,7 @@ local EffectUI=require('ibis_effect_tools_ui')
 local VectorFrameUI=require('ibis_vector_frame_ui')
 local PaletteUI=require('ibis_palette_ui')
 local GalleryUI=require('ibis_gallery_ui')
-local CanvasReference=require('ibis_canvas_reference')
+IbisPanels.canvasReference=require('ibis_canvas_reference')
 local GalleryShell=require('ibis_gallery_shell')
 local SettingsUI=require('ibis_settings_ui')
 IbisPanels.stabilizer=require('ibis_stabilizer_ui')
@@ -3284,19 +3284,19 @@ local function advanceShowcase()
             pixels=Native.bytes(A.layerSession.composite),
             undo=A.layerSession:historyStats().undo}
         local w,h=love.graphics.getDimensions()
-        local rect=CanvasReference.layout(w,h)
+        local rect=IbisPanels.canvasReference.layout(w,h)
         -- Clique e arraste no W/H; mesmos controles funcionais
         -- do formulario anterior, mas na geometria da lista.
-        local plus=CanvasReference.stepper(rect,2,1)
+        local plus=IbisPanels.canvasReference.stepper(rect,2,1)
         love.draw()
         love.mousepressed(plus.x+15,plus.y+14,1,false)
         assert(A.modal.values[2]=='528','W + nao atualizou largura')
-        local minus=CanvasReference.stepper(rect,2,-1)
+        local minus=IbisPanels.canvasReference.stepper(rect,2,-1)
         love.draw()
         love.mousepressed(minus.x+15,minus.y+14,1,false)
         assert(A.modal.values[2]=='512','W - nao restaurou largura')
         for _,axis in ipairs({2,3}) do
-            local track=CanvasReference.slider(rect,axis)
+            local track=IbisPanels.canvasReference.slider(rect,axis)
             local cy=track.y+track.h/2
             love.draw()
             love.mousepressed(track.x+track.w,cy,1,false)
@@ -3322,15 +3322,15 @@ local function advanceShowcase()
         status('Nova tela: lista de formatos do tutorial publico')
     elseif sh.stage==71 then
         local w,h=love.graphics.getDimensions()
-        local r=CanvasReference.layout(w,h)
+        local r=IbisPanels.canvasReference.layout(w,h)
         local proof=assert(A.showcaseCanvasProof)
         love.draw()
-        assert(CanvasReference.item('square-sd').w==1280
-            and CanvasReference.item('sd').h==1344
-            and not CanvasReference.allowed(
-                CanvasReference.item('vertical')),
+        assert(IbisPanels.canvasReference.item('square-sd').w==1280
+            and IbisPanels.canvasReference.item('sd').h==1344
+            and not IbisPanels.canvasReference.allowed(
+                IbisPanels.canvasReference.item('vertical')),
             'Lista oficial nao possui formatos e limites corretos')
-        local row,visible=CanvasReference.row(
+        local row,visible=IbisPanels.canvasReference.row(
             r,'square-sd',A.modal.canvasListScroll)
         assert(visible,'Formato 1:1 nao aparece no inicio')
         love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
@@ -3342,8 +3342,8 @@ local function advanceShowcase()
         status('Nova tela: formato 1:1 SD 1280×1280')
     elseif sh.stage==72 then
         local w,h=love.graphics.getDimensions()
-        local r=CanvasReference.layout(w,h)
-        local row,visible=CanvasReference.row(
+        local r=IbisPanels.canvasReference.layout(w,h)
+        local row,visible=IbisPanels.canvasReference.row(
             r,'portrait-sd',A.modal.canvasListScroll)
         assert(visible,'Formato 3:4 fora da lista visivel')
         love.draw()
@@ -3354,9 +3354,9 @@ local function advanceShowcase()
         status('Nova tela: formato 3:4 SD 768×1024')
     elseif sh.stage==73 then
         local w,h=love.graphics.getDimensions()
-        local r=CanvasReference.layout(w,h)
-        A.modal.canvasListScroll=CanvasReference.maxScroll(r)
-        local row,visible=CanvasReference.row(
+        local r=IbisPanels.canvasReference.layout(w,h)
+        A.modal.canvasListScroll=IbisPanels.canvasReference.maxScroll(r)
+        local row,visible=IbisPanels.canvasReference.row(
             r,'a4',A.modal.canvasListScroll)
         assert(visible,'A4 nao ficou visivel apos rolagem')
         love.draw()
@@ -3367,10 +3367,10 @@ local function advanceShowcase()
         status('Nova tela: A4 1240×1754, sem DPI operacional')
     elseif sh.stage==74 then
         local w,h=love.graphics.getDimensions()
-        local r=CanvasReference.layout(w,h)
+        local r=IbisPanels.canvasReference.layout(w,h)
         local proof=assert(A.showcaseCanvasProof)
-        A.modal.canvasListScroll=CanvasReference.maxScroll(r)
-        local row,visible=CanvasReference.row(
+        A.modal.canvasListScroll=IbisPanels.canvasReference.maxScroll(r)
+        local row,visible=IbisPanels.canvasReference.row(
             r,'legacy-square',A.modal.canvasListScroll)
         assert(visible,'Preset legado nao visivel no fim da lista')
         love.draw()
@@ -3388,7 +3388,7 @@ local function advanceShowcase()
         assert(A.modal and A.modal.kind=='new',
             'Nova tela desapareceu antes da prova de fechar')
         local w,h=love.graphics.getDimensions()
-        local close=CanvasReference.close(CanvasReference.layout(w,h))
+        local close=IbisPanels.canvasReference.close(IbisPanels.canvasReference.layout(w,h))
         local proof=assert(A.showcaseCanvasProof)
         love.draw()
         love.mousepressed(close.x+close.w/2,
@@ -8153,10 +8153,10 @@ local function drawEditor(w,h)
     end
 end
 local function drawNewCanvasDialog(w,h)
-    local r=CanvasReference.layout(w,h)
+    local r=IbisPanels.canvasReference.layout(w,h)
     local m=A.modal
     IbisPanels.canvasReferenceDraw.panel(r,A.fonts.body,A.fonts.small)
-    local close=CanvasReference.close(r)
+    local close=IbisPanels.canvasReference.close(r)
     A.buttons[#A.buttons+1]={
         x=close.x,y=close.y,w=close.w,h=close.h,
         fn=function()
@@ -8166,7 +8166,7 @@ local function drawNewCanvasDialog(w,h)
         end}
     -- W/H diretamente no inicio da lista, como na referencia.
     for _,axis in ipairs({2,3}) do
-        local field=CanvasReference.field(r,axis)
+        local field=IbisPanels.canvasReference.field(r,axis)
         box(field.x,field.y,field.w,field.h,'card')
         if m.focus==axis then
             c('accent')
@@ -8179,7 +8179,7 @@ local function drawNewCanvasDialog(w,h)
             x=field.x,y=field.y,w=field.w,h=field.h,
             fn=function()m.focus=axis end}
         for _,direction in ipairs({-1,1}) do
-            local bt=CanvasReference.stepper(r,axis,direction)
+            local bt=IbisPanels.canvasReference.stepper(r,axis,direction)
             local nextValue=GalleryUI.stepDimension(
                 m.values[axis],direction)
             local mx,my=love.mouse.getPosition()
@@ -8197,24 +8197,24 @@ local function drawNewCanvasDialog(w,h)
                     end}
             end
         end
-        local track=CanvasReference.slider(r,axis)
+        local track=IbisPanels.canvasReference.slider(r,axis)
         local mx,my=love.mouse.getPosition()
         IbisPanels.canvasDimensionSlider.draw(track,m.values[axis],
             GalleryUI.sliderHit(track,mx,my),
             A.canvasDimensionDrag==axis,GalleryUI)
     end
     -- Lista propria do screenshot, com rolagem e recorte reais.
-    local viewport=CanvasReference.listViewport(r)
+    local viewport=IbisPanels.canvasReference.listViewport(r)
     love.graphics.push('all')
     love.graphics.setScissor(viewport.x,viewport.y,viewport.w,viewport.h)
-    for _,row in ipairs(CanvasReference.rows(
+    for _,row in ipairs(IbisPanels.canvasReference.rows(
         r,m.canvasListScroll or 0)) do
         if row.y<viewport.y+viewport.h and
             row.y+row.h>viewport.y then
             if row.item.kind=='heading' then
                 IbisPanels.canvasReferenceDraw.heading(
                     row,A.fonts.small)
-            elseif CanvasReference.allowed(row.item) then
+            elseif IbisPanels.canvasReference.allowed(row.item) then
                 local selected=m.values[2]==tostring(row.item.w)
                     and m.values[3]==tostring(row.item.h)
                 local mx,my=love.mouse.getPosition()
@@ -8228,7 +8228,7 @@ local function drawNewCanvasDialog(w,h)
                     local id=row.item.id
                     A.buttons[#A.buttons+1]={
                         x=row.x,y=row.y,w=row.w,h=row.h-2,
-                        fn=function()CanvasReference.choose(m,id) end}
+                        fn=function()IbisPanels.canvasReference.choose(m,id) end}
                 end
             else
                 IbisPanels.canvasReferenceDraw.disabled(
@@ -8239,7 +8239,7 @@ local function drawNewCanvasDialog(w,h)
     love.graphics.pop()
     IbisPanels.canvasReferenceDraw.footer(r,A.fonts.small)
     -- Nome permanece editavel como adaptacao ao armazenamento RBD2.
-    local field=CanvasReference.field(r,1)
+    local field=IbisPanels.canvasReference.field(r,1)
     box(field.x,field.y,field.w,field.h,'card')
     fitted(m.values[1]..(m.focus==1 and '|' or ''),
         field.x+9,field.y+5,'body','text',field.w-15)
@@ -10001,8 +10001,8 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         local w,h=love.graphics.getDimensions()
         local rect=GalleryUI.dialog(w,h)
         for _,axis in ipairs({2,3}) do
-            local track=CanvasReference.slider(
-                CanvasReference.layout(w,h),axis)
+            local track=IbisPanels.canvasReference.slider(
+                IbisPanels.canvasReference.layout(w,h),axis)
             if GalleryUI.sliderHit(track,x,y) then
                 A.canvasDimensionDrag=axis
                 A.modal.values[axis]=GalleryUI.sliderValue(track,x)
@@ -10329,7 +10329,7 @@ local function pointerReleased(x,y,b,pressure)
         A.canvasDimensionDrag=nil
         if A.modal and A.modal.kind=='new' then
             local w,h=love.graphics.getDimensions()
-            local track=CanvasReference.slider(CanvasReference.layout(w,h),axis)
+            local track=IbisPanels.canvasReference.slider(IbisPanels.canvasReference.layout(w,h),axis)
             A.modal.values[axis]=GalleryUI.sliderValue(track,x)
         end
         return
@@ -10660,8 +10660,8 @@ end
 function love.wheelmoved(x,y)
     if A.modal and A.modal.kind=='new' then
         local w,h=love.graphics.getDimensions()
-        local rect=CanvasReference.layout(w,h)
-        A.modal.canvasListScroll=CanvasReference.scroll(
+        local rect=IbisPanels.canvasReference.layout(w,h)
+        A.modal.canvasListScroll=IbisPanels.canvasReference.scroll(
             rect,A.modal.canvasListScroll or 0,y)
         return -- Nao rolar galeria nem zoom por baixo da janela.
     end
