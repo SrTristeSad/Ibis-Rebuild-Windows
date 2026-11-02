@@ -112,6 +112,28 @@ function T.run()
     end
     local Chrome=require('ibis_gallery_card_chrome')
     local sizes={{960,640},{1220,800},{1920,1080}}
+    -- A35: a tela inicial atual nao inclui a Colecao,
+    -- retirada pelo fabricante desde a versao 12.2.0.
+    local Home=require('ibis_home_screen')
+    for _,size in ipairs(sizes) do
+        local w,h=size[1],size[2]
+        local buttons=Home.layout(w,h)
+        eq(buttons.gallery.x>0 and buttons.online.x>0
+            and buttons.gallery.x+buttons.gallery.w<buttons.online.x
+            and buttons.online.x+buttons.online.w<w,
+            'Acoes da tela inicial se sobrepoem')
+        local r=buttons.gallery
+        eq(Home.hit(w,h,r.x+r.w/2,r.y+r.h/2)=='gallery',
+            'Minha Galeria nao tem clique real')
+        local online=buttons.online
+        eq(Home.hit(w,h,online.x+online.w/2,
+            online.y+online.h/2)=='online',
+            'Galeria Online nao identificada como indisponivel')
+        eq(Home.hit(w,h,0,0)==nil,
+            'Cliques vazios da tela inicial vazam para galeria')
+    end
+    eq(not pcall(Home.layout,320,480),
+        'Tela inicial aceita resolucao inferior ao minimo')
     for _,size in ipairs(sizes) do
         local w,h=size[1],size[2]
         local grid=Shell.layout(w,h)

@@ -142,7 +142,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Captura do editor Lua falhou: $LASTEXITCODE" }
           $report = Get-Content (Join-Path $screens 'showcase-report.json') -Raw | ConvertFrom-Json
           if (!$report.ok -or !$report.real_love_render) { throw 'Capturas nao verificadas' }
-          $expected = @('01-galeria.png','02-editor-compacto.png',
+          $expected = @('00-inicial.png','01-galeria.png','02-editor-compacto.png',
             '03-biblioteca-pinceis.png','04-seletor-cores.png',
             '05-camadas.png','06-editor-desktop.png',
             '07-editor-960x640.png','08-ajustes-pincel.png',

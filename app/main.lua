@@ -42,6 +42,7 @@ IbisPanels.canvasDimensionControls=require('ibis_canvas_dimension_controls')
 IbisPanels.canvasDimensionSlider=require('ibis_canvas_dimension_slider')
 IbisPanels.canvasDialogChrome=require('ibis_canvas_dialog_chrome')
 IbisPanels.canvasReferenceDraw=require('ibis_canvas_reference_draw')
+IbisPanels.home=require('ibis_home_screen')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -70,7 +71,7 @@ local LayerRowVisual=require('layer_row_visual')
 local CompactLayerWheel=require('compact_layer_wheel')
 local LayerListWheel=require('layer_list_wheel')
 local dispatchInkEvent
-local showcaseNames={'01-galeria.png','02-editor-compacto.png',
+local showcaseNames={[0]='00-inicial.png','01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
@@ -2135,7 +2136,18 @@ local function advanceShowcase()
     local sh=A.showcase
     sh.stage=sh.stage+1
     sh.frames=0;sh.pending=false;sh.captured=false
-    if sh.stage==2 then
+    if sh.stage==1 then
+        assert(A.screen=='home',
+            'Showcase deveria iniciar na tela inicial')
+        local w,h=love.graphics.getDimensions()
+        local b=IbisPanels.home.layout(w,h).gallery
+        love.draw()
+        love.mousepressed(b.x+b.w/2,b.y+b.h/2,1,false)
+        love.mousereleased(b.x+b.w/2,b.y+b.h/2,1,false)
+        assert(A.screen=='gallery' and #A.projects>0,
+            'Minha Galeria nao abriu a partir da tela inicial')
+        status('Tela inicial -> Minha Galeria; projeto intacto')
+    elseif sh.stage==2 then
         local project=A.store:openProject(sh.projectId)
         openDoc(project)
         selectTool('brush')
@@ -4506,6 +4518,7 @@ local function advanceShowcase()
             JSON.encode({ok=true,real_love_render=true,
                 lua_renderer=Native.implementation=='lua',
                 screenshots=showcaseNames,
+                title_screen='00-inicial.png',
                 android_1412_pixel_parity=false}))
         A.showcase=nil
         love.event.quit(0)
@@ -5062,6 +5075,10 @@ function love.load(args)
         ('Motor Lua v1 carregado · '..(A.inkAttached and
             'Windows Ink Lua ativo' or 'mouse/toque LÖVE')) or
         'Galeria disponível · motor Lua indisponível')
+    if not (options.luaTest or options.selfTest
+        or options.luaGuiSmoke) then
+        A.screen='home'
+    end
     if options.showcaseDir then
         assert(Native.available,'Visual showcase requires the real Lua raster engine')
         assert(not options.selfTest and not options.luaTest,
@@ -5084,7 +5101,7 @@ function love.load(args)
             512,512,'',Native.bytes(sample))
         refreshGallery()
         A.showcase={directory=options.showcaseDir,projectId=demo.id,
-            stage=1,frames=0,pending=false,captured=false}
+            stage=0,frames=0,pending=false,captured=false}
         status('Captura real de UI · galeria, editor, pincéis, cores, camadas')
     end
     if options.luaTest or options.selfTest then
@@ -6747,6 +6764,18 @@ local function drawGallery(w,h)
                 end
                 setFolder(parent)
             end)}
+    end
+    else
+        -- Voltar na raiz agora tem destino real: tela inicial.
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=function()
+                if A.gallerySelecting then
+                    A.gallerySelecting=false;A.gallerySelected={}
+                else
+                    A.galleryGesture=nil
+                    A.screen='home'
+                end
+            end}
     end
     lg.setColor(.45,.74,.94,1)
     lg.printf(A.gallerySelecting and 'Concluir' or 'Selecionar',
@@ -9883,9 +9912,16 @@ end
 function love.draw()
     A.buttons={};A.galleryPreviewBudget=A.screen=='gallery' and 5 or 1
     local w,h=love.graphics.getDimensions()
-    local theme=A.screen=='gallery' and galleryPalette
-        or (A.compactUi and compactPalette or palette)
+    local theme=(A.screen=='gallery' or A.screen=='home')
+        and galleryPalette or (A.compactUi and compactPalette or palette)
     love.graphics.clear(theme.bg)
+    if A.screen=='home' then
+        IbisPanels.home.draw(w,h,A.fonts)
+        local rect=IbisPanels.home.layout(w,h).gallery
+        A.buttons[#A.buttons+1]={
+            x=rect.x,y=rect.y,w=rect.w,h=rect.h,
+            fn=function()A.screen='gallery';refreshGallery() end}
+    else
     if A.screen=='editor' and not A.compactUi then
         box(0,0,w,64,'panel')
         c('accent');love.graphics.rectangle('fill',0,62,w,2)
@@ -9938,6 +9974,7 @@ function love.draw()
         A.buttons={}
         drawCompactPopup(w,h)
     end
+    end -- nao mostrar editor/galeria por baixo da tela inicial
     if A.showcase and A.showcase.frames>=3 and
         not A.showcase.pending then
         local sh=A.showcase
@@ -9952,6 +9989,16 @@ function love.draw()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
+    if A.screen=='home' then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w and
+                    y>=b.y and y<b.y+b.h then b.fn();return end
+            end
+        end
+        return -- A tela inicial nao propaga entrada ao editor.
+    end
     if (A.galleryCreateMenu or A.galleryMoveMenu
         or A.galleryDeleteMenu or A.galleryRestoreMenu
         or A.galleryMoreMenu)
@@ -10324,6 +10371,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if A.screen=='home' then return end
     if b==1 and A.canvasDimensionDrag then
         local axis=A.canvasDimensionDrag
         A.canvasDimensionDrag=nil
@@ -10750,6 +10798,12 @@ function love.textinput(t)
     end
 end
 function love.keypressed(key)
+    if A.screen=='home' then
+        if key=='return' or key=='kpenter' then
+            A.screen='gallery';refreshGallery()
+        end
+        return
+    end
     if A.screen=='gallery' and A.galleryDetailId then
         if key=='escape' or key=='backspace' then
             A.galleryDetailId=nil;A.galleryDetailSwipe=nil
@@ -10831,6 +10885,8 @@ function love.keypressed(key)
                 if f.id==A.folder then parent=f.parent;break end
             end
             setFolder(parent)
+        else
+            A.screen='home'
         end
         return
     end
