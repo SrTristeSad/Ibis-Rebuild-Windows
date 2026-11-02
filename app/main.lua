@@ -110,7 +110,11 @@ local showcaseNames={'01-galeria.png','02-editor-compacto.png',
     '75-galeria-selecao-rodape.png',
     '76-galeria-selecionar-todos.png',
     '77-galeria-limpar-selecao.png',
-    '78-galeria-mover-pendente.png'}
+    '78-galeria-excluir-pendente.png',
+    '79-galeria-mover-abrir.png',
+    '80-galeria-mover-escolher-pasta.png',
+    '81-galeria-obra-movida.png',
+    '82-galeria-destino-verificado.png'}
 local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
@@ -233,6 +237,7 @@ end
 local function refreshGallery() A.folders=A.store:folders(A.folder);A.projects=A.store:listProjects(A.folder) end
 local function setFolder(id)
     A.folder=id or '';A.galleryScroll=0
+    A.galleryMoveMenu=nil
     A.gallerySelected={};A.gallerySelecting=false
     refreshGallery()
 end
@@ -514,7 +519,7 @@ local function saveDoc()
 end
 local function toGallery()
     A.backMenu=false;A.settingsOpen=false
-    A.galleryCreateMenu=false;A.galleryScroll=0
+    A.galleryCreateMenu=false;A.galleryMoveMenu=nil;A.galleryScroll=0
     A.gallerySelecting=false;A.gallerySelected={}
     clearWandSelection()
     A.visualPendingTool=nil
@@ -3334,21 +3339,104 @@ local function advanceShowcase()
         local keys=GalleryShell.selectionKeys(
             A.folders,A.projects,A.galleryFilter)
         assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1)
-        local disabled=GalleryShell.selectionAction(w,h,'move')
+        local disabled=GalleryShell.selectionAction(w,h,'delete')
         love.draw()
         love.mousepressed(disabled.x+disabled.w/2,
             disabled.y+disabled.h/2,1,false)
         local proof=assert(A.showcaseGallerySelection)
         assert(A.screen=='gallery' and A.gallerySelecting and
             GalleryShell.selectionCount(A.gallerySelected,keys)==1
-            and not A.modal and not A.galleryCreateMenu,
-            'Acao Mover pendente nao pode abrir dialogo ficticio')
+            and not A.modal and not A.galleryCreateMenu
+            and not A.galleryMoveMenu,
+            'Acao Excluir pendente nao pode abrir dialogo ficticio')
         assert(#A.projects==proof.projects and
             #A.folders==proof.folders and
             Native.bytes(A.layerSession.composite)==proof.pixels and
             A.layerSession:historyStats().undo==proof.undo,
             'Acao desabilitada alterou documentos')
-        status('Galeria: Mover/Excluir indisponiveis e seguros')
+        status('Galeria: Excluir indisponivel e seguro')
+    elseif sh.stage==79 then
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        A.galleryMoveMenu=nil
+        A.galleryFilter='all'
+        A.galleryScroll=0
+        local dest=A.store:createFolder('Arquivo Final',A.folder)
+        A.showcaseDestinationId=dest
+        refreshGallery()
+        local w,h=love.graphics.getDimensions()
+        local item=GalleryShell.card(w,h,#A.folders+1,0)
+        local first=A.projects[1]
+        assert(first,'Nenhuma obra de teste para mover')
+        A.showcaseMoveId=first.id
+        A.showcaseMovePixels=Native.bytes(A.store:openProject(first.id).pixels or
+            A.store:openProject(first.id).layers[1].pixels)
+        love.draw()
+        love.mousepressed(item.x+item.w/2,item.y+item.h/2,1,false)
+        assert(A.gallerySelected['p:'..first.id],
+            'Obra nao selecionada antes de mover')
+        love.draw()
+        local move=GalleryShell.selectionAction(w,h,'move')
+        love.mousepressed(move.x+move.w/2,move.y+move.h/2,1,false)
+        assert(A.galleryMoveMenu and #A.galleryMoveMenu.ids==1,
+            'Mover nao abriu escolha de pasta')
+        status('Mover desenho · selecionar pasta de destino')
+    elseif sh.stage==80 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        local list=GalleryShell.folderChoices(
+            A.store.catalog.folders,A.folder)
+        assert(#list==1 and list[1].id==A.showcaseDestinationId,
+            'Destino de teste nao encontrado')
+        local row=GalleryShell.moveRow(p,1)
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.galleryMoveMenu.target==A.showcaseDestinationId,
+            'Escolha de destino nao registrada')
+        assert(A.store:openProject(A.showcaseMoveId).folder==A.folder,
+            'Selecao de destino moveu projeto prematuramente')
+        status('Destino escolhido · aguardando confirmacao')
+    elseif sh.stage==81 then
+        local before=A.store:openProject(A.showcaseMoveId)
+        local rev=before.revision
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        local ok=GalleryShell.moveConfirmRect(p)
+        love.draw()
+        love.mousepressed(ok.x+ok.w/2,ok.y+ok.h/2,1,false)
+        local moved=A.store:openProject(A.showcaseMoveId)
+        assert(moved.folder==A.showcaseDestinationId and
+            moved.revision==rev+1 and
+            not A.galleryMoveMenu and not A.gallerySelecting,
+            'Movimento nao persistiu ou manteve modal aberto')
+        assert(moved.pixels==before.pixels or
+            (moved.layers and before.layers and
+                moved.layers[1].pixels==before.layers[1].pixels),
+            'Movimento modificou raster do desenho')
+        for _,doc in ipairs(A.projects) do
+            assert(doc.id~=A.showcaseMoveId,
+                'Obra movida continua listada na pasta de origem')
+        end
+        status('Movimento concluido · obra saiu da origem')
+    elseif sh.stage==82 then
+        local w,h=love.graphics.getDimensions()
+        local folderIndex
+        for i,folder in ipairs(A.folders) do
+            if folder.id==A.showcaseDestinationId then
+                folderIndex=i;break
+            end
+        end
+        assert(folderIndex,'Pasta de destino nao aparece na galeria')
+        local item=GalleryShell.card(w,h,folderIndex,0)
+        love.draw()
+        love.mousepressed(item.x+item.w/2,item.y+item.h/2,1,false)
+        assert(A.folder==A.showcaseDestinationId and
+            #A.projects==1 and A.projects[1].id==A.showcaseMoveId,
+            'Obra movida nao foi reencontrada na pasta destino')
+        local reopened=A.store:openProject(A.showcaseMoveId)
+        assert(reopened.folder==A.folder,
+            'Documento reaberto nao preservou localizacao')
+        status('Destino verificado · obra RBD2 preservada')
     elseif sh.stage>#showcaseNames then
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
@@ -5592,8 +5680,8 @@ local function drawGallery(w,h)
             'A Minha Galeria está vazia',
             0,math.floor((l.top+l.bottom)/2)-24,w,'center')
     end
-    -- Rodape dedicado ao modo de selecao. Nunca oferece uma
-    -- acao destrutiva ate existir backend de pastas/exclusao em lote.
+    -- Rodape dedicado ao modo de selecao: mover apenas projetos.
+    -- Excluir continua desabilitado, sem backend nem perda de arquivos.
     lg.setColor(.18,.19,.20,1)
     lg.rectangle('fill',0,l.footerY,w,h-l.footerY)
     if A.gallerySelecting then
@@ -5613,7 +5701,10 @@ local function drawGallery(w,h)
             local r=GalleryShell.selectionAction(w,h,item.id)
             local enabled=GalleryShell.selectionAvailable(item.id)
                 and (item.id=='all' and count<#keys
-                    or item.id=='clear' and count>0)
+                    or item.id=='clear' and count>0
+                    or item.id=='move' and
+                        GalleryShell.selectedProjectIds(
+                            A.gallerySelected or {},keys)~=nil)
             local pending=not GalleryShell.selectionAvailable(item.id)
             lg.setColor(pending and .27 or enabled and .24 or .23,
                 pending and .29 or enabled and .46 or .26,
@@ -5632,6 +5723,12 @@ local function drawGallery(w,h)
                         A.gallerySelected=GalleryShell.selectAll(keys)
                     elseif command=='clear' then
                         A.gallerySelected={}
+                    elseif command=='move' then
+                        local ids=GalleryShell.selectedProjectIds(
+                            A.gallerySelected,keys)
+                        if ids then
+                            A.galleryMoveMenu={ids=ids,page=1}
+                        end
                     end
                 end}
             end
@@ -5662,6 +5759,78 @@ local function drawGallery(w,h)
 end
 local function drawGalleryCreateMenu(w,h)
     local lg=love.graphics
+    if A.galleryMoveMenu then
+        local state=A.galleryMoveMenu
+        local p=GalleryShell.movePopup(w,h)
+        local choices=GalleryShell.folderChoices(
+            A.store.catalog.folders,A.folder)
+        local pages=GalleryShell.movePageCount(#choices)
+        state.page=math.min(state.page,pages)
+        lg.setColor(0,0,0,.55)
+        lg.rectangle('fill',0,0,w,h)
+        lg.setColor(.95,.95,.94,1)
+        lg.rectangle('fill',p.x,p.y,p.w,p.h,8,8)
+        lg.setColor(.19,.24,.30,1)
+        lg.setFont(A.fonts.title)
+        lg.print(('Mover %d desenho(s)'):format(#state.ids),
+            p.x+24,p.y+18)
+        lg.setFont(A.fonts.small)
+        lg.setColor(.4,.45,.49,1)
+        lg.print('Selecione a pasta de destino:',p.x+24,p.y+65)
+        if #choices==0 then
+            lg.setColor(.63,.44,.20,1)
+            lg.printf('Nenhuma outra pasta disponível. Crie uma pasta na galeria.',
+                p.x+38,p.y+175,p.w-76,'center')
+        end
+        for i=1,6 do
+            local entry=choices[(state.page-1)*6+i]
+            if entry then
+                local slot=GalleryShell.moveRow(p,i)
+                local choice=entry
+                button(entry.label,slot.x,slot.y,slot.w,slot.h,
+                    function()state.target=choice.id end,
+                    state.target==entry.id)
+            end
+        end
+        if pages>1 then
+            local back=GalleryShell.moveNavRect(p,1)
+            local next=GalleryShell.moveNavRect(p,2)
+            button('‹',back.x,back.y,back.w,back.h,function()
+                state.page=GalleryShell.movePage(state.page,pages,-1)
+            end,false,state.page==1)
+            button('›',next.x,next.y,next.w,next.h,function()
+                state.page=GalleryShell.movePage(state.page,pages,1)
+            end,false,state.page==pages)
+            lg.setColor(.25,.28,.32,1)
+            lg.printf(('%d / %d'):format(state.page,pages),
+                p.x+150,p.y+p.h-83,p.w-300,'center')
+        end
+        local cancel=GalleryShell.moveCancelRect(p)
+        button('Cancelar',cancel.x,cancel.y,cancel.w,cancel.h,
+            function()A.galleryMoveMenu=nil end)
+        local confirm=GalleryShell.moveConfirmRect(p)
+        button('Mover',confirm.x,confirm.y,confirm.w,confirm.h,
+            function()
+                local report=A.store:moveProjects(
+                    state.ids,state.target,A.folder)
+                for _,id in ipairs(report.ids) do
+                    A.gallerySelected['p:'..id]=nil
+                end
+                A.galleryMoveMenu=nil
+                A.galleryScroll=0
+                refreshGallery()
+                if report.error then
+                    status(('Movidos %d/%d; erro ao gravar: %s'):format(
+                        report.moved,report.total,report.error))
+                else
+                    A.gallerySelecting=false
+                    A.gallerySelected={}
+                    status(('%d desenho(s) movido(s)'):format(
+                        report.moved))
+                end
+            end,true,state.target==nil)
+        return
+    end
     lg.setColor(0,0,0,.36)
     lg.rectangle('fill',0,0,w,h)
     local p=GalleryShell.newMenu(w,h)
@@ -8276,7 +8445,8 @@ function love.draw()
         text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',
             w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')
     end
-    if A.galleryCreateMenu and A.screen=='gallery' then
+    if (A.galleryCreateMenu or A.galleryMoveMenu)
+        and A.screen=='gallery' then
         A.buttons={}
         drawGalleryCreateMenu(w,h)
     elseif A.settingsOpen then
@@ -8313,7 +8483,8 @@ function love.draw()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
-    if A.galleryCreateMenu and A.screen=='gallery' then
+    if (A.galleryCreateMenu or A.galleryMoveMenu)
+        and A.screen=='gallery' then
         if buttonNumber==1 then
             for i=#A.buttons,1,-1 do
                 local b=A.buttons[i]
@@ -8321,6 +8492,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     y>=b.y and y<b.y+b.h then b.fn();return end
             end
             A.galleryCreateMenu=false
+            A.galleryMoveMenu=nil
         end
         return -- Fechar nao dispara clique na obra sob o popup.
     end
@@ -8865,7 +9037,7 @@ function love.focus(focused)
 end
 function love.wheelmoved(x,y)
     if A.screen=='gallery' then
-        if A.modal or A.galleryCreateMenu then return end
+        if A.modal or A.galleryCreateMenu or A.galleryMoveMenu then return end
         local total=(GalleryUI.filter(A.galleryFilter,'folder')
             and #A.folders or 0)+(GalleryUI.filter(A.galleryFilter,'work')
             and #A.projects or 0)
@@ -8938,7 +9110,8 @@ function love.textinput(t)
 end
 function love.keypressed(key)
     if A.screen=='gallery' and A.gallerySelecting and
-        not A.modal and not A.galleryCreateMenu and
+        not A.modal and not A.galleryCreateMenu
+        and not A.galleryMoveMenu and
         love.keyboard.isDown('lctrl','rctrl') then
         if key=='a' then
             A.gallerySelected=GalleryShell.selectAll(
@@ -8954,6 +9127,7 @@ function love.keypressed(key)
         if A.modal then
             A.modal=nil;love.keyboard.setTextInput(false)
         elseif A.galleryCreateMenu then A.galleryCreateMenu=false
+        elseif A.galleryMoveMenu then A.galleryMoveMenu=nil
         elseif A.gallerySelecting then
             A.gallerySelecting=false;A.gallerySelected={}
         elseif A.folder~='' then

@@ -506,3 +506,38 @@ confirmam seleção múltipla para mover e excluir obras.
 
 A ordem, as dimensões e a aparência exatas dos controles
 continuam sem comparação direta com o APK Android 14.1.2.
+
+## Mover obras para outra pasta — implementação real
+
+O [tutorial oficial de pastas](https://ibispaint.com/lecture/index.jsp?no=193)
+mostra a ação de selecionar múltiplas obras, tocar no ícone de pasta,
+escolher um destino e confirmar a movimentação. Agora o rebuild
+tem esse fluxo funcional **para desenhos**:
+
+- `Store:moveProjects(ids,targetFolder,sourceFolder)` primeiro valida
+  todos os identificadores, pastas e documentos, então salva a
+  mudança no campo `folder` de cada projeto usando o mecanismo
+  existente `saveProject` e a gravação atômica de arquivos.
+  Preserva bytes RGBA, layers, visibilidade, opacidade e IDs.
+- A operação **não é atômica como lote**: se ocorrer erro de disco
+  após o início das gravações, o relatório inclui exatamente
+  quantos desenhos foram movidos e qual falhou. A interface
+  remove somente as marcas dos arquivos movidos; os restantes
+  continuam disponíveis para nova tentativa. Isto impede
+  mensagens falsas de sucesso total.
+- `Mover` no rodapé fica ativo apenas quando todas as entradas
+  selecionadas são desenhos. Pastas selecionadas não são
+  movidas. `Excluir` permanece desabilitado.
+- O diálogo de destino enumera a hierarquia local completa,
+  com nomes de caminho, paginação de 6 entradas, escolha e
+  confirmação separadas. `Cancelar`/Escape/outside-click
+  nunca alteram o documento.
+- `tests/test_store.lua` cobre RBD1/RBD2, revisão,
+  reabertura, falha de pré-validação e falha de I/O simulada.
+  `tests/test_ibis_gallery_ui.lua` cobre seleções e o
+  diálogo de destinos em resoluções diversas. Capturas
+  reais Windows **79–82** comprovam o fluxo gráfico e a
+  reabertura da obra na pasta de destino.
+
+A organização visual não foi comparada pixel a pixel com
+o Android 14.1.2, e o rebuild ainda não move pastas inteiras.
