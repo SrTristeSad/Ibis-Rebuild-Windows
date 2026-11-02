@@ -268,7 +268,7 @@ jobs:
             $b = (Get-FileHash (Join-Path $screens $pair[1]) -Algorithm SHA256).Hash
             if ($a -eq $b) { throw "Estados visuais identicos: $($pair[0]) e $($pair[1])" }
           }
-          Write-Host "119 capturas reais verificadas"
+          Write-Host "$($expected.Count) capturas reais verificadas"
       - name: Publish real Lua editor screenshots
         uses: actions/upload-artifact@v4
         with:
