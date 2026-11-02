@@ -175,6 +175,18 @@ function Test.run(rootPath)
     rejects(function()store:moveProjects(
         {layeredDeleted.id},parent,child)end,
         'Deleted project accepted in move batch')
+    local recordedDeletion=store.deleted.items[1].deleted_at
+    local withinWindow=store:deletedProjects(recordedDeletion+86400*29)
+    local outsideWindow=store:deletedProjects(recordedDeletion+86400*31)
+    check(withinWindow[1].retention_days==1 and
+        not withinWindow[1].retention_expired,
+        '30-day retention countdown missing')
+    check(outsideWindow[1].retention_days==0 and
+        outsideWindow[1].retention_expired,
+        'Retention end not marked')
+    check(fs:read('projects/'..recoverable.id..'.rbd')==imageA
+        and fs:read('projects/'..layeredDeleted.id..'.rbd')==imageB,
+        'Expiration status unexpectedly deleted RBD bytes')
     local reopenedTrash=Store.open(rootPath)
     check(#reopenedTrash:deletedProjects()==2
         and #reopenedTrash:listProjects(child)==baseline-2,

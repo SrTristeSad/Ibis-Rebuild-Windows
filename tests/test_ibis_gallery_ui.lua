@@ -1,10 +1,26 @@
 package.path='app/?.lua;'..package.path
 local G=require('ibis_gallery_ui')
 local Shell=require('ibis_gallery_shell')
+local Retention=require('ibis_deleted_retention')
 local T={}
 function T.run()
     local checks=0
     local function eq(cond,msg) checks=checks+1;assert(cond,msg) end
+    eq(Retention.SECONDS==2592000,'Janela de 30 dias incorreta')
+    local clock=1700000000
+    eq(Retention.label(clock,clock)=='30 dias restantes',
+        'Dia da exclusao incorreto')
+    eq(Retention.label(clock,clock+29*86400)=='1 dia restante',
+        'Ultimo dia incorreto')
+    eq(Retention.label(clock,clock+30*86400)==
+        'Prazo vencido · arquivo preservado',
+        'Expiracao nao deve afirmar eliminacao automatica')
+    eq(Retention.status(clock,clock-86400).remainingDays==30,
+        'Relogio regressivo ampliou prazo acima do teto')
+    eq(Retention.status(clock,clock+31*86400).expired,
+        'Prazo vencido nao sinalizado')
+    eq(not pcall(Retention.status,-1,clock),
+        'Timestamp invalido foi aceito')
     eq(#G.FILTERS==3,'Galeria precisa de tres filtros')
     eq(#G.PRESETS==4,'Dialogo precisa preservar quatro formatos')
     eq(#G.OFFICIAL_PRESETS==4,
@@ -287,6 +303,17 @@ function T.run()
             yes.x+yes.w<=p.x+p.w and
             yes.y==no.y and yes.y+yes.h<p.y+p.h,
             'Controles de confirmacao sobrepostos')
+    end
+    for _,size in ipairs(sizes) do
+        local p=Retention.morePopup(size[1],size[2])
+        local item=Retention.moreItem(p)
+        eq(p.x>=0 and p.y>54 and p.x+p.w<=size[1] and
+            p.y+p.h<120+70,
+            'Menu opcoes sai da regiao superior')
+        eq(item.x>=p.x and item.y>=p.y and
+            item.x+item.w<=p.x+p.w and
+            item.y+item.h<=p.y+p.h,
+            'Opcao recentemente excluidos sai do menu')
     end
     eq(G.preset('square').w==512 and G.preset('portrait').h==1920)
     eq(G.preset('ibis-square').w==768)

@@ -1,6 +1,7 @@
 -- Editable research document storage. This is deliberately not an IPV encoder.
 local JSON=require('json')
 local FS=require('fs')
+local Retention=require('ibis_deleted_retention')
 local Store={}; Store.__index=Store
 local MAGIC='RBD1\r\n\26\n'
 local MAGIC2='RBD2\r\n\26\n'
@@ -285,12 +286,17 @@ function Store:deleteProjects(ids,sourceFolder)
     self.deleted=nextIndex
     return {deleted=#ids,ids=ids}
 end
-function Store:deletedProjects()
+function Store:deletedProjects(now)
+    now=now or os.time()
     local result={}
     for _,entry in ipairs(self.deleted.items) do
         local doc=self:_readProject(entry.id,false)
+        local remaining=Retention.status(entry.deleted_at,now)
         doc.deleted=true
         doc.deleted_at=entry.deleted_at
+        doc.retention_deadline=remaining.deadline
+        doc.retention_days=remaining.remainingDays
+        doc.retention_expired=remaining.expired
         result[#result+1]=doc
     end
     table.sort(result,function(a,b)
