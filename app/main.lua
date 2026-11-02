@@ -4428,17 +4428,23 @@ local function advanceShowcase()
         local old=assert(A.galleryExpandedProof)
         local w,h=love.graphics.getDimensions()
         love.draw()
-        love.mousepressed(w-280,h/2,1,false)
-        love.mousereleased(w-100,h/2+5,1,false)
-        assert(A.galleryDetailId==old.first,
-            'Gesto horizontal nao retornou para a primeira obra')
+        love.mousepressed(w/2,h/2-90,1,false)
+        love.mousereleased(w/2,h/2+70,1,false)
+        assert(not A.galleryDetailId and A.screen=='gallery',
+            'Gesto vertical nao voltou a grade da galeria')
         assert(Native.bytes(A.layerSession.composite)==old.bytes
             and A.layerSession:historyStats().undo==old.undo,
-            'Gesto visual alterou pixels ou historico')
-        status('Galeria: gesto horizontal real para obra anterior')
+            'Retorno a grade alterou pixels ou historico')
+        status('Galeria: gesto vertical real voltou a grade')
     elseif sh.stage==125 then
         local old=assert(A.galleryExpandedProof)
         local w,h=love.graphics.getDimensions()
+        local card=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(card.x+card.w/2,card.y+card.h/2,1,false)
+        love.mousereleased(card.x+card.w/2,card.y+card.h/2,1,false)
+        assert(A.galleryDetailId==old.first,
+            'Retornar a grade impediu reabrir a miniatura')
         local edit=IbisPanels.galleryDetail.edit(w,h)
         love.draw()
         love.mousepressed(edit.x+edit.w/2,edit.y+edit.h/2,1,false)
