@@ -52,6 +52,37 @@ function T.run()
             check(seen[tool.id],
                 'Ferramenta desapareceu na resolucao '..w)
         end
+        -- A posicao direita preserva as ferramentas e nao cobre os
+        -- seis comandos superiores: a primeira linha comeca abaixo.
+        local right=Rail.layout(w,h,1,#Tools.entries,'right')
+        check(right.x+right.w<=w and right.x>=w-80
+            and right.y>=64,'Faixa direita fora da margem segura')
+        local seenRight={}
+        for page=1,right.pages do
+            local list=Rail.entries(w,h,page,Tools.entries,'right')
+            local rr=Rail.layout(w,h,page,#Tools.entries,'right')
+            local last=rr.y
+            for _,e in ipairs(list) do
+                check(e.x==right.x and not seenRight[e.id],
+                    'Ferramenta duplicada ou fora da faixa direita')
+                seenRight[e.id]=true
+                check(e.y>=last and e.y+e.h<=h-130,
+                    'Ferramenta direita invade o rodape')
+                last=e.y+e.h
+            end
+            local nav=Rail.navigation(w,h,page,#Tools.entries,'right')
+            if nav then
+                check(nav.x==right.x and nav.y>=last
+                    and nav.y+nav.h<=h-130,
+                    'Navegador da faixa direita extrapola a viewport')
+            end
+        end
+        for _,e in ipairs(Tools.entries) do
+            check(seenRight[e.id],
+                'Modo direita ocultou a ferramenta '..e.id)
+        end
+        check(not pcall(Rail.layout,w,h,1,#Tools.entries,'popup'),
+            'Popup nao deve gerar faixa lateral')
         local dock=Compact.toolbar(w,h)
         local top=Top.toolbar(w,h)
         check(first.x+first.w<top[1].x
@@ -61,6 +92,7 @@ function T.run()
         check(not pcall(Rail.layout,w,h,first.pages+1,#Tools.entries))
         check(Rail.nextPage(w,h,1,#Tools.entries,-1)==1)
         check(Rail.nextPage(w,h,first.pages,#Tools.entries,1)==first.pages)
+        check(Rail.nextPage(w,h,right.pages,#Tools.entries,1,'right')==right.pages)
     end
     check(not pcall(Rail.layout,300,200,1,15))
     return {suite='ibis-editor-rail',passed=true,
