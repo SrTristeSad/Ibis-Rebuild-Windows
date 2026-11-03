@@ -5315,6 +5315,57 @@ function love.update(dt)
                 assert(Native.bytes(layers.composite)==pixelsBefore and
                     layers:historyStats().undo==undoBefore,
                     'Botoes +/- mudaram pixels ou historico')
+                -- A42: botão direito REAL do LÖVE no pixel pintado
+                -- no início deste smoke, sem trocar de ferramenta.
+                local originalColor=A.color
+                local pickedColor=Native.readPixel(layers.composite,20,20)
+                assert(pickedColor~=0,
+                    'Fixture do conta-gotas sem cor no canvas')
+                local dx=(20.5-A.doc.width/2)*A.zoom
+                local dy=(20.5-A.doc.height/2)*A.zoom
+                local ca,sa=math.cos(A.rotation),math.sin(A.rotation)
+                local sx=(w-12)/2+A.panX+dx*ca-dy*sa
+                local sy=(h-130)/2+A.panY+dx*sa+dy*ca
+                A.color=pickedColor==0x112233ff
+                    and 0x6688aaff or 0x112233ff
+                local unrelatedColor=A.color
+                love.draw()
+                love.mousepressed(sx,sy,2,false)
+                assert(A.color==pickedColor and A.tool=='brush'
+                    and not A.panning and not A.drawing,
+                    'Quick Eyedropper PC nao funcionou com botao 2')
+                love.mousereleased(sx,sy,2,false)
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'Conta-gotas modificou pixels ou historico')
+                A.color=unrelatedColor
+                love.draw()
+                love.mousepressed(railItem.x+railItem.w/2,
+                    railItem.y+railItem.h/2,2,false)
+                assert(A.color==unrelatedColor and not A.panning,
+                    'Conta-gotas vazou por cima de ferramenta visivel')
+                love.mousereleased(railItem.x+railItem.w/2,
+                    railItem.y+railItem.h/2,2,false)
+                A.compactPanel='tools'
+                love.draw()
+                love.mousepressed(sx,sy,2,false)
+                assert(A.color==unrelatedColor and not A.panning,
+                    'Conta-gotas ignorou popup ativo')
+                love.mousereleased(sx,sy,2,false)
+                A.compactPanel=nil
+                A.tool='erase'
+                love.draw()
+                love.mousepressed(sx,sy,2,false)
+                assert(A.panning and A.panButton==2
+                    and A.color==unrelatedColor,
+                    'Pan direito anterior quebrou fora do Brush')
+                love.mousereleased(sx,sy,2,false)
+                assert(not A.panning and A.panButton==nil,
+                    'Pan direito nao liberou o mouse')
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'Gestos Windows alteraram bytes ou historico')
+                A.color=originalColor
                 A.tool=originalTool
                 A.brushDiameter=originalDiameter
                 A.brushOpacity=originalOpacity
@@ -10410,8 +10461,32 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             return
         end
     end
-    -- Middle/right mouse or Space+left pan the view without opening any
-    -- painting, shape, selection or undo transaction.
+    -- A42: Quick Eyedropper confirmado para ibisPaint Windows
+    -- (tutorial no=167). Direito com pincel = colher, sem trocar tool.
+    -- Nunca ler pixels sob os controles de interface.
+    if buttonNumber==2 and A.screen=='editor' and A.doc
+        and A.tool=='brush' and not A.visualPendingTool
+        and not A.modal and not A.spaceHeld and not A.panning then
+        local w,h=love.graphics.getDimensions()
+        if Workspace.contains(w,h,paneHidden(),x,y,
+            A.compactUi and not A.focusMode) then
+            for _,b in ipairs(A.buttons) do
+                if x>=b.x and x<b.x+b.w
+                    and y>=b.y and y<b.y+b.h then
+                    return
+                end
+            end
+            local px,py=canvasPoint(x,y)
+            if px>=0 and py>=0 and
+                px<A.doc.width and py<A.doc.height then
+                finishStroke()
+                pickColor(px,py)
+                return
+            end
+        end
+    end
+    -- Middle mouse or Space+left pan, as before; right-button pan
+    -- remains only for contexts not using the quick eyedropper.
     if A.screen=='editor' and not A.modal and
         (buttonNumber==2 or buttonNumber==3 or
         (buttonNumber==1 and A.spaceHeld)) then

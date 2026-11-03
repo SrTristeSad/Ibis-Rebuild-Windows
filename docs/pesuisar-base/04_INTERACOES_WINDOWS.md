@@ -14,7 +14,7 @@ Fontes centrais:
 | Mover o canvas | Espaço + arrastar com botão esquerdo do mouse |
 | Aproximar/afastar | Roda do mouse; para caneta Alt+Espaço ou Z + arrasto |
 | Girar canvas | Shift + roda do mouse; para caneta Shift+Espaço ou R + arrasto circular |
-| Conta-gotas rápido | Botão direito do mouse durante uso do pincel |
+| Conta-gotas rápido | Botão direito com Pincel ativo, sem trocar de ferramenta; implementado/testado na A42 |
 | Mudar espessura | Alt+Ctrl + arraste do mouse; para caneta equivalente com teclas |
 | Abrir lista de atalhos | Shift + / (slash) |
 | Copiar/cortar/colar | Atalhos ilustrados no manual, verificar mapa em imagem da versão-alvo |
