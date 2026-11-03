@@ -8488,14 +8488,16 @@ local function drawEditor(w,h)
                     slot.y+slot.h/2,21,r/255,g/255,b/255)
             else
                 c(disabled and 'muted' or 'text')
-                -- A52: o seletor exibe a ferramenta ativa, inclusive
-                -- categorias visuais pendentes, sem trocar o callback.
-                local glyph=slot.id=='tools' and
-                    IbisTools.toolbarIcon(A.tool,A.visualPendingTool) or
-                    (slot.id=='brush' and
-                    (A.tool=='erase' and 'erase' or 'brush') or slot.id)
-                Icons.draw(glyph,
-                    slot.x+slot.w/2,slot.y+slot.h/2,21)
+                if slot.id=='tools' then
+                    -- A52: delegar o glifo ativo ao modulo Icons
+                    -- para respeitar o limite de 60 upvalues LuaJIT.
+                    Icons.drawToolSelector(A.tool,A.visualPendingTool,
+                        slot.x+slot.w/2,slot.y+slot.h/2,21)
+                else
+                    Icons.draw(slot.id=='brush' and
+                        (A.tool=='erase' and 'erase' or 'brush') or slot.id,
+                        slot.x+slot.w/2,slot.y+slot.h/2,21)
+                end
             end
             if not disabled then
                 A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
