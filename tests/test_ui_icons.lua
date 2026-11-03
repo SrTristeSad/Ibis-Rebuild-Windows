@@ -43,7 +43,7 @@ function M.run()
     for _,entry in ipairs(VisualTools.entries) do
         validate(entry.icon)
     end
-    for _,id in ipairs(Compact.order) do
+    for _,id in ipairs(Compact.IDS) do
         validate(id)
     end
     check(Icons.commands('unknown')==nil,'Unknown tools should not have glyphs')
