@@ -7,15 +7,15 @@ UI.IDS={'brush','tools','properties','color','fullscreen',
     'undo','redo','layers','back'}
 UI.LABELS={'Pincel','Ferramentas','Ajustes','Cor','Tela',
     'Desfazer','Refazer','Camadas','Voltar'}
-UI.WIDTH=72
-UI.GAP=7
-UI.HEIGHT=50
+UI.WIDTH=60
+UI.GAP=5
+UI.HEIGHT=44
 function UI.toolbar(w,h)
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Dimensão insuficiente')
     local total=#UI.IDS*UI.WIDTH+(#UI.IDS-1)*UI.GAP
     local x=math.floor((w-total)/2)
-    local y=h-60
+    local y=h-52
     local result={}
     for i,id in ipairs(UI.IDS) do
         result[i]={id=id,label=UI.LABELS[i],
@@ -23,6 +23,15 @@ function UI.toolbar(w,h)
             w=UI.WIDTH,h=UI.HEIGHT}
     end
     return result
+end
+-- A41: a caixa de realce visual fica restrita ao ícone.
+-- A área clicável permanece o slot inteiro, independente do realce.
+function UI.iconFrame(slot)
+    assert(type(slot)=='table' and slot.w>=44 and slot.h>=40,
+        'Slot de comando invalido')
+    local size=36
+    return {x=math.floor(slot.x+(slot.w-size)/2),
+        y=math.floor(slot.y+(slot.h-size)/2),w=size,h=size}
 end
 function UI.pick(w,h,x,y)
     for _,slot in ipairs(UI.toolbar(w,h)) do

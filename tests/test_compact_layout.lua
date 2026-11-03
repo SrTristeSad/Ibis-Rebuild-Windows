@@ -15,7 +15,7 @@ function T.run()
         local prevRight=0
         for i,slot in ipairs(slots) do
             check(slot.id==expected[i],'Mobile toolbar action order changed')
-            check(slot.w>=72 and slot.h>=34,'Touch target too small')
+            check(slot.w>=56 and slot.h>=40,'Touch target too small')
             check(slot.x>=12 and slot.x+slot.w<w-12 and
                 slot.y>=h-85 and slot.y+slot.h<=h-8,
                 'Bottom toolbar must be fully inside viewport')
@@ -24,6 +24,26 @@ function T.run()
                 slot.y+slot.h/2)==slot.id,
                 'Toolbar hit map must match its visual geometry')
             prevRight=slot.x+slot.w
+        end
+        -- A41: alvos compactos centralizados e moldura de 36 px
+        -- contida no slot, mas sem encolher a area de clique.
+        local first,last=slots[1],slots[#slots]
+        check(first.x+last.x+last.w==w,
+            'Barra principal deve ficar centralizada')
+        check(first.y==h-52 and first.h==44 and
+            last.y==first.y,
+            'Barra principal deve ocupar uma so faixa')
+        check(last.x+last.w-first.x<650,
+            'Barra inferior nao deve ser um bloco gigante')
+        for _,slot in ipairs(slots) do
+            local frame=UI.iconFrame(slot)
+            check(frame.w==36 and frame.h==36 and
+                frame.x>=slot.x and frame.y>=slot.y and
+                frame.x+frame.w<=slot.x+slot.w and
+                frame.y+frame.h<=slot.y+slot.h,
+                'Moldura visual extrapola hitbox')
+            check(UI.pick(w,h,slot.x+3,slot.y+3)==slot.id,
+                'Alvo so funciona sobre o icone e nao no slot')
         end
         check(UI.pick(w,h,10,180)==nil,
             'Canvas must not accidentally activate bottom controls')

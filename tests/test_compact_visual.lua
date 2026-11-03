@@ -24,8 +24,13 @@ function T.run()
         check(#bar==9,'Toolbar action count changed')
         for i,item in ipairs(bar) do
             check(item.id==actions[i],'Toolbar order must match reference')
-            check(item.w==72 and item.h==50,
+            check(item.w==60 and item.h==44,
                 'Compact icon touch area must use visual contract')
+            local f=UI.iconFrame(item)
+            check(f.w==36 and f.h==36 and
+                f.x+f.w/2==item.x+item.w/2 and
+                f.y+f.h/2==item.y+item.h/2,
+                'Moldura ativa deve ficar centrada no icone')
             check(UI.pick(w,h,item.x+item.w/2,
                 item.y+item.h/2)==item.id,
                 'Hit area differs from rendered action')

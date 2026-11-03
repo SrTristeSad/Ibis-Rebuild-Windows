@@ -8264,8 +8264,9 @@ local function drawEditor(w,h)
                 EditorTools.fromId(A.tool).label),
                 (w-350)/2,h-113,'small','muted')
         end
-        c('line')
-        love.graphics.rectangle('fill',w/2-352,h-62,704,1)
+        -- A41: o rodapé já possui uma divisória contínua de tela
+        -- inteira; remover o filete de 704 px que criava um bloco
+        -- central não documentado na barra principal.
         for _,slot in ipairs(Compact.toolbar(w,h)) do
             local active=(slot.id=='brush' and not A.visualPendingTool
                 and (A.tool=='brush' or A.tool=='erase')) or
@@ -8278,25 +8279,32 @@ local function drawEditor(w,h)
             local mx,my=love.mouse.getPosition()
             local over=mx>=slot.x and mx<slot.x+slot.w
                 and my>=slot.y and my<slot.y+slot.h
-            if active or (over and not disabled) then
-                c(active and 'selected' or 'line')
-                love.graphics.rectangle('fill',
-                    slot.x+2,slot.y+2,slot.w-4,slot.h-4,3,3)
+            -- Realce compacto em torno do glifo. O retângulo de
+            -- toque completo continua inalterado na coleção de botões.
+            local frame=Compact.iconFrame(slot)
+            if over and not disabled then
+                c('line',.52)
+                love.graphics.rectangle('fill',frame.x,frame.y,
+                    frame.w,frame.h,5,5)
             end
-            c(disabled and 'muted' or active and 'accent' or 'text')
+            if active then
+                c('selected',.35)
+                love.graphics.rectangle('fill',frame.x,frame.y,
+                    frame.w,frame.h,5,5)
+                c('accent',.93)
+                love.graphics.setLineWidth(1.5)
+                love.graphics.rectangle('line',frame.x+.75,
+                    frame.y+.75,frame.w-1.5,frame.h-1.5,5,5)
+            end
+            c(disabled and 'muted' or 'text')
             Icons.draw(slot.id=='brush' and
                 (A.tool=='erase' and 'erase' or 'brush') or slot.id,
-                slot.x+slot.w/2,slot.y+slot.h/2,23)
+                slot.x+slot.w/2,slot.y+slot.h/2,21)
             if slot.id=='color' then
                 local r,g,b=Colors.channels(A.color)
                 love.graphics.setColor(r/255,g/255,b/255,1)
                 love.graphics.rectangle('fill',
                     slot.x+slot.w/2+13,slot.y+slot.h/2+11,12,7,1,1)
-            end
-            if active then
-                c('accent')
-                love.graphics.rectangle('fill',slot.x+13,
-                    slot.y+slot.h-3,slot.w-26,2)
             end
             if not disabled then
                 A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
