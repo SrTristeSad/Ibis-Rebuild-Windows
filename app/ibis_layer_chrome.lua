@@ -1,5 +1,6 @@
 -- Somente representacao da janela Camadas; nenhuma edicao de pixels.
 -- Cores/organizacao baseadas em Layer Window Details do ibisPaint.
+local TextFit=require('text_fit')
 local M={}
 M.colors={
     window={.91,.92,.93},header={.21,.22,.24},
@@ -197,13 +198,23 @@ function M.row(r,active)
         love.graphics.rectangle('fill',r.x,r.y,3,r.h)
     end
 end
+-- A55: nomes precisam ocupar so uma linha. O original do projeto
+-- nao e modificado; somente a representacao e truncada em UTF-8.
+function M.rowName(name,width,measure)
+    assert(type(name)=='string','Nome de camada invalido')
+    local single=name:gsub('[\r\n\t]',' '):gsub(' +',' ')
+    return TextFit.truncate(single,width,measure)
+end
 function M.label(r,index,name,opacity,body,small)
     color('text')
     love.graphics.setFont(body)
     love.graphics.print(tostring(index),r.x+54,r.y+3)
     love.graphics.setFont(small)
-    love.graphics.printf(name,r.x+71,r.y+6,
-        math.max(40,r.w-120),'left')
+    local width=math.max(40,r.w-120)
+    local short=M.rowName(name,width,function(value)
+        return small:getWidth(value)
+    end)
+    love.graphics.print(short,r.x+71,r.y+6)
     color('muted')
     love.graphics.print(('%d%%'):format(math.floor(opacity*100+.5)),
         r.x+151,r.y+31)
