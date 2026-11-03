@@ -142,6 +142,69 @@ function M.run()
     check(Compact.IDS[5]=='fullscreen' and
         Icons.commands(Compact.IDS[5])==screen,
         'A nova seta precisa manter o ID e o slot Tela')
+    -- A53: Propriedades reflete o tamanho do pincel/borracha.
+    check(Icons.brushSizeLabel(1)=='1' and
+        Icons.brushSizeLabel(24)=='24' and
+        Icons.brushSizeLabel(256)=='256',
+        'Indicador de Propriedades perdeu os tamanhos de 1 a 256')
+    for _,v in ipairs({0,-1,257,12.5}) do
+        check(not pcall(Icons.brushSizeLabel,v),
+            'Tamanho invalido nao pode entrar no indicador')
+    end
+    local badgeCalls={}
+    local badgeFont={getHeight=function()return 10 end,
+        getWidth=function(_,value)return #value*6 end}
+    local savedLove=_G.love
+    local badgeGraphics={
+        push=function(mode)
+            badgeCalls[#badgeCalls+1]={'push',mode}
+        end,
+        pop=function()
+            badgeCalls[#badgeCalls+1]={'pop'}
+        end,
+        setColor=function(r,g,b,a)
+            badgeCalls[#badgeCalls+1]={'color',r,g,b,a}
+        end,
+        circle=function(mode,cx,cy,r)
+            badgeCalls[#badgeCalls+1]={'circle',mode,cx,cy,r}
+        end,
+        setLineWidth=function(w)
+            badgeCalls[#badgeCalls+1]={'width',w}
+        end,
+        setFont=function(font)
+            badgeCalls[#badgeCalls+1]={'font',font}
+        end,
+        translate=function(x,y)
+            badgeCalls[#badgeCalls+1]={'translate',x,y}
+        end,
+        scale=function(x,y)
+            badgeCalls[#badgeCalls+1]={'scale',x,y}
+        end,
+        print=function(value,x,y)
+            badgeCalls[#badgeCalls+1]={'text',value,x,y}
+        end
+    }
+    _G.love={graphics=badgeGraphics}
+    local badgeOK,badgeError=pcall(Icons.drawBrushSizeBadge,
+        100,150,21,256,badgeFont)
+    _G.love=savedLove
+    check(badgeOK,'Propriedades nao renderizou: '..tostring(badgeError))
+    local pushCount,popCount,number,rounds=0,0,nil,0
+    for _,call in ipairs(badgeCalls) do
+        if call[1]=='push' then pushCount=pushCount+1 end
+        if call[1]=='pop' then popCount=popCount+1 end
+        if call[1]=='text' then number=call[2] end
+        if call[1]=='circle' then
+            rounds=rounds+1
+            check(call[3]==100 and call[4]==150 and
+                call[5]<=10.5,'Disco excedeu a faixa de 21 px')
+        end
+    end
+    check(pushCount==2 and popCount==2 and
+        rounds==2 and number=='256',
+        'O disco deve preservar pilha grafica e texto do tamanho atual')
+    check(Compact.IDS[3]=='properties',
+        'O botao Ajustes nao pode mudar de ID ou posicao')
     check(Icons.commands('unknown')==nil,'Unknown tools should not have glyphs')
     check(#Tools.items==8,'Existing eight tool set must stay intact')
     return {suite='editor-vector-tool-icons',passed=true,assertions=checks,
