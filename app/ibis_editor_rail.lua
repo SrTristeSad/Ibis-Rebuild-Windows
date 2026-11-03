@@ -1,17 +1,16 @@
--- Faixa lateral do seletor de ferramentas: duas colunas visuais,
--- como a janela Left/Right do tutorial oficial ibisPaint #03.
--- Apenas geometria e rótulos; não altera o raster ou seleção.
--- Versão Android 14.1.2: sem screenshot autenticada pixel a pixel.
+-- Barra de ferramentas Windows: uma coluna, como no marketing oficial
+-- da Microsoft Store. Dimensoes ainda nao calibradas contra o PC.
+-- Preservar quinze ferramentas e seus respectivos callbacks.
 local M={}
-M.WIDTH=136
+M.WIDTH=68
 M.LEFT=7
 M.TOP=19
 M.RIGHT_TOP=64 -- abaixo dos seis comandos superiores
-M.ROW=43
+M.ROW=39
 M.CELL=64
 M.GAP=4
 M.MARGIN=2
-M.COLUMNS=2
+M.COLUMNS=1
 M.shortLabels={transform='Mover',wand='Varinha',lasso='Laço',
     filter='Filtro',brush='Pincel',eraser='Borracha',
     smudge='Borrar',blur='Desfoque',special='Especial',
@@ -34,8 +33,7 @@ function M.layout(w,h,page,count,position)
     local rows=math.max(1,math.floor(available/M.ROW))
     local capacity=rows*M.COLUMNS
     if count>capacity then
-        -- Deixe espaço para os controles de página e mantenha ambas
-        -- as colunas acima da área de espessura/opacidade.
+        -- Reservar paginacao sem tocar ajustes inferiores.
         rows=math.max(1,math.floor((available-27)/M.ROW))
         capacity=rows*M.COLUMNS
     end
@@ -52,6 +50,11 @@ function M.layout(w,h,page,count,position)
         row=M.ROW,columns=M.COLUMNS,cell=M.CELL,
         rows=visibleRows,perPage=capacity,pages=pages,page=page,
         start=first,stop=last}
+end
+function M.clampPage(w,h,page,count,position)
+    assert(type(page)=='number' and page%1==0 and page>=1,
+        'Pagina invalida')
+    return math.min(page,M.layout(w,h,1,count,position).pages)
 end
 function M.entries(w,h,page,items,position)
     assert(type(items)=='table' and #items>0,

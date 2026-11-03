@@ -7727,10 +7727,12 @@ end
 local function drawEditorToolRail(w,h)
     local count=#IbisTools.entries
     local position=A.toolRailPosition or 'left'
-    local rect=EditorRail.layout(w,h,A.toolRailPage or 1,count,position)
-    -- A39: fundo acompanha oito linhas (duas colunas), nunca as
-    -- quinze linhas legadas. Registrar uma hitbox do fundo ANTES
-    -- dos botões para que seus espaçamentos não pintem no canvas.
+    -- A45: PC documentado com uma coluna. Garantir pagina valida
+    -- apos resize, sem trocar ferramentas ou editar o documento.
+    A.toolRailPage=EditorRail.clampPage(w,h,
+        A.toolRailPage or 1,count,position)
+    local rect=EditorRail.layout(w,h,A.toolRailPage,count,position)
+    -- Fundo consome somente a faixa efetivamente desenhada.
     local panelH=rect.rows*rect.row+(rect.pages>1 and 31 or 8)
     c('panel',.78)
     love.graphics.rectangle('fill',rect.x-1,rect.y-4,
@@ -7747,16 +7749,17 @@ local function drawEditorToolRail(w,h)
         local mx,my=love.mouse.getPosition()
         local hover=mx>=item.x and mx<item.x+item.w
             and my>=item.y and my<item.y+item.h
-        if active or hover then
-            c(active and 'selected' or 'line')
+        -- Ferramenta ativa: glifo e legenda azuis, sem placa azul.
+        if hover and not active then
+            c('line',.72)
             love.graphics.rectangle('fill',item.x+2,item.y+1,
                 item.w-4,item.h-2,3,3)
         end
         c(active and 'accent' or 'text')
-        Icons.draw(item.icon,item.x+item.w/2,item.y+14,18)
+        Icons.draw(item.icon,item.x+item.w/2,item.y+12,18)
         love.graphics.setFont(A.fonts.micro)
         love.graphics.printf(item.shortLabel,item.x+1,
-            item.y+27,item.w-2,'center')
+            item.y+25,item.w-2,'center')
         A.buttons[#A.buttons+1]={x=item.x,y=item.y,w=item.w,h=item.h,
             fn=guard(function()activateIbisTool(tool)end)}
     end

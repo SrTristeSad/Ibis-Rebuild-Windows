@@ -3,7 +3,7 @@
 -- Nenhum asset proprietario; mapeia somente funcoes Lua existentes.
 local M={}
 M.entries={
-    {id='transform',label='Transformar',icon='select',backend=nil},
+    {id='transform',label='Transformar',icon='transform',backend=nil},
     {id='wand',label='Vara mágica',icon='magic',backend=nil},
     {id='lasso',label='Laço',icon='lasso',backend=nil},
     {id='filter',label='Filtro',icon='filter',backend=nil},

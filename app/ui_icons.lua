@@ -109,6 +109,17 @@ glyphs.down={
 }
 -- Icones vetoriais originais para categorias ainda sem motor Lua.
 -- O nome representa a funcao na UI, nao implica suporte funcional.
+-- Mover/Transformar: cruz de quatro setas, desenhada em vetores
+-- independentes; nao reutilizar a caixa de selecao.
+glyphs.transform={
+    {op='line',points={0,-5.5,0,5.5}},
+    {op='line',points={-5.5,0,5.5,0}},
+    {op='line',points={-2.7,-3,0,-6.5,2.7,-3}},
+    {op='line',points={-2.7,3,0,6.5,2.7,3}},
+    {op='line',points={-3,-2.7,-6.5,0,-3,2.7}},
+    {op='line',points={3,-2.7,6.5,0,3,2.7}},
+    {op='circle',mode='fill',x=0,y=0,r=1.25}
+}
 glyphs.magic={
     {op='line',points={-6,6,5,-5}},
     {op='line',points={2,-6,2,-2}},

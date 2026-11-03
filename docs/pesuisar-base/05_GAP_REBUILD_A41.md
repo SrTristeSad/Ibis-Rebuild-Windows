@@ -55,3 +55,15 @@ Referências externas apontam apenas o que efetivamente mostram.
 - Imagens do PC: **reais, mas de versões diferentes**.
 - Layout pixel a pixel da versão PC de 2026: **PENDENTE**.
 - Clone visual completo: **OBJETIVO**, ainda não atingido.
+
+## Correção A45 — ícones da faixa Windows
+
+Uma captura promocional do **ibisPaint oficial para Windows** na
+[Microsoft Store](https://apps.microsoft.com/detail/9pfdf2zd4z4n)
+exibe a faixa esquerda em **uma coluna** (ícone e legenda), com
+Pincel ativo em azul. A39 usava duas colunas de um tutorial geral,
+cuja plataforma não foi confirmada como Windows. A45 corrige o
+rebuild para uma coluna, mantendo todos os comandos, e substitui
+Transformar por um glifo vetorial de quatro setas.
+A versão e o DPI da imagem não foram identificados; medidas e todos
+os outros glifos continuam pendentes de validação 1:1 no PC.

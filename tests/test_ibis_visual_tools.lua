@@ -10,6 +10,9 @@ function T.run()
         'smudge','blur','special','bucket','vector','text','frame',
         'picker','canvas'}
     local seen={}
+    assert(Catalog.entries[1].icon=='transform' and
+        Icons.commands('transform')~=Icons.commands('select'),
+        'Transformar nao pode parecer seletor retangular')
     for i,entry in ipairs(Catalog.entries) do
         assert(entry.id==reference[i],'Ordem visual de ferramentas divergente')
         assert(not seen[entry.id] and Catalog.get(entry.id)==entry,
