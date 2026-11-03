@@ -2,6 +2,7 @@
 -- Referencia: selecao de ferramentas e barra nos tutoriais oficiais.
 -- Nenhum asset proprietario; mapeia somente funcoes Lua existentes.
 local M={}
+local EditorTools=require('editor_tools')
 M.entries={
     {id='transform',label='Transformar',icon='transform',backend=nil},
     {id='wand',label='Vara mágica',icon='magic',backend=nil},
@@ -25,6 +26,17 @@ for _,entry in ipairs(M.entries) do
     byId[entry.id]=entry
 end
 function M.get(id) return byId[id] end
+-- A52: o botao inferior do seletor mostra a ferramenta em uso,
+-- em vez do mosaico generico de quatro quadrados.
+-- Quando um modo visual ainda nao possui motor, o icone vem do
+-- catalogo sem ativar outro backend. "tools" e fallback seguro.
+function M.toolbarIcon(activeTool,pendingId)
+    if pendingId~=nil then
+        local entry=M.get(pendingId)
+        return entry and entry.icon or 'tools'
+    end
+    return EditorTools.fromId(activeTool) and activeTool or 'tools'
+end
 -- A documentacao oficial permite 1, 2 ou 3 colunas no popup.
 -- Uma coluna pagina os 15 itens: nunca desenha fora da viewport.
 function M.pages(columns)
