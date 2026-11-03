@@ -288,6 +288,15 @@ function Icons.drawColorSwatch(cx,cy,size,r,g,b)
     gapi.circle('line',geom.cx,geom.cy,geom.ringRadius,32)
     gapi.pop()
 end
+-- A52: a funcao principal do editor ja atingiu o limite de
+-- upvalues no LuaJIT. Delegar a escolha do icone ao proprio modulo
+-- de renderizacao evita capturar o catalogo dentro de drawEditor.
+local visualTools
+function Icons.drawToolSelector(activeTool,pendingId,cx,cy,size)
+    visualTools=visualTools or require('ibis_visual_tools')
+    local id=visualTools.toolbarIcon(activeTool,pendingId)
+    return Icons.draw(id,cx,cy,size)
+end
 function Icons.draw(id,cx,cy,size)
     local shapes=assert(glyphs[id],'Ícone de ferramenta desconhecido')
     local g=assert(love and love.graphics,'Renderização LÖVE obrigatória')
