@@ -8488,8 +8488,13 @@ local function drawEditor(w,h)
                     slot.y+slot.h/2,21,r/255,g/255,b/255)
             else
                 c(disabled and 'muted' or 'text')
-                Icons.draw(slot.id=='brush' and
-                    (A.tool=='erase' and 'erase' or 'brush') or slot.id,
+                -- A52: o seletor exibe a ferramenta ativa, inclusive
+                -- categorias visuais pendentes, sem trocar o callback.
+                local glyph=slot.id=='tools' and
+                    IbisTools.toolbarIcon(A.tool,A.visualPendingTool) or
+                    (slot.id=='brush' and
+                    (A.tool=='erase' and 'erase' or 'brush') or slot.id)
+                Icons.draw(glyph,
                     slot.x+slot.w/2,slot.y+slot.h/2,21)
             end
             if not disabled then
