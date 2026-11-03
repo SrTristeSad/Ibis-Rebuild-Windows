@@ -89,8 +89,10 @@ function T.run()
             'Popup nao deve virar faixa lateral')
         local dock=Compact.toolbar(w,h)
         local top=Top.toolbar(w,h)
+        -- Separar eixos: a faixa pode partilhar colunas X com o
+        -- rodape, desde que termine acima dele (nao ha colisao 2D).
         check(first.x+first.w<top[1].x
-            and first.x+first.w<dock[1].x,
+            and first.y+first.rows*first.row<dock[1].y,
             'Faixa invade barras de controle')
         check(not pcall(Rail.layout,w,h,0,#Tools.entries))
         check(not pcall(Rail.layout,w,h,first.pages+1,#Tools.entries))
