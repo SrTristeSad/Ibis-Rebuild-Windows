@@ -67,11 +67,11 @@ glyphs.properties={
     {op='circle',mode='fill',x=3.1,y=0,r=1.8},
     {op='circle',mode='fill',x=-2.5,y=4.5,r=1.8}
 }
+-- A50: representacao estatica do indicador de cor; no editor,
+-- Icons.drawColorSwatch colore o disco com a selecao RGBA atual.
 glyphs.color={
-    {op='circle',mode='line',x=0,y=0,r=6.3},
-    {op='circle',mode='fill',x=2.8,y=-2.6,r=1.8},
-    {op='circle',mode='fill',x=-2.5,y=0.2,r=1.3},
-    {op='circle',mode='fill',x=.2,y=3.1,r=1.3}
+    {op='circle',mode='line',x=0,y=0,r=6.8},
+    {op='circle',mode='fill',x=0,y=0,r=5.2}
 }
 glyphs.fullscreen={
     {op='line',points={-6,-2,-6,-6,-2,-6}},
@@ -258,6 +258,33 @@ glyphs['gallery-next']={
     {op='line',points={-3.6,-6,3.6,0,-3.6,6}}}
 function Icons.commands(id)
     return glyphs[id]
+end
+-- A50: o controle de cor do Windows e um disco com amostra viva,
+-- nao uma paleta de tres pontos ou pequenos quadrados redundantes.
+-- As cores RGB sao normalizadas [0,1]; o alfa do pincel fica no slider.
+function Icons.colorSwatchGeometry(cx,cy,size)
+    assert(type(cx)=='number' and cx==cx and
+        type(cy)=='number' and cy==cy and
+        type(size)=='number' and size>0 and size==size,
+        'Geometria do indicador de cor invalida')
+    return {cx=cx,cy=cy,fillRadius=size*.35,
+        ringRadius=size*.44}
+end
+function Icons.drawColorSwatch(cx,cy,size,r,g,b)
+    for _,value in ipairs({r,g,b}) do
+        assert(type(value)=='number' and value==value and
+            value>=0 and value<=1, 'Canal de cor invalido')
+    end
+    local gapi=assert(love and love.graphics,
+        'Renderizacao LOVE obrigatoria')
+    local geom=Icons.colorSwatchGeometry(cx,cy,size)
+    gapi.push('all')
+    gapi.setColor(r,g,b,1)
+    gapi.circle('fill',geom.cx,geom.cy,geom.fillRadius,32)
+    gapi.setColor(.85,.85,.85,1)
+    gapi.setLineWidth(1.4)
+    gapi.circle('line',geom.cx,geom.cy,geom.ringRadius,32)
+    gapi.pop()
 end
 function Icons.draw(id,cx,cy,size)
     local shapes=assert(glyphs[id],'Ícone de ferramenta desconhecido')
