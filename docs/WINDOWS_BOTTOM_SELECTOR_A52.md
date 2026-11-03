@@ -28,13 +28,27 @@ mesma forma, nem foram medidos DPI, escala ou estados de hover.
   resolve o `id` existente. Quando há categoria visual pendente,
   usa `entry.icon` do catálogo de 15 itens. Se nenhum ID for válido,
   retorna `tools`, sem lançar exceção.
+- `app/ui_icons.lua`: adiciona `Icons.drawToolSelector`, que resolve
+  o ícone por `toolbarIcon` e chama `Icons.draw` dentro do próprio
+  módulo, sem aumentar os *upvalues* do editor.
 - `app/main.lua`: no segundo slot de `Compact.toolbar`, chama
-  `IbisTools.toolbarIcon(A.tool, A.visualPendingTool)` antes de
-  `Icons.draw`, mantendo a mesma posição, escala 21, callback,
-  hitbox e estados de painel.
+  `Icons.drawToolSelector(A.tool, A.visualPendingTool, ...)`,
+  mantendo a mesma posição, escala 21, callback, hitbox e estados de
+  painel.
 - `tests/test_ibis_visual_tools.lua`: testa resolução dos oito IDs,
   15 categorias, prioridade da categoria pendente, existência de todos
-  os vetores, fallback e preservação do segundo slot `tools`.
+  os vetores, fallback, preservação do segundo slot `tools` e
+  delegação das coordenadas ao renderizador.
+
+## Correção após CI inicial
+
+A primeira implementação chamou `IbisTools.toolbarIcon` diretamente
+de `drawEditor`, aumentando as dependências capturadas. O workflow
+Linux do commit `715e390` detectou corretamente a limitação do
+LuaJIT: `function at line 7833 has more than 60 upvalues`.
+A integração foi corrigida com `Icons.drawToolSelector`, que deixa
+a resolução de ícones fora da função principal. A aprovação da
+versão corrigida depende dos workflows do commit final.
 
 ## Reutilização e licenças
 
