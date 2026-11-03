@@ -328,10 +328,36 @@ end
 -- upvalues no LuaJIT. Delegar a escolha do icone ao proprio modulo
 -- de renderizacao evita capturar o catalogo dentro de drawEditor.
 local visualTools
+-- A54: disco do seletor com a ferramenta em escala menor e uma
+-- pequena marca de menu. Isso distingue o segundo botao do alternador
+-- Pincel/Borracha sem alterar o ID nem os callbacks da barra.
+function Icons.toolSelectorGeometry(cx,cy,size)
+    assert(type(cx)=='number' and cx==cx and
+        type(cy)=='number' and cy==cy and
+        type(size)=='number' and size>0 and size==size,
+        'Geometria do seletor invalida')
+    return {cx=cx,cy=cy,radius=size*.49,
+        iconSize=size*.65,caret={
+            cx+size*.22,cy+size*.22,
+            cx+size*.42,cy+size*.22,
+            cx+size*.32,cy+size*.34}}
+end
 function Icons.drawToolSelector(activeTool,pendingId,cx,cy,size)
     visualTools=visualTools or require('ibis_visual_tools')
     local id=visualTools.toolbarIcon(activeTool,pendingId)
-    return Icons.draw(id,cx,cy,size)
+    local g=assert(love and love.graphics,
+        'Renderizacao LOVE obrigatoria')
+    local frame=Icons.toolSelectorGeometry(cx,cy,size)
+    g.push('all')
+    g.setColor(.07,.07,.07,1)
+    g.circle('fill',cx,cy,frame.radius,32)
+    g.setColor(.80,.80,.80,1)
+    g.setLineWidth(1)
+    g.circle('line',cx,cy,frame.radius,32)
+    g.setColor(.95,.95,.95,1)
+    Icons.draw(id,cx,cy,frame.iconSize)
+    g.polygon('fill',unpack(frame.caret))
+    g.pop()
 end
 function Icons.draw(id,cx,cy,size)
     local shapes=assert(glyphs[id],'Ícone de ferramenta desconhecido')
