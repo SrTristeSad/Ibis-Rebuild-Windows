@@ -76,6 +76,23 @@ function T.run()
             end
         end
     end
+    -- A55: nomes longos, acentuados e com quebras nao devem
+    -- invadir as linhas Normal/opacidade nem o icone do olho.
+    local measure=function(s)return #s*6 end
+    local longName='Camada com nome comprido de iluminacao e sombras'
+    local short=Chrome.rowName(longName,96,measure)
+    check(short~=longName and short:sub(-3)=='...' and
+        measure(short)<=96,
+        'Nome comprido perdeu truncamento de largura real')
+    check(Chrome.rowName('Café decorado',48,measure)=='Café...',
+        'Truncamento deve preservar caracteres UTF-8 inteiros')
+    check(Chrome.rowName('A\nB\tC',100,measure)=='A B C',
+        'Rotulo de camada nao pode conter quebra de linha')
+    check(Chrome.rowName('Curta',100,measure)=='Curta' and
+        longName=='Camada com nome comprido de iluminacao e sombras',
+        'Truncamento nao deve alterar nome original')
+    check(not pcall(Chrome.rowName,nil,90,measure),
+        'Nome de camada ausente precisa ser rejeitado')
     for _,v in pairs(Chrome.colors) do
         check(#v==3)
         for _,c in ipairs(v) do check(c>=0 and c<=1)end
@@ -90,17 +107,35 @@ function T.run()
     -- a propria funcao com uma string e desenhava botoes vazios.
     local previous=love
     local glyphMarks=0
-    local fakeFont={getHeight=function()return 12 end}
+    local prints={}
+    local fakeFont={
+        getHeight=function()return 12 end,
+        getWidth=function(_,value)return #value*6 end
+    }
     love={graphics={
         setColor=function()end,
         setLineWidth=function()end,
         setFont=function()end,
-        print=function()end,
+        print=function(value,x,y)
+            prints[#prints+1]={label=value,x=x,y=y}
+        end,
         printf=function()end,
         rectangle=function()glyphMarks=glyphMarks+1 end,
         line=function()glyphMarks=glyphMarks+1 end
     }}
     local p=UI.popup(1220,800,'layers')
+    -- A55: regressao de pintura real com fonte de medidas simulada.
+    local row=Panels.layerRow(p,1)
+    Chrome.label(row,1,longName,.37,fakeFont,fakeFont)
+    check(#prints==3,'Linha deve conter indice, nome e opacidade')
+    check(prints[2].label==Chrome.rowName(
+        longName,row.w-120,measure) and
+        prints[2].y==row.y+6 and
+        prints[2].x+measure(prints[2].label)<
+            row.x+row.w-34 and
+        prints[3].label=='37%' and
+        prints[3].y>prints[2].y,
+        'Nome deve ocupar apenas a linha superior, longe do olho')
     local buttons=Chrome.toolbar(p,'top')
     for _,v in ipairs(Chrome.toolbar(p,'footer')) do
         buttons[#buttons+1]=v
