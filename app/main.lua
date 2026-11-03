@@ -43,7 +43,6 @@ IbisPanels.canvasDimensionSlider=require('ibis_canvas_dimension_slider')
 IbisPanels.canvasDialogChrome=require('ibis_canvas_dialog_chrome')
 IbisPanels.canvasReferenceDraw=require('ibis_canvas_reference_draw')
 IbisPanels.home=require('ibis_home_screen')
-IbisPanels.windowsHud=require('ibis_windows_hud')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -169,7 +168,7 @@ local showcaseNames={[0]='00-inicial.png','01-galeria.png','02-editor-compacto.p
     '123-galeria-proxima-obra.png',
     '124-galeria-gesto-voltar.png',
     '125-galeria-editar-obra.png'}
-local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,windowsHudApi=require('ibis_windows_hud'),quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
         A.wandOverlay:release()
@@ -7600,9 +7599,9 @@ local function drawEditor(w,h)
             -- A38: deixar a superfície principal sem botões de PC.
             -- F10 expõe os comandos existentes sem interceptar pintura
             -- com hitboxes invisíveis quando o painel estiver fechado.
-            if IbisPanels.windowsHud.visible(A.screen,A.compactUi,
+            if A.windowsHudApi.visible(A.screen,A.compactUi,
                 A.focusMode,A.windowsHud,A.compactPanel) then
-                local r=IbisPanels.windowsHud.rects(w,h)
+                local r=A.windowsHudApi.rects(w,h)
                 box(r.background.x,r.background.y,
                     r.background.w,r.background.h,'panel')
                 button('Salvar',r.save.x,r.save.y,
@@ -11050,7 +11049,8 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and key=='f10' and
-        A.compactUi and not A.focusMode then
+        A.compactUi and not A.focusMode and
+        not A.toolHelp and not A.contextMenu then
         A.windowsHud=not A.windowsHud
         return
     end
