@@ -59,6 +59,8 @@ jobs:
         run: luajit -e "local t=loadfile('tests/test_ibis_editor_rail.lua')(); assert(t.run().passed)"
       - name: Lua Windows brush-size Ctrl Alt gesture and bracket shortcuts
         run: luajit -e "local t=loadfile('tests/test_ibis_windows_brush_size.lua')(); assert(t.run().passed)"
+      - name: Lua Windows Ink pen zoom and rotate geometry
+        run: luajit -e "local t=loadfile('tests/test_ibis_windows_pen_view.lua')(); assert(t.run().passed)"
       - name: Lua standalone layer chrome geometry
         run: luajit -e "local t=loadfile('tests/test_ibis_layer_chrome.lua')(); assert(t.run().passed)"
       - name: Lua raster buffer and composite regression

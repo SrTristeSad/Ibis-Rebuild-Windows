@@ -168,7 +168,7 @@ local showcaseNames={[0]='00-inicial.png','01-galeria.png','02-editor-compacto.p
     '123-galeria-proxima-obra.png',
     '124-galeria-gesto-voltar.png',
     '125-galeria-editar-obra.png'}
-local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,windowsHudApi=require('ibis_windows_hud'),windowsBrushSizeGesture=require('ibis_windows_brush_size'),brushSizeDrag=nil,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,windowsHudApi=require('ibis_windows_hud'),windowsBrushSizeGesture=require('ibis_windows_brush_size'),brushSizeDrag=nil,windowsPenViewApi=require('ibis_windows_pen_view'),penViewDrag=nil,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
         A.wandOverlay:release()
@@ -420,6 +420,7 @@ local function openDoc(doc)
     A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.desktopLayerOpacityDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
     A.compactPanel=nil;A.compactLayerStart=nil;A.windowsHud=false
+    A.penViewDrag=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -517,7 +518,7 @@ local function toggleFocusMode()
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
-    A.brushSizeDrag=nil
+    A.brushSizeDrag=nil;A.penViewDrag=nil
     navigateCompactPanel(nil);A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
     A.focusMode=not A.focusMode
     A.windowsHud=false
@@ -530,7 +531,7 @@ local function toggleCompactUi()
     finishStroke()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
-    A.brushSizeDrag=nil
+    A.brushSizeDrag=nil;A.penViewDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
     navigateCompactPanel(nil);A.compactLayerStart=nil;A.colorDrag=nil
     A.desktopLayerOpacityDrag=nil
@@ -5428,6 +5429,76 @@ function love.update(dt)
                     and A.dirty==previousInk,
                     'Atalhos Ctrl+Alt/[] modificaram raster ou dirty')
                 A.brushDiameter=previousSize;A.tool=previousTool
+                -- A44: eventos de CANETA do dispatcher Windows Ink,
+                -- modificadores simulados no runner sem teclado.
+                -- O canvas deve navegar sem alterar raster/RBD2.
+                local oldZoom,oldRotation=A.zoom,A.rotation
+                local oldPanX,oldPanY=A.panX,A.panY
+                local oldDirty=A.dirty
+                local oldPixels=Native.bytes(layers.composite)
+                local oldUndo=layers:historyStats().undo
+                local keyDown=love.keyboard.isDown
+                local penModifiers='alt'
+                love.keyboard.isDown=function(...)
+                    for i=1,select('#',...) do
+                        local key=select(i,...)
+                        if penModifiers=='alt' and
+                            (key=='lalt' or key=='ralt') then return true end
+                        if penModifiers=='shift' and
+                            (key=='lshift' or key=='rshift') then return true end
+                    end
+                    return keyDown(...)
+                end
+                local penOk,penError=xpcall(function()
+                    local midX,midY=View.center(viewData(),w,h)
+                    local penX,penY=midX+30,midY-28
+                    love.keypressed('space')
+                    love.draw()
+                    dispatchInkEvent({kind=1,id=991,x=penX,y=penY,
+                        pressure=1,flags=0})
+                    assert(A.penViewDrag and
+                        A.penViewDrag.kind=='zoom' and
+                        not A.panning and not A.drawing,
+                        'Caneta Alt+Space nao iniciou zoom')
+                    dispatchInkEvent({kind=2,id=991,x=penX,
+                        y=penY-24,pressure=1})
+                    assert(A.zoom>oldZoom,
+                        'Caneta Alt+Space nao aproximou canvas')
+                    dispatchInkEvent({kind=3,id=991,x=penX,
+                        y=penY-24,pressure=1})
+                    assert(not A.penViewDrag and A.inkPenId==nil,
+                        'Zoom nao encerrou com a caneta')
+                    A.zoom=oldZoom;A.rotation=oldRotation
+                    A.panX=oldPanX;A.panY=oldPanY
+                    penModifiers='shift'
+                    love.draw()
+                    dispatchInkEvent({kind=1,id=992,x=penX,y=penY,
+                        pressure=1,flags=0})
+                    assert(A.penViewDrag and
+                        A.penViewDrag.kind=='rotate' and
+                        not A.drawing and not A.panning,
+                        'Caneta Shift+Space nao iniciou rotacao')
+                    dispatchInkEvent({kind=2,id=992,x=midX-28,
+                        y=midY-30,pressure=1})
+                    assert(math.abs(A.rotation-oldRotation)>.1,
+                        'Caneta Shift+Space nao rotacionou')
+                    dispatchInkEvent({kind=3,id=992,x=midX-28,
+                        y=midY-30,pressure=1})
+                    assert(not A.penViewDrag and A.inkPenId==nil,
+                        'Rotacao nao encerrou no evento de caneta')
+                    A.zoom=oldZoom;A.rotation=oldRotation
+                    A.panX=oldPanX;A.panY=oldPanY
+                    assert(Native.bytes(layers.composite)==oldPixels and
+                        layers:historyStats().undo==oldUndo and
+                        A.dirty==oldDirty,
+                        'Navegacao de caneta escreveu no raster')
+                end,debug.traceback)
+                love.keyboard.isDown=keyDown
+                love.keyreleased('space')
+                A.penViewDrag=nil;A.inkPenId=nil
+                A.zoom=oldZoom;A.rotation=oldRotation
+                A.panX=oldPanX;A.panY=oldPanY
+                if not penOk then error(penError) end
                 local loaded=A.store:openProject(A.doc.id)
                 assert(loaded and loaded.layers and
                     loaded.layers[1].pixels==Native.bytes(layers:activeBuffer()),
@@ -10520,6 +10591,46 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             return
         end
     end
+    -- A44: navegação exclusiva para CANETA Windows Ink.
+    -- Alt+Space arrastar = zoom; Shift+Space circular = rotação.
+    -- Mouse preserva roda/Shift+roda e Space+arrastar.
+    if buttonNumber==1 and A.screen=='editor' and A.doc
+        and A.inkPenId~=nil and A.spaceHeld
+        and not A.modal and not A.toolHelp and not A.contextMenu
+        and not A.brushLibrary and not A.compactPanel
+        and not A.windowsHud and not A.panning
+        and not A.drawing and not A.brushSizeDrag then
+        local mode=A.windowsPenViewApi.mode(true,true,
+            love.keyboard.isDown('lalt','ralt'),
+            love.keyboard.isDown('lshift','rshift'))
+        if mode then
+            local w,h=love.graphics.getDimensions()
+            if Workspace.contains(w,h,paneHidden(),x,y,
+                A.compactUi and not A.focusMode) then
+                local overControl=false
+                for _,b in ipairs(A.buttons) do
+                    if x>=b.x and x<b.x+b.w and
+                        y>=b.y and y<b.y+b.h then
+                        overControl=true;break
+                    end
+                end
+                if not overControl then
+                    local px,py=canvasPoint(x,y)
+                    if px>=0 and py>=0 and
+                        px<A.doc.width and py<A.doc.height then
+                        local pivotX,pivotY=View.center(viewData(),w,h)
+                        local gesture=A.windowsPenViewApi.begin(
+                            mode,x,y,pivotX,pivotY)
+                        if gesture then
+                            finishStroke()
+                            A.penViewDrag=gesture
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end
     -- A43: Ctrl+Alt+arrastar com esquerdo — atalho documentado
     -- para espessura do pincel no ibisPaint Windows. A prioridade
     -- e anterior a pintura; a gestualidade nao grava pixels.
@@ -10715,6 +10826,16 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if b==1 and A.penViewDrag then
+        local v=A.windowsPenViewApi.move(A.penViewDrag,x,y)
+        if A.penViewDrag.kind=='zoom' then
+            zoomCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        else
+            rotateCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        end
+        A.penViewDrag=nil
+        return -- Sem pintura ou historico na soltura da caneta.
+    end
     if b==1 and A.brushSizeDrag then
         A.brushDiameter=A.windowsBrushSizeGesture.move(
             A.brushSizeDrag,x)
@@ -10932,6 +11053,15 @@ local function pointerMoved(x,y,dx,dy,pressure)
         applyParameterSlider(A.sliderDrag,x)
         return
     end
+    if A.penViewDrag then
+        local v=A.windowsPenViewApi.move(A.penViewDrag,x,y)
+        if A.penViewDrag.kind=='zoom' then
+            zoomCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        else
+            rotateCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        end
+        return
+    end
     if A.brushSizeDrag then
         A.brushDiameter=A.windowsBrushSizeGesture.move(
             A.brushSizeDrag,x)
@@ -11026,6 +11156,7 @@ dispatchInkEvent=function(e)
             pointerMoved(e.x,e.y,0,0,Pressure.normalize(e.pressure))
         elseif e.kind==3 or e.kind==4 then
             if e.kind==4 then
+                A.penViewDrag=nil
                 guard(finishStroke)()
                 A.shapePreview=nil
                 guard(finishSelection)()
@@ -11044,7 +11175,7 @@ end
 function love.mousefocus(focused)
     if not focused then
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
-        A.brushSizeDrag=nil
+        A.brushSizeDrag=nil;A.penViewDrag=nil
     end
 end
 function love.focus(focused)
@@ -11054,7 +11185,7 @@ function love.focus(focused)
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.galleryGesture=nil;A.galleryDetailSwipe=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.brushSizeDrag=nil
+        A.brushSizeDrag=nil;A.penViewDrag=nil
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil
         navigateCompactPanel(nil)
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
@@ -11529,7 +11660,7 @@ function love.keypressed(key)
 end
 function love.keyreleased(key)
     if key=='space' then
-        A.spaceHeld=false
+        A.spaceHeld=false;A.penViewDrag=nil
         if A.panning and A.panButton==1 then
             A.panning=false;A.panButton=nil
         end

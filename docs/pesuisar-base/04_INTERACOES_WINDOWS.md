@@ -12,8 +12,8 @@ Fontes centrais:
 | Operação | Interação documentada |
 |---|---|
 | Mover o canvas | Espaço + arrastar com botão esquerdo do mouse |
-| Aproximar/afastar | Roda do mouse; para caneta Alt+Espaço ou Z + arrasto |
-| Girar canvas | Shift + roda do mouse; para caneta Shift+Espaço ou R + arrasto circular |
+| Aproximar/afastar | Roda do mouse; para caneta Alt+Espaço ou Z + arrasto. A44 implementa Alt+Espaço + arrasto para Windows Ink; Z pendente |
+| Girar canvas | Shift + roda do mouse; para caneta Shift+Espaço ou R + arrasto circular. A44 implementa Shift+Espaço + gesto circular Windows Ink; R pendente |
 | Conta-gotas rápido | Botão direito com Pincel ativo, sem trocar de ferramenta; implementado/testado na A42 |
 | Mudar espessura | Alt+Ctrl + arraste do mouse; para caneta equivalente com teclas. A43 implementa o ajuste no rebuild com sensibilidade própria; [ e ] ajustam 1 px |
 | Abrir lista de atalhos | Shift + / (slash) |
