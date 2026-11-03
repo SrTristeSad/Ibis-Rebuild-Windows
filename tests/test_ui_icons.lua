@@ -78,6 +78,53 @@ function M.run()
     check(layers[1].points[1]>layers[2].points[1]
         and layers[2].points[1]>layers[3].x,
         'Camadas perdeu a ordem de deslocamento das folhas')
+    -- A50: disco de cor real com borda, sem simbolo abstrato de paleta.
+    local staticColor=Icons.commands('color')
+    check(#staticColor==2 and
+        staticColor[1].op=='circle' and
+        staticColor[2].op=='circle',
+        'Indicador de cor deve manter dois discos concentricos')
+    local geometry=Icons.colorSwatchGeometry(110,145,21)
+    check(geometry.cx==110 and geometry.cy==145 and
+        geometry.fillRadius>0 and
+        geometry.ringRadius>geometry.fillRadius and
+        geometry.ringRadius<11,
+        'Indicador de cor extrapolou os 21px do botao')
+    local previousLove=_G.love
+    local rendered={}
+    _G.love={graphics={
+        push=function(mode)
+            rendered[#rendered+1]={'push',mode}
+        end,
+        pop=function()
+            rendered[#rendered+1]={'pop'}
+        end,
+        setColor=function(r,g,b,a)
+            rendered[#rendered+1]={'color',r,g,b,a}
+        end,
+        setLineWidth=function(width)
+            rendered[#rendered+1]={'width',width}
+        end,
+        circle=function(mode,cx,cy,radius,segments)
+            rendered[#rendered+1]={'circle',mode,cx,cy,radius,segments}
+        end}}
+    local ok,err=pcall(Icons.drawColorSwatch,
+        110,145,21,.25,.5,.75)
+    _G.love=previousLove
+    check(ok,'Falha no desenho dinamico da cor: '..tostring(err))
+    check(#rendered==7 and rendered[1][1]=='push' and
+        rendered[2][1]=='color' and rendered[3][1]=='circle' and
+        rendered[4][1]=='color' and rendered[5][1]=='width' and
+        rendered[6][1]=='circle' and rendered[7][1]=='pop',
+        'Indicador de cor deve desenhar somente disco e contorno')
+    check(rendered[2][2]==.25 and rendered[2][3]==.5 and
+        rendered[2][4]==.75 and rendered[2][5]==1 and
+        rendered[3][2]=='fill' and rendered[6][2]=='line' and
+        rendered[3][3]==rendered[6][3] and
+        rendered[3][4]==rendered[6][4],
+        'Disco nao reflete os canais RGB ou perdeu a centralizacao')
+    check(not pcall(Icons.drawColorSwatch,110,145,21,1.5,0,0),
+        'Canal de cor fora de [0,1] nao pode ser aceito')
     check(Icons.commands('unknown')==nil,'Unknown tools should not have glyphs')
     check(#Tools.items==8,'Existing eight tool set must stay intact')
     return {suite='editor-vector-tool-icons',passed=true,assertions=checks,
