@@ -73,11 +73,13 @@ glyphs.color={
     {op='circle',mode='line',x=0,y=0,r=6.8},
     {op='circle',mode='fill',x=0,y=0,r=5.2}
 }
+-- A51: a barra Windows mostra uma seta para baixo no controle
+-- Tela/visualizacao. Adaptacao do Tabler "arrow-down" (licenca MIT);
+-- somente silhueta, sem alterar a acao de foco nem o hit-test.
+-- Fonte: tabler/tabler-icons/icons/outline/arrow-down.svg
 glyphs.fullscreen={
-    {op='line',points={-6,-2,-6,-6,-2,-6}},
-    {op='line',points={2,-6,6,-6,6,-2}},
-    {op='line',points={6,2,6,6,2,6}},
-    {op='line',points={-2,6,-6,6,-6,2}}
+    {op='line',points={0,-6.2,0,6.2}},
+    {op='line',points={-5.2,.9,0,6.2,5.2,.9}}
 }
 glyphs.layers={
     -- A48: tres folhas deslocadas para baixo/direita, como na
