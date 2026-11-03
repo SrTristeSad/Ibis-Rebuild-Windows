@@ -7416,13 +7416,39 @@ local function drawCompactQuick(kind,w,h,value)
         ('%.0f%%'):format(value*100)
     text(label,d.labelX,d.y-2,'small','muted')
     text(valueLabel,d.valueX,d.y-2,'small','text')
+    local g=love.graphics
+    local centerY=d.y+7
+    -- Trilha neutra e marcador branco, evitando a barra azul
+    -- exclusiva do rebuild. Opacidade explicita transparencia.
     c('line')
-    love.graphics.rectangle('fill',d.x,d.y+5,d.w,5,2,2)
-    c('accent')
-    love.graphics.rectangle('fill',d.x,d.y+5,
-        math.max(1,d.w*factor),5,2,2)
-    c('text')
-    love.graphics.circle('fill',d.x+d.w*factor,d.y+7,7,18)
+    g.rectangle('fill',d.x,d.y+4,d.w,7,4,4)
+    if kind=='opacity' then
+        for i=0,math.ceil(d.w/10)-1 do
+            local x=d.x+i*10
+            local width=math.min(10,d.x+d.w-x)
+            g.setColor(i%2==0 and .80 or .55,
+                i%2==0 and .81 or .57,
+                i%2==0 and .82 or .60,.82)
+            g.rectangle('fill',x,d.y+5,width,5)
+        end
+    else
+        g.setColor(.84,.86,.87,.88)
+        g.rectangle('fill',d.x,d.y+4,math.max(1,d.w*factor),7,4,4)
+    end
+    g.setColor(1,1,1,1)
+    g.circle('fill',d.x+d.w*factor,centerY,7,20)
+    -- Botões + e − desenhados no mesmo retângulo de hit-test.
+    for _,name in ipairs({'minus','plus'}) do
+        local rect=d[name]
+        local cx=rect.x+rect.w/2
+        local cy=rect.y+rect.h/2
+        g.setColor(.20,.22,.24,1)
+        g.circle('fill',cx,cy,12,28)
+        g.setColor(.96,.97,.99,1)
+        g.setLineWidth(1.7)
+        g.line(cx-4,cy,cx+4,cy)
+        if name=='plus' then g.line(cx,cy-4,cx,cy+4) end
+    end
 end
 local function activateIbisTool(tool)
     if tool.id~='wand' then clearWandSelection() end
@@ -10287,6 +10313,19 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         (A.tool=='brush' or A.tool=='erase') and
         not A.modal and not A.spaceHeld then
         local w,h=love.graphics.getDimensions()
+        local stepKind,direction=Compact.quickButton(w,h,x,y)
+        if stepKind then
+            finishStroke()
+            if stepKind=='diameter' then
+                A.brushDiameter=Compact.quickStep(
+                    stepKind,A.brushDiameter,direction)
+            else
+                A.brushOpacity=Compact.quickStep(
+                    stepKind,A.brushOpacity,direction)
+            end
+            A.quickDrag=nil
+            return -- Botao nunca inicia pintura ou drag.
+        end
         local kind=Compact.quickHit(w,h,x,y)
         if kind then
             finishStroke()

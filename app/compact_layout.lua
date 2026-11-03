@@ -33,18 +33,37 @@ function UI.pick(w,h,x,y)
     end
     return nil
 end
--- Two quick rails live in a single bottom strip above the icon row.
--- Their hit boxes are independent of drawing bounds and popup hit maps.
+-- Canvas inferior: duas barras igualmente alinhadas, com menos/mais
+-- na extremidade (tutoriais publicos do ibisPaint). O retangulo da
+-- linha e os botoes sao distintos para que nenhum clique seja fantasma.
+-- A faixa continua uma adaptacao Windows: dimensoes nao sao medidas
+-- no APK Android 14.1.2.
 function UI.quick(w,h)
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela pequena para os ajustes')
-    local left=math.floor((w-640)/2)
-    return {
-        diameter={x=left+185,y=h-123,w=370,h=14,
-            labelX=left+52,valueX=left+569},
-        opacity={x=left+185,y=h-97,w=370,h=14,
-            labelX=left+52,valueX=left+569}
-    }
+    local left=math.floor((w-690)/2)
+    local function make(y)
+        return {x=left+187,y=y,w=350,h=14,
+            labelX=left+12,valueX=left+113,
+            minus={x=left+151,y=y-5,w=24,h=24},
+            plus={x=left+547,y=y-5,w=24,h=24}}
+    end
+    return {diameter=make(h-123),opacity=make(h-97)}
+end
+-- Retornar direcao sem alterar estado; o motor aplica o valor no
+-- mesmo caminho usado pelo arrasto da barra.
+function UI.quickButton(w,h,x,y)
+    local bars=UI.quick(w,h)
+    for _,kind in ipairs({'diameter','opacity'}) do
+        for _,button in ipairs({'minus','plus'}) do
+            local r=bars[kind][button]
+            if x>=r.x and x<r.x+r.w and
+                y>=r.y and y<r.y+r.h then
+                return kind,button=='minus' and -1 or 1
+            end
+        end
+    end
+    return nil
 end
 local ranges={
     diameter={min=1,max=256,step=1},
@@ -54,6 +73,19 @@ function UI.quickFraction(kind,value)
     local r=assert(ranges[kind],'Ajuste rápido inválido')
     assert(type(value)=='number' and value==value,'Valor inválido')
     return math.max(0,math.min(1,(value-r.min)/(r.max-r.min)))
+end
+function UI.quickStep(kind,value,direction)
+    local r=assert(ranges[kind],'Ajuste rapido desconhecido')
+    assert(type(value)=='number' and value==value,
+        'Valor de ajuste invalido')
+    assert(direction==-1 or direction==1,
+        'Direcao de ajuste invalida')
+    local count=math.floor((r.max-r.min)/r.step+.5)
+    local index=math.floor((value-r.min)/r.step+.5)+direction
+    index=math.max(0,math.min(count,index))
+    local nextValue=r.min+index*r.step
+    return tonumber(string.format('%.4f',
+        math.max(r.min,math.min(r.max,nextValue))))
 end
 function UI.quickValue(kind,w,h,x)
     local r=assert(ranges[kind],'Ajuste rápido inválido')
