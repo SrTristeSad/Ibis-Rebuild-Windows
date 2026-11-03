@@ -8480,15 +8480,17 @@ local function drawEditor(w,h)
                 love.graphics.rectangle('line',frame.x+.75,
                     frame.y+.75,frame.w-1.5,frame.h-1.5,5,5)
             end
-            c(disabled and 'muted' or 'text')
-            Icons.draw(slot.id=='brush' and
-                (A.tool=='erase' and 'erase' or 'brush') or slot.id,
-                slot.x+slot.w/2,slot.y+slot.h/2,21)
             if slot.id=='color' then
+                -- A50: disco RGB vivo como na barra inferior Windows,
+                -- sem paleta abstrata nem dois quadrados adicionais.
                 local r,g,b=Colors.channels(A.color)
-                love.graphics.setColor(r/255,g/255,b/255,1)
-                love.graphics.rectangle('fill',
-                    slot.x+slot.w/2+13,slot.y+slot.h/2+11,12,7,1,1)
+                Icons.drawColorSwatch(slot.x+slot.w/2,
+                    slot.y+slot.h/2,21,r/255,g/255,b/255)
+            else
+                c(disabled and 'muted' or 'text')
+                Icons.draw(slot.id=='brush' and
+                    (A.tool=='erase' and 'erase' or 'brush') or slot.id,
+                    slot.x+slot.w/2,slot.y+slot.h/2,21)
             end
             if not disabled then
                 A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
@@ -8513,12 +8515,7 @@ local function drawEditor(w,h)
                     end
                 end)}
             end
-            if slot.id=='color' then
-                local r,g,b=Colors.channels(A.color)
-                love.graphics.setColor(r/255,g/255,b/255,1)
-                love.graphics.rectangle('fill',
-                    slot.x+slot.w-16,slot.y+4,9,9,2,2)
-            end
+
         end
     end
 end
