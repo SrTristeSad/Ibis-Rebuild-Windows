@@ -166,6 +166,9 @@ funcional já comprovado, preservando o projeto.
 
 ## DOCUMENTOS E FONTES ÚTEIS
 
+- **[PESUISAR BASE — pesquisa visual, imagens, versões, lacunas e protocolo](PESUISAR_BASE.md)**: ler antes de qualquer alteração de interface.
+
+
 - Referência oficial do produto **Windows**:
   https://ibispaint.com/productWin.jsp
 - Tutoriais oficiais (apoio funcional, verificar plataforma e versão):

@@ -10,6 +10,7 @@ as versões. A correspondência visual com o aplicativo de PC **ainda
 não foi comprovada**; as fases anteriores são provisórias nesse aspecto.
 
 **[LEIA PRIMEIRO: PROMPT DE CONTINUAÇÃO E OBJETIVO CENTRAL](PROMPT_CONTINUACAO.md).**
+**[PESUISAR BASE: pesquisa do ibisPaint PC com imagens, inventário e evidências](PESUISAR_BASE.md).**
 O documento determina prioridades, fontes de evidência, limites e
 critérios de aceitação para todo o desenvolvimento futuro.
 

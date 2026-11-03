@@ -1,0 +1,363 @@
+{
+  "kind": "external-windows-visual-research-index",
+  "as_of": "2026-11-02",
+  "purpose": "visual clone ibisPaint Windows, Android 14.1.2 functional evidence only",
+  "target_windows_version": "NOT VERIFIED - capture installed PC",
+  "rebuild_head_at_audit": "af29edf90f07ebba8dbf8f74297c352b1a106c09",
+  "image_policy": "links only; no proprietary image bytes copied",
+  "records": [
+    {
+      "id": "W01",
+      "type": "source",
+      "platform": "windows",
+      "date": "dynamic",
+      "title": "Official Windows product",
+      "url": "https://ibispaint.com/productWin.jsp",
+      "confidence": "primary"
+    },
+    {
+      "id": "W02",
+      "type": "source",
+      "platform": "windows",
+      "date": "dynamic",
+      "title": "Windows gestures and shortcuts",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=167",
+      "confidence": "primary"
+    },
+    {
+      "id": "W03",
+      "type": "source",
+      "platform": "pc-tablet",
+      "date": "dynamic",
+      "title": "Layer window including floating PC",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=156",
+      "confidence": "primary"
+    },
+    {
+      "id": "W04",
+      "type": "source",
+      "platform": "mixed-with-windows-notes",
+      "date": "dynamic",
+      "title": "Settings and platform differences",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=81",
+      "confidence": "primary"
+    },
+    {
+      "id": "W05",
+      "type": "source",
+      "platform": "mixed-with-pc-features",
+      "date": "dynamic",
+      "title": "New features by versions",
+      "url": "https://ibispaint.com/newFeature.jsp",
+      "confidence": "primary"
+    },
+    {
+      "id": "W06",
+      "type": "source",
+      "platform": "multi-platform",
+      "date": "2026-11-02",
+      "title": "Version history",
+      "url": "https://ibispaint.com/historyAndRights.jsp?lang=en",
+      "confidence": "primary"
+    },
+    {
+      "id": "W07",
+      "type": "source",
+      "platform": "windows",
+      "date": "2022-06-30",
+      "title": "Ibis official Windows launch release",
+      "url": "https://prtimes.jp/main/html/rd/p/000000010.000015594.html",
+      "confidence": "primary-historical"
+    },
+    {
+      "id": "W08",
+      "type": "source",
+      "platform": "windows",
+      "date": "unknown",
+      "title": "Microsoft Store product listing",
+      "url": "https://apps.microsoft.com/detail/9pfdf2zd4z4n",
+      "confidence": "primary-marketing"
+    },
+    {
+      "id": "G01",
+      "type": "source",
+      "platform": "general",
+      "date": "dynamic",
+      "title": "Toolbar and tool selection",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=4",
+      "confidence": "official-not-windows-only"
+    },
+    {
+      "id": "G02",
+      "type": "source",
+      "platform": "general",
+      "date": "dynamic",
+      "title": "Color window",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=11",
+      "confidence": "official-not-windows-only"
+    },
+    {
+      "id": "G03",
+      "type": "source",
+      "platform": "general",
+      "date": "dynamic",
+      "title": "Brush settings",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=118",
+      "confidence": "official-not-windows-only"
+    },
+    {
+      "id": "G04",
+      "type": "source",
+      "platform": "general",
+      "date": "dynamic",
+      "title": "View menu",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=168",
+      "confidence": "official-not-windows-only"
+    },
+    {
+      "id": "G05",
+      "type": "source",
+      "platform": "general",
+      "date": "dynamic",
+      "title": "All official tutorials",
+      "url": "https://ibispaint.com/lecture/index.jsp?no=0",
+      "confidence": "official-not-windows-only"
+    },
+    {
+      "id": "V01",
+      "type": "release",
+      "platform": "windows",
+      "date": "2026-08-05",
+      "title": "Windows 14.0.10",
+      "url": "https://ibispaint.com/historyAndRights.jsp?newsID=298222714",
+      "confidence": "primary"
+    },
+    {
+      "id": "V02",
+      "type": "release",
+      "platform": "windows-included",
+      "date": "2026-11-02",
+      "title": "14.1.4 including Windows fixes",
+      "url": "https://ibispaint.com/historyAndRights.jsp?newsID=313331619",
+      "confidence": "primary-version-not-installed-verified"
+    },
+    {
+      "id": "V03",
+      "type": "release",
+      "platform": "windows-included",
+      "date": "2024-09-05",
+      "title": "12.2.0 floating Windows layers",
+      "url": "https://ibispaint.com/historyAndRights.jsp?newsID=112714208",
+      "confidence": "primary"
+    },
+    {
+      "id": "IMG-W01",
+      "type": "image",
+      "platform": "windows",
+      "version": "unknown",
+      "title": "Official PC product hero",
+      "url": "https://ibispaint.com/img/product/win_app.png",
+      "source": "W01",
+      "quality": "marketing",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-W02",
+      "type": "image",
+      "platform": "windows",
+      "version": "13.1.8",
+      "title": "PC title and keyboard shortcut dialog",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_167_13.png",
+      "source": "W02",
+      "quality": "documented",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-W03",
+      "type": "image",
+      "platform": "windows",
+      "version": "unknown",
+      "title": "Windows settings and shortcut list",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_167_12.png",
+      "source": "W02",
+      "quality": "documented",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-W04",
+      "type": "image",
+      "platform": "windows-instructions",
+      "version": "unknown",
+      "title": "Space drag gesture",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_167_01.png",
+      "source": "W02",
+      "quality": "diagram",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-W05",
+      "type": "image",
+      "platform": "windows-instructions",
+      "version": "unknown",
+      "title": "Zoom mouse and pen gesture",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_167_02.png",
+      "source": "W02",
+      "quality": "diagram",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-P01",
+      "type": "image",
+      "platform": "pc-or-tablet",
+      "version": "unknown",
+      "title": "Floating layer window",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_156_09.png",
+      "source": "W03",
+      "quality": "documented",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-P02",
+      "type": "image",
+      "platform": "pc-or-tablet",
+      "version": "unknown",
+      "title": "Floating layer move bar and resize",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_156_10.png",
+      "source": "W03",
+      "quality": "documented",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-G01",
+      "type": "image",
+      "platform": "general",
+      "version": "unknown",
+      "title": "Nine main toolbar actions",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_04_01.png",
+      "source": "G01",
+      "quality": "reference-not-pc-proof",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-G02",
+      "type": "image",
+      "platform": "general",
+      "version": "unknown",
+      "title": "Fifteen tool selector entries",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_04_02.png",
+      "source": "G01",
+      "quality": "reference-not-pc-proof",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-G03",
+      "type": "image",
+      "platform": "general",
+      "version": "unknown",
+      "title": "Six upper controls",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_04_03.png",
+      "source": "G01",
+      "quality": "reference-not-pc-proof",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-G04",
+      "type": "image",
+      "platform": "general",
+      "version": "unknown",
+      "title": "Layer window details",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_156_01.png",
+      "source": "W03",
+      "quality": "reference-not-pc-proof",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-G05",
+      "type": "image",
+      "platform": "general",
+      "version": "unknown",
+      "title": "Settings interface",
+      "url": "https://ibispaint.com/img/lecture/common/chapter_81_03.png",
+      "source": "W04",
+      "quality": "reference-not-pc-proof",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-M01",
+      "type": "image",
+      "platform": "windows-marketing",
+      "version": "unknown",
+      "title": "Brush library",
+      "url": "https://store-images.s-microsoft.com/image/apps.62782.14202576542330599.5d8d33ef-6e70-4d7f-953d-99930bb9592a.91fbe5d5-ba54-4efc-92b2-f5f6b5059862",
+      "source": "W08",
+      "quality": "marketing",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-M02",
+      "type": "image",
+      "platform": "windows-marketing",
+      "version": "unknown",
+      "title": "Text and ruler tools",
+      "url": "https://store-images.s-microsoft.com/image/apps.28260.14202576542330599.b2b42d35-09bb-4a4c-86fb-3e9ca2034d9b.fb3f18d3-a3c3-4d7a-ae87-f2dcbdbc7bc3",
+      "source": "W08",
+      "quality": "marketing",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-M03",
+      "type": "image",
+      "platform": "windows-marketing",
+      "version": "unknown",
+      "title": "Materials browser",
+      "url": "https://store-images.s-microsoft.com/image/apps.56014.14202576542330599.5d8d33ef-6e70-4d7f-953d-99930bb9592a.00fbb8d6-6143-4714-a30b-a5002bf75768",
+      "source": "W08",
+      "quality": "marketing",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-H01",
+      "type": "image",
+      "platform": "windows",
+      "version": "2022-06-30",
+      "title": "Historical title with Collection",
+      "url": "https://prcdn.freetls.fastly.net/release_image/15594/10/15594-10-cd4b695b22fce5a27abfa72703fdd1ac-1920x1080.png?auto=webp&fit=bounds&format=jpeg&height=1350&quality=85%2C65&width=1950",
+      "source": "W07",
+      "quality": "historical-outdated",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-H02",
+      "type": "image",
+      "platform": "windows",
+      "version": "2022-06-30",
+      "title": "Historical effects screenshot",
+      "url": "https://prcdn.freetls.fastly.net/release_image/15594/10/15594-10-4bf84df3896d45ac56da87dcc9734fe8-1921x1081.png?auto=webp&fit=bounds&format=jpeg&height=1350&quality=85%2C65&width=1950",
+      "source": "W07",
+      "quality": "historical-outdated",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-X01",
+      "type": "image",
+      "platform": "third-party-windows",
+      "version": "unknown",
+      "title": "New Canvas unversioned from Uptodown",
+      "url": "https://img.utdstc.com/screen/a65/274/a65274b8eed31f3f889105ad4259cd2290958b5cb1ff1e9b74ffed7e65b1ae2a%3A600",
+      "source": "https://ibis-paint.en.uptodown.com/windows",
+      "quality": "low-unverified",
+      "local_copy": false
+    },
+    {
+      "id": "IMG-X02",
+      "type": "image",
+      "platform": "third-party-windows",
+      "version": "unknown",
+      "title": "Layer tutorial unversioned from Uptodown",
+      "url": "https://img.utdstc.com/screen/344/970/344970ad640d31c7b97ff56c968af1ca47289acda116499bf94c128b7d6e0d85%3A600",
+      "source": "https://ibis-paint.en.uptodown.com/windows",
+      "quality": "low-unverified",
+      "local_copy": false
+    }
+  ]
+}
