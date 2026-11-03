@@ -60,6 +60,13 @@ function M.run()
     check(Icons.commands(eraser.icon)~=Icons.commands(brush.icon)
         and Icons.commands(bucket.icon)~=Icons.commands(brush.icon),
         'Borracha ou balde aponta para ícone do pincel')
+    -- A49: pipeta Tabler mantem a diagonal e a base sem ponta circular.
+    local picker=Icons.commands('picker')
+    check(#picker==2 and picker[1].op=='line'
+        and picker[2].op=='line',
+        'Conta-gotas deve manter as duas linhas do modelo Tabler')
+    check(#picker[2].points>=12,
+        'Conta-gotas perdeu o corpo diagonal da pipeta')
     -- A48: Camadas deve preservar o glifo documentado de tres folhas.
     -- O primeiro e segundo contornos ficam atras da folha preenchida.
     local layers=Icons.commands('layers')
