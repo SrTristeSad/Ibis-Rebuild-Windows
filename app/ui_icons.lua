@@ -120,19 +120,36 @@ glyphs.transform={
     {op='line',points={3,-2.7,6.5,0,3,2.7}},
     {op='circle',mode='fill',x=0,y=0,r=1.25}
 }
+-- A46: tres silhuetas do seletor Windows observadas na imagem
+-- promocional oficial Microsoft Store: estrela/varinha, laco com
+-- cordao e FX num circulo. Redesenho independente em vetores Lua;
+-- nao sao sprites nem medidas extraidas do aplicativo original.
 glyphs.magic={
-    {op='line',points={-6,6,5,-5}},
-    {op='line',points={2,-6,2,-2}},
-    {op='line',points={0,-4,4,-4}},
-    {op='circle',mode='fill',x=-5,y=-3,r=1.4}}
+    -- Cabo diagonal e estrela principal de oito pontas.
+    {op='line',points={-6,6,.2,-.2}},
+    {op='line',points={2,-7,2,-1}},
+    {op='line',points={-1,-4,5,-4}},
+    {op='line',points={.2,-5.8,3.8,-2.2}},
+    {op='line',points={.2,-2.2,3.8,-5.8}},
+    {op='circle',mode='fill',x=-4,y=-4.8,r=.65},
+    {op='line',points={4.6,2.7,6.5,2.7}},
+    {op='line',points={5.55,1.75,5.55,3.65}}}
 glyphs.lasso={
-    {op='circle',mode='line',x=-1,y=-1,r=5.5},
-    {op='line',points={2,3,6,6}},
-    {op='circle',mode='fill',x=6,y=6,r=1.7}}
+    -- Volta do laco irregular e cauda: evita parecer lupa.
+    {op='line',points={-5.4,-1.2,-4.6,-3.6,-2.2,-5.2,
+        1.0,-5.4,3.9,-3.8,5.4,-1.4,4.8,.8,
+        2.5,2.6,-.8,2.7,-3.8,1.5,-5.4,-1.2}},
+    {op='line',points={-.8,2.7,.2,4.3,-1.9,6,-4.2,5.1}},
+    {op='circle',mode='fill',x=-4.2,y=5.1,r=1.0}}
 glyphs.filter={
-    {op='circle',mode='line',x=0,y=0,r=6.2},
-    {op='line',points={-5,4,4,-5}},
-    {op='circle',mode='fill',x=4,y=4,r=1.8}}
+    -- Letra FX em circunferencia como no seletor PC.
+    {op='circle',mode='line',x=0,y=0,r=6.3},
+    -- F, alinhado a esquerda.
+    {op='line',points={-4.4,3.4,-4.4,-3.3,-.9,-3.3}},
+    {op='line',points={-4.4,-.2,-1.2,-.2}},
+    -- X, alinhado a direita.
+    {op='line',points={.4,-3.3,4.5,3.4}},
+    {op='line',points={4.5,-3.3,.4,3.4}}}
 glyphs.smudge={
     {op='line',points={-6,4,-3,-2,0,-3,2,-1,5,-5}},
     {op='line',points={-5,6,-1,2,2,3,5,0}},

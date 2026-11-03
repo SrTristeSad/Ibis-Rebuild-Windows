@@ -1,5 +1,7 @@
 -- Visual assets are generated from known primitives; no external images.
 local Tools=require('editor_tools')
+local VisualTools=require('ibis_visual_tools')
+local Compact=require('compact_layout')
 local Icons=require('ui_icons')
 local M={}
 function M.run()
@@ -7,12 +9,10 @@ function M.run()
     local function check(v,message)checks=checks+1;assert(v,message)end
     local expected={line=true,rectangle=true,circle=true,polygon=true}
     local ids={}
-    for _,tool in ipairs(Tools.items) do
-        check(not ids[tool.id],'Repeated icon ID')
-        ids[tool.id]=true
-        local commands=Icons.commands(tool.id)
+    local function validate(id)
+        local commands=Icons.commands(id)
         check(type(commands)=='table' and #commands>=2,
-            'Every tool needs meaningful visual glyphs')
+            'Every tool needs meaningful visual glyphs: '..id)
         for _,p in ipairs(commands) do
             check(expected[p.op],'Unsupported drawing operation')
             if p.op=='line' or p.op=='polygon' then
@@ -33,6 +33,18 @@ function M.run()
                     p.x+p.r<=8 and p.y+p.r<=8,'Circle glyph out of bounds')
             end
         end
+    end
+    for _,tool in ipairs(Tools.items) do
+        check(not ids[tool.id],'Repeated icon ID')
+        ids[tool.id]=true
+        validate(tool.id)
+    end
+    check(#VisualTools.entries==15,'All fifteen PC tools must remain')
+    for _,entry in ipairs(VisualTools.entries) do
+        validate(entry.icon)
+    end
+    for _,id in ipairs(Compact.order) do
+        validate(id)
     end
     check(Icons.commands('unknown')==nil,'Unknown tools should not have glyphs')
     check(#Tools.items==8,'Existing eight tool set must stay intact')

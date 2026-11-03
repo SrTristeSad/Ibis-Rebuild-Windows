@@ -28,6 +28,7 @@ local integration={
     'test_compact_layout.lua',
     'test_compact_visual.lua',
     'test_ibis_visual_tools.lua',
+    'test_ui_icons.lua',
     'test_ibis_tool_popup_columns.lua',
     'test_ibis_settings_ui.lua',
     'test_ibis_visual_panels.lua',

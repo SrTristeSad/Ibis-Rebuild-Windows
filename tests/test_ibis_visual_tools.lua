@@ -13,6 +13,25 @@ function T.run()
     assert(Catalog.entries[1].icon=='transform' and
         Icons.commands('transform')~=Icons.commands('select'),
         'Transformar nao pode parecer seletor retangular')
+    -- A46: as tres silhuetas PC precisam ser distinguiveis,
+    -- sem trocar os IDs/callbacks das ferramentas.
+    local wand=Icons.commands('magic')
+    local lasso=Icons.commands('lasso')
+    local fx=Icons.commands('filter')
+    assert(Catalog.get('wand').icon=='magic' and
+        Catalog.get('lasso').icon=='lasso' and
+        Catalog.get('filter').icon=='filter',
+        'Correspondencia entre categoria e icon foi alterada')
+    assert(#wand>=7 and wand[1].op=='line' and
+        wand[2].op=='line' and wand[3].op=='line',
+        'Varinha precisa de cabo e estrela, nao um traco generico')
+    assert(lasso[1].op=='line' and #lasso[1].points>=16
+        and lasso[2].op=='line',
+        'Laco precisa de contorno irregular e cordao, nao lupa')
+    assert(fx[1].op=='circle' and fx[1].r>=6 and
+        fx[2].op=='line' and fx[3].op=='line' and
+        fx[4].op=='line' and fx[5].op=='line',
+        'Filtro precisa de FX dentro de um circulo')
     for i,entry in ipairs(Catalog.entries) do
         assert(entry.id==reference[i],'Ordem visual de ferramentas divergente')
         assert(not seen[entry.id] and Catalog.get(entry.id)==entry,

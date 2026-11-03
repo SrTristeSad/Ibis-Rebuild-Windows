@@ -67,3 +67,14 @@ rebuild para uma coluna, mantendo todos os comandos, e substitui
 Transformar por um glifo vetorial de quatro setas.
 A versão e o DPI da imagem não foram identificados; medidas e todos
 os outros glifos continuam pendentes de validação 1:1 no PC.
+
+## Atualização A46 — ícones reconhecíveis no seletor Windows
+
+A captura [IMG-M01](02_ATLAS_VISUAL.md#img-m01--microsoft-store-janela-de-configurações-do-pincel-marketing-versão-não-identificada) da Microsoft Store Windows mostra:
+**Filtro = FX cercado por anel**, **Varinha Mágica = estrela com cabo**,
+**Laço = contorno fechado com cordão**. O rebuild A45 usava,
+respectivamente, sinal de proibido, risco com cruz pequena e lupa.
+A46 redesenha só esses três glifos em vetores próprios, compartilhados
+entre faixa lateral e seletor popup, com IDs e callbacks preservados.
+A referência promocional não contém build/DPI/zoom medidos; o desenho
+novo **não é certificado 1:1**. Outros ícones continuam sob auditoria.
