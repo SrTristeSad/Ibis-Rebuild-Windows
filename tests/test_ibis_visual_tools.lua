@@ -114,6 +114,20 @@ function T.run()
         'Seletor precisa de fallback seguro para estado invalido')
     assert(UI.IDS[2]=='tools',
         'Identidade do segundo botao da barra foi alterada')
+    -- A52: delegacao ao renderizador protege o limite de upvalues
+    -- do drawEditor sem alterar a identidade do glifo exibido.
+    local originalDraw=Icons.draw
+    local received={}
+    Icons.draw=function(id,cx,cy,size)
+        received={id,cx,cy,size}
+    end
+    local ok,err=pcall(Icons.drawToolSelector,
+        'brush','wand',120,200,21)
+    Icons.draw=originalDraw
+    assert(ok,'Delegacao do seletor falhou: '..tostring(err))
+    assert(received[1]=='magic' and received[2]==120
+        and received[3]==200 and received[4]==21,
+        'Seletor nao encaminhou o glifo ativo para o renderer')
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local popup=UI.popup(size[1],size[2],'tools')
         assert(popup.w==242 and popup.h==383
