@@ -3,6 +3,7 @@
 -- Geometria visual baseada na captura pública de 14.0.2, não
 -- em medição autenticada do Android 14.1.2.
 local M={}
+local Header=require('ibis_home_header')
 local cachedBrandFont,cachedBrandSize
 local BG={.145,.30,.46,1}
 local colors={
@@ -92,6 +93,7 @@ function M.draw(w,h,fonts)
     g.push('all')
     g.setColor(BG)
     g.rectangle('fill',0,0,w,h)
+    Header.draw(w,h,fonts)
     g.setColor(1,1,1,1)
     g.setFont(fonts.large)
     local left,right='ibis','aint'

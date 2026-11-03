@@ -132,6 +132,29 @@ function T.run()
         eq(Home.hit(w,h,0,0)==nil,
             'Cliques vazios da tela inicial vazam para galeria')
     end
+    -- Auditoria visual A37: tres controles reais na imagem publica
+    -- 14.0.2. Sem engine correspondente, NAO devem receber clique.
+    local HomeHeader=require('ibis_home_header')
+    for _,size in ipairs(sizes) do
+        local w,h=size[1],size[2]
+        local items=HomeHeader.controls(w,h)
+        eq(#items==3 and items[1].id=='premium' and
+            items[2].id=='help' and items[3].id=='settings',
+            'Chrome inicial nao preserva ordem da referencia')
+        for i,item in ipairs(items) do
+            eq(item.actionable==false and item.x>=0 and item.y>=0
+                and item.x+item.w<=w and item.y+item.h<=h,
+                'Chrome inicial invalido ou promete callback')
+            eq(Home.hit(w,h,item.cx,item.cy)==nil,
+                'Controle indisponivel captura clique da tela inicial')
+            if i>1 then
+                eq(items[i-1].x+items[i-1].w<item.x,
+                    'Controles superiores se sobrepoem')
+            end
+        end
+        eq(items[3].x+items[3].w<w,
+            'Configuracoes invadem borda direita')
+    end
     -- A36: a marca agora ocupa uma área legível e os ícones
     -- ampliados continuam dentro das áreas de clique reais.
     for _,size in ipairs(sizes) do
