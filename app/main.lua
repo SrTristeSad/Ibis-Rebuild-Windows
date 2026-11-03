@@ -8493,6 +8493,13 @@ local function drawEditor(w,h)
                     -- para respeitar o limite de 60 upvalues LuaJIT.
                     Icons.drawToolSelector(A.tool,A.visualPendingTool,
                         slot.x+slot.w/2,slot.y+slot.h/2,21)
+                elseif slot.id=='properties' and
+                    not A.visualPendingTool and
+                    (A.tool=='brush' or A.tool=='erase') then
+                    -- A53: diâmetro atual no lugar dos sliders abstratos.
+                    -- Reutiliza a mesma fonte, ID e area clicavel.
+                    Icons.drawBrushSizeBadge(slot.x+slot.w/2,
+                        slot.y+slot.h/2,21,A.brushDiameter,A.fonts.micro)
                 else
                     Icons.draw(slot.id=='brush' and
                         (A.tool=='erase' and 'erase' or 'brush') or slot.id,
