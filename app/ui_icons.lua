@@ -77,9 +77,12 @@ glyphs.fullscreen={
     {op='line',points={-2,6,-6,6,-6,2}}
 }
 glyphs.layers={
-    {op='rectangle',mode='line',x=-5.5,y=-6.4,w=8.4,h=8.4},
-    {op='rectangle',mode='line',x=-2.7,y=-2.5,w=8.4,h=8.4},
-    {op='rectangle',mode='fill',x=3.7,y=-5.6,w=2,h=2}
+    -- A48: tres folhas deslocadas para baixo/direita, como na
+    -- referencia promocional Windows IMG-M04. A folha frontal e
+    -- preenchida; os dois contornos traseiros ficam abertos sob ela.
+    {op='line',points={6.4,-2.5,6.4,6.4,-2.5,6.4}},
+    {op='line',points={4.2,-4.7,4.2,4.2,-4.7,4.2}},
+    {op='rectangle',mode='fill',x=-6.4,y=-6.4,w=8.5,h=8.5}
 }
 glyphs.back={
     {op='line',points={-5,-.5,4.7,-.5}},
