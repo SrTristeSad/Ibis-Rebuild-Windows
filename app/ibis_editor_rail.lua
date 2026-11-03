@@ -1,17 +1,25 @@
--- Faixa lateral do editor inspirada na disposicao vertical da
--- captura publica do editor ibisPaint. Geometria independente de LÖVE.
--- Sem redistribuir recursos ou sprites da versao Android.
+-- Faixa lateral do seletor de ferramentas: duas colunas visuais,
+-- como a janela Left/Right do tutorial oficial ibisPaint #03.
+-- Apenas geometria e rótulos; não altera o raster ou seleção.
+-- Versão Android 14.1.2: sem screenshot autenticada pixel a pixel.
 local M={}
-M.WIDTH=68
+M.WIDTH=136
 M.LEFT=7
 M.TOP=19
 M.RIGHT_TOP=64 -- abaixo dos seis comandos superiores
-M.ROW=32
+M.ROW=43
+M.CELL=64
+M.GAP=4
+M.MARGIN=2
+M.COLUMNS=2
 M.shortLabels={transform='Mover',wand='Varinha',lasso='Laço',
     filter='Filtro',brush='Pincel',eraser='Borracha',
     smudge='Borrar',blur='Desfoque',special='Especial',
     bucket='Balde',vector='Vetor',text='Texto',
     frame='Quadros',picker='Conta-gotas',canvas='Tela'}
+local function ceildiv(n,d)
+    return math.floor((n+d-1)/d)
+end
 function M.layout(w,h,page,count,position)
     assert(type(w)=='number' and w>=960
         and type(h)=='number' and h>=640,
@@ -23,20 +31,27 @@ function M.layout(w,h,page,count,position)
         'Posicao da faixa invalida')
     local top=position=='right' and M.RIGHT_TOP or M.TOP
     local available=h-130-top-6
-    local visible=math.max(1,math.floor(available/M.ROW))
-    -- Reservar espaço para paginacao se nao couberem todos os itens.
-    if count>visible then
-        visible=math.max(1,math.floor((available-27)/M.ROW))
+    local rows=math.max(1,math.floor(available/M.ROW))
+    local capacity=rows*M.COLUMNS
+    if count>capacity then
+        -- Deixe espaço para os controles de página e mantenha ambas
+        -- as colunas acima da área de espessura/opacidade.
+        rows=math.max(1,math.floor((available-27)/M.ROW))
+        capacity=rows*M.COLUMNS
     end
-    local pages=math.ceil(count/visible)
+    local pages=ceildiv(count,capacity)
     assert(type(page)=='number' and page%1==0
         and page>=1 and page<=pages,
         'Pagina de ferramentas invalida')
+    local first=(page-1)*capacity+1
+    local last=math.min(page*capacity,count)
+    local shown=last-first+1
+    local visibleRows=ceildiv(shown,M.COLUMNS)
     return {x=position=='right' and w-M.WIDTH-M.LEFT or M.LEFT,
         y=top,w=M.WIDTH,position=position,
-        row=M.ROW,perPage=visible,pages=pages,page=page,
-        start=(page-1)*visible+1,
-        stop=math.min(page*visible,count)}
+        row=M.ROW,columns=M.COLUMNS,cell=M.CELL,
+        rows=visibleRows,perPage=capacity,pages=pages,page=page,
+        start=first,stop=last}
 end
 function M.entries(w,h,page,items,position)
     assert(type(items)=='table' and #items>0,
@@ -44,19 +59,22 @@ function M.entries(w,h,page,items,position)
     local r=M.layout(w,h,page,#items,position)
     local result={}
     for i=r.start,r.stop do
+        local offset=i-r.start
+        local column=offset%r.columns
+        local row=math.floor(offset/r.columns)
         result[#result+1]={id=items[i].id,
             label=items[i].label,shortLabel=M.shortLabels[items[i].id]
                 or items[i].label,
             icon=items[i].icon,index=i,
-            x=r.x,y=r.y+(i-r.start)*r.row,
-            w=r.w,h=r.row}
+            x=r.x+M.MARGIN+column*(M.CELL+M.GAP),
+            y=r.y+row*r.row,w=M.CELL,h=r.row}
     end
     return result
 end
 function M.navigation(w,h,page,count,position)
     local r=M.layout(w,h,page,count,position)
     if r.pages==1 then return nil end
-    return {x=r.x,y=r.y+(r.stop-r.start+1)*r.row,
+    return {x=r.x,y=r.y+r.rows*r.row,
         w=r.w,h=27,back=page>1,forward=page<r.pages}
 end
 function M.nextPage(w,h,page,count,direction,position)

@@ -4421,7 +4421,7 @@ local function advanceShowcase()
         local w,h=love.graphics.getDimensions()
         local entries=EditorRail.entries(w,h,1,
             IbisTools.entries,'right')
-        assert(entries[1].x>w-80 and entries[1].y>=64,
+        assert(entries[1].x>w-150 and entries[1].y>=64,
             'Faixa direita sobrepoe barra superior')
         local found=false
         for _,button in ipairs(A.buttons) do
@@ -7474,10 +7474,16 @@ local function drawEditorToolRail(w,h)
     local count=#IbisTools.entries
     local position=A.toolRailPosition or 'left'
     local rect=EditorRail.layout(w,h,A.toolRailPage or 1,count,position)
+    -- A39: fundo acompanha oito linhas (duas colunas), nunca as
+    -- quinze linhas legadas. Registrar uma hitbox do fundo ANTES
+    -- dos botões para que seus espaçamentos não pintem no canvas.
+    local panelH=rect.rows*rect.row+(rect.pages>1 and 31 or 8)
     c('panel',.78)
     love.graphics.rectangle('fill',rect.x-1,rect.y-4,
-        rect.w+2,(rect.stop-rect.start+1)*rect.row+
-        (rect.pages>1 and 31 or 8),6,6)
+        rect.w+2,panelH,6,6)
+    A.buttons[#A.buttons+1]={
+        x=rect.x-1,y=rect.y-4,w=rect.w+2,h=panelH,
+        fn=function()end}
     for _,item in ipairs(EditorRail.entries(w,h,rect.page,
         IbisTools.entries,position)) do
         local tool=IbisTools.get(item.id)
@@ -7493,10 +7499,10 @@ local function drawEditorToolRail(w,h)
                 item.w-4,item.h-2,3,3)
         end
         c(active and 'accent' or 'text')
-        Icons.draw(item.icon,item.x+item.w/2,item.y+11,16)
+        Icons.draw(item.icon,item.x+item.w/2,item.y+14,18)
         love.graphics.setFont(A.fonts.micro)
         love.graphics.printf(item.shortLabel,item.x+1,
-            item.y+21,item.w-2,'center')
+            item.y+27,item.w-2,'center')
         A.buttons[#A.buttons+1]={x=item.x,y=item.y,w=item.w,h=item.h,
             fn=guard(function()activateIbisTool(tool)end)}
     end
@@ -7504,7 +7510,8 @@ local function drawEditorToolRail(w,h)
     if page then
         box(page.x+1,page.y,page.w-2,page.h,'card')
         fitted(('%d/%d'):format(rect.page,rect.pages),
-            page.x+33,page.y+8,'small','text',40)
+            page.x+math.floor((page.w-45)/2),page.y+8,
+            'small','text',45)
         for _,item in ipairs({{x=page.x,delta=-1,enabled=page.back},
             {x=page.x+page.w-30,delta=1,enabled=page.forward}}) do
             if item.enabled then
