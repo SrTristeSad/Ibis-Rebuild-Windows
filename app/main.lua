@@ -1654,10 +1654,15 @@ local function verifyCompactUi()
     assert(Native.bytes(A.layerSession.composite)==pixels and
         #A.doc.layers==layerCount,
         'Ações desfeitas da barra compacta modificaram a obra')
+    love.keypressed('f10')
+    assert(A.windowsHud,'F10 nao expos comandos auxiliares Windows')
     love.draw()
-    love.mousepressed(w-595,30,1,false)
-    assert(not A.compactUi and A.compactPanel==nil,
-        'Retorno para a interface desktop falhou')
+    local desktop=A.windowsHudApi.rects(w,h).desktop
+    love.mousepressed(desktop.x+desktop.w/2,
+        desktop.y+desktop.h/2,1,false)
+    assert(not A.compactUi and A.compactPanel==nil and
+        not A.windowsHud,
+        'Retorno para interface desktop via F10 falhou')
     assert(A.zoom==zoom and A.rotation==rotation and
         A.panX==panX and A.panY==panY,
         'Trocar layout de volta mudou zoom ou rotação')
@@ -5220,6 +5225,52 @@ function love.update(dt)
                 layers:recompose()
                 rebuildImage()
                 saveDoc()
+                -- A38: exercício no LÖVE real (não só geometria Lua).
+                -- Sem F10, nenhuma hitbox do HUD pode tocar o canvas.
+                local hud=A.windowsHudApi.rects(
+                    love.graphics.getDimensions())
+                local function hitRegistered(rect)
+                    local x=rect.x+rect.w/2
+                    local y=rect.y+rect.h/2
+                    for _,button in ipairs(A.buttons) do
+                        if x>=button.x and x<button.x+button.w and
+                            y>=button.y and y<button.y+button.h then
+                            return true
+                        end
+                    end
+                    return false
+                end
+                local pixelsBefore=Native.bytes(layers.composite)
+                local undoBefore=layers:historyStats().undo
+                assert(A.compactUi and not A.focusMode and
+                    not A.windowsHud,'HUD deve iniciar fechado')
+                love.draw()
+                assert(not hitRegistered(hud.save) and
+                    not hitRegistered(hud.desktop) and
+                    not hitRegistered(hud.properties),
+                    'HUD oculto deixou hitbox clicavel')
+                love.keypressed('f10')
+                assert(A.windowsHud,'Tecla F10 nao abriu HUD Windows')
+                love.draw()
+                assert(hitRegistered(hud.save) and
+                    hitRegistered(hud.desktop) and
+                    hitRegistered(hud.properties),
+                    'HUD F10 nao registra botoes ativos')
+                love.mousepressed(hud.properties.x+
+                    hud.properties.w/2,hud.properties.y+
+                    hud.properties.h/2,1,false)
+                assert(A.compactPanel=='properties' and
+                    not A.windowsHud,
+                    'Propriedades do HUD nao utilizam callback real')
+                love.keypressed('escape')
+                assert(not A.compactPanel,
+                    'Propriedades nao fecharam com Escape')
+                love.draw()
+                assert(not hitRegistered(hud.properties),
+                    'Fechar painel reativou hitbox invisivel')
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'HUD F10 alterou raster ou historico')
                 local loaded=A.store:openProject(A.doc.id)
                 assert(loaded and loaded.layers and
                     loaded.layers[1].pixels==Native.bytes(layers:activeBuffer()),

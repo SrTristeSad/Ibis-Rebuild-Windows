@@ -47,3 +47,12 @@ A PR permanece draft; não mexer na branch main.
 Validar LuaJIT Linux, testes Windows e screenshot LÖVE real. A interface
 normal deve deixar livre o canto superior esquerdo; o painel PC apenas
 é uma adaptação documentada. Não considerar paridade com Android 14.1.2.
+
+## Validação GUI adicional
+
+O smoke Windows com LÖVE real passou a verificar o estado F10
+fechado (nenhuma hitbox), abertura por tecla, registro dos três
+comandos superiores, clique real em **Ajustes** e seu fechamento
+por Escape. O teste exige bytes RGBA e histórico inalterados.
+O autoteste legado de troca de layout também passa a retornar
+por F10 → Desktop, preservando o callback existente.
