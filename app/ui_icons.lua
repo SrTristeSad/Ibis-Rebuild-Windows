@@ -288,6 +288,42 @@ function Icons.drawColorSwatch(cx,cy,size,r,g,b)
     gapi.circle('line',geom.cx,geom.cy,geom.ringRadius,32)
     gapi.pop()
 end
+-- A53: para Pincel/Borracha, a area Propriedades da barra do
+-- ibisPaint mostra o tamanho atual num disco. A nossa UI so possui
+-- diametros inteiros (1..256); outros modos mantem glyphs.properties.
+function Icons.brushSizeLabel(diameter)
+    assert(type(diameter)=='number' and diameter==diameter and
+        diameter%1==0 and diameter>=1 and diameter<=256,
+        'Diametro do pincel fora dos limites do motor Lua')
+    return tostring(diameter)
+end
+function Icons.drawBrushSizeBadge(cx,cy,size,diameter,font)
+    assert(type(cx)=='number' and cx==cx and
+        type(cy)=='number' and cy==cy and
+        type(size)=='number' and size>0 and size==size,
+        'Indicador de tamanho invalido')
+    local label=Icons.brushSizeLabel(diameter)
+    local g=assert(love and love.graphics,
+        'Renderizacao LOVE obrigatoria')
+    assert(font and type(font.getHeight)=='function' and
+        type(font.getWidth)=='function','Fonte de tamanho ausente')
+    g.push('all')
+    g.setColor(.075,.075,.075,1)
+    g.circle('fill',cx,cy,size*.46,32)
+    g.setColor(.85,.85,.85,1)
+    g.setLineWidth(1.1)
+    g.circle('line',cx,cy,size*.46,32)
+    g.setFont(font)
+    -- Caber ate tres algarismos sem aumentar a hitbox do botao.
+    local textWidth=font:getWidth(label)
+    local fit=math.min(1,(size*.83)/math.max(1,textWidth))
+    g.push()
+    g.translate(cx,cy)
+    g.scale(fit,fit)
+    g.print(label,-textWidth/2,-font:getHeight()/2)
+    g.pop()
+    g.pop()
+end
 -- A52: a funcao principal do editor ja atingiu o limite de
 -- upvalues no LuaJIT. Delegar a escolha do icone ao proprio modulo
 -- de renderizacao evita capturar o catalogo dentro de drawEditor.
