@@ -37,3 +37,11 @@ devem passar. A comparação visual mostra apenas **aproximação da
 estrutura** da referência pública, NÃO equivalência pixel a pixel
 Android 14.1.2. Pincéis, RBD2, camadas, históricos e Windows Ink
 não são alterados. PR #66 permanece draft e `main` intacta.
+
+## Revisão A39 — conflito com F10 identificado pelo smoke Windows
+
+A faixa dupla ocupa a região onde o HUD Windows F10 aparece.
+O modo F10 **oculta temporariamente a faixa e todas suas hitboxes**,
+reexibindo-a ao fechar o painel. O teste LÖVE de F10 diferencia
+hitboxes exatas dos comandos auxiliares dos botões da faixa,
+verifica que não coexistem e confirma que o seletor volta ao fechar.

@@ -5229,32 +5229,43 @@ function love.update(dt)
                 -- Sem F10, nenhuma hitbox do HUD pode tocar o canvas.
                 local hud=A.windowsHudApi.rects(
                     love.graphics.getDimensions())
-                local function hitRegistered(rect)
-                    local x=rect.x+rect.w/2
-                    local y=rect.y+rect.h/2
+                -- A barra dupla pode cruzar geometricamente o HUD
+                -- enquanto fechada: exigir a hitbox EXATA dos botoes
+                -- auxiliares, nao a existencia de qualquer outro botao
+                -- visivel naquela coordenada.
+                local function registeredExact(rect)
                     for _,button in ipairs(A.buttons) do
-                        if x>=button.x and x<button.x+button.w and
-                            y>=button.y and y<button.y+button.h then
+                        if button.x==rect.x and button.y==rect.y and
+                            button.w==rect.w and button.h==rect.h then
                             return true
                         end
                     end
                     return false
                 end
+                local w,h=love.graphics.getDimensions()
+                local railList=require('ibis_editor_rail').entries(
+                    w,h,1,require('ibis_visual_tools').entries,
+                    A.toolRailPosition or 'left')
+                local railItem=railList[1]
                 local pixelsBefore=Native.bytes(layers.composite)
                 local undoBefore=layers:historyStats().undo
                 assert(A.compactUi and not A.focusMode and
                     not A.windowsHud,'HUD deve iniciar fechado')
                 love.draw()
-                assert(not hitRegistered(hud.save) and
-                    not hitRegistered(hud.desktop) and
-                    not hitRegistered(hud.properties),
-                    'HUD oculto deixou hitbox clicavel')
+                assert(registeredExact(railItem),
+                    'Barra de ferramentas nao esta visivel sem F10')
+                assert(not registeredExact(hud.save) and
+                    not registeredExact(hud.desktop) and
+                    not registeredExact(hud.properties),
+                    'HUD oculto deixou hitbox propria clicavel')
                 love.keypressed('f10')
                 assert(A.windowsHud,'Tecla F10 nao abriu HUD Windows')
                 love.draw()
-                assert(hitRegistered(hud.save) and
-                    hitRegistered(hud.desktop) and
-                    hitRegistered(hud.properties),
+                assert(not registeredExact(railItem),
+                    'Seletor lateral cobre o HUD auxiliar F10')
+                assert(registeredExact(hud.save) and
+                    registeredExact(hud.desktop) and
+                    registeredExact(hud.properties),
                     'HUD F10 nao registra botoes ativos')
                 love.mousepressed(hud.properties.x+
                     hud.properties.w/2,hud.properties.y+
@@ -5266,8 +5277,9 @@ function love.update(dt)
                 assert(not A.compactPanel,
                     'Propriedades nao fecharam com Escape')
                 love.draw()
-                assert(not hitRegistered(hud.properties),
-                    'Fechar painel reativou hitbox invisivel')
+                assert(not registeredExact(hud.properties) and
+                    registeredExact(railItem),
+                    'Fechar painel nao restaurou seletor lateral')
                 assert(Native.bytes(layers.composite)==pixelsBefore and
                     layers:historyStats().undo==undoBefore,
                     'HUD F10 alterou raster ou historico')
@@ -10012,7 +10024,11 @@ function love.draw()
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
     -- Faixa lateral e overlay visual sobre o canvas, fora da funcao
     -- monolitica drawEditor (limite LuaJIT de 60 upvalues).
+    -- O HUD auxiliar F10 ocupa o canto superior esquerdo e nao
+    -- deve cruzar o seletor em duas colunas. Ocultar a faixa e
+    -- suas hitboxes somente enquanto F10 estiver visivel.
     if A.screen=='editor' and A.compactUi and not A.focusMode
+        and not A.windowsHud
         and (A.toolRailPosition or 'left')~='popup' then
         drawEditorToolRail(w,h)
     end
