@@ -1,12 +1,20 @@
 # Ibis Rebuild Windows
 
-**Foco atual: reconstrução visual e ferramentas do ibisPaint 14.1.2.**
-A primeira passagem da nova galeria, barra de nove ações e seletor
-com quinze categorias está em
-[Visual Shell — Fase 1](docs/VISUAL_SHELL_PHASE1.md).
+**Objetivo central: clone visual completo do ibisPaint oficial para Windows (PC).**
+A interface original do **Windows** é a referência obrigatória de
+telas, painéis, posição, tamanho, cores, ícones e estados; **não inventar
+telas ou adaptar livremente a aparência do Android**. A análise do
+ibisPaint X **Android 14.1.2** serve como referência técnica para
+entender o funcionamento das ferramentas, respeitando diferenças entre
+as versões. A correspondência visual com o aplicativo de PC **ainda
+não foi comprovada**; as fases anteriores são provisórias nesse aspecto.
+
+**[LEIA PRIMEIRO: PROMPT DE CONTINUAÇÃO E OBJETIVO CENTRAL](PROMPT_CONTINUACAO.md).**
+O documento determina prioridades, fontes de evidência, limites e
+critérios de aceitação para todo o desenvolvimento futuro.
+
 O motor Lua existente permanece em operação; recursos ainda sem motor
 aparecem como pendentes, sem simular funcionalidades inexistentes.
-
 
 Editor raster independente para Windows x64, escrito em **LuaJIT/LÖVE 11.5**.
 O motor de pixels, pincéis, camadas, seleções e ferramentas é código Lua.
@@ -18,8 +26,9 @@ Windows usa LuaJIT FFI para acesso ao sistema operacional.
 
 **Validação disponível:** testes do motor Lua aprovados no Linux e Windows;
 geração de executável e smoke real de GUI Windows com atualização parcial
-de textura, undo/redo e salvamento RBD2. Ainda não há equivalência 1:1
-com o ibisPaint Android 14.1.2. A ponte Windows Ink foi
+de textura, undo/redo e salvamento RBD2. Ainda não há equivalência visual 1:1
+com o ibisPaint oficial para Windows, nem paridade funcional completa
+comprovada. A ponte Windows Ink foi
 reimplementada em LuaJIT FFI e passou na integração com a janela Windows,
 mas pressão/inclinação **com caneta física ainda não foram verificadas**.
 Mouse e toque via LÖVE seguem disponíveis e a ponte pode ser desativada
