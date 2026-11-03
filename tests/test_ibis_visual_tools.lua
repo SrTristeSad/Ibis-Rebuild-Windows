@@ -114,20 +114,61 @@ function T.run()
         'Seletor precisa de fallback seguro para estado invalido')
     assert(UI.IDS[2]=='tools',
         'Identidade do segundo botao da barra foi alterada')
-    -- A52: delegacao ao renderizador protege o limite de upvalues
-    -- do drawEditor sem alterar a identidade do glifo exibido.
+    -- A54: segundo botao recebe disco, glifo reduzido e indicador
+    -- de popup; o primeiro continua mostrando pincel sem moldura.
+    local shape=Icons.toolSelectorGeometry(120,200,21)
+    assert(shape.radius>9 and shape.radius<11
+        and shape.iconSize<21 and shape.iconSize>12
+        and #shape.caret==6,
+        'Disco do seletor deve caber no slot e ter indicador de menu')
+    for i=1,#shape.caret,2 do
+        assert(math.abs(shape.caret[i]-120)<11 and
+            math.abs(shape.caret[i+1]-200)<11,
+            'Indicador do seletor escapou da moldura')
+    end
+    -- A52/A54: renderizacao delegada respeita o limite de 60
+    -- upvalues do drawEditor; teste de primitivas sem motor LOVE.
     local originalDraw=Icons.draw
-    local received={}
+    local originalLove=_G.love
+    local received,operations={},{}
+    local function log(op,...)
+        operations[#operations+1]={op,...}
+    end
     Icons.draw=function(id,cx,cy,size)
         received={id,cx,cy,size}
     end
+    _G.love={graphics={
+        push=function(mode)log('push',mode)end,
+        pop=function()log('pop')end,
+        setColor=function(r,g,b,a)log('color',r,g,b,a)end,
+        setLineWidth=function(width)log('width',width)end,
+        circle=function(mode,x,y,r)log('circle',mode,x,y,r)end,
+        polygon=function(mode,...)log('polygon',mode,...)end}}
     local ok,err=pcall(Icons.drawToolSelector,
         'brush','wand',120,200,21)
     Icons.draw=originalDraw
+    _G.love=originalLove
     assert(ok,'Delegacao do seletor falhou: '..tostring(err))
     assert(received[1]=='magic' and received[2]==120
-        and received[3]==200 and received[4]==21,
-        'Seletor nao encaminhou o glifo ativo para o renderer')
+        and received[3]==200 and
+        math.abs(received[4]-shape.iconSize)<1e-7,
+        'Seletor nao encaminhou o glifo e escala ao renderer')
+    assert(#operations==9 and
+        operations[1][1]=='push' and
+        operations[3][1]=='circle' and
+        operations[3][2]=='fill' and
+        operations[6][1]=='circle' and
+        operations[6][2]=='line' and
+        operations[8][1]=='polygon' and
+        operations[8][2]=='fill' and
+        operations[9][1]=='pop',
+        'Seletor deve desenhar disco, aro, icone e indicador de menu')
+    assert(operations[2][1]=='color' and
+        operations[2][2]<.2 and operations[7][2]>.8,
+        'Glifo branco deve manter contraste com fundo escuro')
+    assert(UI.IDS[1]=='brush' and UI.IDS[2]=='tools'
+        and UI.IDS[3]=='properties',
+        'A54 nao pode trocar a ordem dos botoes')
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local popup=UI.popup(size[1],size[2],'tools')
         assert(popup.w==242 and popup.h==383
