@@ -43,10 +43,13 @@ local glyphs={
     shape={
         {op='rectangle',mode='line',x=-6,y=-5,w=8,h=8},
         {op='circle',mode='line',x=3.5,y=2.5,r=3.5}},
+    -- A49: adaptado do Tabler Icons "color-picker" (MIT, Pawel Kuna).
+    -- SVG original: tabler/tabler-icons/icons/outline/color-picker.svg
+    -- A silhueta da pipeta e mantida em coordenadas Lua normalizadas.
     picker={
-        {op='line',points={-5,5,2,-2,4,0,6,-2,2,-6,0,-4}},
-        {op='line',points={-5,5,-6,6}},
-        {op='circle',mode='line',x=-3,y=3,r=1.8}}
+        {op='line',points={-.7,-3.5,3.5,.7}},
+        {op='line',points={-5.6,2.8,2.59,-5.39,3.57,-5.39,
+            5.39,-3.57,5.39,-2.59,-2.8,5.6,-5.6,5.6,-5.6,2.8}}}
 }
 -- Compact action bar glyphs. Pure vectors inspired by functional
 -- categories in the official toolbar, not copied Android assets.
