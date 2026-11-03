@@ -37,6 +37,12 @@ function M.run(root)
         Native.readPixel(session.composite,0,0)==0x19232dff,'move must alter stacking')
     session:move(1,2)
     ok(session.doc.active_layer==2,'move should preserve selected identity')
+    ok(session:setAlphaLock(2,true),'alpha lock was not activated')
+    ok(session.doc.layers[2].alpha_lock and
+        session.buffers[2].alphaLock,
+        'alpha lock did not reach native Lua raster')
+    rejects(function() session:setAlphaLock(2,'yes') end,
+        'invalid alpha lock metadata accepted')
     session:save()
     local contents=store.fs:read(oldPath)
     ok(contents:sub(1,8)==Store.MAGIC2 and session.doc.revision==2,
@@ -49,6 +55,9 @@ function M.run(root)
         'RBD2 layered RGBA lost')
     ok(reopened.layers[2].opacity==0.5 and reopened.layers[2].visible,
         'RBD2 opacity/visibility lost')
+    ok(reopened.layers[2].alpha_lock==true and
+        reopened.layers[1].alpha_lock==false,
+        'RBD2 alpha lock metadata not persisted')
     local reload=Layers.open(Store.open(root),reopened)
     ok(Native.readPixel(reload.composite,0,0)==merged,'composite changed after reopening')
     local previous=store:openProject(original.id)

@@ -53,11 +53,20 @@ function T.run()
         check(rect.x>=0 and rect.y+rect.h<h-48 and
             rect.x+rect.w<=w,'Color window outside viewport')
         local square=Model.svRect(rect)
-        check(Model.svAt(rect,square.x,square.y+square.h)==0,
-            'Low saturation or brightness should clamp')
-        local sat,bright=Model.svAt(rect,
-            square.x+square.w,square.y)
-        check(sat==100 and bright==100,'HSV square top-right should be pure')
+        for _,value in ipairs({
+            {s=0,b=100},{s=100,b=100},
+            {s=0,b=0},{s=100,b=0},
+            {s=30,b=70},{s=80,b=20}}) do
+            local px,py=Model.svPoint(rect,value.s,value.b)
+            check(Model.svHit(rect,px,py),
+                'Losango nao aceita ponto HSB valido')
+            local ps,pb=Model.svAt(rect,px,py)
+            check(math.abs(ps-value.s)<=1 and
+                math.abs(pb-value.b)<=1,
+                'HSB losango nao corresponde ao controle')
+        end
+        check(not Model.svHit(rect,square.x,square.y),
+            'Fora do losango nao deve selecionar cor')
         local strip=Model.hueRect(rect)
         check(Model.hueAt(rect,strip.y)==0 and
             Model.hueAt(rect,strip.y+strip.h)==360,

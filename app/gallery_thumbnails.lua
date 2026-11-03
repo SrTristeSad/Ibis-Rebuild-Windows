@@ -22,12 +22,12 @@ function Thumb.source(x,y,tw,th,width,height)
 end
 -- Calls pixel(r,g,b,a,x,y) for each target pixel, no native writes.
 -- The source is the *composite* produced by native C++; alpha is retained.
-function Thumb.sample(rgba,width,height,tw,th,pixel)
+local function sample(rgba,width,height,tw,th,pixel,limitW,limitH)
     assert(type(rgba)=='string' and positive(width) and
         positive(height) and #rgba==width*height*4,
         'Expected exact native RGBA bytes')
-    assert(positive(tw) and positive(th) and tw<=176 and
-        th<=126 and type(pixel)=='function',
+    assert(positive(tw) and positive(th) and tw<=limitW and
+        th<=limitH and type(pixel)=='function',
         'Invalid thumbnail canvas')
     for y=0,th-1 do
         for x=0,tw-1 do
@@ -37,6 +37,14 @@ function Thumb.sample(rgba,width,height,tw,th,pixel)
             pixel(r,g,b,a,x,y)
         end
     end
+end
+-- Original gallery-grid contract unchanged; enlarged artworks have
+-- their own explicit preview budget and must never write into RBD2.
+function Thumb.sample(rgba,width,height,tw,th,pixel)
+    return sample(rgba,width,height,tw,th,pixel,176,126)
+end
+function Thumb.sampleLarge(rgba,width,height,tw,th,pixel)
+    return sample(rgba,width,height,tw,th,pixel,768,768)
 end
 function Thumb.key(doc)
     assert(type(doc)=='table' and type(doc.id)=='string' and

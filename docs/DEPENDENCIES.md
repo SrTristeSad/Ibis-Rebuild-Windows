@@ -1,8 +1,18 @@
-# Dependências externas
+# Dependências externas da versão Lua
 
-- LÖVE11.5 Windows x64: janela, apresentação e módulos de imagem. Site oficial: https://love2d.org/ ; fonte oficial: https://github.com/love2d/love/tree/11.5 .
-- LuaJIT distribuído com esse runtime, compatível com API Lua 5.1: https://luajit.org/ e https://www.lua.org/manual/5.1/ .
-- Compilador C++17 x64 (MSVC ou Clang/LLD) e, opcionalmente, CMake 3.20+.
-- Python3 para scripts e testes.
+- Runtime oficial **LÖVE 11.5 x64**: janela, eventos, imagem, textura GPU,
+  runtime LuaJIT e bibliotecas necessárias para executar o aplicativo.
+  https://love2d.org/
+- **LuaJIT**, distribuído com LÖVE, usado por código Lua e LuaJIT FFI.
+  https://luajit.org/
+- **Windows x64**, com bibliotecas do sistema operacional utilizadas pelo
+  módulo `app/fs.lua` e pela ponte `app/windows_ink.lua`.
+- **PowerShell**, somente para conveniência de execução de `run.ps1`,
+  `test.ps1` e `build.ps1`.
 
-Não há cópia de SDK/toolchain, runtime, código do Android, bibliotecas do ibisPaint ou código do Inkora na árvore revisada. O empacotamento local copia o runtime instalado e sua licença para dist/, pasta ignorada e não publicada. Essas dependências preservam suas licenças próprias. A publicação não pressupõe licença de redistribuição do aplicativo original.
+Não é necessário Python, CMake, compilador C++ nem DLL própria de raster.
+
+O build empacota as DLLs oficiais do runtime LÖVE. A verificação CI de
+GUI utiliza uma implementação OpenGL por software **apenas no runner**;
+ela não pode ser distribuída acidentalmente junto ao pacote. Cada
+dependência conserva seus termos de licenciamento.

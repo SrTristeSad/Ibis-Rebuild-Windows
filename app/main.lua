@@ -7,6 +7,7 @@ local Colors=require('colors')
 local ColorPanel=require('color_window')
 local Stabilizer=require('stroke_stabilizer')
 local DirtyRegion=require('dirty_region')
+local GPUUpload=require('gpu_upload')
 local StrokePath=require('stroke_path')
 local Pressure=require('touch_pressure')
 local PressureCurves=require('pressure_curves')
@@ -30,6 +31,36 @@ local Tip=require('brush_cursor')
 local Workspace=require('workspace_layout')
 local Sidebar=require('sidebar_scroll')
 local Compact=require('compact_layout')
+local PopupFocus=require('compact_popup_focus')
+local IbisTools=require('ibis_visual_tools')
+local EditorRail=require('ibis_editor_rail')
+local TopToolbar=require('ibis_top_toolbar')
+local IbisPanels=require('ibis_visual_panels')
+IbisPanels.galleryDetail=require('ibis_gallery_detail')
+IbisPanels.canvasPresetRows=require('ibis_canvas_preset_rows')
+IbisPanels.canvasDimensionControls=require('ibis_canvas_dimension_controls')
+IbisPanels.canvasDimensionSlider=require('ibis_canvas_dimension_slider')
+IbisPanels.canvasDialogChrome=require('ibis_canvas_dialog_chrome')
+IbisPanels.canvasReferenceDraw=require('ibis_canvas_reference_draw')
+IbisPanels.home=require('ibis_home_screen')
+IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
+local LayerUI=require('ibis_layer_ui')
+local LayerChrome=require('ibis_layer_chrome')
+local FilterUI=require('ibis_filter_ui')
+local TextUI=require('ibis_text_ui')
+local RulerUI=require('ibis_ruler_ui')
+local MaterialUI=require('ibis_material_ui')
+local TransformUI=require('ibis_transform_ui')
+local SelectionToolUI=require('ibis_selection_tool_ui')
+local EffectUI=require('ibis_effect_tools_ui')
+local VectorFrameUI=require('ibis_vector_frame_ui')
+local PaletteUI=require('ibis_palette_ui')
+local GalleryUI=require('ibis_gallery_ui')
+IbisPanels.canvasReference=require('ibis_canvas_reference')
+local GalleryShell=require('ibis_gallery_shell')
+local SettingsUI=require('ibis_settings_ui')
+IbisPanels.stabilizer=require('ibis_stabilizer_ui')
+IbisPanels.trash=require('ibis_deleted_retention')
 local LayerKeys=require('compact_layer_keys')
 local Inspector=require('compact_inspector')
 local LayerOpacity=require('compact_layer_opacity')
@@ -40,29 +71,139 @@ local LayerRowVisual=require('layer_row_visual')
 local CompactLayerWheel=require('compact_layer_wheel')
 local LayerListWheel=require('layer_list_wheel')
 local dispatchInkEvent
-local showcaseNames={'01-galeria.png','02-editor-compacto.png',
+local showcaseNames={[0]='00-inicial.png','01-galeria.png','02-editor-compacto.png',
     '03-biblioteca-pinceis.png','04-seletor-cores.png',
     '05-camadas.png','06-editor-desktop.png',
     '07-editor-960x640.png','08-ajustes-pincel.png',
-    '09-opacidade-camadas.png'}
-local A={screen='gallery',folder='',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+    '09-opacidade-camadas.png','10-seletor-ferramentas.png',
+    '11-criar-tela.png','12-galeria-desenhos.png',
+    '13-menu-visualizacao.png','14-estabilizador.png',
+    '15-opcoes-forma.png','16-materiais-pendentes.png',
+    '17-losango-hsb.png','18-sliders-rgb.png',
+    '19-paleta-cores.png','20-cores-pessoais.png',
+    '21-camada-selecao.png','22-modos-mesclagem.png',
+    '23-selecao-ativa.png','24-catalogo-filtros.png',
+    '25-texto-rascunho.png','26-texto-estilo.png',
+    '27-reguas-catalogo.png','28-regua-espelho.png',
+    '29-materiais-categorias.png','30-materiais-busca.png',
+    '31-transformar-mover.png','32-transformar-perspectiva.png',
+    '33-varinha-magica.png','34-laco.png',
+    '35-borrar.png','36-desfoque.png',
+    '37-caneta-especial.png','38-liquify.png',
+    '39-vetor.png','40-dividir-quadros.png',
+    '41-quadros-divisao.png',
+    '42-busca-fechada.png','43-texto-foco-encerrado.png',
+    '44-editor-faixa-ferramentas.png','45-editor-faixa-interacao.png',
+    '46-paleta-ferramentas.png','47-janela-camadas.png',
+    '48-camadas-visuais.png','49-camada-selecionada.png',
+    '50-camadas-comandos.png','51-camadas-adicionar.png',
+    '52-camadas-duplicar.png','53-camadas-rodape-oficial.png',
+    '54-camadas-mesclagem-rodape.png',
+    '55-varinha-mascara-real.png',
+    '56-ferramenta-pendente-nao-pinta.png',
+    '57-ferramentas-uma-coluna.png',
+    '58-ferramentas-uma-coluna-pagina2.png',
+    '59-ferramentas-tres-colunas.png',
+    '60-menu-voltar.png','61-configuracoes-ibis.png',
+    '62-ferramentas-sem-rotulos.png',
+    '63-galeria-miniaturas.png','64-galeria-rolagem.png',
+    '65-galeria-selecao-visual.png',
+    '66-estabilizador-1412-tempo-real.png',
+    '67-estabilizador-1412-fade.png',
+    '68-estabilizador-1412-rascunho.png',
+    '69-estabilizador-legado-lua.png',
+    '70-nova-tela-tamanhos-basicos.png',
+    '71-nova-tela-formatos-oficiais.png',
+    '72-nova-tela-proporcao-3-4.png',
+    '73-nova-tela-a4-pixels.png',
+    '74-nova-tela-presets-preservados.png',
+    '75-galeria-selecao-rodape.png',
+    '76-galeria-selecionar-todos.png',
+    '77-galeria-limpar-selecao.png',
+    '78-galeria-excluir-pendente.png',
+    '79-galeria-mover-abrir.png',
+    '80-galeria-mover-escolher-pasta.png',
+    '81-galeria-obra-movida.png',
+    '82-galeria-destino-verificado.png',
+    '83-mover-criar-pasta.png',
+    '84-mover-nova-pasta-criada.png',
+    '85-mover-obra-para-pasta-nova.png',
+    '86-mover-pasta-nova-verificada.png',
+    '87-mover-criacao-cancelada.png',
+    '88-excluir-confirmacao.png',
+    '89-excluir-cancelado.png',
+    '90-excluir-recuperavel.png',
+    '91-excluidos-recentemente.png',
+    '92-recuperar-confirmacao.png',
+    '93-desenho-recuperado.png',
+    '94-galeria-menu-tres-pontos.png',
+    '95-excluidos-prazo-recuperacao.png',
+    '96-excluidos-selecao-em-lote.png',
+    '97-excluidos-lote-recuperado.png',
+    '98-galeria-sem-abas-inventadas.png',
+    '99-galeria-rolagem-sem-abas.png',
+    '100-galeria-selecao-sem-abas.png',
+    '101-galeria-arrasto-pressionado.png',
+    '102-galeria-ordem-alterada.png',
+    '103-galeria-ordem-persistida.png',
+    '104-galeria-arrasto-curto-cancelado.png',
+    '105-galeria-pastas-e-obras-reordenadas.png',
+    '106-arrastar-desenho-para-pasta.png',
+    '107-desenho-dentro-da-pasta.png',
+    '108-arrastar-desenho-para-voltar.png',
+    '109-desenho-movido-para-pasta-pai.png',
+    '110-agrupar-desenho-sobre-outro.png',
+    '111-pasta-criada-com-dois-desenhos.png',
+    '112-conteudo-da-pasta-agrupada.png',
+    '113-agrupar-com-nome-duplicado.png',
+    '114-arrasto-rolagem-para-baixo.png',
+    '115-arrasto-rolagem-para-cima.png',
+    '116-arrasto-rolagem-cancelado.png',
+    '117-alpha-lock-camada-ativado.png',
+    '118-alpha-lock-pintura-real.png',
+    '119-alpha-lock-rbd2-reaberto.png',
+    '120-ferramentas-direita.png',
+    '121-ferramentas-popup-sem-faixa.png',
+    '122-galeria-imagem-ampliada.png',
+    '123-galeria-proxima-obra.png',
+    '124-galeria-gesto-voltar.png',
+    '125-galeria-editar-obra.png'}
+local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,windowsHudApi=require('ibis_windows_hud'),windowsBrushSizeGesture=require('ibis_windows_brush_size'),brushSizeDrag=nil,windowsPenViewApi=require('ibis_windows_pen_view'),penViewDrag=nil,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local function clearWandSelection()
+    if A.wandOverlay then
+        A.wandOverlay:release()
+        A.wandOverlay=nil
+    end
+    A.wandSelection=nil
+end
+-- Cache de ImageData temporario, limitado a 1 MiB e quatro dimensoes.
+local gpuUpload=GPUUpload.new({maxEntries=4,maxCacheBytes=1024*1024})
 -- Visual language: neutral studio workspace, clear blue tool state and
 -- compact layer controls. All painting remains inside the native canvas.
 local palette={bg={.105,.119,.139},panel={.147,.167,.191},card={.194,.218,.247},line={.267,.307,.342},text={.94,.96,.98},muted={.65,.71,.76},accent={.29,.68,.98},selected={.16,.34,.48},canvas={.126,.140,.158},warn={1,.72,.35}}
 -- A denser gray and charcoal editing chrome, referencing the official tool
 -- and layer screenshots. The desktop palette remains untouched.
-local compactPalette={bg={.215,.222,.229},panel={.125,.133,.145},
-    card={.210,.220,.231},line={.345,.365,.380},
-    text={.95,.96,.97},muted={.70,.73,.76},
-    accent={.34,.69,1},selected={.14,.29,.43},
-    canvas={.25,.26,.27},warn={1,.72,.35}}
+local compactPalette={bg={.60,.61,.62},panel={.205,.215,.227},
+    card={.29,.305,.325},line={.43,.45,.47},
+    text={.96,.97,.98},muted={.76,.79,.82},
+    accent={.36,.70,1},selected={.20,.36,.53},
+    canvas={.57,.58,.59},warn={1,.72,.35}}
+local galleryPalette={
+    bg={.915,.927,.937},panel={.985,.988,.990},
+    card={1,1,1},line={.78,.81,.84},
+    text={.15,.19,.23},muted={.40,.45,.50},
+    accent={.16,.47,.90},selected={.82,.89,.99},
+    canvas={.86,.87,.88},warn={.86,.42,.19}
+}
 local swatches={
     {name='Grafite',rgba=0x192d40ff},{name='Preto',rgba=0x000000ff},
     {name='Vermelho',rgba=0xe53b44ff},{name='Verde',rgba=0x20ba84ff},
     {name='Azul',rgba=0x347ce9ff},{name='Branco',rgba=0xffffffff}
 }
 local function c(key,alpha)
-    local v=(A.compactUi and compactPalette or palette)[key]
+    local colors=A.screen=='gallery' and galleryPalette or
+        (A.compactUi and compactPalette or palette)
+    local v=colors[key]
     love.graphics.setColor(v[1],v[2],v[3],alpha or 1)
 end
 local function text(value,x,y,font,key) c(key or 'text');love.graphics.setFont(A.fonts[font or 'body']);love.graphics.print(value,x,y) end
@@ -146,9 +287,21 @@ local function externalWrite(path,bytes)
     path=path:gsub('\\','/');local dir,name=path:match('^(.*)/([^/]+)$');assert(dir and name,'Caminho absoluto necessário')
     local fs=FS.new(dir);fs:writeAtomic(name,bytes)
 end
-local function refreshGallery() A.folders=A.store:folders(A.folder);A.projects=A.store:listProjects(A.folder) end
+local function refreshGallery()
+    A.folders=A.store:folders(A.folder)
+    A.projects=A.store:listProjects(A.folder)
+    A.trashProjects=A.store:deletedProjects()
+    A.galleryItems=A.store:galleryItems(A.folder)
+end
 local function setFolder(id)
-    A.folder=id or '';refreshGallery()
+    A.folder=id or '';A.galleryScroll=0
+    A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+    A.galleryGesture=nil
+    A.galleryMoveMenu=nil;A.galleryDeleteMenu=nil
+    A.galleryRestoreMenu=nil;A.galleryTrash=false
+    A.galleryMoreMenu=false
+    A.gallerySelected={};A.gallerySelecting=false
+    refreshGallery()
 end
 local function clearLayerThumbs()
     if A.layerThumbs then
@@ -187,6 +340,7 @@ local function rebuildImage()
             A.layerThumbDirty[layer.id]=true
         end
     end
+    gpuUpload:clear() -- projeto/textura completos invalidam scratch anterior
     if A.image then A.image:release() end
     if A.imageData then A.imageData:release() end
     A.imageData=love.image.newImageData(A.buffer.width,A.buffer.height,'rgba8',Native.bytes(A.buffer))
@@ -197,11 +351,15 @@ end
 -- Non-brush mutations continue to use rebuildImage() for full sync.
 local function updateImageRegion(rect)
     if not rect then return false end
+    -- Uma chamada Ink.poll pode conter dezenas de WM_POINTERUPDATE.
+    -- Nao recompor/enviar a mesma textura a cada amostra do pacote;
+    -- acumular a regiao e fazer um unico envio ao final do love.update.
+    if A.deferInkUploads then
+        A.pendingInkRect=DirtyRegion.union(A.pendingInkRect,rect)
+        return true
+    end
     A.layerSession:recomposeRect(rect)
-    local patch=love.image.newImageData(rect.w,rect.h,'rgba8',
-        Native.regionBytes(A.buffer,rect))
-    A.image:replacePixels(patch,nil,1,rect.x,rect.y)
-    patch:release()
+    gpuUpload:send(A.image,A.buffer,rect)
     local layer=A.doc.layers[A.doc.active_layer]
     A.layerThumbDirty=A.layerThumbDirty or {}
     A.layerThumbDirty[layer.id]=true
@@ -250,9 +408,10 @@ local function resetCanvasRotation()
     commitView(v);return changed
 end
 local function openDoc(doc)
-    assert(Native.available,'O editor requer o motor C++ compilado. A galeria continua disponível.')
+    assert(Native.available,'O editor requer o motor Lua compilado. A galeria continua disponível.')
     clearLayerThumbs()
     A.layerScroll=nil
+    clearWandSelection()
     A.layerSession=Layers.open(A.store,doc)
     A.doc=A.layerSession.doc
     A.buffer=A.layerSession.composite
@@ -260,7 +419,8 @@ local function openDoc(doc)
     releaseBrushSamples()
     A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.desktopLayerOpacityDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
-    A.compactPanel=nil;A.compactLayerStart=nil
+    A.compactPanel=nil;A.compactLayerStart=nil;A.windowsHud=false
+    A.penViewDrag=nil
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -299,7 +459,7 @@ local function paintBrushSegment(x,y,pressure,defer)
         updateImageRegion(rect)
     end
 end
--- Batch the C++ raster calls from one input packet into one composition/upload.
+-- Batch the Lua raster calls from one input packet into one composition/upload.
 local function paintBrushPath(x,y,pressure,closing)
     if not A.drawing or not A.strokePath then return end
     local emit=function(px,py,p)
@@ -339,6 +499,8 @@ selectTool=function(id)
         return false
     end
     finishStroke()
+    clearWandSelection()
+    A.visualPendingTool=nil
     if A.tool~=id then A.shapePreview=nil;A.sidebarScroll=0 end
     A.tool=id
     local tab=EditorTools.panelFor(id)
@@ -347,13 +509,19 @@ selectTool=function(id)
 end
 -- The canvas gains horizontal workspace while the document/view state is
 -- untouched. All editing shortcuts remain active with the pane hidden.
+local function navigateCompactPanel(nextPanel)
+    PopupFocus.navigate(A,nextPanel)
+    love.keyboard.setTextInput(false)
+end
 local function toggleFocusMode()
     assert(A.screen=='editor' and A.doc,'Abra uma obra para usar o modo foco')
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
-    A.compactPanel=nil;A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
+    A.brushSizeDrag=nil;A.penViewDrag=nil
+    navigateCompactPanel(nil);A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
     A.focusMode=not A.focusMode
+    A.windowsHud=false
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
     return A.focusMode
@@ -363,10 +531,12 @@ local function toggleCompactUi()
     finishStroke()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
+    A.brushSizeDrag=nil;A.penViewDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
-    A.compactPanel=nil;A.compactLayerStart=nil;A.colorDrag=nil
+    navigateCompactPanel(nil);A.compactLayerStart=nil;A.colorDrag=nil
     A.desktopLayerOpacityDrag=nil
     A.compactUi=not A.compactUi
+    A.windowsHud=false
     status(A.compactUi and 'Interface compacta · barra inferior ativa' or
         'Interface desktop · painel lateral restaurado')
 end
@@ -374,7 +544,8 @@ local function toggleCompactPanel(kind)
     assert(A.compactUi and A.screen=='editor','Painel compacto indisponível')
     finishStroke()
     A.shapePreview=nil;A.panning=false;A.panButton=nil
-    A.compactPanel=A.compactPanel==kind and nil or kind
+    A.windowsHud=false
+    navigateCompactPanel(A.compactPanel==kind and nil or kind)
 end
 local function undoDoc()
     A.shapePreview=nil
@@ -415,11 +586,49 @@ local function saveDoc()
     status('Projeto RBD2 salvo · revisão '..tostring(A.doc.revision))
 end
 local function toGallery()
-    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.compactPanel=nil;A.colorDrag=nil;A.compactPanel=nil
+    A.backMenu=false;A.settingsOpen=false
+    A.galleryCreateMenu=false;A.galleryMoveMenu=nil;A.galleryScroll=0
+    A.galleryGesture=nil
+    A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+    A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil;A.galleryTrash=false
+    A.galleryMoreMenu=false
+    A.gallerySelecting=false;A.gallerySelected={}
+    clearWandSelection()
+    A.visualPendingTool=nil
+    A.shapePreview=nil;A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil;A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil;A.colorDrag=nil;navigateCompactPanel(nil)
     finishStroke()
     clearLayerThumbs();A.layerScroll=nil
     if A.doc and A.dirty then saveDoc() end
     A.screen='gallery';refreshGallery()
+end
+-- No ibisPaint o botao Voltar abre um menu com Configuracoes
+-- e retorno para A Minha Galeria. Nenhuma acao edita o documento.
+local function openBackMenu()
+    assert(A.screen=='editor' and A.doc,'Menu indisponivel')
+    finishStroke()
+    A.shapePreview=nil;A.quickDrag=nil
+    A.panning=false;A.panButton=nil;A.colorDrag=nil
+    navigateCompactPanel(nil)
+    A.backMenu=true;A.settingsOpen=false
+end
+local function saveToolPreference(key,value)
+    assert(key=='toolPopupColumns' or key=='toolPopupLabels'
+        or key=='toolRailPosition',
+        'Preferencia de interface invalida')
+    local prefs={}
+    for k,v in pairs(A.preferences or {}) do prefs[k]=v end
+    prefs[key]=value
+    A.store:setPreferences(prefs)
+    A.preferences=prefs
+    if key=='toolPopupColumns' then
+        A.toolPopupColumns=SettingsUI.normalizeColumns(value)
+        A.toolPopupPage=1
+    elseif key=='toolRailPosition' then
+        A.toolRailPosition=SettingsUI.normalizePosition(value)
+        A.toolRailPage=1
+    else
+        A.toolPopupLabels=SettingsUI.labelsVisible(value)
+    end
 end
 local function exportPNG()
     assert(A.doc,'Nenhum projeto aberto')
@@ -468,12 +677,18 @@ local function updateColorDrag(kind,x,y)
         local sat,bright=ColorPanel.svAt(p,x,y)
         local hue=ColorPanel.hsb(A.color)
         A.color=ColorPanel.fromHSB(hue,sat,bright,a)
-    elseif kind=='hue' then
+    elseif kind=='hue' or kind=='wheel' then
         local _,sat,bright=ColorPanel.hsb(A.color)
-        A.color=ColorPanel.fromHSB(ColorPanel.hueAt(p,y),sat,bright,a)
+        local angle=kind=='wheel' and IbisPanels.wheelHue(p,x,y)
+            or ColorPanel.hueAt(p,y)
+        A.color=ColorPanel.fromHSB(angle,sat,bright,a)
     elseif kind=='alpha' then
         A.color=ColorPanel.rgba(r,g,b,
             ColorPanel.hsbAlphaValue(p,x))
+    elseif kind:sub(1,5)=='mini-' then
+        local channel=kind:sub(6)
+        local value=ColorPanel.hsbMiniValue(p,channel,x)
+        A.color=ColorPanel.withHSB(A.color,channel,value)
     else
         local mode,channel=kind:match('^(%a+)%-(%u)$')
         assert(mode=='rgb' or mode=='hsb','Ajuste inválido')
@@ -490,6 +705,10 @@ local function modal(kind)
     if kind=='new' and not Native.available then status('Criação de raster requer rebuild_core.dll. Consulte o diagnóstico de compilação.');return end
     A.modal={kind=kind,focus=1,values=kind=='new' and {'Sem título','512','512'} or
         kind=='color' and {Colors.format(A.color)} or {''}}
+    if kind=='new' then
+        A.modal.canvasListScroll=0
+        A.modal.presetTab='basic' -- Preservado para dados de builds antigos.
+    end
     love.keyboard.setTextInput(true)
 end
 local function openLayerRename()
@@ -1115,7 +1334,7 @@ local function verifyBrushLibrary()
         Samples.key(A.brushLabDraft,A.color) and
         Native.bytes(A.layerSession.composite)==originalPixels and
         A.layerSession:historyStats().undo==originalHistory,
-        'Prévia de cartão alterou pixels/histórico ou não atualizou C++')
+        'Prévia de cartão alterou pixels/histórico ou não atualizou Lua')
     -- Built-in #3 occupies the second row, first column.
     love.mousepressed(rect.x+34,rect.y+80+88+10,1,false)
     assert(not A.brushLibrary and A.brushStyle=='soft' and
@@ -1281,7 +1500,7 @@ local function verifyBrushTipHover()
         0xe53b44ff,'soft',1,0,0,false))
     assert(Native.bytes(A.tipCache.stamp.buffer)==
         Native.bytes(nativeReference.buffer),
-        'Prévia gráfica divergiu dos bytes RGBA do raster C++')
+        'Prévia gráfica divergiu dos bytes RGBA do raster Lua')
     local cache=A.tipCache
     love.draw()
     assert(A.tipCache==cache,
@@ -1353,7 +1572,7 @@ local function verifyCompactUi()
         love.mousepressed(b.x+b.w/2,b.y+b.h/2,1,false)
     end
     local clip=Workspace.bounds(w,h,true,true)
-    assert(clip.right==w-16 and clip.bottom==h-190,
+    assert(clip.right==w-16 and clip.bottom==h-130,
         'Canvas compacto deve evitar os ajustes e a barra inferior')
     assert(A.zoom==zoom and A.rotation==rotation and
         A.panX==panX and A.panY==panY,
@@ -1362,7 +1581,8 @@ local function verifyCompactUi()
     assert(A.compactPanel=='tools','Botão Ferramentas não abriu a paleta')
     local p=Compact.popup(w,h,'tools')
     love.draw()
-    love.mousepressed(p.x+14+156+32,p.y+52+70+25,1,false)
+    local eraser=IbisTools.grid(p,6)
+    love.mousepressed(eraser.x+eraser.w/2,eraser.y+eraser.h/2,1,false)
     assert(not A.compactPanel and A.tool=='erase',
         'Ícone de borracha na paleta não ativou ferramenta')
     tap(1)
@@ -1437,10 +1657,15 @@ local function verifyCompactUi()
     assert(Native.bytes(A.layerSession.composite)==pixels and
         #A.doc.layers==layerCount,
         'Ações desfeitas da barra compacta modificaram a obra')
+    love.keypressed('f10')
+    assert(A.windowsHud,'F10 nao expos comandos auxiliares Windows')
     love.draw()
-    love.mousepressed(w-595,30,1,false)
-    assert(not A.compactUi and A.compactPanel==nil,
-        'Retorno para a interface desktop falhou')
+    local desktop=A.windowsHudApi.rects(w,h).desktop
+    love.mousepressed(desktop.x+desktop.w/2,
+        desktop.y+desktop.h/2,1,false)
+    assert(not A.compactUi and A.compactPanel==nil and
+        not A.windowsHud,
+        'Retorno para interface desktop via F10 falhou')
     assert(A.zoom==zoom and A.rotation==rotation and
         A.panX==panX and A.panY==panY,
         'Trocar layout de volta mudou zoom ou rotação')
@@ -1668,7 +1893,7 @@ local function verifyNativeBrushCatalogue()
     openBrushLibrary()
     love.draw()
     local cached=assert(A.brushSampleCache and A.brushSampleCache[3],
-        'Brush window did not render native C++ swatches')
+        'Brush window did not render native Lua swatches')
     local expected=Samples.render(Native,Presets.BUILTINS[3],A.color)
     assert(Native.bytes(cached.sample.buffer)==Native.bytes(expected.buffer),
         'Marker preview does not use native feather renderer')
@@ -1732,7 +1957,7 @@ local function verifyNativeBrushCatalogue()
     selectTool(previousTool)
     A.sideTab=previousTab
 end
--- Stage 35 regression: edit a live C++ brush inspector with pointer drags,
+-- Stage 35 regression: edit a live Lua brush inspector with pointer drags,
 -- explicitly apply/cancel and prove no pixels or saved presets were touched.
 local function verifyBrushLabLive()
     local w,h=love.graphics.getDimensions()
@@ -1779,16 +2004,16 @@ local function verifyBrushLabLive()
         'Stabilizer and draft-modified indicator failed')
     love.draw()
     local appliedPreview=assert(A.brushSampleCache.inspector_active,
-        'In-use C++ comparison sample must be rendered')
+        'In-use Lua comparison sample must be rendered')
     local inUse=brushInUse()
     assert(appliedPreview.key==Samples.key(inUse,A.color) and
         Native.bytes(appliedPreview.sample.buffer)==
         Native.bytes(Samples.render(Native,inUse,A.color).buffer),
-        'In-use comparison differs from actual C++ brush parameters')
+        'In-use comparison differs from actual Lua brush parameters')
     local updated=assert(A.brushSampleCache.inspector)
     assert(updated~=initial and
         updated.key==Samples.key(A.brushLabDraft,A.color),
-        'Live C++ preview did not refresh after adjustments')
+        'Live Lua preview did not refresh after adjustments')
     local expected=Samples.render(Native,A.brushLabDraft,A.color)
     assert(Native.bytes(updated.sample.buffer)==
         Native.bytes(expected.buffer),
@@ -1855,13 +2080,85 @@ local function verifyBrushLabLive()
     selectTool(oldTool);A.sideTab=oldTab
 end
 -- Explicit CI-only visual capture mode. Every screenshot comes from the
--- real LÖVE draw callback using the same independent native C++ raster.
+-- real LÖVE draw callback using the same independent native Lua raster.
 -- Never runs without --showcase-dir and does not touch normal user projects.
+-- O showcase testa cliques reais sobre os ícones da barra superior,
+-- sem escrever nos projetos nem criar entradas de histórico.
+local function showcaseTopClick(id,expectedTool,expectedPanel)
+    assert(A.screen=='editor' and A.compactUi
+        and A.layerSession and not A.modal and not A.brushLibrary)
+    local before=Native.bytes(A.buffer)
+    local edits=A.layerSession:historyStats().undo
+    A.compactPanel=nil
+    love.draw()
+    local slot
+    for _,item in ipairs(TopToolbar.toolbar(
+        love.graphics.getDimensions())) do
+        if item.id==id then slot=item;break end
+    end
+    assert(slot,'Ícone superior não encontrado: '..id)
+    love.mousepressed(slot.x+slot.w/2,
+        slot.y+slot.h/2,1,false)
+    assert(A.compactPanel==expectedPanel,
+        'Clique na barra superior não abriu '..expectedPanel)
+    if expectedTool then
+        assert(A.tool==expectedTool,
+            'Ferramenta superior não selecionada: '..expectedTool)
+    end
+    assert(A.layerSession:historyStats().undo==edits,
+        'A navegação visual não pode editar o histórico')
+    assert(Native.bytes(A.buffer)==before,
+        'O clique na interface alterou os pixels')
+end
+-- Exercita o seletor HSB como um utilizador: roda, losango e
+-- slider de saturação. Os dados RBD2 e o histórico ficam intactos.
+local function showcaseHSBClicks()
+    assert(A.screen=='editor' and A.compactUi
+        and A.compactPanel=='color' and A.colorMode=='hsb')
+    local before=Native.bytes(A.buffer)
+    local edits=A.layerSession:historyStats().undo
+    local width,height=love.graphics.getDimensions()
+    local rect=Compact.popup(width,height,'color')
+    local function click(x,y)
+        love.draw()
+        love.mousepressed(x,y,1,false)
+        love.mousereleased(x,y,1,false)
+        assert(A.compactPanel=='color',
+            'Ajuste de cor fechou seu próprio painel')
+    end
+    local wx,wy=IbisPanels.wheelPoint(rect,0)
+    click(wx,wy)
+    local dx,dy=ColorPanel.svPoint(rect,100,100)
+    click(dx,dy)
+    assert(A.color==0xff0000ff,
+        'Roda e losango não selecionaram vermelho HSB puro')
+    local mini=ColorPanel.hsbMiniRect(rect,'S')
+    click(mini.x+mini.w*.5,mini.y+mini.h/2)
+    local hue,sat,bright,alpha=ColorPanel.hsb(A.color)
+    assert(hue<=1 and math.abs(sat-50)<=1 and
+        bright>=99 and alpha==255,
+        'Slider de saturação HSB não acompanha a prévia')
+    assert(Native.bytes(A.buffer)==before,
+        'Seletor HSB modificou o desenho original')
+    assert(A.layerSession:historyStats().undo==edits,
+        'Seleção de cor criou uma edição de raster')
+end
 local function advanceShowcase()
     local sh=A.showcase
     sh.stage=sh.stage+1
     sh.frames=0;sh.pending=false;sh.captured=false
-    if sh.stage==2 then
+    if sh.stage==1 then
+        assert(A.screen=='home',
+            'Showcase deveria iniciar na tela inicial')
+        local w,h=love.graphics.getDimensions()
+        local b=IbisPanels.home.layout(w,h).gallery
+        love.draw()
+        love.mousepressed(b.x+b.w/2,b.y+b.h/2,1,false)
+        love.mousereleased(b.x+b.w/2,b.y+b.h/2,1,false)
+        assert(A.screen=='gallery' and #A.projects>0,
+            'Minha Galeria nao abriu a partir da tela inicial')
+        status('Tela inicial -> Minha Galeria; projeto intacto')
+    elseif sh.stage==2 then
         local project=A.store:openProject(sh.projectId)
         openDoc(project)
         selectTool('brush')
@@ -1902,7 +2199,7 @@ local function advanceShowcase()
         A.color=0x34aaf7ff
         selectTool('brush')
         fit()
-        status('Ajustes compactos · prévia nativa de pincel C++')
+        status('Ajustes compactos · prévia nativa de pincel Lua')
     elseif sh.stage==9 then
         if #A.doc.layers==1 then
             A.layerSession:add('Destaques')
@@ -1916,11 +2213,2326 @@ local function advanceShowcase()
         A.compactPanel='layers'
         A.compactLayerOpacityDrag=nil
         status('Camadas · opacidade precisa de 37%')
+    elseif sh.stage==10 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        status('Seletor visual · 15 ferramentas e motores Lua disponíveis')
+    elseif sh.stage==11 then
+        toGallery()
+        A.galleryFilter='all'
+        modal('new')
+        status('Nova tela · visualizacao de proporcao e tamanhos predefinidos')
+    elseif sh.stage==12 then
+        A.modal=nil
+        love.keyboard.setTextInput(false)
+        A.galleryFilter='works'
+        status('A Minha Galeria · filtro apenas desenhos')
+    elseif sh.stage==13 then
+        openDoc(A.store:openProject(sh.projectId))
+        A.compactUi=true
+        selectTool('brush')
+        showcaseTopClick('view','brush','view')
+        status('Controles superiores · menu de visualização')
+    elseif sh.stage==14 then
+        A.stabilization=3
+        showcaseTopClick('stabilizer','brush','stabilizer')
+        status('Estabilização Lua · nível 3 / 5')
+    elseif sh.stage==15 then
+        showcaseTopClick('shape','shape','properties')
+        status('Ferramentas de formas · configurações do motor Lua')
+    elseif sh.stage==16 then
+        showcaseTopClick('materials','shape','materials')
+        status('Materiais · aparência disponível, motor pendente')
+    elseif sh.stage==17 then
+        selectTool('brush')
+        openCompactColor()
+        showcaseHSBClicks()
+        status('HSB: roda, losango e saturação · clique real aprovado')
+    elseif sh.stage==18 then
+        A.colorMode='rgb'
+        status('Cores · canais RGBA Lua')
+    elseif sh.stage==19 then
+        A.colorMode='palette'
+        A.paletteTab='standard'
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'color')
+        local swatch=PaletteUI.swatch(p,7)
+        love.draw()
+        love.mousepressed(swatch.x+swatch.w/2,
+            swatch.y+swatch.h/2,1,false)
+        love.mousereleased(swatch.x+swatch.w/2,
+            swatch.y+swatch.h/2,1,false)
+        assert(A.color==PaletteUI.standard[7] and
+            Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==edits,
+            'Paleta básica não seleciona cor ou altera a obra')
+        status('Cores básicas · 36 amostras, clique real aprovado')
+    elseif sh.stage==20 then
+        A.paletteTab='personal'
+        status('Cores pessoais · vazia até guardar a primeira cor')
+    elseif sh.stage==21 then
+        A.compactPanel='layers'
+        A.compactLayerStart=nil
+        A.selection=nil
+        status('Janela de camadas · seleção separada e raster preservado')
+    elseif sh.stage==22 then
+        A.compactPanel='layers'
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local start,stop=Thumbnails.window(#A.doc.layers,
+            A.doc.active_layer,Compact.layerRows(p),A.compactLayerStart)
+        local position=stop-A.doc.active_layer+1
+        assert(position>=1 and position<=stop-start+1,
+            'Camada ativa deve aparecer no painel')
+        local r=IbisPanels.layerRow(p,position)
+        local before=Native.bytes(A.buffer)
+        local undo=A.layerSession:historyStats().undo
+        love.draw()
+        love.mousepressed(r.x+92,r.y+35,1,false)
+        love.mousereleased(r.x+92,r.y+35,1,false)
+        assert(A.compactPanel=='blends',
+            'Clicar no modo Normal não abriu os modos de mesclagem')
+        local modes=Compact.popup(w,h,'blends')
+        local pending=LayerUI.blendRow(modes,2)
+        love.draw()
+        love.mousepressed(pending.x+40,pending.y+17,1,false)
+        love.mousereleased(pending.x+40,pending.y+17,1,false)
+        assert(A.compactPanel=='blends',
+            'Modo sem motor não pode mudar de painel')
+        assert(Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==undo,
+            'A navegação de mistura não pode editar a obra')
+        status('Mesclagem · Normal ativo, demais modos pendentes')
+    elseif sh.stage==23 then
+        A.compactPanel='layers'
+        A.selection={x=44,y=56,w=92,h=74}
+        status('Camada de seleção · visual atualiza com área ativa')
+    elseif sh.stage==24 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local tool=A.tool
+        local w,h=love.graphics.getDimensions()
+        local panel=Compact.popup(w,h,'tools')
+        local cell=IbisTools.grid(panel,4)
+        love.draw()
+        love.mousepressed(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        love.mousereleased(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        assert(A.compactPanel=='filters' and
+            A.visualPendingTool=='filter',
+            'Filtro não abriu o catálogo a partir do seletor')
+        local filters=Compact.popup(w,h,'filters')
+        local category=FilterUI.categoryRect(filters,2)
+        love.draw()
+        love.mousepressed(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        love.mousereleased(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        assert(A.filterCategory=='blur' and A.filterPage==1,
+            'Categoria Desfoque não foi selecionada')
+        local first=FilterUI.filterRow(filters,1)
+        love.draw()
+        love.mousepressed(first.x+first.w/2,first.y+first.h/2,1,false)
+        love.mousereleased(first.x+first.w/2,first.y+first.h/2,1,false)
+        assert(A.filterPendingId==FilterUI.pageItems('blur',1)[1].id
+            and A.compactPanel=='filters' and A.tool==tool,
+            'Filtro pendente não preservou o estado do editor')
+        assert(Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==edits,
+            'A navegação em filtros alterou pixels ou histórico')
+        status('Filtros: categorias e lista visual · motores pendentes')
+    elseif sh.stage==25 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local dirty=A.dirty
+        local tool=A.tool
+        local w,h=love.graphics.getDimensions()
+        local panel=Compact.popup(w,h,'tools')
+        local cell=IbisTools.grid(panel,12)
+        love.draw()
+        love.mousepressed(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        love.mousereleased(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        assert(A.compactPanel=='text' and
+            A.visualPendingTool=='text' and A.tool==tool,
+            'Texto nao abriu painel sem mudar ferramenta')
+        local p=Compact.popup(w,h,'text')
+        local field=TextUI.inputRect(p)
+        love.draw()
+        love.mousepressed(field.x+24,field.y+24,1,false)
+        love.mousereleased(field.x+24,field.y+24,1,false)
+        assert(A.textUi.focused,'Editor de rascunho nao recebeu foco')
+        love.textinput('Olá ibis')
+        love.keypressed('backspace')
+        love.textinput('!')
+        assert(A.textUi.value=='Olá ibi!',
+            'Entrada de texto Unicode e backspace falharam')
+        local right=TextUI.alignmentRect(p,3)
+        love.draw()
+        love.mousepressed(right.x+right.w/2,
+            right.y+right.h/2,1,false)
+        love.mousereleased(right.x+right.w/2,
+            right.y+right.h/2,1,false)
+        assert(A.textUi.alignment=='right','Alinhamento falhou')
+        assert(Native.bytes(A.buffer)==before and
+            A.layerSession:historyStats().undo==edits and
+            A.dirty==dirty,'Rascunho alterou desenho')
+        A.showcaseTextCheck={rgba=before,undo=edits,dirty=dirty,tool=tool}
+        status('Texto: entrada e alinhamento locais, sem motor')
+    elseif sh.stage==26 then
+        assert(A.compactPanel=='text' and A.showcaseTextCheck,
+            'Painel de Texto perdido entre capturas')
+        local previous=A.showcaseTextCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'text')
+        local tab=TextUI.tabRect(p,3)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        love.mousereleased(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.textUi.tab=='style','Aba de Estilo nao abriu')
+        local stroke=TextUI.propertyRow(p,3)
+        love.draw()
+        love.mousepressed(stroke.x+stroke.w-20,
+            stroke.y+36,1,false)
+        love.mousereleased(stroke.x+stroke.w-20,
+            stroke.y+36,1,false)
+        assert(A.textUi.stroke==1,'Controle visual de contorno falhou')
+        assert(Native.bytes(A.buffer)==previous.rgba and
+            A.layerSession:historyStats().undo==previous.undo and
+            A.dirty==previous.dirty and A.tool==previous.tool,
+            'Estilo de texto alterou o documento')
+        status('Texto: parametros visuais; aplicacao pendente')
+    elseif sh.stage==27 then
+        local before=Native.bytes(A.buffer)
+        local edits=A.layerSession:historyStats().undo
+        local dirty=A.dirty
+        local tool=A.tool
+        showcaseTopClick('ruler',tool,'ruler')
+        A.rulerUi=RulerUI.new()
+        assert(A.rulerUi.previewId==nil,
+            'Regua nao pode ligar guia sem motor')
+        A.showcaseRulerCheck={rgba=before,undo=edits,
+            dirty=dirty,tool=tool}
+        status('Réguas · 8 tipos documentados, sem aplicação')
+    elseif sh.stage==28 then
+        assert(A.compactPanel=='ruler' and A.showcaseRulerCheck)
+        local old=A.showcaseRulerCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'ruler')
+        local row=RulerUI.cell(p,5)
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        love.mousereleased(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.rulerUi.previewId=='mirror' and A.compactPanel=='ruler',
+            'Espelho nao ganhou destaque visual')
+        local clear=RulerUI.clear(p)
+        love.draw()
+        love.mousepressed(clear.x+clear.w/2,clear.y+clear.h/2,1,false)
+        love.mousereleased(clear.x+clear.w/2,clear.y+clear.h/2,1,false)
+        assert(A.rulerUi.previewId==nil,
+            'Limpar deve remover apenas selecao visual')
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        love.mousereleased(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.rulerUi.previewId=='mirror',
+            'Selecao visual nao restaurada')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool,
+            'Régua pendente alterou obra ou historico')
+        status('Régua Espelho · opção destacada, motor pendente')
+    elseif sh.stage==29 then
+        local before=Native.bytes(A.buffer)
+        local undo=A.layerSession:historyStats().undo
+        local dirty=A.dirty
+        local tool=A.tool
+        showcaseTopClick('materials',tool,'materials')
+        A.materialUi=MaterialUI.new()
+        assert(#MaterialUI.items(A.materialUi)==0,
+            'Nao deve existir catalogo de materiais inventado')
+        A.showcaseMaterialCheck={rgba=before,undo=undo,
+            dirty=dirty,tool=tool}
+        status('Materiais: categorias, nenhum item local carregado')
+    elseif sh.stage==30 then
+        assert(A.compactPanel=='materials' and A.showcaseMaterialCheck)
+        local old=A.showcaseMaterialCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'materials')
+        local category=MaterialUI.categoryRect(p,4)
+        love.draw()
+        love.mousepressed(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        love.mousereleased(category.x+category.w/2,
+            category.y+category.h/2,1,false)
+        assert(A.materialUi.category=='backgrounds',
+            'A categoria Fundos nao respondeu ao clique')
+        local search=MaterialUI.searchRect(p)
+        love.draw()
+        love.mousepressed(search.x+15,search.y+16,1,false)
+        love.mousereleased(search.x+15,search.y+16,1,false)
+        assert(A.materialUi.focused,'Busca de materiais nao recebeu foco')
+        love.textinput('céu')
+        assert(A.materialUi.query=='céu','Busca Unicode nao atualizou')
+        local action=MaterialUI.searchButton(p)
+        love.draw()
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        love.mousereleased(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.materialUi.submittedQuery=='céu'
+            and A.materialUi.searchCount==1
+            and not A.materialUi.focused
+            and #MaterialUI.items(A.materialUi)==0,
+            'Busca pendente nao preservou estado vazio')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool,
+            'Janela de materiais alterou a obra original')
+        status('Materiais: busca local sem catalogo, nenhum pixel alterado')
+    elseif sh.stage==31 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        local rect=Compact.popup(w,h,'tools')
+        local cell=IbisTools.grid(rect,1)
+        love.draw()
+        love.mousepressed(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        love.mousereleased(cell.x+cell.w/2,cell.y+cell.h/2,1,false)
+        assert(A.compactPanel=='transform' and
+            A.visualPendingTool=='transform' and
+            A.transformUi and A.transformUi.mode=='translate',
+            'Transformar nao abriu a janela propria')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Botao Transformar acionou motor indevido')
+        A.showcaseTransformCheck=old
+        status('Transformar: controles visuais, motor ainda pendente')
+    elseif sh.stage==32 then
+        assert(A.compactPanel=='transform' and A.showcaseTransformCheck)
+        local old=A.showcaseTransformCheck
+        local w,h=love.graphics.getDimensions()
+        local rect=Compact.popup(w,h,'transform')
+        local plus=TransformUI.plusRect(rect,3)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.transformUi.zoom==105,
+            'Zoom do rascunho nao respondeu ao clique')
+        local mode=TransformUI.modeRect(rect,2)
+        love.draw()
+        love.mousepressed(mode.x+mode.w/2,mode.y+mode.h/2,1,false)
+        love.mousereleased(mode.x+mode.w/2,mode.y+mode.h/2,1,false)
+        assert(A.transformUi.mode=='perspective'
+            and not TransformUI.canApply(),
+            'Perspectiva visual nao selecionada ou aplicada falsamente')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Rascunho de transformar alterou raster ou selecao')
+        status('Transformar: perspectiva visível, operação pendente')
+    elseif sh.stage==33 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        local tools=Compact.popup(w,h,'tools')
+        local wand=IbisTools.grid(tools,2)
+        love.draw()
+        love.mousepressed(wand.x+wand.w/2,wand.y+wand.h/2,1,false)
+        love.mousereleased(wand.x+wand.w/2,wand.y+wand.h/2,1,false)
+        assert(A.compactPanel=='wand'
+            and A.visualPendingTool=='wand'
+            and A.selectionToolUi.mode=='set',
+            'Varinha não abriu um painel independente')
+        local p=Compact.popup(w,h,'wand')
+        local add=SelectionToolUI.modeRect(p,2)
+        love.draw()
+        love.mousepressed(add.x+add.w/2,add.y+add.h/2,1,false)
+        love.mousereleased(add.x+add.w/2,add.y+add.h/2,1,false)
+        local plus=SelectionToolUI.toleranceButton(p,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        local gap=SelectionToolUI.toggleRect(p,1)
+        love.draw()
+        love.mousepressed(gap.x+gap.w/2,gap.y+gap.h/2,1,false)
+        love.mousereleased(gap.x+gap.w/2,gap.y+gap.h/2,1,false)
+        assert(A.selectionToolUi.mode=='add'
+            and A.selectionToolUi.tolerance==15
+            and A.selectionToolUi.gap,
+            'Controles de Varinha não atualizaram rascunho')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Varinha pendente alterou o projeto real')
+        A.showcaseSelectionToolCheck=old
+        status('Varinha: modo Adicionar, reconhecimento visual pendente')
+    elseif sh.stage==34 then
+        assert(A.compactPanel=='wand' and A.showcaseSelectionToolCheck)
+        local old=A.showcaseSelectionToolCheck
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'wand')
+        love.draw()
+        love.mousepressed(p.x+p.w-63,p.y+23,1,false)
+        love.mousereleased(p.x+p.w-63,p.y+23,1,false)
+        assert(A.compactPanel=='tools',
+            'Voltar da Varinha não restaurou o catálogo')
+        local tools=Compact.popup(w,h,'tools')
+        local lasso=IbisTools.grid(tools,3)
+        love.draw()
+        love.mousepressed(lasso.x+lasso.w/2,lasso.y+lasso.h/2,1,false)
+        love.mousereleased(lasso.x+lasso.w/2,lasso.y+lasso.h/2,1,false)
+        assert(A.compactPanel=='lasso'
+            and A.visualPendingTool=='lasso'
+            and A.selectionToolUi.mode=='set',
+            'Laço não abriu painel próprio')
+        local r=Compact.popup(w,h,'lasso')
+        local subtract=SelectionToolUI.modeRect(r,3)
+        love.draw()
+        love.mousepressed(subtract.x+subtract.w/2,
+            subtract.y+subtract.h/2,1,false)
+        love.mousereleased(subtract.x+subtract.w/2,
+            subtract.y+subtract.h/2,1,false)
+        assert(A.selectionToolUi.mode=='subtract'
+            and not SelectionToolUI.canApply(),
+            'Laço não mudou modo ou aplicou seleção falsa')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Laço pendente alterou o projeto real')
+        status('Laço: modo Subtrair visual, seleção raster pendente')
+    elseif sh.stage==35 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        local chooser=Compact.popup(w,h,'tools')
+        local r=IbisTools.grid(chooser,7)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='smudge' and A.visualPendingTool=='smudge'
+            and A.effectUi and A.effectUi.diameter==24,
+            'Borrar nao abriu painel de rascunho')
+        local p=Compact.popup(w,h,'smudge')
+        local plus=EffectUI.paintButton(p,1,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.effectUi.diameter==25,'Tamanho de Borrar nao ajustou')
+        A.showcaseEffectCheck=old
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,'Borrar alterou raster ou historico')
+        status('Borrar: parametros locais e motor pendente')
+    elseif sh.stage==36 then
+        local old=assert(A.showcaseEffectCheck)
+        assert(A.compactPanel=='smudge')
+        love.keypressed('escape')
+        assert(A.compactPanel=='tools','Escape de Borrar nao voltou')
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),8)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='blur' and A.visualPendingTool=='blur',
+            'Desfoque nao abriu painel independente')
+        local p=Compact.popup(w,h,'blur')
+        local minus=EffectUI.paintButton(p,2,-1)
+        love.draw()
+        love.mousepressed(minus.x+minus.w/2,minus.y+minus.h/2,1,false)
+        love.mousereleased(minus.x+minus.w/2,minus.y+minus.h/2,1,false)
+        assert(A.effectUi.opacity==95,'Opacidade Desfoque nao mudou')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,'Desfoque pendente alterou documento')
+        status('Desfoque: parametros visuais, sem filtro')
+    elseif sh.stage==37 then
+        local old=assert(A.showcaseEffectCheck)
+        love.keypressed('escape')
+        assert(A.compactPanel=='tools','Escape de Desfoque nao voltou')
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),9)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='special' and
+            A.visualPendingTool=='special' and
+            A.effectUi.specialId=='liquify',
+            'Caneta Especial nao abriu catalogo')
+        local p=Compact.popup(w,h,'special')
+        local copy=EffectUI.specialRect(p,5)
+        love.draw()
+        love.mousepressed(copy.x+copy.w/2,copy.y+copy.h/2,1,false)
+        love.mousereleased(copy.x+copy.w/2,copy.y+copy.h/2,1,false)
+        assert(A.effectUi.specialId=='copy-fixed',
+            'Copia Fixa nao foi destacada')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,'Caneta especial alterou desenho')
+        status('Caneta Especial: Copia Fixa destacada, sem copiar')
+    elseif sh.stage==38 then
+        local old=assert(A.showcaseEffectCheck)
+        assert(A.compactPanel=='special')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'special')
+        local liquify=EffectUI.specialRect(p,1)
+        love.draw()
+        love.mousepressed(liquify.x+liquify.w/2,
+            liquify.y+liquify.h/2,1,false)
+        love.mousereleased(liquify.x+liquify.w/2,
+            liquify.y+liquify.h/2,1,false)
+        local smooth=EffectUI.liquifyModeRect(p,4)
+        love.draw()
+        love.mousepressed(smooth.x+smooth.w/2,
+            smooth.y+smooth.h/2,1,false)
+        love.mousereleased(smooth.x+smooth.w/2,
+            smooth.y+smooth.h/2,1,false)
+        local plus=EffectUI.strengthButton(p,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.effectUi.specialId=='liquify'
+            and A.effectUi.liquifyId=='smoothen'
+            and A.effectUi.strength==55
+            and not EffectUI.canApply(),
+            'Controles Liquify nao mudaram em rascunho')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Liquify visual alterou documento')
+        status('Liquify: suavizar e forca visuais, sem deformacao')
+    elseif sh.stage==39 then
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,
+            layer=A.doc.active_layer,selection=A.selection,
+            layers=#A.doc.layers}
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),11)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='vector' and
+            A.visualPendingTool=='vector' and
+            A.vectorFrameUi and A.vectorFrameUi.tab=='select',
+            'Vetor nao abriu painel independente')
+        local p=Compact.popup(w,h,'vector')
+        local tab=VectorFrameUI.tabRect(p,3)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        love.mousereleased(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.vectorFrameUi.tab=='order'
+            and not VectorFrameUI.canApply(),
+            'Aba Ordem do vetor nao foi selecionada')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and #A.doc.layers==old.layers
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Vetor visual alterou documento raster')
+        A.showcaseVectorFrameCheck=old
+        status('Vetor: ordem sem formas, sem alteracao de camadas')
+    elseif sh.stage==40 then
+        local old=assert(A.showcaseVectorFrameCheck)
+        assert(A.compactPanel=='vector')
+        love.keypressed('escape')
+        assert(A.compactPanel=='tools','Voltar do Vetor nao funcionou')
+        local w,h=love.graphics.getDimensions()
+        local r=IbisTools.grid(Compact.popup(w,h,'tools'),13)
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.mousereleased(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.compactPanel=='frame' and
+            A.visualPendingTool=='frame' and
+            A.vectorFrameUi.tab=='create',
+            'Dividir Quadros nao abriu popup')
+        local p=Compact.popup(w,h,'frame')
+        local plus=VectorFrameUI.frameStep(p,1,1)
+        love.draw()
+        love.mousepressed(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        love.mousereleased(plus.x+plus.w/2,plus.y+plus.h/2,1,false)
+        assert(A.vectorFrameUi.horizontal==13,
+            'Espacamento horizontal nao respondeu')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and #A.doc.layers==old.layers
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Quadro visual criou camada ou modificou raster')
+        status('Dividir Quadros: parametros de rascunho, sem criar')
+    elseif sh.stage==41 then
+        local old=assert(A.showcaseVectorFrameCheck)
+        assert(A.compactPanel=='frame')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'frame')
+        local tab=VectorFrameUI.tabRect(p,2)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        love.mousereleased(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.vectorFrameUi.tab=='divide',
+            'Divisao visual nao abriu')
+        local cut=VectorFrameUI.cutRect(p,2)
+        love.draw()
+        love.mousepressed(cut.x+cut.w/2,cut.y+cut.h/2,1,false)
+        love.mousereleased(cut.x+cut.w/2,cut.y+cut.h/2,1,false)
+        assert(A.vectorFrameUi.cut=='horizontal'
+            and not VectorFrameUI.canApply(),
+            'Direcao de corte nao atualizou estado local')
+        assert(A.tool==old.tool and A.doc.active_layer==old.layer
+            and A.selection==old.selection
+            and #A.doc.layers==old.layers
+            and Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Divisao de quadros tentou aplicar geometria real')
+        status('Quadros: divisao horizontal visual, motor pendente')
+    elseif sh.stage==42 then
+        local old={rgba=Native.bytes(A.buffer),undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,tool=A.tool,layer=A.doc.active_layer,
+            selection=A.selection}
+        local w,h=love.graphics.getDimensions()
+        A.compactPanel='materials'
+        A.materialUi=MaterialUI.new()
+        local rect=MaterialUI.searchRect(Compact.popup(w,h,'materials'))
+        love.draw()
+        love.mousepressed(rect.x+20,rect.y+rect.h/2,1,false)
+        love.mousereleased(rect.x+20,rect.y+rect.h/2,1,false)
+        assert(A.materialUi.focused and love.keyboard.hasTextInput(),
+            'Campo de materiais nao recebeu foco')
+        love.textinput('céu')
+        assert(A.materialUi.query=='céu')
+        love.draw()
+        love.mousepressed(110,340,1,false)
+        love.mousereleased(110,340,1,false)
+        assert(A.compactPanel==nil and not A.materialUi.focused
+            and not love.keyboard.hasTextInput(),
+            'Clique externo deixou campo ativo')
+        love.textinput('X')
+        assert(A.materialUi.query=='céu',
+            'Campo invisivel recebeu texto')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool
+            and A.doc.active_layer==old.layer
+            and A.selection==old.selection,
+            'Fechar popup alterou documento')
+        A.showcaseFocusCheck=old
+        status('Auditoria: busca encerrada sem pintar')
+    elseif sh.stage==43 then
+        local old=assert(A.showcaseFocusCheck)
+        local w,h=love.graphics.getDimensions()
+        A.compactPanel='tools'
+        local c=IbisTools.grid(Compact.popup(w,h,'tools'),12)
+        love.draw()
+        love.mousepressed(c.x+c.w/2,c.y+c.h/2,1,false)
+        love.mousereleased(c.x+c.w/2,c.y+c.h/2,1,false)
+        assert(A.compactPanel=='text' and A.textUi)
+        local input=TextUI.inputRect(Compact.popup(w,h,'text'))
+        love.draw()
+        love.mousepressed(input.x+20,input.y+20,1,false)
+        love.mousereleased(input.x+20,input.y+20,1,false)
+        assert(A.textUi.focused and love.keyboard.hasTextInput())
+        love.textinput('Revisão')
+        assert(A.textUi.value=='Revisão')
+        toggleCompactUi()
+        assert(not A.compactUi and A.compactPanel==nil
+            and not A.textUi.focused and not love.keyboard.hasTextInput(),
+            'Modo Desktop deixou teclado ligado')
+        love.textinput('X')
+        assert(A.textUi.value=='Revisão',
+            'Texto oculto foi alterado')
+        toggleCompactUi()
+        assert(A.compactUi and not love.keyboard.hasTextInput(),
+            'Modo Compacto reativou teclado')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.tool==old.tool
+            and A.doc.active_layer==old.layer
+            and A.selection==old.selection,
+            'Troca de layout alterou documento')
+        status('Auditoria: texto guardado, entrada desativada')
+    elseif sh.stage==44 then
+        A.compactPanel=nil
+        A.visualPendingTool=nil
+        A.toolRailPage=1
+        selectTool('brush')
+        local w,h=love.graphics.getDimensions()
+        local all=EditorRail.entries(w,h,1,IbisTools.entries)
+        assert(#all==#IbisTools.entries,
+            'Viewport amplo deveria mostrar todas as 15 ferramentas')
+        local old={rgba=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,layer=A.doc.active_layer,tool=A.tool}
+        A.showcaseRailCheck=old
+        love.draw()
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty,
+            'Nova faixa de ferramentas alterou raster')
+        status('Editor: faixa lateral, barra inferior e sliders em duas linhas')
+    elseif sh.stage==45 then
+        local old=assert(A.showcaseRailCheck)
+        local w,h=love.graphics.getDimensions()
+        local row=EditorRail.entries(w,h,1,IbisTools.entries)[7]
+        assert(row.id=='smudge')
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        love.mousereleased(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.compactPanel=='smudge' and A.visualPendingTool=='smudge',
+            'Faixa lateral nao abriu o painel Borrar')
+        assert(Native.bytes(A.buffer)==old.rgba
+            and A.layerSession:historyStats().undo==old.undo
+            and A.dirty==old.dirty and A.doc.active_layer==old.layer
+            and A.tool==old.tool,
+            'Barra lateral nao pode acionar outro motor')
+        status('Faixa original: ferramenta Borrar aberta com clique real')
+    elseif sh.stage==46 then
+        local before={pixels=Native.bytes(A.buffer),
+            undo=A.layerSession:historyStats().undo,
+            dirty=A.dirty,layer=A.doc.active_layer,
+            tool=A.tool,selection=A.selection}
+        A.compactPanel='tools'
+        A.visualPendingTool=nil
+        A.showcasePopupVisualCheck=before
+        local w,h=love.graphics.getDimensions()
+        local popup=Compact.popup(w,h,'tools')
+        assert(popup.w==242 and popup.h==383
+            and popup.x==85 and popup.y+popup.h<=h-127,
+            'Seletor de 2 colunas incorreto')
+        assert(Native.bytes(A.buffer)==before.pixels
+            and A.layerSession:historyStats().undo==before.undo
+            and A.dirty==before.dirty,
+            'Paleta de ferramentas modificou raster')
+        status('Ferramentas: paleta flutuante de duas colunas')
+    elseif sh.stage==47 then
+        local before=assert(A.showcasePopupVisualCheck)
+        A.compactPanel='layers'
+        local w,h=love.graphics.getDimensions()
+        local popup=Compact.popup(w,h,'layers')
+        assert(popup.x>=w/2 and popup.y>=134
+            and popup.y+popup.h<=h-130,
+            'Janela de camadas nao acompanha canto inferior direito')
+        assert(Native.bytes(A.buffer)==before.pixels
+            and A.layerSession:historyStats().undo==before.undo
+            and A.doc.active_layer==before.layer
+            and A.dirty==before.dirty and A.tool==before.tool
+            and A.selection==before.selection,
+            'Navegacao de janelas alterou projeto')
+        status('Camadas: janela ancorada junto ao rodape')
+    elseif sh.stage==48 then
+        A.compactPanel='layers'
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        assert(p.h>=350,'Janela de camadas precisa caber')
+        A.showcaseLayerChromeCheck={pixels=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo,active=A.doc.active_layer}
+        status('Camadas: seleção rosa e camada ativa azul')
+    elseif sh.stage==49 then
+        local old=assert(A.showcaseLayerChromeCheck)
+        local count=#A.doc.layers
+        assert(count>=2 and A.compactPanel=='layers',
+            'Camadas devem continuar abertas')
+        local target=A.doc.active_layer==1 and 2 or 1
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local start,stop=Thumbnails.window(count,A.doc.active_layer,
+            Compact.layerRows(p),A.compactLayerStart)
+        local row=stop-target+1
+        assert(row>=1 and row<=Compact.layerRows(p),
+            'Camada alternativa nao esta visivel')
+        local rect=IbisPanels.layerRow(p,row)
+        love.draw()
+        love.mousepressed(rect.x+rect.w/2,rect.y+14,1,false)
+        love.mousereleased(rect.x+rect.w/2,rect.y+14,1,false)
+        assert(A.doc.active_layer==target,
+            'Clique na camada nao alterou camada ativa')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels,
+            'Troca de camada modificou pixels compostos')
+        status('Camadas: destaque acompanha a selecao real')
+    elseif sh.stage==50 then
+        assert(A.compactPanel=='layers')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local header=LayerChrome.toolbar(p,'top')
+        local footer=LayerChrome.toolbar(p,'footer')
+        assert(#header==3 and #footer==4
+            and header[1].id=='add' and footer[4].id=='merge',
+            'Comandos de camadas ausentes')
+        A.showcaseLayerActionsCheck={
+            pixels=Native.bytes(A.layerSession.composite),
+            count=#A.doc.layers,
+            undo=A.layerSession:historyStats().undo}
+        status('Camadas: comandos compactos com callbacks originais')
+    elseif sh.stage==51 then
+        local old=assert(A.showcaseLayerActionsCheck)
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local slot=LayerChrome.toolbar(p,'top')[1]
+        love.draw()
+        love.mousepressed(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        assert(#A.doc.layers==old.count+1,
+            'Adicionar nao chamou o motor de camadas Lua')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels,
+            'Adicionar uma camada vazia alterou pixels do desenho')
+        assert(A.compactPanel=='layers',
+            'Adicionar fechou a janela de camadas')
+        status('Camadas: nova camada criada pelo controle visual')
+    elseif sh.stage==52 then
+        local old=assert(A.showcaseLayerActionsCheck)
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local slot=LayerChrome.toolbar(p,'top')[2]
+        love.draw()
+        love.mousepressed(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        assert(#A.doc.layers==old.count+2,
+            'Duplicar nao chamou o motor de camadas Lua')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels,
+            'Duplicar camada vazia alterou pixels do desenho')
+        assert(A.compactPanel=='layers',
+            'Duplicar fechou a janela')
+        status('Camadas: nova camada duplicada pela barra compacta')
+    elseif sh.stage==53 then
+        assert(A.compactPanel=='layers')
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'layers')
+        local footer=LayerChrome.footerControls(p)
+        assert(#footer==3 and not footer[1].available
+            and footer[2].available and footer[3].available,
+            'Alpha Lock deve estar habilitado; Clipping continua pendente')
+        local before=Native.bytes(A.layerSession.composite)
+        A.showcaseFooterProof={pixels=before,
+            history=A.layerSession:historyStats().undo,
+            layers=#A.doc.layers,active=A.doc.active_layer}
+        status('Rodape: Alpha Lock disponivel; Clipping pendente')
+    elseif sh.stage==54 then
+        local old=assert(A.showcaseFooterProof)
+        local w,h=love.graphics.getDimensions()
+        local slot=LayerChrome.footerControls(
+            Compact.popup(w,h,'layers'))[3]
+        love.draw()
+        love.mousepressed(slot.x+slot.w/2,slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,slot.y+slot.h/2,1,false)
+        assert(A.compactPanel=='blends',
+            'Modo Normal do rodape nao abriu mesclagem')
+        assert(Native.bytes(A.layerSession.composite)==old.pixels
+            and A.layerSession:historyStats().undo==old.history
+            and #A.doc.layers==old.layers
+            and A.doc.active_layer==old.active,
+            'Abrir mesclagem pelo rodape alterou o desenho')
+        status('Rodape: mesclagem abriu sem editar o documento')
+    elseif sh.stage==55 then
+        A.compactPanel=nil
+        A.visualPendingTool='wand'
+        A.selectionToolUi=SelectionToolUI.new('wand')
+        A.selectionToolUi.continuous=true
+        local old=Native.bytes(A.layerSession.composite)
+        local edits=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local sx,sy=View.center(viewData(),w,h)
+        love.draw()
+        love.mousepressed(sx,sy,1,false)
+        love.mousereleased(sx,sy,1,false)
+        assert(A.wandSelection and A.wandSelection.count>0
+            and A.wandOverlay,
+            'Clique real da varinha nao criou a mascara')
+        assert(Native.bytes(A.layerSession.composite)==old
+            and A.layerSession:historyStats().undo==edits,
+            'Varinha nao pode alterar composicao nem historico')
+        A.showcaseWandProof={pixels=old,undo=edits}
+        status(('Varinha: máscara RGBA de %d pixels'):format(A.wandSelection.count))
+    elseif sh.stage==56 then
+        local proof=assert(A.showcaseWandProof)
+        clearWandSelection()
+        A.visualPendingTool='lasso'
+        A.selectionToolUi=SelectionToolUI.new('lasso')
+        local w,h=love.graphics.getDimensions()
+        local sx,sy=View.center(viewData(),w,h)
+        local previousTool=A.tool
+        love.draw()
+        love.mousepressed(sx,sy,1,false)
+        love.mousereleased(sx,sy,1,false)
+        assert(A.tool==previousTool and not A.drawing,
+            'Ferramenta pendente chamou motor do pincel')
+        assert(Native.bytes(A.layerSession.composite)==proof.pixels
+            and A.layerSession:historyStats().undo==proof.undo,
+            'Laço pendente nao pode editar o canvas')
+        status('Laço pendente: clique não aciona o pincel anterior')
+    elseif sh.stage==57 then
+        A.visualPendingTool=nil
+        A.compactUi=true
+        A.compactPanel='tools'
+        A.toolPopupColumns=1
+        A.toolPopupPage=1
+        status('Ferramentas · uma coluna, 7 itens por pagina')
+    elseif sh.stage==58 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'tools',1)
+        local nextPage=IbisTools.pageButton(p,1)
+        love.draw()
+        love.mousepressed(nextPage.x+nextPage.w/2,
+            nextPage.y+nextPage.h/2,1,false)
+        love.mousereleased(nextPage.x+nextPage.w/2,
+            nextPage.y+nextPage.h/2,1,false)
+        assert(A.toolPopupPage==2 and A.toolPopupColumns==1,
+            'Botao de pagina nao navegou em uma coluna')
+        assert(Native.bytes(A.layerSession.composite)==old and
+            A.layerSession:historyStats().undo==undo,
+            'Navegacao do seletor nao pode alterar o raster')
+        status('Ferramentas · uma coluna, segunda pagina')
+    elseif sh.stage==59 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        openBackMenu()
+        love.draw()
+        local menu=SettingsUI.menuItem(SettingsUI.menu(w,h),2)
+        love.mousepressed(menu.x+menu.w/2,menu.y+menu.h/2,1,false)
+        assert(A.settingsOpen and not A.backMenu,
+            'Voltar nao abriu Configuracoes')
+        love.draw()
+        local p=SettingsUI.panel(w,h)
+        local three=SettingsUI.columnRect(p,3)
+        love.mousepressed(three.x+three.w/2,
+            three.y+three.h/2,1,false)
+        assert(A.toolPopupColumns==3 and A.toolPopupPage==1
+            and A.store:getPreferences().toolPopupColumns==3,
+            'Tres colunas nao foram aplicadas/persistidas')
+        local close=SettingsUI.closeRect(p)
+        love.draw()
+        love.mousepressed(close.x+close.w/2,
+            close.y+close.h/2,1,false)
+        assert(not A.settingsOpen,'Concluir nao fechou Configuracoes')
+        A.compactPanel='tools'
+        assert(Native.bytes(A.layerSession.composite)==old and
+            A.layerSession:historyStats().undo==undo,
+            'Configuracao visual nao pode alterar o raster')
+        status('Ferramentas · tres colunas, quinze categorias')
+    elseif sh.stage==60 then
+        openBackMenu()
+        assert(A.backMenu and not A.compactPanel,
+            'Botao Voltar deve ter menu independente')
+        status('Menu Voltar: Galeria, Configurações e Cancelar')
+    elseif sh.stage==61 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local item=SettingsUI.menuItem(SettingsUI.menu(w,h),2)
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        assert(A.settingsOpen and not A.backMenu,
+            'Opcao Configuracoes nao abriu')
+        assert(Native.bytes(A.layerSession.composite)==old
+            and A.layerSession:historyStats().undo==undo,
+            'Abrir Configuracoes alterou documento')
+        status('Configurações: Popup e número de colunas')
+    elseif sh.stage==62 then
+        local old=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        local w,h=love.graphics.getDimensions()
+        local p=SettingsUI.panel(w,h)
+        local off=SettingsUI.labelRect(p,2)
+        love.draw()
+        love.mousepressed(off.x+off.w/2,off.y+off.h/2,1,false)
+        assert(not A.toolPopupLabels and
+            A.store:getPreferences().toolPopupLabels==false,
+            'Opcao Mostrar Nomes nao persistiu')
+        local close=SettingsUI.closeRect(p)
+        love.draw()
+        love.mousepressed(close.x+close.w/2,
+            close.y+close.h/2,1,false)
+        assert(not A.settingsOpen,'Configuracoes nao fechou')
+        A.compactPanel='tools'
+        assert(Native.bytes(A.layerSession.composite)==old and
+            A.layerSession:historyStats().undo==undo,
+            'Mudanca visual de rotulos alterou raster')
+        status('Ferramentas: nomes desativados, ícones mantidos')
+    elseif sh.stage==63 then
+        toGallery()
+        A.galleryFilter='all'
+        local sample=Native.buffer(96,96)
+        for i=1,18 do
+            Native.clear(sample,0)
+            Native.basicStroke(sample,8,10+(i%5)*6,86,81,9,
+                (i%2==0) and 0x338adfff or 0xe17caaff,1)
+            A.store:createProject(('Ilustração %02d'):format(i),
+                96,96,'',Native.bytes(sample))
+        end
+        refreshGallery()
+        assert(#A.projects>=18,'Galeria nao criou obras de prova')
+        A.galleryScroll=0
+        status('Galeria em grade compacta · miniaturas reais')
+    elseif sh.stage==64 then
+        local before=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        love.wheelmoved(0,-7)
+        assert((A.galleryScroll or 0)>0,
+            'Roda do mouse nao percorreu a galeria')
+        assert(Native.bytes(A.layerSession.composite)==before
+            and A.layerSession:historyStats().undo==history,
+            'Scroll de galeria nao pode alterar documento')
+        status('Galeria: rolagem independente das obras')
+    elseif sh.stage==65 then
+        A.galleryScroll=0
+        love.draw()
+        local w,h=love.graphics.getDimensions()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting,
+            'Selecionar nao ativou o estado visual')
+        love.draw()
+        local r=GalleryShell.card(w,h,1,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local selected=0
+        for _,v in pairs(A.gallerySelected) do
+            if v then selected=selected+1 end
+        end
+        assert(selected==1 and A.screen=='gallery',
+            'Selecao visual nao deve abrir nem editar obra')
+        status('Galeria: seleção visual · ações em lote pendentes')
+    elseif sh.stage==66 then
+        openDoc(A.store:openProject(sh.projectId))
+        A.compactUi=true
+        selectTool('brush')
+        A.stabilization=2
+        A.stabilizerVisual=IbisPanels.stabilizer.new()
+        A.compactPanel='stabilizer'
+        status('14.1 · Tempo real com Constante e Traços rápidos')
+    elseif sh.stage==67 then
+        local old=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        -- Usa a geometria real do popup da barra superior.
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'stabilizer')
+        local tab=IbisPanels.stabilizer.tabRect(p,2)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.stabilizerVisual.tab=='fade',
+            'Aba Fade nao abriu com clique real')
+        assert(Native.bytes(A.layerSession.composite)==old
+            and A.layerSession:historyStats().undo==history,
+            'Navegacao Fade nao pode alterar raster')
+        status('14.1 · Fade e comprimentos (prévia pendente)')
+    elseif sh.stage==68 then
+        local before=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        local previous=A.stabilization
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'stabilizer')
+        local tab=IbisPanels.stabilizer.tabRect(p,1)
+        love.draw()
+        love.mousepressed(tab.x+tab.w/2,tab.y+tab.h/2,1,false)
+        assert(A.stabilizerVisual.tab=='stabilization')
+        for i=1,2 do
+            local step=IbisPanels.stabilizer.draftButton(p,i,1)
+            love.draw()
+            love.mousepressed(step.x+step.w/2,
+                step.y+step.h/2,1,false)
+        end
+        assert(A.stabilizerVisual.constant==10 and
+            A.stabilizerVisual.fast==10 and A.stabilization==previous,
+            'Ajustes novos nao podem fingir aplicacao no motor Lua')
+        assert(Native.bytes(A.layerSession.composite)==before
+            and A.layerSession:historyStats().undo==history,
+            'Rascunho de estabilizador modificou pixels')
+        status('14.1 · rascunho dos dois modos, motor preservado')
+    elseif sh.stage==69 then
+        local w,h=love.graphics.getDimensions()
+        local p=Compact.popup(w,h,'stabilizer')
+        local legacy=IbisPanels.stabilizer.legacyRow(p)
+        local before=Native.bytes(A.layerSession.composite)
+        local history=A.layerSession:historyStats().undo
+        local old=A.stabilization
+        love.draw()
+        love.mousepressed(legacy.x+legacy.w-18,
+            legacy.y+30,1,false)
+        assert(A.stabilization==old+1,
+            'Estabilizador legado deixou de ser funcional')
+        assert(Native.bytes(A.layerSession.composite)==before
+            and A.layerSession:historyStats().undo==history,
+            'Ajuste legado nao deve modificar pixels existentes')
+        status(('Legado Lua: nível %d / 5 aplicado'):format(A.stabilization))
+    elseif sh.stage==70 then
+        toGallery()
+        A.galleryFilter='all'
+        modal('new')
+        assert(A.modal and A.modal.kind=='new' and
+            A.modal.canvasListScroll==0,
+            'A lista original nao abriu no topo')
+        A.showcaseCanvasProof={
+            count=#A.projects,
+            pixels=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo}
+        local w,h=love.graphics.getDimensions()
+        local rect=IbisPanels.canvasReference.layout(w,h)
+        -- Clique e arraste no W/H; mesmos controles funcionais
+        -- do formulario anterior, mas na geometria da lista.
+        local plus=IbisPanels.canvasReference.stepper(rect,2,1)
+        love.draw()
+        love.mousepressed(plus.x+15,plus.y+14,1,false)
+        assert(A.modal.values[2]=='528','W + nao atualizou largura')
+        local minus=IbisPanels.canvasReference.stepper(rect,2,-1)
+        love.draw()
+        love.mousepressed(minus.x+15,minus.y+14,1,false)
+        assert(A.modal.values[2]=='512','W - nao restaurou largura')
+        for _,axis in ipairs({2,3}) do
+            local track=IbisPanels.canvasReference.slider(rect,axis)
+            local cy=track.y+track.h/2
+            love.draw()
+            love.mousepressed(track.x+track.w,cy,1,false)
+            assert(A.canvasDimensionDrag==axis and
+                A.modal.values[axis]=='2048',
+                'Slider nao alcancou o limite do motor Lua')
+            love.mousemoved(track.x-30,cy,0,0,false)
+            assert(A.modal.values[axis]=='1',
+                'Slider nao respeitou o minimo de 1 pixel')
+            local restore=GalleryUI.sliderPosition(track,512)
+            love.mousemoved(restore,cy,0,0,false)
+            love.mousereleased(restore,cy,1,false)
+            assert(A.canvasDimensionDrag==nil
+                and A.modal.values[axis]=='512',
+                'Slider nao restaurou o tamanho inicial')
+        end
+        assert(#A.projects==A.showcaseCanvasProof.count
+            and Native.bytes(A.layerSession.composite)==
+                A.showcaseCanvasProof.pixels
+            and A.layerSession:historyStats().undo==
+                A.showcaseCanvasProof.undo,
+            'Escolher tamanho alterou Store, raster ou undo')
+        status('Nova tela: lista de formatos do tutorial publico')
+    elseif sh.stage==71 then
+        local w,h=love.graphics.getDimensions()
+        local r=IbisPanels.canvasReference.layout(w,h)
+        local proof=assert(A.showcaseCanvasProof)
+        love.draw()
+        assert(IbisPanels.canvasReference.item('square-sd').w==1280
+            and IbisPanels.canvasReference.item('sd').h==1344
+            and not IbisPanels.canvasReference.allowed(
+                IbisPanels.canvasReference.item('vertical')),
+            'Lista oficial nao possui formatos e limites corretos')
+        local row,visible=IbisPanels.canvasReference.row(
+            r,'square-sd',A.modal.canvasListScroll)
+        assert(visible,'Formato 1:1 nao aparece no inicio')
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.modal.values[2]=='1280'
+            and A.modal.values[3]=='1280',
+            'Formato 1:1 SD nao atualizou o formulario')
+        assert(#A.projects==proof.count,
+            'Escolha de formato criou projeto sem confirmacao')
+        status('Nova tela: formato 1:1 SD 1280×1280')
+    elseif sh.stage==72 then
+        local w,h=love.graphics.getDimensions()
+        local r=IbisPanels.canvasReference.layout(w,h)
+        local row,visible=IbisPanels.canvasReference.row(
+            r,'portrait-sd',A.modal.canvasListScroll)
+        assert(visible,'Formato 3:4 fora da lista visivel')
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.modal.values[2]=='768'
+            and A.modal.values[3]=='1024',
+            'Formato 3:4 SD nao atualizou largura/altura')
+        status('Nova tela: formato 3:4 SD 768×1024')
+    elseif sh.stage==73 then
+        local w,h=love.graphics.getDimensions()
+        local r=IbisPanels.canvasReference.layout(w,h)
+        A.modal.canvasListScroll=IbisPanels.canvasReference.maxScroll(r)
+        local row,visible=IbisPanels.canvasReference.row(
+            r,'a4',A.modal.canvasListScroll)
+        assert(visible,'A4 nao ficou visivel apos rolagem')
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.modal.values[2]=='1240'
+            and A.modal.values[3]=='1754',
+            'A4 nao atualizou dimensoes')
+        status('Nova tela: A4 1240×1754, sem DPI operacional')
+    elseif sh.stage==74 then
+        local w,h=love.graphics.getDimensions()
+        local r=IbisPanels.canvasReference.layout(w,h)
+        local proof=assert(A.showcaseCanvasProof)
+        A.modal.canvasListScroll=IbisPanels.canvasReference.maxScroll(r)
+        local row,visible=IbisPanels.canvasReference.row(
+            r,'legacy-square',A.modal.canvasListScroll)
+        assert(visible,'Preset legado nao visivel no fim da lista')
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.modal.values[2]=='512'
+            and A.modal.values[3]=='512',
+            'Preset legado 512×512 deixou de funcionar')
+        assert(#A.projects==proof.count
+            and Native.bytes(A.layerSession.composite)==proof.pixels
+            and A.layerSession:historyStats().undo==proof.undo,
+            'Navegacao de formatos alterou raster ou historico')
+        status('Nova tela: formatos anteriores preservados')
+    elseif sh.stage==75 then
+        -- Verificar o X novo pela GUI real, sem cancelar por atribuicao.
+        assert(A.modal and A.modal.kind=='new',
+            'Nova tela desapareceu antes da prova de fechar')
+        local w,h=love.graphics.getDimensions()
+        local close=IbisPanels.canvasReference.close(IbisPanels.canvasReference.layout(w,h))
+        local proof=assert(A.showcaseCanvasProof)
+        love.draw()
+        love.mousepressed(close.x+close.w/2,
+            close.y+close.h/2,1,false)
+        assert(A.modal==nil and #A.projects==proof.count
+            and Native.bytes(A.layerSession.composite)==proof.pixels
+            and A.layerSession:historyStats().undo==proof.undo,
+            'Fechar X nao encerrou Nova tela ou alterou RBD2')
+        love.keyboard.setTextInput(false)
+        A.galleryScroll=0
+        A.galleryFilter='all'
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        local r=GalleryShell.card(w,h,1,0)
+        A.showcaseGallerySelection={
+            projects=#A.projects,
+            folders=#A.folders,
+            pixels=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo}
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1,
+            'Modo selecao nao marcou a miniatura')
+        status('Galeria: 1 selecionado; Mover/Excluir pendentes')
+    elseif sh.stage==76 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryShell.selectionAction(w,h,'all')
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(#keys>1 and GalleryShell.selectionCount(
+            A.gallerySelected,keys)==#keys,
+            'Selecionar Todos nao marcou o catalogo visivel')
+        local proof=assert(A.showcaseGallerySelection)
+        assert(#A.projects==proof.projects and
+            #A.folders==proof.folders and
+            Native.bytes(A.layerSession.composite)==proof.pixels and
+            A.layerSession:historyStats().undo==proof.undo,
+            'Selecao multipla alterou arquivos ou raster')
+        status('Galeria: todos os itens visiveis marcados')
+    elseif sh.stage==77 then
+        local w,h=love.graphics.getDimensions()
+        local r=GalleryShell.selectionAction(w,h,'clear')
+        love.draw()
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==0
+            and A.gallerySelecting,
+            'Limpar selecao alterou o modo ou manteve marcas')
+        status('Galeria: selecao limpa sem perder o modo')
+    elseif sh.stage==78 then
+        local w,h=love.graphics.getDimensions()
+        local card=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(card.x+card.w/2,card.y+card.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1)
+        local action=GalleryShell.selectionAction(w,h,'delete')
+        love.draw()
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.galleryDeleteMenu and #A.galleryDeleteMenu.ids==1,
+            'Excluir deve exigir confirmacao')
+        local dialog=GalleryShell.confirmPopup(w,h)
+        local cancel=GalleryShell.confirmCancel(dialog)
+        love.draw()
+        love.mousepressed(cancel.x+cancel.w/2,
+            cancel.y+cancel.h/2,1,false)
+        local proof=assert(A.showcaseGallerySelection)
+        assert(A.screen=='gallery' and A.gallerySelecting and
+            GalleryShell.selectionCount(A.gallerySelected,keys)==1
+            and not A.galleryDeleteMenu and
+            not A.galleryCreateMenu and not A.galleryMoveMenu,
+            'Cancelar exclusao nao retornou a selecao')
+        assert(#A.projects==proof.projects and
+            #A.folders==proof.folders and
+            Native.bytes(A.layerSession.composite)==proof.pixels and
+            A.layerSession:historyStats().undo==proof.undo,
+            'Cancelar alterou documentos')
+        status('Galeria: Excluir exige confirmacao e permite cancelar')
+    elseif sh.stage==79 then
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        A.galleryMoveMenu=nil
+        A.galleryFilter='all'
+        A.galleryScroll=0
+        local dest=A.store:createFolder('Arquivo Final',A.folder)
+        A.showcaseDestinationId=dest
+        refreshGallery()
+        local w,h=love.graphics.getDimensions()
+        local item=GalleryShell.card(w,h,#A.folders+1,0)
+        local first=A.projects[1]
+        assert(first,'Nenhuma obra de teste para mover')
+        A.showcaseMoveId=first.id
+        love.draw()
+        love.mousepressed(item.x+item.w/2,item.y+item.h/2,1,false)
+        assert(A.gallerySelected['p:'..first.id],
+            'Obra nao selecionada antes de mover')
+        love.draw()
+        local move=GalleryShell.selectionAction(w,h,'move')
+        love.mousepressed(move.x+move.w/2,move.y+move.h/2,1,false)
+        assert(A.galleryMoveMenu and #A.galleryMoveMenu.ids==1,
+            'Mover nao abriu escolha de pasta')
+        status('Mover desenho · selecionar pasta de destino')
+    elseif sh.stage==80 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        local list=GalleryShell.folderChoices(
+            A.store.catalog.folders,A.folder)
+        assert(#list==1 and list[1].id==A.showcaseDestinationId,
+            'Destino de teste nao encontrado')
+        local row=GalleryShell.moveRow(p,1)
+        love.draw()
+        love.mousepressed(row.x+row.w/2,row.y+row.h/2,1,false)
+        assert(A.galleryMoveMenu.target==A.showcaseDestinationId,
+            'Escolha de destino nao registrada')
+        assert(A.store:openProject(A.showcaseMoveId).folder==A.folder,
+            'Selecao de destino moveu projeto prematuramente')
+        status('Destino escolhido · aguardando confirmacao')
+    elseif sh.stage==81 then
+        local before=A.store:openProject(A.showcaseMoveId)
+        local rev=before.revision
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        local ok=GalleryShell.moveConfirmRect(p)
+        love.draw()
+        love.mousepressed(ok.x+ok.w/2,ok.y+ok.h/2,1,false)
+        local moved=A.store:openProject(A.showcaseMoveId)
+        assert(moved.folder==A.showcaseDestinationId and
+            moved.revision==rev+1 and
+            not A.galleryMoveMenu and not A.gallerySelecting,
+            'Movimento nao persistiu ou manteve modal aberto')
+        assert(moved.pixels==before.pixels or
+            (moved.layers and before.layers and
+                moved.layers[1].pixels==before.layers[1].pixels),
+            'Movimento modificou raster do desenho')
+        for _,doc in ipairs(A.projects) do
+            assert(doc.id~=A.showcaseMoveId,
+                'Obra movida continua listada na pasta de origem')
+        end
+        status('Movimento concluido · obra saiu da origem')
+    elseif sh.stage==82 then
+        local w,h=love.graphics.getDimensions()
+        local folderIndex
+        for i,folder in ipairs(A.folders) do
+            if folder.id==A.showcaseDestinationId then
+                folderIndex=i;break
+            end
+        end
+        assert(folderIndex,'Pasta de destino nao aparece na galeria')
+        local item=GalleryShell.card(w,h,folderIndex,0)
+        love.draw()
+        love.mousepressed(item.x+item.w/2,item.y+item.h/2,1,false)
+        assert(A.folder==A.showcaseDestinationId and
+            #A.projects==1 and A.projects[1].id==A.showcaseMoveId,
+            'Obra movida nao foi reencontrada na pasta destino')
+        local reopened=A.store:openProject(A.showcaseMoveId)
+        assert(reopened.folder==A.folder,
+            'Documento reaberto nao preservou localizacao')
+        status('Destino verificado · obra RBD2 preservada')
+    elseif sh.stage==83 then
+        local w,h=love.graphics.getDimensions()
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        A.galleryScroll=0
+        love.draw()
+        local r=GalleryShell.card(w,h,1,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.gallerySelected['p:'..A.showcaseMoveId],
+            'Projeto da pasta atual nao foi selecionado')
+        love.draw()
+        local move=GalleryShell.selectionAction(w,h,'move')
+        love.mousepressed(move.x+move.w/2,move.y+move.h/2,1,false)
+        local p=GalleryShell.movePopup(w,h)
+        love.draw()
+        local action=GalleryShell.moveNewFolderRect(p)
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.galleryMoveMenu and A.galleryMoveMenu.creating
+            and A.galleryMoveMenu.createParent==A.folder,
+            'Nova pasta nao foi aberta sob a pasta de origem')
+        A.showcaseSecondMoveRevision=
+            A.store:openProject(A.showcaseMoveId).revision
+        status('Criar pasta durante a movimentação')
+    elseif sh.stage==84 then
+        local state=assert(A.galleryMoveMenu)
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        love.textinput('Pasta Nova 🎨')
+        assert(state.createName=='Pasta Nova 🎨')
+        love.draw()
+        love.keypressed('return')
+        local folderId=state.target
+        assert(folderId and not state.creating and
+            A.store:_folder(folderId)==folderId,
+            'Pasta nao foi persistida no catalogo')
+        A.showcaseNewDestination=folderId
+        local found=false
+        for _,f in ipairs(A.store.catalog.folders) do
+            if f.id==folderId and f.parent==A.folder then
+                found=true;break
+            end
+        end
+        assert(found and
+            A.store:openProject(A.showcaseMoveId).revision==
+                A.showcaseSecondMoveRevision and
+            A.store:openProject(A.showcaseMoveId).folder==A.folder,
+            'Criar pasta mudou prematuramente o documento')
+        status('Pasta criada, obra ainda na origem')
+    elseif sh.stage==85 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.movePopup(w,h)
+        local btn=GalleryShell.moveConfirmRect(p)
+        local before=A.store:openProject(A.showcaseMoveId)
+        love.draw()
+        love.mousepressed(btn.x+btn.w/2,
+            btn.y+btn.h/2,1,false)
+        local moved=A.store:openProject(A.showcaseMoveId)
+        assert(moved.folder==A.showcaseNewDestination
+            and moved.revision==before.revision+1
+            and not A.galleryMoveMenu,
+            'Nova pasta nao recebeu a obra')
+        assert(moved.pixels==before.pixels or
+            (moved.layers and before.layers
+            and moved.layers[1].pixels==before.layers[1].pixels),
+            'Movimentar para nova pasta mudou pixels')
+        status('Obra movida para pasta criada no seletor')
+    elseif sh.stage==86 then
+        local w,h=love.graphics.getDimensions()
+        local folderIndex
+        for i,folder in ipairs(A.folders) do
+            if folder.id==A.showcaseNewDestination then
+                folderIndex=i;break
+            end
+        end
+        assert(folderIndex,'Pasta nova nao aparece na origem')
+        love.draw()
+        local r=GalleryShell.card(w,h,folderIndex,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.folder==A.showcaseNewDestination
+            and #A.projects==1
+            and A.projects[1].id==A.showcaseMoveId,
+            'Projeto nao aparece ao entrar na nova pasta')
+        status('Novo destino verificado na galeria')
+    elseif sh.stage==87 then
+        local w,h=love.graphics.getDimensions()
+        A.gallerySelecting=true
+        A.gallerySelected={}
+        love.draw()
+        local r=GalleryShell.card(w,h,1,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        love.draw()
+        local move=GalleryShell.selectionAction(w,h,'move')
+        love.mousepressed(move.x+move.w/2,move.y+move.h/2,1,false)
+        local p=GalleryShell.movePopup(w,h)
+        love.draw()
+        local create=GalleryShell.moveNewFolderRect(p)
+        love.mousepressed(create.x+create.w/2,
+            create.y+create.h/2,1,false)
+        local count=#A.store.catalog.folders
+        love.textinput('Nao salvar')
+        love.keypressed('escape')
+        assert(A.galleryMoveMenu and not A.galleryMoveMenu.creating
+            and A.galleryMoveMenu.target==nil
+            and #A.store.catalog.folders==count,
+            'Cancelar digitacao criou pasta ou fechou movimento')
+        status('Criacao cancelada sem alterar catalogo')
+    elseif sh.stage==88 then
+        A.galleryMoveMenu=nil
+        A.gallerySelected={}
+        A.gallerySelecting=true
+        A.galleryScroll=0
+        local id=assert(A.projects[1] and A.projects[1].id,
+            'Obra para exclusao nao encontrada')
+        A.showcaseTrashId=id
+        A.showcaseTrashFile=A.store.fs:read(
+            'projects/'..id..'.rbd')
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local item=GalleryShell.card(w,h,1,0)
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        love.draw()
+        local del=GalleryShell.selectionAction(w,h,'delete')
+        love.mousepressed(del.x+del.w/2,
+            del.y+del.h/2,1,false)
+        assert(A.galleryDeleteMenu and
+            #A.galleryDeleteMenu.ids==1,
+            'Selecionar Excluir nao abre confirmacao')
+        assert(A.store:openProject(id).folder==A.folder,
+            'Abrir confirmacao alterou projeto')
+        status('Exclusão recuperável: confirmação obrigatória')
+    elseif sh.stage==89 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.confirmPopup(w,h)
+        local cancel=GalleryShell.confirmCancel(p)
+        love.draw()
+        love.mousepressed(cancel.x+cancel.w/2,
+            cancel.y+cancel.h/2,1,false)
+        assert(not A.galleryDeleteMenu
+            and A.store:openProject(A.showcaseTrashId).folder==A.folder,
+            'Cancelar exclusao alterou projeto')
+        status('Cancelar não exclui a obra')
+    elseif sh.stage==90 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local del=GalleryShell.selectionAction(w,h,'delete')
+        love.mousepressed(del.x+del.w/2,
+            del.y+del.h/2,1,false)
+        assert(A.galleryDeleteMenu)
+        local p=GalleryShell.confirmPopup(w,h)
+        local confirm=GalleryShell.confirmAction(p)
+        love.draw()
+        love.mousepressed(confirm.x+confirm.w/2,
+            confirm.y+confirm.h/2,1,false)
+        assert(not A.galleryDeleteMenu and not A.gallerySelecting,
+            'Confirmacao de exclusao nao encerrou selecao')
+        for _,entry in ipairs(A.projects) do
+            assert(entry.id~=A.showcaseTrashId,
+                'Obra excluida permanece visivel na galeria')
+        end
+        assert(A.store.fs:read('projects/'..
+            A.showcaseTrashId..'.rbd')==A.showcaseTrashFile,
+            'Exclusao mudou arquivo RBD')
+        status('Obra oculta, bytes RBD preservados')
+    elseif sh.stage==91 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(166,27,1,false)
+        assert(A.galleryMoreMenu,
+            'Menu de tres pontos nao abriu')
+        local p=IbisPanels.trash.morePopup(w,h)
+        local item=IbisPanels.trash.moreItem(p)
+        love.draw()
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        assert(A.galleryTrash and #A.trashProjects>=1,
+            'Excluídos recentemente não abriu')
+        local found=false
+        for _,entry in ipairs(A.trashProjects) do
+            if entry.id==A.showcaseTrashId then
+                found=true;break end
+        end
+        assert(found,'Obra não encontrada na recuperação')
+        status('Excluídos recentemente · obra recuperável')
+    elseif sh.stage==92 then
+        local w,h=love.graphics.getDimensions()
+        local index
+        for i,entry in ipairs(A.trashProjects) do
+            if entry.id==A.showcaseTrashId then index=i;break end
+        end
+        assert(index,'Obra não está na lista de recuperação')
+        A.galleryScroll=0
+        love.draw()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting,
+            'Selecionar nao ativou recuperacao')
+        love.draw()
+        local item=GalleryShell.card(w,h,index,0)
+        assert(item.visible,'Obra de recuperação fora da viewport')
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        assert(A.gallerySelected['p:'..A.showcaseTrashId],
+            'Miniatura nao foi marcada para recuperar')
+        love.draw()
+        local action=IbisPanels.trash.trashAction(w,h,'recover')
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.galleryRestoreMenu and
+            #A.galleryRestoreMenu.ids==1 and
+            A.galleryRestoreMenu.ids[1]==A.showcaseTrashId,
+            'Recuperar nao abriu confirmacao')
+        status('Seleção e recuperação exigem confirmação')
+    elseif sh.stage==93 then
+        local w,h=love.graphics.getDimensions()
+        local p=GalleryShell.confirmPopup(w,h)
+        local yes=GalleryShell.confirmAction(p)
+        love.draw()
+        love.mousepressed(yes.x+yes.w/2,
+            yes.y+yes.h/2,1,false)
+        assert(not A.galleryRestoreMenu and
+            A.store.fs:read('projects/'..
+            A.showcaseTrashId..'.rbd')==A.showcaseTrashFile,
+            'Recuperação alterou bytes do arquivo')
+        love.draw()
+        love.mousepressed(48,27,1,false)
+        assert(not A.galleryTrash,
+            'Voltar não saiu da pasta de excluídos')
+        local found=false
+        for _,entry in ipairs(A.projects) do
+            if entry.id==A.showcaseTrashId then
+                found=true;break end
+        end
+        assert(found and
+            A.store:openProject(A.showcaseTrashId).folder==A.folder,
+            'Obra recuperada não aparece na pasta anterior')
+        status('Recuperação concluída · RBD intacto')
+    elseif sh.stage==94 then
+        local rgba=string.rep(string.char(0,0,0,0),4)
+        local first=A.store:createProject('Descartável A',
+            2,2,A.folder,rgba)
+        local second=A.store:createProject('Descartável B',
+            2,2,A.folder,rgba)
+        A.showcaseBatchTrashIds={first.id,second.id}
+        local outcome=A.store:deleteProjects(
+            A.showcaseBatchTrashIds,A.folder)
+        assert(outcome.deleted==2,'Nao preparou duas obras excluidas')
+        A.showcaseBatchRBD={
+            A.store.fs:read('projects/'..first.id..'.rbd'),
+            A.store.fs:read('projects/'..second.id..'.rbd')}
+        refreshGallery()
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(166,27,1,false)
+        assert(A.galleryMoreMenu,'Menu de tres pontos ausente')
+        status('Galeria · menu de mais opções')
+    elseif sh.stage==95 then
+        local w,h=love.graphics.getDimensions()
+        local p=IbisPanels.trash.morePopup(w,h)
+        local item=IbisPanels.trash.moreItem(p)
+        love.draw()
+        love.mousepressed(item.x+item.w/2,
+            item.y+item.h/2,1,false)
+        assert(A.galleryTrash and #A.trashProjects==2,
+            'Navegacao recente nao preservou dois itens')
+        for _,doc in ipairs(A.trashProjects) do
+            assert(doc.retention_days==30 and
+                not doc.retention_expired,
+                'Prazo inicial de recuperacao nao exibido')
+        end
+        status('Itens excluidos: 30 dias · sem apagamento automatico')
+    elseif sh.stage==96 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting)
+        love.draw()
+        local all=IbisPanels.trash.trashAction(w,h,'all')
+        love.mousepressed(all.x+all.w/2,
+            all.y+all.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            {},A.trashProjects,'works')
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==2,
+            'Selecionar Todos nao funciona em Excluidos')
+        status('Excluidos: duas obras marcadas para recuperar')
+    elseif sh.stage==97 then
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local action=IbisPanels.trash.trashAction(w,h,'recover')
+        love.mousepressed(action.x+action.w/2,
+            action.y+action.h/2,1,false)
+        assert(A.galleryRestoreMenu and
+            #A.galleryRestoreMenu.ids==2,
+            'Recuperar lote nao abriu confirmacao')
+        local popup=GalleryShell.confirmPopup(w,h)
+        local yes=GalleryShell.confirmAction(popup)
+        love.draw()
+        love.mousepressed(yes.x+yes.w/2,
+            yes.y+yes.h/2,1,false)
+        assert(not A.galleryRestoreMenu and
+            not A.gallerySelecting and #A.trashProjects==0,
+            'Restauracao em lote nao limpou itens excluidos')
+        for i,id in ipairs(A.showcaseBatchTrashIds) do
+            local doc=A.store:openProject(id)
+            assert(doc.folder==A.folder and
+                A.store.fs:read('projects/'..id..'.rbd')==
+                    A.showcaseBatchRBD[i],
+                'Recuperacao lote alterou arquivo RBD')
+        end
+        status('Duas obras recuperadas em lote · RBD intactos')
+    elseif sh.stage==98 then
+        toGallery()
+        setFolder('')
+        A.galleryFilter='all'
+        A.galleryScroll=0
+        local w,h=love.graphics.getDimensions()
+        local layout=GalleryShell.layout(w,h)
+        assert(layout.top==66
+            and GalleryShell.card(w,h,1,0).y==66,
+            'Miniaturas nao ocupam faixa antes reservada aos filtros')
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        love.draw()
+        for _,hit in ipairs(A.buttons) do
+            assert(not (hit.y==70 and hit.w==101
+                and hit.h==33),
+                'Abas inventadas ainda recebem cliques invisiveis')
+        end
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Retirar filtros alterou raster ou historico')
+        status('Galeria oficial: miniaturas sob a barra superior')
+    elseif sh.stage==99 then
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        love.wheelmoved(0,-7)
+        assert(A.galleryScroll>0,
+            'Galeria sem abas nao rolou')
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Rolagem da galeria alterou os pixels')
+        status('Galeria oficial: rolagem com grade expandida')
+    elseif sh.stage==100 then
+        A.galleryScroll=0
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(w-82,27,1,false)
+        assert(A.gallerySelecting,
+            'Selecionar deixou de funcionar sem abas')
+        local first=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(first.x+first.w/2,
+            first.y+first.h/2,1,false)
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,'all')
+        assert(GalleryShell.selectionCount(A.gallerySelected,keys)==1
+            and not A.galleryDeleteMenu and not A.galleryMoveMenu,
+            'Marcar miniatura abriu operacao indevida')
+        status('Galeria oficial: selecao intacta sem filtros locais')
+    elseif sh.stage==101 then
+        A.gallerySelecting=false;A.gallerySelected={}
+        A.galleryScroll=0;A.galleryFilter='all'
+        refreshGallery()
+        local w,h=love.graphics.getDimensions()
+        local first=#A.folders+1
+        local second=first+1
+        local source=A.galleryItems[second]
+        local target=A.galleryItems[first]
+        assert(source and target and
+            source.type=='project' and target.type=='project',
+            'Prova de arrasto precisa de duas obras')
+        A.showcaseReorderSource=source.key
+        A.showcaseReorderTarget=target.key
+        A.showcaseReorderPixels=Native.bytes(A.layerSession.composite)
+        A.showcaseReorderUndo=A.layerSession:historyStats().undo
+        A.showcaseReorderRBD=A.store.fs:read(
+            'projects/'..source.value.id..'.rbd')
+        love.draw()
+        local start=GalleryShell.card(w,h,second,0)
+        love.mousepressed(start.x+start.w/2,
+            start.y+start.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==source.key,
+            'Galeria abriu imagem antes de pressao prolongada')
+        A.galleryGesture.started=love.timer.getTime()-1
+        local dest=GalleryShell.card(w,h,first,0)
+        love.mousemoved(dest.x+7,dest.y+dest.h/2,
+            dest.x+7-start.x-start.w/2,
+            dest.y-start.y,false)
+        assert(A.galleryGesture and A.galleryGesture.active,
+            'Pressao prolongada nao ativou arrasto')
+        status('Galeria: arrastando miniatura sobre outra')
+    elseif sh.stage==102 then
+        local w,h=love.graphics.getDimensions()
+        local target=GalleryShell.card(w,h,#A.folders+1,0)
+        love.mousereleased(target.x+7,
+            target.y+target.h/2,1,false)
+        assert(not A.galleryGesture
+            and A.galleryItems[#A.folders+1].key==
+                A.showcaseReorderSource,
+            'Soltar nao mudou a ordem')
+        assert(A.store.fs:read('projects/'..
+            A.showcaseReorderSource:sub(3)..'.rbd')==
+                A.showcaseReorderRBD,
+            'Arrasto regravou bytes RBD')
+        assert(Native.bytes(A.layerSession.composite)==
+                A.showcaseReorderPixels and
+            A.layerSession:historyStats().undo==
+                A.showcaseReorderUndo,
+            'Arrasto alterou raster ou historico')
+        status('Galeria: ordem de obras alterada sem regravar RBD')
+    elseif sh.stage==103 then
+        local reopened=Store.open(A.store.root)
+        local items=reopened:galleryItems(A.folder)
+        assert(items[#A.folders+1].key==A.showcaseReorderSource,
+            'Ordem nao sobreviveu a reinicializacao do Store')
+        assert(A.store.fs:read('projects/'..
+            A.showcaseReorderSource:sub(3)..'.rbd')==
+                A.showcaseReorderRBD,
+            'Reabrir ordem alterou projeto')
+        status('Galeria: ordem persistida apos reabrir')
+    elseif sh.stage==104 then
+        local w,h=love.graphics.getDimensions()
+        local before=A.galleryItems[#A.folders+1].key
+        local source=GalleryShell.card(w,h,#A.folders+1,0)
+        local target=GalleryShell.card(w,h,#A.folders+2,0)
+        love.draw()
+        love.mousepressed(source.x+source.w/2,
+            source.y+source.h/2,1,false)
+        love.mousemoved(target.x+target.w/2,target.y+target.h/2,
+            160,0,false)
+        love.mousereleased(target.x+target.w/2,
+            target.y+target.h/2,1,false)
+        assert(not A.galleryGesture and
+            A.galleryItems[#A.folders+1].key==before and
+            A.screen=='gallery',
+            'Arrasto curto deve cancelar sem abrir obra')
+        status('Galeria: movimento precoce nao altera ordem')
+    elseif sh.stage==105 then
+        local w,h=love.graphics.getDimensions()
+        assert(#A.folders>0,'Falta pasta para arrasto misto')
+        local folderIndex
+        for i,item in ipairs(A.galleryItems) do
+            if item.type=='folder' then folderIndex=i;break end
+        end
+        assert(folderIndex,'Pasta nao encontrada na grade')
+        local folderKey=A.galleryItems[folderIndex].key
+        local other=#A.folders+1
+        local targetKey=A.galleryItems[other].key
+        assert(targetKey~=folderKey and
+            A.galleryItems[other].type=='project',
+            'Arrasto precisa de pasta e obra distintas')
+        local start=GalleryShell.card(w,h,folderIndex,0)
+        local dest=GalleryShell.card(w,h,other,0)
+        love.draw()
+        love.mousepressed(start.x+start.w/2,
+            start.y+start.h/2,1,false)
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(dest.x+dest.w/2,dest.y+dest.h/2,
+            dest.x-start.x,dest.y-start.y,false)
+        love.mousereleased(dest.x+dest.w/2,
+            dest.y+dest.h/2,1,false)
+        local found=false
+        for i,item in ipairs(Store.open(A.store.root):galleryItems('')) do
+            if item.key==folderKey and i==other then
+                found=true;break end
+        end
+        assert(found and not A.galleryGesture,
+            'Ordem mista de pasta e obra nao persistiu')
+        status('Galeria: pastas e desenhos reordenados juntos')
+    elseif sh.stage==106 then
+        -- The gallery contains mixed artworks and folders after stage 105.
+        A.gallerySelecting=false;A.gallerySelected={}
+        A.galleryScroll=0;A.galleryFilter='all'
+        refreshGallery()
+        local folderIndex,projectIndex
+        for i,entry in ipairs(A.galleryItems) do
+            if entry.type=='folder' and not folderIndex then
+                folderIndex=i
+            elseif entry.type=='project' and not projectIndex then
+                projectIndex=i
+            end
+        end
+        assert(folderIndex and projectIndex and
+            folderIndex<=5 and projectIndex<=5,
+            'Prova requer pasta e desenho visiveis na galeria')
+        local folder=A.galleryItems[folderIndex]
+        local project=A.galleryItems[projectIndex]
+        A.showcaseFolderDropId=project.value.id
+        A.showcaseFolderDropFolder=folder.value.id
+        local opened=A.store:openProject(project.value.id)
+        A.showcaseFolderDropRev=opened.revision
+        A.showcaseFolderDropPixels=opened.pixels or
+            opened.layers[1].pixels
+        local w,h=love.graphics.getDimensions()
+        local src=GalleryShell.card(w,h,projectIndex,0)
+        local dest=GalleryShell.card(w,h,folderIndex,0)
+        love.draw()
+        love.mousepressed(src.x+src.w/2,src.y+src.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==project.key,
+            'Pressionar obra nao iniciou gesto')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(dest.x+dest.w/2,dest.y+dest.h/2,
+            dest.x-src.x,dest.y-src.y,false)
+        local action=GalleryShell.dropAction(A.folder,nil,
+            A.galleryGesture.key,folder.key,w,h,
+            dest.x+dest.w/2,dest.y+dest.h/2)
+        assert(A.galleryGesture.active and
+            action.kind=='move' and action.folder==folder.value.id,
+            'Soltar sobre pasta nao oferece destino correto')
+        status('Arrastar desenho sobre pasta: alvo de movimentacao')
+    elseif sh.stage==107 then
+        local w,h=love.graphics.getDimensions()
+        local index
+        for i,entry in ipairs(A.galleryItems) do
+            if entry.key=='f:'..A.showcaseFolderDropFolder then
+                index=i;break
+            end
+        end
+        assert(index,'Pasta alvo nao esta visivel')
+        local dest=GalleryShell.card(w,h,index,0)
+        love.draw()
+        love.mousereleased(dest.x+dest.w/2,
+            dest.y+dest.h/2,1,false)
+        local opened=A.store:openProject(A.showcaseFolderDropId)
+        assert(opened.folder==A.showcaseFolderDropFolder and
+            opened.revision==A.showcaseFolderDropRev+1,
+            'Soltar sobre pasta nao moveu desenho')
+        assert((opened.pixels or opened.layers[1].pixels)==
+            A.showcaseFolderDropPixels,
+            'Movimento para pasta alterou pixels')
+        local reopened=Store.open(A.store.root):openProject(
+            A.showcaseFolderDropId)
+        assert(reopened.folder==opened.folder and
+            reopened.revision==opened.revision,
+            'Mover para pasta nao persistiu apos reinicio')
+        status('Desenho movido e preservado dentro da pasta')
+    elseif sh.stage==108 then
+        setFolder(A.showcaseFolderDropFolder)
+        local index
+        for i,entry in ipairs(A.galleryItems) do
+            if entry.key=='p:'..A.showcaseFolderDropId then
+                index=i;break
+            end
+        end
+        assert(index and index<=5,
+            'Desenho movido nao esta visivel na pasta destino')
+        local w,h=love.graphics.getDimensions()
+        local src=GalleryShell.card(w,h,index,0)
+        love.draw()
+        love.mousepressed(src.x+src.w/2,src.y+src.h/2,1,false)
+        assert(A.galleryGesture and A.galleryGesture.key==
+            'p:'..A.showcaseFolderDropId,
+            'Pressionar desenho na pasta nao iniciou gesto')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(46,27,46-src.x-src.w/2,
+            27-src.y-src.h/2,false)
+        local parent=''
+        for _,entry in ipairs(A.store.catalog.folders) do
+            if entry.id==A.folder then parent=entry.parent;break end
+        end
+        A.showcaseParentDropFolder=parent
+        local action=GalleryShell.dropAction(A.folder,parent,
+            A.galleryGesture.key,nil,w,h,46,27)
+        assert(A.galleryGesture.active and
+            action.kind=='move' and action.folder==parent,
+            'Arrastar sobre Voltar nao selecionou pasta pai')
+        status('Arrastar desenho sobre Voltar: mover a pasta superior')
+    elseif sh.stage==109 then
+        love.draw()
+        love.mousereleased(46,27,1,false)
+        local moved=A.store:openProject(A.showcaseFolderDropId)
+        assert(moved.folder==A.showcaseParentDropFolder and
+            moved.revision==A.showcaseFolderDropRev+2,
+            'Soltar sobre Voltar nao moveu obra a pasta pai')
+        assert((moved.pixels or moved.layers[1].pixels)==
+            A.showcaseFolderDropPixels,
+            'Mover a pasta superior alterou os pixels')
+        setFolder(A.showcaseParentDropFolder)
+        local found=false
+        for _,entry in ipairs(A.galleryItems) do
+            if entry.key=='p:'..A.showcaseFolderDropId then
+                found=true;break
+            end
+        end
+        assert(found and Store.open(A.store.root):openProject(
+            A.showcaseFolderDropId).folder==A.folder,
+            'Obra nao reapareceu na pasta pai apos reiniciar')
+        status('Obra devolvida a pasta pai; dados RBD intactos')
+    elseif sh.stage==110 then
+        local rgbaA=string.rep(string.char(250,34,77,255),4)
+        local rgbaB=string.rep(string.char(38,167,231,255),4)
+        local root=A.folder
+        A.showcaseGroupParent=A.store:createFolder(
+            'Agrupamento com gesto',root)
+        A.showcaseGroupSource=A.store:createProject(
+            'Fonte do grupo',2,2,A.showcaseGroupParent,rgbaA)
+        A.showcaseGroupTarget=A.store:createProject(
+            'Alvo do grupo',2,2,A.showcaseGroupParent,rgbaB)
+        A.showcaseGroupPixels={rgbaA,rgbaB}
+        setFolder(A.showcaseGroupParent)
+        A.galleryFilter='all'
+        assert(#A.projects==2 and #A.folders==0,
+            'Teste de agrupamento nao comecou com duas obras')
+        local w,h=love.graphics.getDimensions()
+        local source=GalleryShell.card(w,h,1,0)
+        local destination=GalleryShell.card(w,h,2,0)
+        A.showcaseGroupDragKey=A.galleryItems[1].key
+        A.showcaseGroupDropKey=A.galleryItems[2].key
+        love.draw()
+        love.mousepressed(source.x+source.w/2,
+            source.y+source.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==A.showcaseGroupDragKey,
+            'Gesto de grupo nao iniciou pressionamento')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(destination.x+destination.w/2,
+            destination.y+destination.h/2,
+            destination.x-source.x,
+            destination.y-source.y,false)
+        local action=GalleryShell.dropAction(
+            A.folder,nil,A.showcaseGroupDragKey,
+            A.showcaseGroupDropKey,w,h,
+            destination.x+destination.w/2,
+            destination.y+destination.h/2,destination)
+        assert(A.galleryGesture.active and
+            action.kind=='group',
+            'Sobreposicao central nao criou alvo de agrupamento')
+        status('Arrastar desenho sobre outro: criar nova pasta')
+    elseif sh.stage==111 then
+        local w,h=love.graphics.getDimensions()
+        local destination=GalleryShell.card(w,h,2,0)
+        love.draw()
+        love.mousereleased(destination.x+destination.w/2,
+            destination.y+destination.h/2,1,false)
+        assert(not A.galleryGesture and #A.projects==0
+            and #A.folders==1 and
+            A.folders[1].name=='Nova pasta',
+            'Agrupar nao criou pasta com as duas obras')
+        A.showcaseGroupedFolder=A.folders[1].id
+        for _,doc in ipairs({
+            A.showcaseGroupSource,A.showcaseGroupTarget}) do
+            local saved=A.store:openProject(doc.id)
+            assert(saved.folder==A.showcaseGroupedFolder
+                and saved.revision==doc.revision+1,
+                'Agrupamento nao persistiu ambos os documentos')
+        end
+        assert(A.store:openProject(A.showcaseGroupSource.id).pixels==
+            A.showcaseGroupPixels[1] and
+            A.store:openProject(A.showcaseGroupTarget.id).pixels==
+            A.showcaseGroupPixels[2],
+            'Agrupar regravou o raster original')
+        status('Nova pasta criada com duas obras reais')
+    elseif sh.stage==112 then
+        setFolder(A.showcaseGroupedFolder)
+        local fromDisk=Store.open(A.store.root)
+        local projects=fromDisk:listProjects(A.showcaseGroupedFolder)
+        assert(#A.projects==2 and #projects==2
+            and A.folder==A.showcaseGroupedFolder,
+            'Obras nao aparecem na pasta depois da reabertura')
+        assert(fromDisk:openProject(A.showcaseGroupSource.id).pixels==
+            A.showcaseGroupPixels[1] and
+            fromDisk:openProject(A.showcaseGroupTarget.id).pixels==
+            A.showcaseGroupPixels[2],
+            'Reabrir a pasta perdeu os pixels')
+        status('Galeria agrupada: duas miniaturas persistidas')
+    elseif sh.stage==113 then
+        setFolder(A.showcaseGroupParent)
+        local rgba=string.rep(string.char(10,20,30,255),4)
+        local one=A.store:createProject('Outro desenho A',
+            2,2,A.folder,rgba)
+        local two=A.store:createProject('Outro desenho B',
+            2,2,A.folder,rgba)
+        refreshGallery()
+        local sourceIndex,targetIndex
+        for i,item in ipairs(A.galleryItems) do
+            if item.key=='p:'..one.id then sourceIndex=i end
+            if item.key=='p:'..two.id then targetIndex=i end
+        end
+        assert(sourceIndex and targetIndex,
+            'Faltam desenhos para segundo agrupamento')
+        local w,h=love.graphics.getDimensions()
+        local src=GalleryShell.card(w,h,sourceIndex,0)
+        local dst=GalleryShell.card(w,h,targetIndex,0)
+        love.draw()
+        love.mousepressed(src.x+src.w/2,
+            src.y+src.h/2,1,false)
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(dst.x+dst.w/2,dst.y+dst.h/2,
+            dst.x-src.x,dst.y-src.y,false)
+        love.mousereleased(dst.x+dst.w/2,
+            dst.y+dst.h/2,1,false)
+        assert(#A.folders==2 and #A.projects==0
+            and A.folders[1].name=='Nova pasta'
+            and A.folders[2].name=='Nova pasta (2)',
+            'Segundo agrupamento nao gerou nome exclusivo')
+        assert(A.store:openProject(one.id).folder==A.folders[2].id
+            and A.store:openProject(two.id).folder==A.folders[2].id,
+            'Segundo grupo nao moveu os dois projetos')
+        status('Agrupar obras: pastas com nomes unicos')
+    elseif sh.stage==114 then
+        toGallery();setFolder('');A.galleryFilter='all'
+        A.galleryScroll=0
+        local w,h=love.graphics.getDimensions()
+        local l=GalleryShell.layout(w,h)
+        while GalleryShell.maxScroll(
+            w,h,#A.galleryItems)<240 do
+            A.store:createProject('Rolagem extra '..#A.galleryItems,
+                2,2,'',string.rep(string.char(31,90,150,255),4))
+            refreshGallery()
+        end
+        local index
+        for i,item in ipairs(A.galleryItems) do
+            if item.type=='project' and
+                GalleryShell.card(w,h,i,0).visible then
+                index=i;break
+            end
+        end
+        assert(index,'Rolagem precisa de uma obra visivel')
+        local project=A.galleryItems[index]
+        A.showcaseScrollKey=project.key
+        A.showcaseScrollRBD=A.store.fs:read(
+            'projects/'..project.value.id..'.rbd')
+        A.showcaseScrollOrder=A.galleryItems[1].key
+        love.draw()
+        local r=GalleryShell.card(w,h,index,0)
+        love.mousepressed(r.x+r.w/2,r.y+r.h/2,1,false)
+        assert(A.galleryGesture and
+            A.galleryGesture.key==project.key,
+            'Pressionar obra nao iniciou arrasto')
+        A.galleryGesture.started=love.timer.getTime()-1
+        love.mousemoved(5,l.bottom-3,
+            5-r.x-r.w/2,l.bottom-3-r.y-r.h/2,false)
+        assert(A.galleryGesture.active and
+            A.galleryGesture.moved,
+            'Arrasto nao ativou antes da rolagem')
+        A.showcaseScrollMax=GalleryShell.maxScroll(
+            w,h,#A.galleryItems)
+        status('Arrasto ativo: rolagem na borda inferior')
+    elseif sh.stage==115 then
+        assert(A.galleryScroll>0 and
+            A.galleryScroll<=A.showcaseScrollMax,
+            'Arrasto parado na borda inferior nao rolou')
+        local w,h=love.graphics.getDimensions()
+        local l=GalleryShell.layout(w,h)
+        A.galleryScroll=A.showcaseScrollMax
+        love.mousemoved(5,l.top+3,0,
+            l.top+3-A.galleryGesture.py,false)
+        assert(A.galleryGesture and A.galleryGesture.active,
+            'Rolagem perdeu o arrasto')
+        status('Arrasto ativo: rolagem na borda superior')
+    elseif sh.stage==116 then
+        assert(A.galleryScroll<A.showcaseScrollMax and
+            A.galleryScroll>=0,
+            'Arrasto parado na borda superior nao rolou')
+        local w,h=love.graphics.getDimensions()
+        local l=GalleryShell.layout(w,h)
+        love.draw()
+        love.mousereleased(5,l.top+3,1,false)
+        assert(not A.galleryGesture and
+            A.galleryItems[1].key==A.showcaseScrollOrder,
+            'Soltar fora da grade alterou a ordem')
+        assert(A.store.fs:read('projects/'..
+            A.showcaseScrollKey:sub(3)..'.rbd')==
+                A.showcaseScrollRBD,
+            'Rolagem modificou bytes RBD')
+        status('Arrasto cancelado: catalogo e RBD preservados')
+    elseif sh.stage==117 then
+        openDoc(A.store:openProject(sh.projectId))
+        A.compactUi=true;A.compactPanel='layers'
+        A.layerSession:select(1)
+        local ls=A.layerSession
+        ls:beginEdit()
+        ls:pixel(1,1,0x23456780)
+        ls:pixel(4,4,0x00000000)
+        assert(ls:finishEdit(),'Alpha Lock demo requires source pixels')
+        A.showcaseAlphaBase=Native.readPixel(
+            ls:activeBuffer(),1,1)
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        local p=Compact.popup(w,h,'layers')
+        local slot=LayerChrome.footerControls(p)[2]
+        assert(slot.available and slot.id=='alpha',
+            'Alpha Lock visual still disabled')
+        love.mousepressed(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        love.mousereleased(slot.x+slot.w/2,
+            slot.y+slot.h/2,1,false)
+        assert(A.doc.layers[1].alpha_lock and
+            ls.buffers[1].alphaLock and A.compactPanel=='layers',
+            'Alpha Lock button did not toggle actual layer state')
+        status('Camadas: Alpha Lock real ativado pelo rodape')
+    elseif sh.stage==118 then
+        local ls=A.layerSession
+        ls:beginEdit()
+        ls:beginStrokeAccum()
+        ls:pressureStroke(1.5,1.5,4.5,4.5,
+            8,8,0xff0000ff,1,1,1,0,0,0,true)
+        assert(ls:finishEdit(),'Alpha Lock brush made no RGB edit')
+        ls:recompose()
+        A.dirty=true;rebuildImage()
+        local changed=Native.readPixel(ls:activeBuffer(),1,1)
+        local untouched=Native.readPixel(ls:activeBuffer(),4,4)
+        assert(changed%256==128 and changed~=A.showcaseAlphaBase
+            and untouched==0,
+            'Alpha Lock changed original alpha or painted empty area')
+        A.showcaseAlphaPainted=changed
+        assert(ls:undo(),'Alpha Lock stroke undo unavailable')
+        assert(Native.readPixel(ls:activeBuffer(),1,1)==
+            A.showcaseAlphaBase and
+            ls.doc.layers[1].alpha_lock,
+            'Undo did not restore RGB or lock state')
+        assert(ls:redo(),'Alpha Lock stroke redo unavailable')
+        assert(Native.readPixel(ls:activeBuffer(),1,1)==
+            A.showcaseAlphaPainted,
+            'Redo did not restore locked brush')
+        A.dirty=true;rebuildImage()
+        status('Alpha Lock: RGB pintado, alfa 128 preservado')
+    elseif sh.stage==119 then
+        saveDoc()
+        local reread=Store.open(A.store.root):openProject(
+            A.doc.id)
+        local alphaOffset=(reread.width+1)*4+4
+        assert(reread.format==2 and reread.layers[1].alpha_lock
+            and reread.layers[1].pixels:byte(alphaOffset)==128,
+            'RBD2 saved layer lock or original alpha incorrectly')
+        local reopened=Layers.open(A.store,reread)
+        assert(reopened.buffers[1].alphaLock and
+            Native.readPixel(reopened:activeBuffer(),1,1)==
+                A.showcaseAlphaPainted and
+            Native.readPixel(reopened:activeBuffer(),4,4)==0,
+            'Reopening RBD2 lost Alpha Lock or transparent pixels')
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        status('Alpha Lock reaberto em RBD2 com pixels intactos')
+    elseif sh.stage==120 then
+        assert(A.screen=='editor' and A.compactUi and A.layerSession,
+            'Faixa direita exige editor compacto')
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        saveToolPreference('toolRailPosition','right')
+        A.compactPanel=nil;A.toolRailPage=1
+        love.draw()
+        local w,h=love.graphics.getDimensions()
+        local entries=EditorRail.entries(w,h,1,
+            IbisTools.entries,'right')
+        assert(entries[1].x>w-150 and entries[1].y>=64,
+            'Faixa direita sobrepoe barra superior')
+        local found=false
+        for _,button in ipairs(A.buttons) do
+            if button.x==entries[1].x and
+                button.y==entries[1].y then found=true end
+        end
+        assert(found,'Ferramenta direita nao possui hitbox real')
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Mudar faixa alterou obra ou historico')
+        status('Ferramentas na direita: hitboxes ativas e obra intacta')
+    elseif sh.stage==121 then
+        local before=Native.bytes(A.layerSession.composite)
+        local undo=A.layerSession:historyStats().undo
+        saveToolPreference('toolRailPosition','popup')
+        A.compactPanel=nil
+        love.draw()
+        local w,h=love.graphics.getDimensions()
+        local right=EditorRail.entries(w,h,1,
+            IbisTools.entries,'right')
+        for _,button in ipairs(A.buttons) do
+            for _,entry in ipairs(right) do
+                assert(not (button.x==entry.x and button.y==entry.y
+                    and button.w==entry.w and button.h==entry.h),
+                    'Popup manteve hitbox invisivel da faixa')
+            end
+        end
+        A.compactPanel='tools'
+        love.draw()
+        assert(Native.bytes(A.layerSession.composite)==before and
+            A.layerSession:historyStats().undo==undo,
+            'Seletor popup alterou obra ou historico')
+        status('Seletor em popup: sem faixa lateral invisivel')
+    elseif sh.stage==122 then
+        toGallery();A.galleryFilter='works';A.galleryScroll=0
+        local selected=IbisPanels.galleryDetail.artworks(A.galleryItems,'works')
+        assert(#selected>=2,
+            'Showcase precisa de duas obras para ampliar')
+        A.galleryExpandedProof={
+            bytes=Native.bytes(A.layerSession.composite),
+            undo=A.layerSession:historyStats().undo,
+            first=selected[1].id,second=selected[2].id
+        }
+        local w,h=love.graphics.getDimensions()
+        local card=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(card.x+card.w/2,card.y+card.h/2,1,false)
+        love.mousereleased(card.x+card.w/2,card.y+card.h/2,1,false)
+        assert(A.galleryDetailId==selected[1].id and
+            A.screen=='gallery',
+            'Clique na miniatura deve ampliar antes de editar')
+        assert(Native.bytes(A.layerSession.composite)==
+            A.galleryExpandedProof.bytes and
+            A.layerSession:historyStats().undo==
+                A.galleryExpandedProof.undo,
+            'Abrir ampliacao alterou os pixels')
+        status('Galeria ampliada: thumbnail real, editor ainda fechado')
+    elseif sh.stage==123 then
+        local old=assert(A.galleryExpandedProof)
+        local w,h=love.graphics.getDimensions()
+        -- As setas de mouse so existem sob hover. O showcase de
+        -- navegacao usa a tecla real, sem forcar click invisivel.
+        love.draw()
+        love.keypressed('right')
+        assert(A.galleryDetailId==old.second,
+            'Tecla direita nao navegou para a segunda obra')
+        assert(Native.bytes(A.layerSession.composite)==old.bytes
+            and A.layerSession:historyStats().undo==old.undo,
+            'Navegacao da galeria alterou documento')
+        status('Galeria: segunda obra, navegacao sem alterar RBD2')
+    elseif sh.stage==124 then
+        local old=assert(A.galleryExpandedProof)
+        local w,h=love.graphics.getDimensions()
+        love.draw()
+        love.mousepressed(w/2,h/2-90,1,false)
+        love.mousereleased(w/2,h/2+70,1,false)
+        assert(not A.galleryDetailId and A.screen=='gallery',
+            'Gesto vertical nao voltou a grade da galeria')
+        assert(Native.bytes(A.layerSession.composite)==old.bytes
+            and A.layerSession:historyStats().undo==old.undo,
+            'Retorno a grade alterou pixels ou historico')
+        status('Galeria: gesto vertical real voltou a grade')
+    elseif sh.stage==125 then
+        local old=assert(A.galleryExpandedProof)
+        local w,h=love.graphics.getDimensions()
+        local card=GalleryShell.card(w,h,1,0)
+        love.draw()
+        love.mousepressed(card.x+card.w/2,card.y+card.h/2,1,false)
+        love.mousereleased(card.x+card.w/2,card.y+card.h/2,1,false)
+        assert(A.galleryDetailId==old.first,
+            'Retornar a grade impediu reabrir a miniatura')
+        local edit=IbisPanels.galleryDetail.edit(w,h)
+        love.draw()
+        love.mousepressed(edit.x+edit.w/2,edit.y+edit.h/2,1,false)
+        love.mousereleased(edit.x+edit.w/2,edit.y+edit.h/2,1,false)
+        assert(A.screen=='editor' and A.doc.id==old.first
+            and not A.galleryDetailId,
+            'Editar nao abriu a obra ampliada no editor real')
+        status('Galeria: Editar abriu projeto RBD2 no motor Lua')
     elseif sh.stage>#showcaseNames then
+        -- A captura 00 e verificada separadamente; o codificador
+        -- JSON so permite arrays sequenciais com indices de 1 em diante.
+        showcaseNames[0]=nil
         externalWrite(sh.directory..'/showcase-report.json',
             JSON.encode({ok=true,real_love_render=true,
-                native_cpp=Native.available,
+                lua_renderer=Native.implementation=='lua',
                 screenshots=showcaseNames,
+                title_screen='00-inicial.png',
                 android_1412_pixel_parity=false}))
         A.showcase=nil
         love.event.quit(0)
@@ -1989,7 +4601,7 @@ local function verifyAdaptiveDesktopSidebar()
         love.graphics.getHeight()==oldH,
         'GUI resolution not restored after small viewport test')
 end
--- Stage 40: actual compact properties popup and native C++ swatch.
+-- Stage 40: actual compact properties popup and native Lua swatch.
 -- Exercise the same existing mouse buttons without any document edits.
 local function verifyCompactNativeInspector()
     local w,h=love.graphics.getDimensions()
@@ -2017,14 +4629,14 @@ local function verifyCompactNativeInspector()
         A.brushSampleCache.compact_preview,
         'Native brush swatch not rendered in compact inspector')
     assert(first.key==Samples.key(Inspector.settings(A),A.color),
-        'Compact swatch does not reflect currently active C++ brush')
+        'Compact swatch does not reflect currently active Lua brush')
     love.mousepressed(p.x+17+73+25,p.y+54+29+15,1,false)
     assert(A.brushDiameter==26,'Compact diameter adjustment broke')
     love.draw()
     local second=assert(A.brushSampleCache.compact_preview)
     assert(second.key~=first.key and
         second.key==Samples.key(Inspector.settings(A),A.color),
-        'Diameter change did not invalidate C++ preview cache')
+        'Diameter change did not invalidate Lua preview cache')
     love.mousepressed(p.x+17+30,p.y+54+109+15,1,false)
     assert(math.abs(A.brushOpacity-.7)<1e-8,
         'Opacity popup action not applied to active brush')
@@ -2164,7 +4776,7 @@ local function verifyCompactLayerOpacity()
         A.doc.layers[layerIndex].opacity==initial,
         'Undo did not restore original layer opacity')
     assert(Native.bytes(A.layerSession.composite)==bytes,
-        'Undo must exactly restore original C++ RGBA composite')
+        'Undo must exactly restore original Lua RGBA composite')
     assert(A.layerSession:redo() and
         A.doc.layers[layerIndex].opacity==.37,
         'Redo did not reapply 37 percent')
@@ -2235,7 +4847,7 @@ local function verifyDesktopLayerOpacity()
     assert(A.layerSession:undo() and
         A.doc.layers[index].opacity==initial and
         Native.bytes(A.layerSession.composite)==initialBytes,
-        'Opacity undo must exactly restore C++ composite')
+        'Opacity undo must exactly restore Lua composite')
     assert(A.layerSession:redo() and
         A.doc.layers[index].opacity==target,
         'Opacity redo must reapply the chosen percentage')
@@ -2392,7 +5004,7 @@ local function verifyPressureInfluenceControls()
     A.sidebarScroll=Sidebar.clamp(love.graphics.getHeight(),oldScroll or 0)
 end
 local function nativeSelfTest()
-    assert(Native.available,'C++ indisponível; não é permitido substituir por um mock Lua')
+    assert(Native.available,'Lua indisponível; não é permitido substituir por um mock Lua')
     assert(Native.pressure(.25,true,0,1)==.25)
     assert(Native.pressure(5,false,10,10)==1)
     local value,accepted=Native.thickness(.2,-2);assert(accepted and value==-2)
@@ -2403,7 +5015,7 @@ local function nativeSelfTest()
     assert(Native.readPixel(buf,8,6)==0x123456ff)
     local stroke=Native.buffer(9,7);Native.clear(stroke,0)
     Native.basicStroke(stroke,1.5,2.5,6.5,2.5,1,0xaabbccff,1)
-    assert(Native.readPixel(stroke,4,2)==0xaabbccff,'Traço básico contínuo C++ falhou')
+    assert(Native.readPixel(stroke,4,2)==0xaabbccff,'Traço básico contínuo Lua falhou')
     assert(Native.readPixel(stroke,4,3)==0,'Traço básico atingiu pixel fora do segmento')
     local doc=A.store:createProject('Fixture nativa',9,7,'',Native.bytes(buf));openDoc(doc);saveDoc()
     local reopened=A.store:openProject(doc.id)
@@ -2423,7 +5035,7 @@ local function nativeSelfTest()
     local image=love.image.newImageData(love.filesystem.newFileData(pngData,'oracle.png'))
     local r,g,b,a=image:getPixel(8,6);assert(math.abs(r-18/255)<1/255 and math.abs(g-52/255)<1/255 and math.abs(b-86/255)<1/255 and a==1)
     image:release()
-    -- C++ erases only selected layer, then undo/redo restores its exact RGBA bytes.
+    -- Lua erases only selected layer, then undo/redo restores its exact RGBA bytes.
     A.layerSession:beginEdit()
     A.layerSession:erase(1.5,1.5,1.5,1.5,1,1)
     assert(Native.readPixel(A.layerSession:activeBuffer(),1,1)==0,
@@ -2439,7 +5051,7 @@ local function nativeSelfTest()
     return {abi=1,buffer_roundtrip=true,pressure_contract=true,thickness_contract=true,pointer_contract=true,png_pixels=true,basic_desktop_stroke=true,basic_desktop_eraser=true,session_undo_redo=true,layered_roundtrip=true,android_runtime_compared=false}
 end
 function love.load(args)
-    A.fonts={small=love.graphics.newFont(12),body=love.graphics.newFont(14),title=love.graphics.newFont(25),large=love.graphics.newFont(40)}
+    A.fonts={micro=love.graphics.newFont(10),small=love.graphics.newFont(12),body=love.graphics.newFont(14),title=love.graphics.newFont(25),large=love.graphics.newFont(40)}
     local options={}
     for i=1,#args do
         if args[i]=='--data-dir' then options.data=args[i+1]
@@ -2447,14 +5059,22 @@ function love.load(args)
         elseif args[i]=='--capture' then options.capture=args[i+1]
         elseif args[i]=='--showcase-dir' then options.showcaseDir=args[i+1]
         elseif args[i]=='--lua-test' then options.luaTest=true
-        elseif args[i]=='--self-test' then options.selfTest=true end
+        elseif args[i]=='--self-test' then options.selfTest=true
+        elseif args[i]=='--lua-gui-smoke' then options.luaGuiSmoke=true
+        elseif args[i]=='--no-windows-ink' then options.noWindowsInk=true end
     end
     A.options=options;local base=love.filesystem.getSourceBaseDirectory()
     package.path=base..'/?.lua;'..base..'/?/init.lua;'..package.path
     Native.load(base)
-    A.inkAttached=Ink.init(Native)
+    A.inkAttached=not options.noWindowsInk and Ink.init(Native) or false
     A.root=options.data or (base..'/user-data');A.store=Store.open(A.root)
     A.preferences=A.store:getPreferences() or {};A.brushes=A.store:getBrushes() or {}
+    local cols=A.preferences.toolPopupColumns
+    A.toolPopupColumns=SettingsUI.normalizeColumns(cols)
+    A.toolRailPosition=SettingsUI.normalizePosition(
+        A.preferences.toolRailPosition)
+    A.toolPopupLabels=SettingsUI.labelsVisible(A.preferences.toolPopupLabels)
+    A.toolPopupPage=1
     A.savedColors={}
     if type(A.preferences.colorPalette)=='table' then
         for _,v in ipairs(A.preferences.colorPalette) do
@@ -2465,9 +5085,16 @@ function love.load(args)
         end
     end
     A.colorHistory={}
-    refreshGallery();status(Native.available and 'Motor C++ v1 carregado' or 'Galeria disponível · motor C++ ainda não compilado')
+    refreshGallery();status(Native.available and
+        ('Motor Lua v1 carregado · '..(A.inkAttached and
+            'Windows Ink Lua ativo' or 'mouse/toque LÖVE')) or
+        'Galeria disponível · motor Lua indisponível')
+    if not (options.luaTest or options.selfTest
+        or options.luaGuiSmoke) then
+        A.screen='home'
+    end
     if options.showcaseDir then
-        assert(Native.available,'Visual showcase requires the real native C++ DLL')
+        assert(Native.available,'Visual showcase requires the real Lua raster engine')
         assert(not options.selfTest and not options.luaTest,
             'Showcase must not share the isolated test modes')
         -- Paint before the gallery capture so its thumbnail depicts the
@@ -2488,7 +5115,7 @@ function love.load(args)
             512,512,'',Native.bytes(sample))
         refreshGallery()
         A.showcase={directory=options.showcaseDir,projectId=demo.id,
-            stage=1,frames=0,pending=false,captured=false}
+            stage=0,frames=0,pending=false,captured=false}
         status('Captura real de UI · galeria, editor, pincéis, cores, camadas')
     end
     if options.luaTest or options.selfTest then
@@ -2506,6 +5133,14 @@ function love.load(args)
         local user=ffi.load('user32');local hwnd=user.GetActiveWindow()
         if hwnd~=nil then user.ShowWindow(hwnd,0) end
     end
+    if options.luaGuiSmoke then
+        assert(Native.implementation=='lua' and Native.available,
+            'Teste grafico requer o motor Lua')
+        local canvas=Native.buffer(64,64)
+        local project=A.store:createProject('Lua GUI Smoke',64,64,'',Native.bytes(canvas))
+        openDoc(project)
+        A.luaGuiSmoke={frames=0}
+    end
 end
 function love.errorhandler(message)
     local detail=debug.traceback(tostring(message),2)
@@ -2516,6 +5151,376 @@ function love.errorhandler(message)
     return function()return 2 end
 end
 function love.update(dt)
+    -- Smoke grafico: exercita a GUI real do LÖVE e a textura GPU com
+    -- o rasterizador Lua, sem ponte compilada ou motor simulado.
+    if A.luaGuiSmoke then
+        A.luaGuiSmoke.frames=A.luaGuiSmoke.frames+1
+        if A.luaGuiSmoke.frames>=3 then
+            local ok,err=xpcall(function()
+                assert(A.screen=='editor' and A.image and A.layerSession,
+                    'Projeto Lua nao abriu no editor')
+                assert(A.image:getWidth()==64 and A.image:getHeight()==64,
+                    'Textura inicial do editor invalida')
+                local texture=A.image
+                local layers=A.layerSession
+                layers:beginEdit()
+                layers:beginStrokeAccum()
+                layers:pressureStroke(16.5,16.5,24.5,24.5,9,9,
+                    0x4cab93ff,.45,.45,1,0,0,0,true)
+                -- Duas regioes da mesma entrega WM_POINTER viram
+                -- uma unica composicao/envio GPU no final do pacote.
+                local oldUploads=gpuUpload:stats().uploads
+                A.deferInkUploads=true
+                updateImageRegion({x=1,y=2,w=12,h=10})
+                updateImageRegion({x=9,y=8,w=11,h=10})
+                assert(gpuUpload:stats().uploads==oldUploads,
+                    'Upload prematuro antes do fim do pacote Ink')
+                local batched=A.pendingInkRect
+                assert(batched.x==1 and batched.y==2 and
+                    batched.w==19 and batched.h==16,
+                    'Uniao de eventos Ink incorreta')
+                A.deferInkUploads=false
+                A.pendingInkRect=nil
+                updateImageRegion(batched)
+                assert(gpuUpload:stats().uploads==oldUploads+1,
+                    'Eventos Ink nao foram enviados em um so pacote')
+                local region={x=10,y=10,w=24,h=24}
+                local beforeStats=gpuUpload:stats()
+                updateImageRegion(region)
+                local firstStats=gpuUpload:stats()
+                assert(firstStats.uploads==beforeStats.uploads+1 and
+                    firstStats.copiedBytes==beforeStats.copiedBytes+
+                        region.w*region.h*4,
+                    'Envio FFI nao registrou bytes da regiao')
+                updateImageRegion(region)
+                local reused=gpuUpload:stats()
+                assert(reused.hits==firstStats.hits+1 and
+                    reused.allocations==firstStats.allocations,
+                    'ImageData RGBA nao foi reutilizado')
+                assert(A.image==texture and A.partialCanvasUpdates>=2,
+                    'Upload parcial recriou a textura GPU')
+                local alpha=Native.readPixel(layers:activeBuffer(),20,20)%256
+                -- Leitura da textura GPU real, em modo de blend replace,
+                -- para comparar o alfa final com a composicao CPU.
+                local canvas=love.graphics.newCanvas(64,64,{format='rgba8'})
+                love.graphics.push('all')
+                love.graphics.setCanvas(canvas)
+                love.graphics.clear(0,0,0,0)
+                love.graphics.setBlendMode('replace')
+                love.graphics.setColor(1,1,1,1)
+                love.graphics.draw(A.image,0,0)
+                love.graphics.setCanvas()
+                love.graphics.pop()
+                local rendered=canvas:newImageData()
+                local _,_,_,gpuAlpha=rendered:getPixel(20,20)
+                assert(math.abs(gpuAlpha-alpha/255)<=2/255,
+                    'Regiao enviada nao corresponde ao alfa GPU real')
+                rendered:release()
+                canvas:release()
+                assert(alpha>0 and alpha<255,'Trajeto Lua sem opacidade')
+                assert(layers:finishEdit(),'Pincelada nao entrou no historico')
+                assert(layers:undo(),'Desfazer grafico indisponivel')
+                assert(Native.readPixel(layers:activeBuffer(),20,20)==0,
+                    'Undo nao limpou o pixel')
+                assert(layers:redo(),'Refazer grafico indisponivel')
+                assert(Native.readPixel(layers:activeBuffer(),20,20)%256==alpha,
+                    'Redo nao restaurou o pixel')
+                layers:recompose()
+                rebuildImage()
+                saveDoc()
+                -- A38: exercício no LÖVE real (não só geometria Lua).
+                -- Sem F10, nenhuma hitbox do HUD pode tocar o canvas.
+                local hud=A.windowsHudApi.rects(
+                    love.graphics.getDimensions())
+                -- A barra dupla pode cruzar geometricamente o HUD
+                -- enquanto fechada: exigir a hitbox EXATA dos botoes
+                -- auxiliares, nao a existencia de qualquer outro botao
+                -- visivel naquela coordenada.
+                local function registeredExact(rect)
+                    for _,button in ipairs(A.buttons) do
+                        if button.x==rect.x and button.y==rect.y and
+                            button.w==rect.w and button.h==rect.h then
+                            return true
+                        end
+                    end
+                    return false
+                end
+                local w,h=love.graphics.getDimensions()
+                local railList=require('ibis_editor_rail').entries(
+                    w,h,1,require('ibis_visual_tools').entries,
+                    A.toolRailPosition or 'left')
+                local railItem=railList[1]
+                local pixelsBefore=Native.bytes(layers.composite)
+                local undoBefore=layers:historyStats().undo
+                assert(A.compactUi and not A.focusMode and
+                    not A.windowsHud,'HUD deve iniciar fechado')
+                love.draw()
+                assert(registeredExact(railItem),
+                    'Barra de ferramentas nao esta visivel sem F10')
+                assert(not registeredExact(hud.save) and
+                    not registeredExact(hud.desktop) and
+                    not registeredExact(hud.properties),
+                    'HUD oculto deixou hitbox propria clicavel')
+                love.keypressed('f10')
+                assert(A.windowsHud,'Tecla F10 nao abriu HUD Windows')
+                love.draw()
+                assert(not registeredExact(railItem),
+                    'Seletor lateral cobre o HUD auxiliar F10')
+                assert(registeredExact(hud.save) and
+                    registeredExact(hud.desktop) and
+                    registeredExact(hud.properties),
+                    'HUD F10 nao registra botoes ativos')
+                love.mousepressed(hud.properties.x+
+                    hud.properties.w/2,hud.properties.y+
+                    hud.properties.h/2,1,false)
+                assert(A.compactPanel=='properties' and
+                    not A.windowsHud,
+                    'Propriedades do HUD nao utilizam callback real')
+                love.keypressed('escape')
+                assert(not A.compactPanel,
+                    'Propriedades nao fecharam com Escape')
+                love.draw()
+                assert(not registeredExact(hud.properties) and
+                    registeredExact(railItem),
+                    'Fechar painel nao restaurou seletor lateral')
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'HUD F10 alterou raster ou historico')
+                -- A40: confirmar no LÖVE real o caminho de clique
+                -- dos botoes +/- sem executar pintura ou historico.
+                local originalTool=A.tool
+                local originalDiameter=A.brushDiameter
+                local originalOpacity=A.brushOpacity
+                A.tool='brush'
+                A.brushDiameter=24
+                A.brushOpacity=.70
+                love.draw()
+                local controls=require('compact_layout').quick(w,h)
+                local function clickQuick(rect)
+                    local px=rect.x+rect.w/2
+                    local py=rect.y+rect.h/2
+                    love.mousepressed(px,py,1,false)
+                    love.mousereleased(px,py,1,false)
+                end
+                clickQuick(controls.diameter.minus)
+                assert(A.brushDiameter==23 and
+                    not A.quickDrag and not A.drawing,
+                    'Botao - nao ajustou tamanho real')
+                clickQuick(controls.diameter.plus)
+                assert(A.brushDiameter==24,
+                    'Botao + nao restaurou tamanho')
+                clickQuick(controls.opacity.minus)
+                assert(math.abs(A.brushOpacity-.69)<.00001,
+                    'Botao - nao ajustou opacidade em 1%')
+                clickQuick(controls.opacity.plus)
+                assert(math.abs(A.brushOpacity-.70)<.00001,
+                    'Botao + nao restaurou opacidade')
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'Botoes +/- mudaram pixels ou historico')
+                -- A42: botão direito REAL do LÖVE no pixel pintado
+                -- no início deste smoke, sem trocar de ferramenta.
+                local originalColor=A.color
+                local pickedColor=Native.readPixel(layers.composite,20,20)
+                assert(pickedColor~=0,
+                    'Fixture do conta-gotas sem cor no canvas')
+                local dx=(20.5-A.doc.width/2)*A.zoom
+                local dy=(20.5-A.doc.height/2)*A.zoom
+                local ca,sa=math.cos(A.rotation),math.sin(A.rotation)
+                local sx=(w-12)/2+A.panX+dx*ca-dy*sa
+                local sy=(h-130)/2+A.panY+dx*sa+dy*ca
+                A.color=pickedColor==0x112233ff
+                    and 0x6688aaff or 0x112233ff
+                local unrelatedColor=A.color
+                love.draw()
+                love.mousepressed(sx,sy,2,false)
+                assert(A.color==pickedColor and A.tool=='brush'
+                    and not A.panning and not A.drawing,
+                    'Quick Eyedropper PC nao funcionou com botao 2')
+                love.mousereleased(sx,sy,2,false)
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'Conta-gotas modificou pixels ou historico')
+                A.color=unrelatedColor
+                love.draw()
+                love.mousepressed(railItem.x+railItem.w/2,
+                    railItem.y+railItem.h/2,2,false)
+                assert(A.color==unrelatedColor and not A.panning,
+                    'Conta-gotas vazou por cima de ferramenta visivel')
+                love.mousereleased(railItem.x+railItem.w/2,
+                    railItem.y+railItem.h/2,2,false)
+                A.compactPanel='tools'
+                love.draw()
+                love.mousepressed(sx,sy,2,false)
+                assert(A.color==unrelatedColor and not A.panning,
+                    'Conta-gotas ignorou popup ativo')
+                love.mousereleased(sx,sy,2,false)
+                A.compactPanel=nil
+                A.tool='erase'
+                love.draw()
+                love.mousepressed(sx,sy,2,false)
+                assert(A.panning and A.panButton==2
+                    and A.color==unrelatedColor,
+                    'Pan direito anterior quebrou fora do Brush')
+                love.mousereleased(sx,sy,2,false)
+                assert(not A.panning and A.panButton==nil,
+                    'Pan direito nao liberou o mouse')
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'Gestos Windows alteraram bytes ou historico')
+                A.color=originalColor
+                A.tool=originalTool
+                A.brushDiameter=originalDiameter
+                A.brushOpacity=originalOpacity
+                -- A43: teclado real do LÖVE, mais mouse com Ctrl+Alt
+                -- simulado por isDown (sem exigir teclado no runner).
+                local previousSize=A.brushDiameter
+                local previousTool=A.tool
+                local previousInk=A.dirty
+                local originalUndo=layers:historyStats().undo
+                local originalPixels=Native.bytes(layers.composite)
+                A.tool='brush';A.brushDiameter=24
+                love.keypressed('leftbracket')
+                assert(A.brushDiameter==23,
+                    'Colchete esquerdo nao diminuiu brush')
+                love.keypressed('rightbracket')
+                assert(A.brushDiameter==24,
+                    'Colchete direito nao aumentou brush')
+                local down=love.keyboard.isDown
+                love.keyboard.isDown=function(...)
+                    for i=1,select('#',...) do
+                        local key=select(i,...)
+                        if key=='lctrl' or key=='rctrl'
+                            or key=='lalt' or key=='ralt' then
+                            return true
+                        end
+                    end
+                    return down(...)
+                end
+                local gestureOk,gestureErr=xpcall(function()
+                    love.draw()
+                    love.mousepressed(sx,sy,1,false)
+                    assert(A.brushSizeDrag and not A.drawing and
+                        not A.panning,
+                        'Ctrl+Alt+esquerdo iniciou pintura ou pan')
+                    love.mousemoved(sx+16,sy,16,0,false)
+                    assert(A.brushDiameter==28,
+                        'Drag Ctrl+Alt nao ajustou 4 pixels')
+                    love.mousemoved(sx-8,sy,-24,0,false)
+                    assert(A.brushDiameter==22,
+                        'Drag reverso deve usar origem fixa')
+                    love.mousereleased(sx+8,sy,1,false)
+                    assert(A.brushDiameter==26 and
+                        not A.brushSizeDrag and not A.drawing,
+                        'Soltura nao finalizou ajuste Ctrl+Alt')
+                    A.brushDiameter=24
+                    A.compactPanel='tools'
+                    love.draw()
+                    love.mousepressed(sx,sy,1,false)
+                    assert(not A.brushSizeDrag and not A.drawing,
+                        'Ctrl+Alt atravessou popup')
+                    love.mousereleased(sx,sy,1,false)
+                    A.compactPanel=nil
+                end,debug.traceback)
+                love.keyboard.isDown=down
+                if not gestureOk then error(gestureErr) end
+                assert(Native.bytes(layers.composite)==originalPixels
+                    and layers:historyStats().undo==originalUndo
+                    and A.dirty==previousInk,
+                    'Atalhos Ctrl+Alt/[] modificaram raster ou dirty')
+                A.brushDiameter=previousSize;A.tool=previousTool
+                -- A44: eventos de CANETA do dispatcher Windows Ink,
+                -- modificadores simulados no runner sem teclado.
+                -- O canvas deve navegar sem alterar raster/RBD2.
+                local oldZoom,oldRotation=A.zoom,A.rotation
+                local oldPanX,oldPanY=A.panX,A.panY
+                local oldDirty=A.dirty
+                local oldPixels=Native.bytes(layers.composite)
+                local oldUndo=layers:historyStats().undo
+                local keyDown=love.keyboard.isDown
+                local penModifiers='alt'
+                love.keyboard.isDown=function(...)
+                    for i=1,select('#',...) do
+                        local key=select(i,...)
+                        if penModifiers=='alt' and
+                            (key=='lalt' or key=='ralt') then return true end
+                        if penModifiers=='shift' and
+                            (key=='lshift' or key=='rshift') then return true end
+                    end
+                    return keyDown(...)
+                end
+                local penOk,penError=xpcall(function()
+                    local midX,midY=View.center(viewData(),w,h)
+                    local penX,penY=midX+30,midY-28
+                    love.keypressed('space')
+                    love.draw()
+                    dispatchInkEvent({kind=1,id=991,x=penX,y=penY,
+                        pressure=1,flags=0})
+                    assert(A.penViewDrag and
+                        A.penViewDrag.kind=='zoom' and
+                        not A.panning and not A.drawing,
+                        'Caneta Alt+Space nao iniciou zoom')
+                    dispatchInkEvent({kind=2,id=991,x=penX,
+                        y=penY-24,pressure=1})
+                    assert(A.zoom>oldZoom,
+                        'Caneta Alt+Space nao aproximou canvas')
+                    dispatchInkEvent({kind=3,id=991,x=penX,
+                        y=penY-24,pressure=1})
+                    assert(not A.penViewDrag and A.inkPenId==nil,
+                        'Zoom nao encerrou com a caneta')
+                    A.zoom=oldZoom;A.rotation=oldRotation
+                    A.panX=oldPanX;A.panY=oldPanY
+                    penModifiers='shift'
+                    love.draw()
+                    dispatchInkEvent({kind=1,id=992,x=penX,y=penY,
+                        pressure=1,flags=0})
+                    assert(A.penViewDrag and
+                        A.penViewDrag.kind=='rotate' and
+                        not A.drawing and not A.panning,
+                        'Caneta Shift+Space nao iniciou rotacao')
+                    dispatchInkEvent({kind=2,id=992,x=midX-28,
+                        y=midY-30,pressure=1})
+                    assert(math.abs(A.rotation-oldRotation)>.1,
+                        'Caneta Shift+Space nao rotacionou')
+                    dispatchInkEvent({kind=3,id=992,x=midX-28,
+                        y=midY-30,pressure=1})
+                    assert(not A.penViewDrag and A.inkPenId==nil,
+                        'Rotacao nao encerrou no evento de caneta')
+                    A.zoom=oldZoom;A.rotation=oldRotation
+                    A.panX=oldPanX;A.panY=oldPanY
+                    assert(Native.bytes(layers.composite)==oldPixels and
+                        layers:historyStats().undo==oldUndo and
+                        A.dirty==oldDirty,
+                        'Navegacao de caneta escreveu no raster')
+                end,debug.traceback)
+                love.keyboard.isDown=keyDown
+                love.keyreleased('space')
+                A.penViewDrag=nil;A.inkPenId=nil
+                A.zoom=oldZoom;A.rotation=oldRotation
+                A.panX=oldPanX;A.panY=oldPanY
+                if not penOk then error(penError) end
+                local loaded=A.store:openProject(A.doc.id)
+                assert(loaded and loaded.layers and
+                    loaded.layers[1].pixels==Native.bytes(layers:activeBuffer()),
+                    'Persistencia RBD2 divergente apos editor grafico')
+                assert(Native.implementation=='lua',
+                    'GUI deixou de usar raster Lua')
+                if A.options.noWindowsInk then
+                    assert(not A.inkAttached and not Ink.mouseGuard(),
+                        'Entrada mouse/toque deve funcionar sem Windows Ink')
+                else
+                    assert(Ink.abiValid and A.inkAttached and Ink.available,
+                        'Ponte Windows Ink em Lua nao anexou a janela real')
+                    assert(Ink.probe(),
+                        'WndProc Lua nao repassou a mensagem WM_NULL')
+                end
+                print('GUI LUA SMOKE OK: canvas, GPU, undo/redo, RBD2')
+            end,debug.traceback)
+            if not ok then io.stderr:write('GUI LUA SMOKE FALHOU: '..tostring(err)..'\n') end
+            love.event.quit(ok and 0 or 1)
+        end
+        return
+    end
     if A.showcase then
         local sh=A.showcase
         if sh.error then
@@ -2532,8 +5537,32 @@ function love.update(dt)
             end
         end
     end
+    -- The pointer is stationary at the viewport edge while the
+    -- thumbnails move beneath it; scrolling therefore belongs to the
+    -- frame update, not mousemoved or the document renderer.
+    if A.screen=='gallery' and A.galleryGesture and
+        A.galleryGesture.active and A.galleryGesture.moved and
+        not A.galleryTrash and not A.gallerySelecting and
+        not A.galleryMoveMenu and not A.galleryCreateMenu and
+        not A.galleryMoreMenu and not A.galleryDeleteMenu then
+        local w,h=love.graphics.getDimensions()
+        A.galleryScroll=GalleryShell.dragAutoScroll(
+            w,h,#(A.galleryItems or {}),A.galleryScroll or 0,
+            A.galleryGesture.py,dt)
+    end
     if A.inkAttached and dispatchInkEvent then
-        for _,event in ipairs(Ink.poll()) do dispatchInkEvent(event) end
+        local events=Ink.poll()
+        if #events>0 then
+            A.deferInkUploads=true
+            local ok,err=pcall(function()
+                for _,event in ipairs(events) do dispatchInkEvent(event) end
+            end)
+            A.deferInkUploads=false
+            local region=A.pendingInkRect
+            A.pendingInkRect=nil
+            if region then updateImageRegion(region) end
+            if not ok then status('Windows Ink: '..tostring(err)) end
+        end
     end
     if A.testReport then
         A.testFrames=A.testFrames+1
@@ -2563,8 +5592,8 @@ function love.update(dt)
             local ok,err=pcall(function()
                 assert(A.screen=='editor' and A.sideTab=='layers',
                     'Teste GUI de camadas requer editor real')
-                assert(A.inkAttached and Ink.lib.rb_ink_is_attached()==1,
-                    'A ponte Windows Ink não se anexou à janela LÖVE real')
+                assert(A.inkAttached and Ink.available and Ink.abiValid,
+                    'A ponte Lua Windows Ink nao anexou a janela LÖVE real')
                 local panel=love.graphics.getWidth()-268
                 local before=#A.doc.layers
                 love.draw()
@@ -2774,7 +5803,7 @@ function love.update(dt)
                 love.mousereleased(lx1,ly1,1)
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==0xe14922ff
                     and Native.readPixel(A.layerSession:activeBuffer(),3,6)==0xe14922ff,
-                    'Linha C++ não desenhou ambas as extremidades')
+                    'Linha Lua não desenhou ambas as extremidades')
                 undoDoc()
                 assert(Native.readPixel(A.layerSession:activeBuffer(),1,6)==oldLine,
                     'Undo da linha falhou')
@@ -2905,7 +5934,7 @@ function love.update(dt)
                 A.dirty=true;rebuildImage()
                 love.draw();love.mousepressed(252,90,1)
                 assert(A.tool=='brush' and A.brushStyle=='hard',
-                    'Touch test requires the hard C++ brush')
+                    'Touch test requires the hard Lua brush')
                 for i=1,3 do
                     love.draw();love.mousepressed(panel+40,472,1)
                 end
@@ -2943,7 +5972,7 @@ function love.update(dt)
                 local highAlpha=Native.readPixel(
                     A.layerSession:activeBuffer(),7,5)%256
                 assert(highAlpha>lowAlpha and highAlpha==255,
-                    'Full pressure should produce stronger C++ paint')
+                    'Full pressure should produce stronger Lua paint')
                 -- Moving pressure: release must reach exact endpoint with
                 -- one undo/redo transaction and preserve pixels in RBD2.
                 A.layerSession:add('Traço pressão variável GUI')
@@ -3007,7 +6036,7 @@ function love.update(dt)
                     'Native pen UP failed to end brush')
                 local inkPixel=Native.readPixel(A.layerSession:activeBuffer(),5,1)
                 assert(inkPixel%256>0 and inkPixel%256<255,
-                    'Native pen pressure not passed into C++ brush')
+                    'Native pen pressure not passed into Lua brush')
                 assert(A.layerSession:historyStats().undo==penHistory+1,
                     'Native pen stroke must have one undo step')
                 undoDoc()
@@ -3340,7 +6369,7 @@ function love.update(dt)
                     metadataSaved.layers[otherIndex].visible==otherVisible and
                     metadataSaved.layers[7].name=='Arte azul Étapa 18',
                     'Propriedades das camadas não persistiram')
-                -- Stage 19: real panel duplicate, new C++ pixel allocation,
+                -- Stage 19: real panel duplicate, new Lua pixel allocation,
                 -- independent edits/undo, new ID, RBD2, and capacity guard.
                 love.draw();love.mousepressed(panel+211,448,1,false)
                 assert(#A.doc.layers==Store.MAX_LAYERS-1,
@@ -3577,7 +6606,7 @@ function love.update(dt)
                 redoDoc()
                 assert(#A.doc.layers==countBefore-1 and
                     Native.bytes(A.layerSession.buffers[mergeIndex-1])==mergedPixels,
-                    'Refazer Mesclar não reproduziu o resultado C++')
+                    'Refazer Mesclar não reproduziu o resultado Lua')
                 saveDoc()
                 local mergedSave=A.store:openProject(A.doc.id)
                 assert(mergedSave.layer_count==countBefore-1 and
@@ -3598,7 +6627,7 @@ function love.update(dt)
                 undoDoc()
                 assert(#A.doc.layers==countBefore-1,
                     'Ctrl+Z não restaurou a segunda mesclagem')
-                -- Stage 23: GUI button uses C++ to mirror the active layer.
+                -- Stage 23: GUI button uses Lua to mirror the active layer.
                 local flipIndex=A.doc.active_layer
                 A.layerSession:beginEdit()
                 A.layerSession:pixel(0,0,0xff1122ff)
@@ -3839,22 +6868,27 @@ function love.update(dt)
         end
     end
 end
-local function galleryPreview(doc)
+local function galleryPreview(doc,maxWidth,maxHeight)
+    maxWidth,maxHeight=maxWidth or 140,maxHeight or 130
     if not Native.available then return nil end
     A.galleryPreviewCache=A.galleryPreviewCache or {order={},entries={}}
     local cache=A.galleryPreviewCache
-    local key=GalleryThumb.key(doc)
+    local key=GalleryThumb.key(doc)..':'..maxWidth..'x'..maxHeight
     if cache.entries[key] then
         return cache.entries[key].image
     end
     if (A.galleryPreviewBudget or 0)<=0 then return nil end
     A.galleryPreviewBudget=A.galleryPreviewBudget-1
     local ok,item=pcall(function()
-        local saved=A.store:openProject(doc.id)
+        local saved=doc.deleted and A.store:_readProject(doc.id,true)
+            or A.store:openProject(doc.id)
         local session=Layers.open(A.store,saved)
-        local width,height=GalleryThumb.size(saved.width,saved.height,176,126)
+        local width,height=GalleryThumb.size(saved.width,saved.height,
+            maxWidth,maxHeight)
         local data=love.image.newImageData(width,height,'rgba8')
-        GalleryThumb.sample(Native.bytes(session.composite),
+        local sampler=(width>176 or height>126)
+            and GalleryThumb.sampleLarge or GalleryThumb.sample
+        sampler(Native.bytes(session.composite),
             saved.width,saved.height,width,height,function(r,g,b,a,x,y)
                 data:setPixel(x,y,r/255,g/255,b/255,a/255)
             end)
@@ -3881,69 +6915,669 @@ local function releaseGalleryPreviews()
     end
     A.galleryPreviewCache=nil
 end
-local function drawGallery(w,h)
-    text('Meus desenhos',42,106,'large');text('Projetos locais editáveis · organização offline',44,163,'body','muted')
-    button('Nova tela',w-322,113,140,42,function()modal('new')end,true,not Native.available)
-    button('Nova pasta',w-168,113,126,42,function()modal('folder')end)
-    button('Raiz',44,206,70,32,function()setFolder('')end,A.folder=='')
-    if A.folder~='' then text('/ '..A.folder,127,213,'small','muted') end
-    local index=0
-    local function card(label,sub,folder,fn,project)
-        index=index+1
-        local r=Visual.galleryCard(w,h,index)
-        if not r.visible then return end
-        local x,y=r.x,r.y
-        local mx,my=love.mouse.getPosition()
-        local hovered=mx>=x and mx<x+r.w and my>=y and my<y+r.h
-        box(x,y,r.w,r.h,hovered and 'line' or 'card')
-        if folder then
-            box(r.preview.x,r.preview.y,r.preview.w,r.preview.h,'bg')
-            c('accent')
-            love.graphics.rectangle('fill',x+75,y+75,67,43,6,6)
-            love.graphics.rectangle('fill',x+75,y+60,31,20,4,4)
+-- Visualizacao ampliada entre a galeria e o editor.
+-- O raster de preview vem dos dados RBD2, nao de imagens ficticias.
+function IbisPanels.drawGalleryExpanded(w,h)
+    local doc,index,total=IbisPanels.galleryDetail.find(A.galleryItems or {},
+        A.galleryDetailId,A.galleryFilter)
+    if not doc then A.galleryDetailId=nil;return false end
+    local lg=love.graphics
+    local image=IbisPanels.galleryDetail.imageRect(w,h,doc.width,doc.height)
+    lg.setColor(.94,.94,.92,1)
+    lg.rectangle('fill',image.x-2,image.y-2,
+        image.w+4,image.h+4)
+    local preview=galleryPreview(doc,
+        math.min(768,math.floor(image.w)),
+        math.min(768,math.floor(image.h)))
+    if preview then
+        local pw,ph=preview:getDimensions()
+        lg.setColor(1,1,1,1)
+        lg.draw(preview,image.x,image.y,0,
+            image.w/pw,image.h/ph)
+    else
+        lg.setColor(.55,.57,.59,1)
+        lg.rectangle('line',image.x,image.y,image.w,image.h)
+    end
+    -- Titulo e dimensoes acompanham os limites da imagem, como
+    -- no tutorial #20; nao inventar duracao de desenho no Store.
+    local label=IbisPanels.galleryDetail.captionForImage(w,h,image)
+    lg.setColor(.19,.20,.22,1)
+    lg.setFont(A.fonts.small)
+    local dimensions=('%d × %d'):format(doc.width,doc.height)
+    local metaWidth=math.ceil(A.fonts.small:getWidth(dimensions))+4
+    local title=TextFit.truncate('Título: '..doc.name,
+        math.max(1,label.w-metaWidth-12),function(t)
+            return A.fonts.small:getWidth(t) end)
+    lg.print(title,label.x,label.y)
+    lg.printf(dimensions,label.x+label.w-metaWidth,
+        label.y,metaWidth,'right')
+    -- Sem setas fixas de desktop sobre a galeria Android.
+    -- Apenas a area visivel sob hover recebe callback de mouse.
+    local pointerX,pointerY=love.mouse.getPosition()
+    for _,direction in ipairs({-1,1}) do
+        local available=direction==-1 and index>1 or index<total
+        local shown=available and IbisPanels.galleryDetail.navRevealed(
+            w,h,direction,pointerX,pointerY)
+        if shown then
+            local nav=IbisPanels.galleryDetail.nav(w,h,direction)
+            lg.setColor(.26,.29,.32,.42)
+            lg.rectangle('fill',nav.x,nav.y,nav.w,nav.h,5,5)
+            lg.setColor(.94,.96,.98,1)
+            Icons.draw(direction==-1 and 'gallery-prev'
+                or 'gallery-next',nav.x+nav.w/2,
+                nav.y+nav.h/2,19)
+            A.buttons[#A.buttons+1]={x=nav.x,y=nav.y,
+                w=nav.w,h=nav.h,fn=function()
+                    A.galleryDetailId=IbisPanels.galleryDetail.step(
+                        A.galleryItems,A.galleryDetailId,
+                        A.galleryFilter,direction)
+                end}
+        end
+    end
+    local footerY=h-52
+    lg.setColor(.17,.18,.19,1)
+    lg.rectangle('fill',0,footerY,w,52)
+    -- Acoes pendentes sao vetores cinza sem hitboxes; Criar
+    -- reutiliza o menu funcional da grade sem tocar no RBD2.
+    for _,entry in ipairs(IbisPanels.galleryDetail.footerIcons(w,h)) do
+        if entry.actionable then
+            lg.setColor(.36,.70,1,1)
+            A.buttons[#A.buttons+1]={
+                x=entry.x-22,y=footerY,w=44,h=52,
+                fn=function() A.galleryCreateMenu=true end}
         else
-            c('bg')
-            love.graphics.rectangle('fill',r.preview.x,r.preview.y,
-                r.preview.w,r.preview.h,3,3)
+            lg.setColor(.54,.57,.60,1)
+        end
+        Icons.draw(entry.id,entry.x,entry.y,19)
+    end
+    local edit=IbisPanels.galleryDetail.edit(w,h)
+    lg.setColor(.36,.70,1,1)
+    lg.setFont(A.fonts.body)
+    lg.printf('Editar',edit.x,edit.y+14,edit.w,'center')
+    A.buttons[#A.buttons+1]={x=edit.x,y=edit.y,w=edit.w,h=edit.h,
+        fn=guard(function()
+            local target=A.galleryDetailId
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+            openDoc(A.store:openProject(target))
+        end)}
+    return true
+end
+local function drawGallery(w,h)
+    -- Galeria com barra escura, miniaturas rolaveis e rodape proprio.
+    -- Os arquivos permanecem no Store/RBD2; sem ordenacao inventada.
+    local lg=love.graphics
+    local l=GalleryShell.layout(w,h)
+    local folders=not A.galleryTrash and
+        GalleryUI.filter(A.galleryFilter,'folder')
+        and #A.folders or 0
+    local works=A.galleryTrash and #(A.trashProjects or {})
+        or (GalleryUI.filter(A.galleryFilter,'work')
+        and #A.projects or 0)
+    local total=folders+works
+    A.galleryScroll=math.min(A.galleryScroll or 0,
+        GalleryShell.maxScroll(w,h,total))
+    -- Barra superior do My Gallery (oficial); sem cabeçalho desktop.
+    lg.setColor(.18,.19,.20,1)
+    lg.rectangle('fill',0,0,w,54)
+    lg.setColor(.95,.96,.97,1)
+    lg.setFont(A.fonts.body)
+    lg.printf(A.galleryTrash and
+        ('Excluídos recentemente (%d)'):format(total)
+        or ('A Minha Galeria (%d)'):format(total),
+        math.floor((w-390)/2),16,390,'center')
+    lg.setColor(.45,.74,.94,1)
+    lg.print('‹ Voltar',18,17)
+    if A.galleryDetailId then
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=function()
+                A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+            end}
+    elseif A.galleryTrash then
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=function()
+                A.galleryTrash=false
+                A.galleryFilter=A.galleryBeforeTrash or 'all'
+                A.galleryBeforeTrash=nil;A.galleryScroll=0
+                refreshGallery()
+            end}
+    elseif A.folder~='' then
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=guard(function()
+                local parent=''
+                for _,f in ipairs(A.store.catalog.folders) do
+                    if f.id==A.folder then parent=f.parent;break end
+                end
+                setFolder(parent)
+            end)}
+    else
+        -- Voltar na raiz agora tem destino real: tela inicial.
+        A.buttons[#A.buttons+1]={x=10,y=7,w=112,h=42,
+            fn=function()
+                if A.gallerySelecting then
+                    A.gallerySelecting=false;A.gallerySelected={}
+                else
+                    A.galleryGesture=nil
+                    A.screen='home'
+                end
+            end}
+    end
+    lg.setColor(.45,.74,.94,1)
+    lg.printf(A.gallerySelecting and 'Concluir' or 'Selecionar',
+        w-156,17,136,'right')
+    A.buttons[#A.buttons+1]={x=w-166,y=7,w=152,h=42,
+        fn=function()
+            A.gallerySelecting=not A.gallerySelecting
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+            A.gallerySelected={}
+        end}
+    if not A.galleryTrash and not A.galleryDetailId then
+        -- O glifo de reticencias da fonte Windows virava quadrado.
+        -- Preservar hitbox e callback do menu existente.
+        lg.setColor(.45,.74,.94,1)
+        Icons.draw('gallery-more',168,26,22)
+        A.buttons[#A.buttons+1]={x=138,y=6,w=64,h=42,
+            fn=function()A.galleryMoreMenu=true end}
+    end
+    -- A galeria original vai diretamente da barra de titulo para
+    -- as miniaturas. As abas Tudo/Desenhos/Pastas eram particulares
+    -- do rebuild e nao existem na referencia oficial.
+    lg.setColor(.96,.95,.92,1)
+    lg.rectangle('fill',0,54,w,l.footerY-54)
+    lg.setColor(.71,.70,.68,1)
+    lg.rectangle('fill',0,53,w,1)
+    if A.galleryGesture then
+        GalleryShell.dragAdvance(A.galleryGesture,
+            A.galleryGesture.px,A.galleryGesture.py,
+            love.timer.getTime())
+    end
+    if A.galleryDetailId and IbisPanels.drawGalleryExpanded(w,h) then return end
+    local index=0
+    lg.setScissor(0,l.top,w,l.bottom-l.top)
+    local function card(label,sub,folder,fn,project,identifier)
+        index=index+1
+        local r=GalleryShell.card(w,h,index,A.galleryScroll)
+        if not r.visible then return end
+        local px,py=love.mouse.getPosition()
+        local hovered=GalleryShell.hit(w,h,index,A.galleryScroll,px,py)
+        local selected=A.gallerySelected and A.gallerySelected[identifier]
+        -- A26: hierarquia simples da galeria, sem caixa desktop
+        -- ao redor de cada titulo; hitboxes permanecem inalteradas.
+        IbisPanels.galleryCardChrome.drawBacking(r,selected,hovered)
+        if folder then
+            lg.setColor(.58,.70,.82,1)
+            lg.rectangle('fill',r.preview.x+35,r.preview.y+42,
+                r.preview.w-70,50,5,5)
+            lg.rectangle('fill',r.preview.x+35,r.preview.y+32,
+                31,17,3,3)
+        else
             local preview=project and galleryPreview(project)
             if preview then
                 local pw,ph=preview:getDimensions()
                 local left=r.preview.x+(r.preview.w-pw)/2
                 local top=r.preview.y+(r.preview.h-ph)/2
-                local tile=8
-                for row=0,math.ceil(ph/tile)-1 do
-                    for col=0,math.ceil(pw/tile)-1 do
-                        local v=(row+col)%2==0 and .83 or .67
-                        love.graphics.setColor(v,v,v,1)
-                        love.graphics.rectangle('fill',
-                            left+col*tile,top+row*tile,
-                            math.min(tile,pw-col*tile),
-                            math.min(tile,ph-row*tile))
-                    end
-                end
-                love.graphics.setColor(1,1,1,1)
-                love.graphics.draw(preview,left,top)
+                lg.setColor(1,1,1,1)
+                lg.draw(preview,left,top)
             else
-                c('muted')
-                love.graphics.rectangle('line',x+83,y+52,46,46,3,3)
+                lg.setColor(.58,.61,.64,1)
+                lg.rectangle('line',r.preview.x+42,
+                    r.preview.y+39,56,52)
             end
         end
-        fitted(label,r.titleX,r.titleY,'body','text',176)
-        text(sub,r.metaX,r.metaY,'small','muted')
-        if hovered then
-            c('accent')
-            love.graphics.rectangle('fill',x,y+2,3,r.h-4,2,2)
+        IbisPanels.galleryCardChrome.drawCaption(
+            r,label,sub,A.fonts.small,A.fonts.micro,A.galleryTrash)
+        if selected then
+            lg.setColor(.14,.43,.80,1)
+            lg.circle('fill',r.x+r.w-13,r.y+14,9)
+            lg.setColor(1,1,1,1)
+            lg.setFont(A.fonts.micro)
+            lg.print('✓',r.x+r.w-17,r.y+8)
         end
-        A.buttons[#A.buttons+1]={x=x,y=y,w=r.w,h=r.h,fn=guard(fn)}
+        local hitTop=math.max(r.y,l.top)
+        local hitBottom=math.min(r.y+r.h,l.bottom)
+        A.buttons[#A.buttons+1]={x=r.x,y=hitTop,w=r.w,
+            h=hitBottom-hitTop,galleryKey=identifier,
+            fn=guard(function()
+                if A.gallerySelecting then
+                    A.gallerySelected=A.gallerySelected or {}
+                    A.gallerySelected[identifier]=not
+                        A.gallerySelected[identifier] or nil
+                else
+                    fn()
+                end
+            end)}
     end
-    for _,folder in ipairs(A.folders) do card(folder.name,'Pasta',true,function()setFolder(folder.id)end) end
-    for _,doc in ipairs(A.projects) do
-        card(doc.name,doc.width..' × '..doc.height..' · r'..(doc.revision or 1),
-            false,function()openDoc(A.store:openProject(doc.id))end,doc)
+    if A.galleryTrash then
+        for _,doc in ipairs(A.trashProjects or {}) do
+            card(doc.name,IbisPanels.trash.label(
+                doc.deleted_at,os.time()),false,function()
+                status('Use Selecionar para recuperar desenhos')
+            end,doc,'p:'..doc.id)
+        end
+    else
+        for _,entry in ipairs(A.galleryItems or {}) do
+            if GalleryUI.filter(A.galleryFilter,
+                entry.type=='folder' and 'folder' or 'work') then
+                if entry.type=='folder' then
+                    local folder=entry.value
+                    card(folder.name,'Pasta',true,
+                        function()setFolder(folder.id)end,
+                        nil,entry.key)
+                else
+                    local doc=entry.value
+                    card(doc.name,doc.width..'×'..doc.height,
+                        false,function()
+                            A.galleryDetailId=doc.id
+                            A.galleryDetailSwipe=nil
+                        end,doc,entry.key)
+                end
+            end
+        end
     end
-    if index==0 then
-        text('Uma galeria vazia, pronta para a primeira tela.',44,290,'title','muted')
-        text('Crie uma pasta ou uma tela. Tudo é salvo neste computador.',44,335,'body','muted')
+    if A.galleryGesture and A.galleryGesture.active then
+        local gesture=A.galleryGesture
+        local key=GalleryShell.dragTarget(w,h,A.galleryScroll,
+            A.galleryItems or {},gesture.px,gesture.py)
+        if key then
+            for i,item in ipairs(A.galleryItems or {}) do
+                if item.key==key then
+                    local r=GalleryShell.card(w,h,i,A.galleryScroll)
+                    local action=GalleryShell.dropAction(
+                        A.folder,nil,gesture.key,key,w,h,
+                        gesture.px,gesture.py,r)
+                    local grouping=action and action.kind=='group'
+                    local intoFolder=action and action.kind=='move'
+                    if grouping then
+                        lg.setColor(.63,.36,.86,.95)
+                    elseif intoFolder then
+                        lg.setColor(.12,.65,.38,.95)
+                    else
+                        lg.setColor(.20,.51,.92,.95)
+                    end
+                    lg.setLineWidth(4)
+                    lg.rectangle('line',r.x+2,r.y+2,
+                        r.w-4,r.h-4,5,5)
+                    if grouping or intoFolder then
+                        lg.setColor(grouping and .35 or .07,
+                            grouping and .17 or .34,
+                            grouping and .55 or .19,.96)
+                        lg.rectangle('fill',r.x+8,r.y+r.h-39,
+                            r.w-16,27,4,4)
+                        lg.setColor(1,1,1,1)
+                        lg.setFont(A.fonts.micro)
+                        lg.printf(grouping and 'Criar pasta'
+                            or 'Mover para pasta',r.x+10,
+                            r.y+r.h-32,r.w-20,'center')
+                    end
+                    break
+                end
+            end
+        end
+    end
+    lg.setScissor()
+    if A.galleryGesture and A.galleryGesture.active
+        and A.galleryGesture.key:sub(1,2)=='p:'
+        and A.folder~='' and
+        GalleryShell.parentDrop(w,h,
+            A.galleryGesture.px,A.galleryGesture.py) then
+        lg.setColor(.12,.65,.38,1)
+        lg.setLineWidth(3)
+        lg.rectangle('line',11,8,110,39,5,5)
+        lg.setColor(.12,.43,.28,1)
+        lg.rectangle('fill',125,8,232,39,5,5)
+        lg.setColor(1,1,1,1)
+        lg.setFont(A.fonts.small)
+        lg.printf('Mover à pasta superior',130,20,222,'center')
+    end
+    if total==0 then
+        lg.setColor(.45,.47,.49,1)
+        lg.setFont(A.fonts.body)
+        lg.printf(A.galleryTrash and 'Nenhuma obra excluída' or
+            A.galleryFilter=='folders' and 'Nenhuma pasta' or
+            A.galleryFilter=='works' and 'Nenhum desenho' or
+            'A Minha Galeria está vazia',
+            0,math.floor((l.top+l.bottom)/2)-24,w,'center')
+    end
+    -- Rodape dedicado ao modo de selecao; nao altera bytes RBD.
+    lg.setColor(.18,.19,.20,1)
+    lg.rectangle('fill',0,l.footerY,w,h-l.footerY)
+    if A.galleryTrash then
+        local keys=GalleryShell.selectionKeys(
+            {},A.trashProjects or {},'works')
+        local count=GalleryShell.selectionCount(
+            A.gallerySelected or {},keys)
+        lg.setColor(.84,.87,.91,1)
+        lg.setFont(A.fonts.small)
+        if A.gallerySelecting then
+            lg.print(('%d de %d selecionados'):format(count,#keys),
+                20,l.footerY+18)
+            for _,item in ipairs({
+                {id='all',label='Todos'},
+                {id='clear',label='Limpar'},
+                {id='recover',label='Recuperar'}}) do
+                local r=IbisPanels.trash.trashAction(w,h,item.id)
+                local enabled=item.id=='all' and count<#keys
+                    or item.id=='clear' and count>0
+                    or item.id=='recover' and count>0
+                lg.setColor(enabled and .24 or .23,
+                    enabled and .46 or .26,
+                    enabled and .72 or .29,1)
+                lg.rectangle('fill',r.x,r.y,r.w,r.h,4,4)
+                lg.setColor(enabled and .96 or .57,
+                    enabled and .97 or .61,
+                    enabled and .99 or .66,1)
+                lg.printf(item.label,r.x,r.y+9,r.w,'center')
+                if enabled then
+                    local command=item.id
+                    A.buttons[#A.buttons+1]={
+                        x=r.x,y=r.y,w=r.w,h=r.h,fn=function()
+                        if command=='all' then
+                            A.gallerySelected=GalleryShell.selectAll(keys)
+                        elseif command=='clear' then
+                            A.gallerySelected={}
+                        else
+                            local ids=GalleryShell.selectedProjectIds(
+                                A.gallerySelected,keys)
+                            if ids then A.galleryRestoreMenu={ids=ids} end
+                        end
+                    end}
+                end
+            end
+        else
+            lg.print('Selecione desenhos para recuperar',
+                20,l.footerY+18)
+            lg.printf('30 dias · limpeza automática pendente',
+                w-340,l.footerY+18,324,'right')
+        end
+    elseif A.gallerySelecting then
+        local keys=GalleryShell.selectionKeys(
+            A.folders,A.projects,A.galleryFilter)
+        local count=GalleryShell.selectionCount(
+            A.gallerySelected or {},keys)
+        lg.setColor(.89,.93,.97,1)
+        lg.setFont(A.fonts.small)
+        lg.print(('%d de %d selecionados'):format(count,#keys),
+            20,l.footerY+18)
+        for _,item in ipairs({
+            {id='all',label='Todos'},
+            {id='clear',label='Limpar'},
+            {id='move',label='Mover'},
+            {id='delete',label='Excluir'}}) do
+            local r=GalleryShell.selectionAction(w,h,item.id)
+            local enabled=GalleryShell.selectionAvailable(item.id)
+                and (item.id=='all' and count<#keys
+                    or item.id=='clear' and count>0
+                    or (item.id=='move' or item.id=='delete') and
+                        GalleryShell.selectedProjectIds(
+                            A.gallerySelected or {},keys)~=nil)
+            local pending=not GalleryShell.selectionAvailable(item.id)
+            lg.setColor(pending and .27 or enabled and .24 or .23,
+                pending and .29 or enabled and .46 or .26,
+                pending and .31 or enabled and .72 or .29,1)
+            lg.rectangle('fill',r.x,r.y,r.w,r.h,4,4)
+            lg.setColor(pending and .53 or enabled and .96 or .57,
+                pending and .55 or enabled and .97 or .61,
+                pending and .57 or enabled and .99 or .66,1)
+            lg.setFont(A.fonts.small)
+            lg.printf(item.label,r.x,r.y+9,r.w,'center')
+            if enabled then
+                local command=item.id
+                A.buttons[#A.buttons+1]={x=r.x,y=r.y,
+                    w=r.w,h=r.h,fn=function()
+                    if command=='all' then
+                        A.gallerySelected=GalleryShell.selectAll(keys)
+                    elseif command=='clear' then
+                        A.gallerySelected={}
+                    elseif command=='move' then
+                        local ids=GalleryShell.selectedProjectIds(
+                            A.gallerySelected,keys)
+                        if ids then
+                            A.galleryMoveMenu={ids=ids,page=1}
+                        end
+                    elseif command=='delete' then
+                        local ids=GalleryShell.selectedProjectIds(
+                            A.gallerySelected,keys)
+                        if ids then A.galleryDeleteMenu={ids=ids} end
+                    end
+                end}
+            end
+        end
+    else
+        -- Fluxo normal preservado: "+" abre nova tela/pasta.
+        lg.setColor(.36,.66,.95,1)
+        lg.setFont(A.fonts.title)
+        lg.print('+',20,l.footerY+7)
+        A.buttons[#A.buttons+1]={x=9,y=l.footerY,w=63,h=52,
+            fn=function()A.galleryCreateMenu=true end}
+        lg.setColor(.74,.77,.81,1)
+        lg.setFont(A.fonts.small)
+        lg.print(A.folder=='' and 'A Minha Galeria' or 'Pasta atual',
+            85,l.footerY+18)
+        if total>0 then
+            lg.printf(('Itens: %d'):format(total),
+                w-165,l.footerY+18,146,'right')
+        end
+    end
+    if A.galleryScroll>0 and
+        GalleryShell.maxScroll(w,h,total)>0 then
+        lg.setColor(.38,.57,.75,1)
+        lg.rectangle('fill',w-5,l.top+math.floor(
+            A.galleryScroll/GalleryShell.maxScroll(w,h,total)*
+            (l.bottom-l.top-42)),3,42,1,1)
+    end
+end
+local function drawGalleryCreateMenu(w,h)
+    local lg=love.graphics
+    if A.galleryMoreMenu then
+        local p=IbisPanels.trash.morePopup(w,h)
+        local r=IbisPanels.trash.moreItem(p)
+        lg.setColor(0,0,0,.25)
+        lg.rectangle('fill',0,0,w,h)
+        lg.setColor(.22,.24,.27,1)
+        lg.rectangle('fill',p.x,p.y,p.w,p.h,5,5)
+        button('Excluídos recentemente',r.x,r.y,r.w,r.h,
+            function()
+                A.galleryMoreMenu=false
+                A.galleryBeforeTrash=A.galleryFilter
+                A.galleryTrash=true;A.galleryFilter='works'
+                A.gallerySelecting=false;A.gallerySelected={}
+                A.galleryScroll=0;refreshGallery()
+            end)
+        return
+    end
+    if A.galleryDeleteMenu or A.galleryRestoreMenu then
+        local deleting=A.galleryDeleteMenu~=nil
+        local state=A.galleryDeleteMenu or A.galleryRestoreMenu
+        local p=GalleryShell.confirmPopup(w,h)
+        lg.setColor(0,0,0,.69)
+        lg.rectangle('fill',0,0,w,h)
+        lg.setColor(.96,.96,.96,1)
+        lg.rectangle('fill',p.x,p.y,p.w,p.h,8,8)
+        lg.setColor(.18,.21,.25,1)
+        lg.setFont(A.fonts.title)
+        lg.print(deleting and 'Excluir desenhos?' or
+            'Recuperar desenhos?',p.x+23,p.y+20)
+        lg.setFont(A.fonts.body)
+        lg.printf(deleting and
+            ('Enviar %d obra(s) para Excluídos recentemente?')
+                :format(#state.ids)
+            or ('Restaurar %d obra(s) às pastas originais?')
+                :format(#state.ids),
+            p.x+23,p.y+77,p.w-46,'left')
+        lg.setFont(A.fonts.small)
+        lg.setColor(.41,.44,.48,1)
+        lg.printf('Os arquivos RBD serão preservados. '..
+            'Limpeza automática após 30 dias: pendente.',
+            p.x+23,p.y+124,p.w-46,'left')
+        local cancel=GalleryShell.confirmCancel(p)
+        button('Cancelar',cancel.x,cancel.y,cancel.w,cancel.h,
+            function()
+                A.galleryDeleteMenu=nil
+                A.galleryRestoreMenu=nil
+            end)
+        local confirm=GalleryShell.confirmAction(p)
+        button(deleting and 'Excluir' or 'Recuperar',
+            confirm.x,confirm.y,confirm.w,confirm.h,
+            function()
+                if deleting then
+                    local report=A.store:deleteProjects(
+                        state.ids,A.folder)
+                    A.galleryDeleteMenu=nil
+                    A.gallerySelected={}
+                    A.gallerySelecting=false
+                    A.galleryScroll=0
+                    refreshGallery()
+                    status(('%d obra(s) excluída(s) recuperavelmente')
+                        :format(report.deleted))
+                else
+                    local report=A.store:restoreProjects(state.ids)
+                    A.galleryRestoreMenu=nil
+                    A.galleryScroll=0
+                    A.gallerySelecting=false;A.gallerySelected={}
+                    refreshGallery()
+                    status(('%d obra(s) recuperada(s)')
+                        :format(report.restored))
+                end
+            end,true)
+        return
+    end
+    if A.galleryMoveMenu then
+        local state=A.galleryMoveMenu
+        local p=GalleryShell.movePopup(w,h)
+        local choices=GalleryShell.folderChoices(
+            A.store.catalog.folders,A.folder)
+        local pages=GalleryShell.movePageCount(#choices)
+        state.page=math.min(state.page,pages)
+        lg.setColor(0,0,0,.55)
+        lg.rectangle('fill',0,0,w,h)
+        lg.setColor(.95,.95,.94,1)
+        lg.rectangle('fill',p.x,p.y,p.w,p.h,8,8)
+        lg.setColor(.19,.24,.30,1)
+        lg.setFont(A.fonts.title)
+        lg.print(('Mover %d desenho(s)'):format(#state.ids),
+            p.x+24,p.y+18)
+        lg.setFont(A.fonts.small)
+        lg.setColor(.4,.45,.49,1)
+        lg.print('Selecione a pasta de destino:',p.x+24,p.y+65)
+        if state.creating then
+            lg.setColor(.19,.24,.30,1)
+            lg.setFont(A.fonts.body)
+            lg.print('Nova pasta',p.x+24,p.y+101)
+            lg.setFont(A.fonts.small)
+            lg.setColor(.39,.44,.49,1)
+            lg.print('Criada dentro da pasta escolhida (ou da origem).',
+                p.x+24,p.y+125)
+            local nameRect=GalleryShell.moveFolderNameRect(p)
+            button('',nameRect.x,nameRect.y,nameRect.w,nameRect.h,
+                function()love.keyboard.setTextInput(true)end,true)
+            fitted(state.createName..'|',
+                nameRect.x+11,nameRect.y+12,'body','text',
+                nameRect.w-22)
+            lg.setColor(.42,.47,.51,1)
+            lg.setFont(A.fonts.small)
+            lg.printf('Informe um nome de 1 a 240 bytes.',
+                p.x+24,p.y+206,p.w-48,'left')
+            if state.createError then
+                lg.setColor(.82,.27,.23,1)
+                lg.printf(state.createError,
+                    p.x+24,p.y+249,p.w-48,'left')
+            end
+            local cancel=GalleryShell.moveCancelRect(p)
+            button('Voltar',cancel.x,cancel.y,
+                cancel.w,cancel.h,function()
+                    GalleryShell.cancelNewFolder(state)
+                    love.keyboard.setTextInput(false)
+                end)
+            local confirm=GalleryShell.moveConfirmRect(p)
+            button('Criar pasta',confirm.x,confirm.y,
+                confirm.w,confirm.h,function()
+                    local ok,id=GalleryShell.createDestination(
+                        A.store,state,A.folder)
+                    if ok then
+                        love.keyboard.setTextInput(false)
+                        refreshGallery()
+                        status('Pasta criada e selecionada para mover')
+                    else
+                        status('Não foi possível criar a pasta: '..
+                            tostring(id))
+                    end
+                end,true,state.createName=='')
+            return
+        end
+        local create=GalleryShell.moveNewFolderRect(p)
+        button('+ Nova pasta',create.x,create.y,
+            create.w,create.h,function()
+                GalleryShell.openNewFolder(state,A.folder)
+                love.keyboard.setTextInput(true)
+            end)
+        if #choices==0 then
+            lg.setColor(.63,.44,.20,1)
+            lg.printf('Nenhuma outra pasta disponível. Crie uma pasta na galeria.',
+                p.x+38,p.y+175,p.w-76,'center')
+        end
+        for i=1,6 do
+            local entry=choices[(state.page-1)*6+i]
+            if entry then
+                local slot=GalleryShell.moveRow(p,i)
+                local choice=entry
+                button(entry.label,slot.x,slot.y,slot.w,slot.h,
+                    function()state.target=choice.id end,
+                    state.target==entry.id)
+            end
+        end
+        if pages>1 then
+            local back=GalleryShell.moveNavRect(p,1)
+            local next=GalleryShell.moveNavRect(p,2)
+            button('‹',back.x,back.y,back.w,back.h,function()
+                state.page=GalleryShell.movePage(state.page,pages,-1)
+            end,false,state.page==1)
+            button('›',next.x,next.y,next.w,next.h,function()
+                state.page=GalleryShell.movePage(state.page,pages,1)
+            end,false,state.page==pages)
+            lg.setColor(.25,.28,.32,1)
+            lg.printf(('%d / %d'):format(state.page,pages),
+                p.x+150,p.y+p.h-83,p.w-300,'center')
+        end
+        local cancel=GalleryShell.moveCancelRect(p)
+        button('Cancelar',cancel.x,cancel.y,cancel.w,cancel.h,
+            function()
+                A.galleryMoveMenu=nil
+                love.keyboard.setTextInput(false)
+            end)
+        local confirm=GalleryShell.moveConfirmRect(p)
+        button('Mover',confirm.x,confirm.y,confirm.w,confirm.h,
+            function()
+                local report=A.store:moveProjects(
+                    state.ids,state.target,A.folder)
+                for _,id in ipairs(report.ids) do
+                    A.gallerySelected['p:'..id]=nil
+                end
+                A.galleryMoveMenu=nil
+                A.galleryScroll=0
+                refreshGallery()
+                if report.error then
+                    status(('Movidos %d/%d; erro ao gravar: %s'):format(
+                        report.moved,report.total,report.error))
+                else
+                    A.gallerySelecting=false
+                    A.gallerySelected={}
+                    status(('%d desenho(s) movido(s)'):format(
+                        report.moved))
+                end
+            end,true,state.target==nil)
+        return
+    end
+    lg.setColor(0,0,0,.36)
+    lg.rectangle('fill',0,0,w,h)
+    local p=GalleryShell.newMenu(w,h)
+    lg.setColor(.23,.25,.28,1)
+    lg.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+    for i,label in ipairs({'Nova tela','Nova pasta','Cancelar'}) do
+        local r=GalleryShell.newOption(p,i)
+        button(label,r.x,r.y,r.w,r.h,function()
+            A.galleryCreateMenu=false
+            if i==1 then modal('new')
+            elseif i==2 then modal('folder') end
+        end,i==1)
     end
 end
 -- A true renderer-produced single dab, composited over the canvas as
@@ -3993,18 +7627,208 @@ end
 local function drawCompactQuick(kind,w,h,value)
     local d=Compact.quick(w,h)[kind]
     local factor=Compact.quickFraction(kind,value)
-    local label=kind=='diameter' and 'Tamanho' or 'Opac.'
+    local label=kind=='diameter' and 'Espessura' or 'Opacidade'
     local valueLabel=kind=='diameter' and ('%d px'):format(value) or
         ('%.0f%%'):format(value*100)
     text(label,d.labelX,d.y-2,'small','muted')
     text(valueLabel,d.valueX,d.y-2,'small','text')
+    local g=love.graphics
+    local centerY=d.y+7
+    -- Trilha neutra e marcador branco, evitando a barra azul
+    -- exclusiva do rebuild. Opacidade explicita transparencia.
     c('line')
-    love.graphics.rectangle('fill',d.x,d.y+5,d.w,4,2,2)
-    c('accent')
-    love.graphics.rectangle('fill',d.x,d.y+5,
-        math.max(1,d.w*factor),4,2,2)
-    c('text')
-    love.graphics.circle('fill',d.x+d.w*factor,d.y+7,6,18)
+    g.rectangle('fill',d.x,d.y+4,d.w,7,4,4)
+    if kind=='opacity' then
+        for i=0,math.ceil(d.w/10)-1 do
+            local x=d.x+i*10
+            local width=math.min(10,d.x+d.w-x)
+            g.setColor(i%2==0 and .80 or .55,
+                i%2==0 and .81 or .57,
+                i%2==0 and .82 or .60,.82)
+            g.rectangle('fill',x,d.y+5,width,5)
+        end
+    else
+        g.setColor(.84,.86,.87,.88)
+        g.rectangle('fill',d.x,d.y+4,math.max(1,d.w*factor),7,4,4)
+    end
+    g.setColor(1,1,1,1)
+    g.circle('fill',d.x+d.w*factor,centerY,7,20)
+    -- Botões + e − desenhados no mesmo retângulo de hit-test.
+    for _,name in ipairs({'minus','plus'}) do
+        local rect=d[name]
+        local cx=rect.x+rect.w/2
+        local cy=rect.y+rect.h/2
+        g.setColor(.20,.22,.24,1)
+        g.circle('fill',cx,cy,12,28)
+        g.setColor(.96,.97,.99,1)
+        g.setLineWidth(1.7)
+        g.line(cx-4,cy,cx+4,cy)
+        if name=='plus' then g.line(cx,cy-4,cx,cy+4) end
+    end
+end
+local function activateIbisTool(tool)
+    if tool.id~='wand' then clearWandSelection() end
+    if tool.id=='vector' or tool.id=='frame' then
+        A.visualPendingTool=tool.id
+        A.vectorFrameUi=VectorFrameUI.new(tool.id)
+        A.compactPanel=tool.id
+        status(tool.label..' · interface disponivel, motor pendente')
+        return
+    end
+    if tool.id=='smudge' or tool.id=='blur'
+        or tool.id=='special' then
+        A.visualPendingTool=tool.id
+        A.effectUi=EffectUI.new(tool.id)
+        A.compactPanel=tool.id
+        status(tool.label..': interface visual, motor pendente')
+        return
+    end
+    if tool.id=='wand' or tool.id=='lasso' then
+        A.visualPendingTool=tool.id
+        A.selectionToolUi=SelectionToolUI.new(tool.id)
+        A.compactPanel=tool.id
+        status(tool.id=='wand' and
+            'Varinha: clique na tela para criar máscara RGBA'
+            or 'Laço: interface visual; motor pendente')
+        return
+    end
+    if tool.id=='transform' then
+        A.visualPendingTool='transform'
+        A.transformUi=TransformUI.new()
+        A.compactPanel='transform'
+        status('Transformar: interface independente, motor pendente')
+        return
+    end
+    if tool.id=='text' then
+        A.visualPendingTool='text'
+        A.textUi=TextUI.new()
+        A.compactPanel='text'
+        status('Texto: interface aberta, motor Lua pendente')
+        return
+    end
+    if tool.id=='filter' then
+        A.visualPendingTool='filter'
+        A.filterCategory=A.filterCategory or 'adjust'
+        A.filterPage=1
+        A.filterPendingId=nil
+        A.compactPanel='filters'
+        status('Filtros · interface disponível, motor pendente')
+        return
+    end
+    local ok,entry=IbisTools.select(tool.id,selectTool)
+    if ok then
+        A.visualPendingTool=nil
+        A.compactPanel=nil
+    else
+        A.visualPendingTool=entry.id
+        status(entry.label..' · motor Lua pendente')
+    end
+end
+local function drawEditorToolRail(w,h)
+    local count=#IbisTools.entries
+    local position=A.toolRailPosition or 'left'
+    -- A45: PC documentado com uma coluna. Garantir pagina valida
+    -- apos resize, sem trocar ferramentas ou editar o documento.
+    A.toolRailPage=EditorRail.clampPage(w,h,
+        A.toolRailPage or 1,count,position)
+    local rect=EditorRail.layout(w,h,A.toolRailPage,count,position)
+    -- Fundo consome somente a faixa efetivamente desenhada.
+    local panelH=rect.rows*rect.row+(rect.pages>1 and 31 or 8)
+    c('panel',.78)
+    love.graphics.rectangle('fill',rect.x-1,rect.y-4,
+        rect.w+2,panelH,6,6)
+    A.buttons[#A.buttons+1]={
+        x=rect.x-1,y=rect.y-4,w=rect.w+2,h=panelH,
+        fn=function()end}
+    for _,item in ipairs(EditorRail.entries(w,h,rect.page,
+        IbisTools.entries,position)) do
+        local tool=IbisTools.get(item.id)
+        local active=(not A.visualPendingTool and tool.backend~=nil
+            and tool.backend==A.tool)
+            or A.visualPendingTool==item.id
+        local mx,my=love.mouse.getPosition()
+        local hover=mx>=item.x and mx<item.x+item.w
+            and my>=item.y and my<item.y+item.h
+        -- Ferramenta ativa: glifo e legenda azuis, sem placa azul.
+        if hover and not active then
+            c('line',.72)
+            love.graphics.rectangle('fill',item.x+2,item.y+1,
+                item.w-4,item.h-2,3,3)
+        end
+        c(active and 'accent' or 'text')
+        Icons.draw(item.icon,item.x+item.w/2,item.y+12,18)
+        love.graphics.setFont(A.fonts.micro)
+        love.graphics.printf(item.shortLabel,item.x+1,
+            item.y+25,item.w-2,'center')
+        A.buttons[#A.buttons+1]={x=item.x,y=item.y,w=item.w,h=item.h,
+            fn=guard(function()activateIbisTool(tool)end)}
+    end
+    local page=EditorRail.navigation(w,h,rect.page,count,position)
+    if page then
+        box(page.x+1,page.y,page.w-2,page.h,'card')
+        fitted(('%d/%d'):format(rect.page,rect.pages),
+            page.x+math.floor((page.w-45)/2),page.y+8,
+            'small','text',45)
+        for _,item in ipairs({{x=page.x,delta=-1,enabled=page.back},
+            {x=page.x+page.w-30,delta=1,enabled=page.forward}}) do
+            if item.enabled then
+                c('text')
+                love.graphics.print(item.delta==-1 and '‹' or '›',
+                    item.x+7,page.y+2)
+                local delta=item.delta
+                A.buttons[#A.buttons+1]={x=item.x,y=page.y,w=30,h=page.h,
+                    fn=guard(function()
+                        A.toolRailPage=EditorRail.nextPage(w,h,
+                            A.toolRailPage,count,delta,position)
+                    end)}
+            end
+        end
+    end
+end
+-- Seis controles no canto superior direito, com a ordem e a
+-- separação de tarefas documentadas nos tutoriais do ibisPaint.
+-- Ações sem backend permanecem explícitas e nunca pintam no canvas.
+local function drawTopToolbar(w,h)
+    for _,slot in ipairs(TopToolbar.toolbar(w,h)) do
+        local active=(slot.id=='selection' and A.tool=='select')
+            or (slot.id=='shape' and A.tool=='shape')
+            or (slot.id=='view' and A.compactPanel=='view')
+            or (slot.id=='stabilizer' and A.compactPanel=='stabilizer')
+            or (slot.id=='ruler' and A.compactPanel=='ruler')
+            or (slot.id=='materials' and A.compactPanel=='materials')
+        local mx,my=love.mouse.getPosition()
+        local hovered=mx>=slot.x and mx<=slot.x+slot.w
+            and my>=slot.y and my<=slot.y+slot.h
+        c(active and 'selected' or hovered and 'line' or 'panel',.84)
+        love.graphics.rectangle('fill',slot.x,slot.y,
+            slot.w,slot.h,slot.h/2,slot.h/2)
+        c(active and 'accent' or 'line')
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle('line',slot.x+.5,slot.y+.5,
+            slot.w-1,slot.h-1,slot.h/2,slot.h/2)
+        c(active and 'accent' or 'text')
+        Icons.draw(slot.icon,slot.x+slot.w/2,
+            slot.y+slot.h/2,19)
+        A.buttons[#A.buttons+1]={
+            x=slot.x,y=slot.y,w=slot.w,h=slot.h,
+            fn=guard(function()
+                if slot.id=='selection' or slot.id=='shape' then
+                    local target=slot.id=='selection' and 'select' or 'shape'
+                    if selectTool(target) then
+                        A.compactPanel='properties'
+                    end
+                else
+                    toggleCompactPanel(slot.id)
+                end
+            end)}
+        if hovered and not A.compactPanel then
+            local labelX=math.max(10,
+                math.min(w-144,slot.x-45))
+            box(labelX,slot.y+slot.h+5,132,24,'panel')
+            fitted(slot.label,labelX+8,slot.y+slot.h+10,
+                'small','text',118)
+        end
+    end
 end
 local function drawEditor(w,h)
     local panel=w-268
@@ -4018,29 +7842,22 @@ local function drawEditor(w,h)
         button(A.focusMode and 'Mostrar painel' or 'Modo foco · Tab',
             w-357,15,134,33,toggleFocusMode,A.focusMode)
     else
-        if A.focusMode then
-            button('Mostrar barra · Tab',20,78,176,34,toggleFocusMode)
-        else
-            iconButton('undo',20,78,43,34,undoDoc,false,
-                not A.layerSession:canUndo())
-            iconButton('redo',67,78,43,34,redoDoc,false,
-                not A.layerSession:canRedo())
-            button('−',118,78,43,34,function()zoomCanvas(1/1.25)end)
-            button('+',165,78,43,34,function()zoomCanvas(1.25)end)
-            button('Encaixar',217,78,90,34,fit)
-            text('Desenho · '..A.doc.width..' × '..A.doc.height,
-                326,87,'small','muted')
-        end
+        -- Controles compactos são desenhados depois do canvas, para não
+        -- serem encobertos pelo fundo cinza nem terem hitboxes invisíveis.
     end
-    button(A.compactUi and 'Layout desktop' or 'Layout compacto',
-        w-645,15,134,33,toggleCompactUi,A.compactUi)
-    button(A.previewEnabled and 'Prévia: ligada' or 'Prévia: desligada',
-        w-501,15,134,33,function()
-            A.previewEnabled=not A.previewEnabled
-        end,A.previewEnabled)
+    if not A.compactUi then
+        button('Layout compacto',w-645,15,134,33,toggleCompactUi)
+        button(A.previewEnabled and 'Prévia: ligada' or 'Prévia: desligada',
+            w-501,15,134,33,function()
+                A.previewEnabled=not A.previewEnabled
+            end,A.previewEnabled)
+    end
     local cx,cy=canvasTransform()
-    box(12,120,w-Workspace.panelWidth(paneHidden())-20,
-        h-(A.compactUi and not A.focusMode and 310 or 178),'canvas')
+    if A.compactUi and not A.focusMode then
+        box(0,0,w,h-130,'canvas')
+    else
+        box(12,120,w-Workspace.panelWidth(paneHidden())-20,h-178,'canvas')
+    end
     love.graphics.setScissor(Workspace.scissor(w,h,paneHidden(),A.compactUi and not A.focusMode))
     love.graphics.push();love.graphics.translate(cx,cy);love.graphics.rotate(A.rotation);love.graphics.scale(A.zoom)
     local dw,dh=A.doc.width,A.doc.height
@@ -4051,6 +7868,10 @@ local function drawEditor(w,h)
         love.graphics.rectangle('fill',x-dw/2,y-dh/2,math.min(checker,dw-x),math.min(checker,dh-y))
     end end
     love.graphics.setColor(1,1,1);love.graphics.draw(A.image,-dw/2,-dh/2)
+    if A.wandOverlay then
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.draw(A.wandOverlay,-dw/2,-dh/2)
+    end
     if A.shapePreview then
         local p=A.shapePreview
         local left=math.min(p.x0,p.x1)-dw/2
@@ -4086,6 +7907,42 @@ local function drawEditor(w,h)
     love.graphics.pop()
     drawBrushTip(w,h)
     love.graphics.setScissor()
+    if A.compactUi then
+        if A.focusMode then
+            button('Mostrar interface · Tab',18,8,196,36,toggleFocusMode)
+        else
+            -- A38: deixar a superfície principal sem botões de PC.
+            -- F10 expõe os comandos existentes sem interceptar pintura
+            -- com hitboxes invisíveis quando o painel estiver fechado.
+            if A.windowsHudApi.visible(A.screen,A.compactUi,
+                A.focusMode,A.windowsHud,A.compactPanel) then
+                local r=A.windowsHudApi.rects(w,h)
+                box(r.background.x,r.background.y,
+                    r.background.w,r.background.h,'panel')
+                button('Salvar',r.save.x,r.save.y,
+                    r.save.w,r.save.h,saveDoc,A.dirty)
+                button('Desktop',r.desktop.x,r.desktop.y,
+                    r.desktop.w,r.desktop.h,toggleCompactUi)
+                button('Ajustes',r.properties.x,r.properties.y,
+                    r.properties.w,r.properties.h,function()
+                        toggleCompactPanel('properties')
+                    end)
+                button('−',r.zoomOut.x,r.zoomOut.y,
+                    r.zoomOut.w,r.zoomOut.h,function()
+                        zoomCanvas(1/1.25)
+                    end,false,A.zoom<=View.MIN_ZOOM)
+                button('+',r.zoomIn.x,r.zoomIn.y,
+                    r.zoomIn.w,r.zoomIn.h,function()
+                        zoomCanvas(1.25)
+                    end,false,A.zoom>=View.MAX_ZOOM)
+                button('Ajustar',r.fit.x,r.fit.y,
+                    r.fit.w,r.fit.h,fit)
+                text(('%d%%'):format(math.floor(A.zoom*100+.5)),
+                    r.zoomLabel.x,r.zoomLabel.y,'small','muted')
+            end
+            drawTopToolbar(w,h)
+        end
+    end
     -- View-only controls remain outside the raster and layer history.
     local dockY=h-116
     if not A.compactUi then
@@ -4154,7 +8011,7 @@ local function drawEditor(w,h)
         text('Pixels transparentes também podem',panel+20,615,'small','muted')
         text('ser capturados sem alterar o desenho.',panel+20,639,'small','muted')
     elseif A.tool=='shape' then
-        text('FORMAS · RASTER C++',panel+20,377,'small','muted')
+        text('FORMAS · RASTER Lua',panel+20,377,'small','muted')
         button('Retângulo',panel+20,410,108,32,
             function()A.shapeKind=0 end,A.shapeKind==0)
         button('Elipse',panel+140,410,108,32,
@@ -4562,67 +8419,228 @@ local function drawEditor(w,h)
         text('Clique para capturar a cor da tela ou da camada ativa',22,h-94,'small','accent')
     end
     if A.compactUi and not A.focusMode then
-        box(10,h-184,w-20,126,'panel')
-        c('accent')
-        love.graphics.rectangle('fill',10,h-184,3,126)
+        -- Os sliders acompanham o fundo cinza da area de desenho.
+        box(0,h-130,w,70,'canvas')
+        box(0,h-60,w,60,'panel')
         c('line')
-        love.graphics.rectangle('fill',13,h-184,w-23,1)
-        text('FERRAMENTA',28,h-162,'small','muted')
-        fitted(EditorTools.fromId(A.tool).label,28,h-144,'body',
-            'text',210)
-        if A.tool=='brush' or A.tool=='erase' then
+        love.graphics.rectangle('fill',0,h-61,w,1)
+        -- Barra de regulagens menos intrusiva, proxima do original.
+        local activeName=A.visualPendingTool and
+            (A.visualPendingTool=='wand' and 'Varinha Mágica'
+            or A.visualPendingTool=='lasso' and 'Laço'
+            or 'Ferramenta pendente')
+            or EditorTools.fromId(A.tool).label
+        fitted(activeName,22,h-113,'small','muted',170)
+        if not A.visualPendingTool and
+            (A.tool=='brush' or A.tool=='erase') then
             drawCompactQuick('diameter',w,h,A.brushDiameter)
             drawCompactQuick('opacity',w,h,A.brushOpacity)
+        elseif A.visualPendingTool=='wand' then
+            text('Clique no desenho para selecionar por cor',
+                (w-450)/2,h-110,'small','text')
+            text('A máscara ainda não restringe a pintura',
+                (w-450)/2,h-84,'small','muted')
+        elseif A.visualPendingTool then
+            text('Ferramenta sem motor de edição',
+                (w-360)/2,h-106,'small','muted')
         else
             text(('Zoom %.0f%% · %s'):format(A.zoom*100,
                 EditorTools.fromId(A.tool).label),
-                (w-350)/2,h-161,'small','muted')
+                (w-350)/2,h-113,'small','muted')
         end
-        c('line')
-        love.graphics.rectangle('fill',w/2-310,h-126,620,1)
+        -- A41: o rodapé já possui uma divisória contínua de tela
+        -- inteira; remover o filete de 704 px que criava um bloco
+        -- central não documentado na barra principal.
         for _,slot in ipairs(Compact.toolbar(w,h)) do
-            local active=(slot.id=='brush' and
-                (A.tool=='brush' or A.tool=='erase')) or
+            local active=(slot.id=='brush' and not A.visualPendingTool
+                and (A.tool=='brush' or A.tool=='erase')) or
                 (slot.id=='tools' and A.compactPanel=='tools') or
                 (slot.id=='layers' and A.compactPanel=='layers') or
                 (slot.id=='properties' and A.compactPanel=='properties')
-            local label=slot.id=='brush' and
-                (A.tool=='erase' and 'Borracha' or 'Pincel') or
-                (slot.id=='tools' and 'Ferram.' or
-                slot.id=='fullscreen' and 'Tela' or slot.label)
-            button('',slot.x,slot.y,slot.w,slot.h,function()
-                if slot.id=='brush' then
-                    selectTool(A.tool=='brush' and 'erase' or 'brush')
-                elseif slot.id=='tools' or slot.id=='layers' or
-                    slot.id=='properties' then
-                    toggleCompactPanel(slot.id)
-                elseif slot.id=='color' then openCompactColor()
-                elseif slot.id=='fullscreen' then toggleFocusMode()
-                elseif slot.id=='back' then toGallery() end
-            end,active)
-            c(active and 'accent' or 'text')
-            Icons.draw(slot.id=='brush' and
-                (A.tool=='erase' and 'erase' or 'brush') or slot.id,
-                slot.x+slot.w/2,slot.y+17,21)
-            c('text')
-            love.graphics.setFont(A.fonts.small)
-            love.graphics.printf(label,slot.x,slot.y+32,
-                slot.w,'center')
+            local disabled=(slot.id=='undo' and
+                not A.layerSession:canUndo()) or
+                (slot.id=='redo' and not A.layerSession:canRedo())
+            local mx,my=love.mouse.getPosition()
+            local over=mx>=slot.x and mx<slot.x+slot.w
+                and my>=slot.y and my<slot.y+slot.h
+            -- Realce compacto em torno do glifo. O retângulo de
+            -- toque completo continua inalterado na coleção de botões.
+            local frame=Compact.iconFrame(slot)
+            if over and not disabled then
+                c('line',.52)
+                love.graphics.rectangle('fill',frame.x,frame.y,
+                    frame.w,frame.h,5,5)
+            end
             if active then
-                c('accent')
-                love.graphics.rectangle('fill',slot.x+12,
-                    slot.y+slot.h-2,slot.w-24,2,1,1)
+                c('selected',.35)
+                love.graphics.rectangle('fill',frame.x,frame.y,
+                    frame.w,frame.h,5,5)
+                c('accent',.93)
+                love.graphics.setLineWidth(1.5)
+                love.graphics.rectangle('line',frame.x+.75,
+                    frame.y+.75,frame.w-1.5,frame.h-1.5,5,5)
             end
             if slot.id=='color' then
+                -- A50: disco RGB vivo como na barra inferior Windows,
+                -- sem paleta abstrata nem dois quadrados adicionais.
                 local r,g,b=Colors.channels(A.color)
-                love.graphics.setColor(r/255,g/255,b/255,1)
-                love.graphics.rectangle('fill',
-                    slot.x+slot.w-16,slot.y+4,9,9,2,2)
+                Icons.drawColorSwatch(slot.x+slot.w/2,
+                    slot.y+slot.h/2,21,r/255,g/255,b/255)
+            else
+                c(disabled and 'muted' or 'text')
+                if slot.id=='tools' then
+                    -- A52: delegar o glifo ativo ao modulo Icons
+                    -- para respeitar o limite de 60 upvalues LuaJIT.
+                    Icons.drawToolSelector(A.tool,A.visualPendingTool,
+                        slot.x+slot.w/2,slot.y+slot.h/2,21)
+                elseif slot.id=='properties' and
+                    not A.visualPendingTool and
+                    (A.tool=='brush' or A.tool=='erase') then
+                    -- A53: diâmetro atual no lugar dos sliders abstratos.
+                    -- Reutiliza a mesma fonte, ID e area clicavel.
+                    Icons.drawBrushSizeBadge(slot.x+slot.w/2,
+                        slot.y+slot.h/2,21,A.brushDiameter,A.fonts.micro)
+                else
+                    Icons.draw(slot.id=='brush' and
+                        (A.tool=='erase' and 'erase' or 'brush') or slot.id,
+                        slot.x+slot.w/2,slot.y+slot.h/2,21)
+                end
             end
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
+                    w=slot.w,h=slot.h,fn=guard(function()
+                    if slot.id=='brush' then
+                        selectTool(A.tool=='brush' and 'erase' or 'brush')
+                    elseif slot.id=='tools' or slot.id=='layers' or
+                        slot.id=='properties' then
+                        toggleCompactPanel(slot.id)
+                    elseif slot.id=='color' then openCompactColor()
+                    elseif slot.id=='fullscreen' then toggleFocusMode()
+                    elseif slot.id=='undo' then undoDoc()
+                    elseif slot.id=='redo' then redoDoc()
+                    elseif slot.id=='back' then
+                        -- Inline para nao exceder o limite de 60
+                        -- upvalues do drawEditor no LuaJIT 2.1.
+                        finishStroke()
+                        A.shapePreview=nil;A.quickDrag=nil
+                        A.panning=false;A.panButton=nil
+                        A.colorDrag=nil;A.compactPanel=nil
+                        A.backMenu=true;A.settingsOpen=false
+                    end
+                end)}
+            end
+
         end
     end
 end
+local function drawNewCanvasDialog(w,h)
+    local r=IbisPanels.canvasReference.layout(w,h)
+    local m=A.modal
+    IbisPanels.canvasReferenceDraw.panel(r,A.fonts.body,A.fonts.small)
+    local close=IbisPanels.canvasReference.close(r)
+    A.buttons[#A.buttons+1]={
+        x=close.x,y=close.y,w=close.w,h=close.h,
+        fn=function()
+            A.canvasDimensionDrag=nil
+            A.modal=nil
+            love.keyboard.setTextInput(false)
+        end}
+    -- W/H diretamente no inicio da lista, como na referencia.
+    for _,axis in ipairs({2,3}) do
+        local field=IbisPanels.canvasReference.field(r,axis)
+        box(field.x,field.y,field.w,field.h,'card')
+        if m.focus==axis then
+            c('accent')
+            love.graphics.rectangle('line',
+                field.x+.5,field.y+.5,field.w-1,field.h-1)
+        end
+        fitted(m.values[axis]..(m.focus==axis and '|' or ''),
+            field.x+9,field.y+5,'body','text',field.w-13)
+        A.buttons[#A.buttons+1]={
+            x=field.x,y=field.y,w=field.w,h=field.h,
+            fn=function()m.focus=axis end}
+        for _,direction in ipairs({-1,1}) do
+            local bt=IbisPanels.canvasReference.stepper(r,axis,direction)
+            local nextValue=GalleryUI.stepDimension(
+                m.values[axis],direction)
+            local mx,my=love.mouse.getPosition()
+            IbisPanels.canvasDimensionControls.draw(bt,direction,
+                nextValue~=nil,mx>=bt.x and mx<bt.x+bt.w
+                    and my>=bt.y and my<bt.y+bt.h)
+            if nextValue then
+                A.buttons[#A.buttons+1]={
+                    x=bt.x,y=bt.y,w=bt.w,h=bt.h,
+                    fn=function()
+                        local value=GalleryUI.stepDimension(
+                            m.values[axis],direction)
+                        if value then m.values[axis]=value end
+                        m.focus=axis
+                    end}
+            end
+        end
+        local track=IbisPanels.canvasReference.slider(r,axis)
+        local mx,my=love.mouse.getPosition()
+        IbisPanels.canvasDimensionSlider.draw(track,m.values[axis],
+            GalleryUI.sliderHit(track,mx,my),
+            A.canvasDimensionDrag==axis,GalleryUI)
+    end
+    -- Lista propria do screenshot, com rolagem e recorte reais.
+    local viewport=IbisPanels.canvasReference.listViewport(r)
+    love.graphics.push('all')
+    love.graphics.setScissor(viewport.x,viewport.y,viewport.w,viewport.h)
+    for _,row in ipairs(IbisPanels.canvasReference.rows(
+        r,m.canvasListScroll or 0)) do
+        if row.y<viewport.y+viewport.h and
+            row.y+row.h>viewport.y then
+            if row.item.kind=='heading' then
+                IbisPanels.canvasReferenceDraw.heading(
+                    row,A.fonts.small)
+            elseif IbisPanels.canvasReference.allowed(row.item) then
+                local selected=m.values[2]==tostring(row.item.w)
+                    and m.values[3]==tostring(row.item.h)
+                local mx,my=love.mouse.getPosition()
+                IbisPanels.canvasPresetRows.draw(
+                    {x=row.x,y=row.y,w=row.w,h=row.h-2},
+                    row.item,selected,
+                    row.visible and mx>=row.x and mx<row.x+row.w
+                        and my>=row.y and my<row.y+row.h,
+                    A.fonts.body,A.fonts.small)
+                if row.visible then
+                    local id=row.item.id
+                    A.buttons[#A.buttons+1]={
+                        x=row.x,y=row.y,w=row.w,h=row.h-2,
+                        fn=function()IbisPanels.canvasReference.choose(m,id) end}
+                end
+            else
+                IbisPanels.canvasReferenceDraw.disabled(
+                    row,A.fonts.small)
+            end
+        end
+    end
+    love.graphics.pop()
+    IbisPanels.canvasReferenceDraw.footer(r,A.fonts.small)
+    -- Nome permanece editavel como adaptacao ao armazenamento RBD2.
+    local field=IbisPanels.canvasReference.field(r,1)
+    box(field.x,field.y,field.w,field.h,'card')
+    fitted(m.values[1]..(m.focus==1 and '|' or ''),
+        field.x+9,field.y+5,'body','text',field.w-15)
+    A.buttons[#A.buttons+1]={x=field.x,y=field.y,
+        w=field.w,h=field.h,fn=function()m.focus=1 end}
+    button('Cancelar',r.x+10,r.y+r.h-39,165,32,function()
+        A.canvasDimensionDrag=nil
+        A.modal=nil
+        love.keyboard.setTextInput(false)
+    end)
+    button('Criar tela',r.x+181,r.y+r.h-39,r.w-191,32,
+        submitModal,true,not GalleryUI.aspectViewport(
+            GalleryUI.dialog(w,h),m.values[2],m.values[3]))
+end
 local function drawModal(w,h)
+    if A.modal.kind=='new' then
+        love.graphics.setColor(0,0,0,.70)
+        love.graphics.rectangle('fill',0,0,w,h)
+        return drawNewCanvasDialog(w,h)
+    end
     love.graphics.setColor(0,0,0,.70);love.graphics.rectangle('fill',0,0,w,h)
     local x,y=w/2-220,h/2-210;box(x,y,440,420,'panel')
     local m=A.modal;local title=m.kind=='new' and 'Criar tela' or m.kind=='folder' and 'Criar pasta' or
@@ -4679,6 +8697,8 @@ local function drawToolHelp(w,h)
         x+22,y+423,'small','muted')
     text('F1 ou H: abrir/fechar · Esc: fechar · Nenhum pixel é alterado.',
         x+22,y+447,'small','muted')
+    text('F10 · comandos auxiliares Windows: salvar, desktop, zoom',
+        x+22,y+470,'small','muted')
     button('Fechar ajuda',x+width-174,y+height-49,150,33,
         function()A.toolHelp=false end)
 end
@@ -4701,7 +8721,7 @@ local function drawContextMenu()
     end
 end
 -- Each card owns one lazily-created GPU image whose RGBA pixels were
--- produced by the real C++ renderer, not a LÖVE approximation.
+-- produced by the real Lua renderer, not a LÖVE approximation.
 local function brushSampleImage(slot,preset)
     local settingsKey=Samples.key(preset,A.color)
     A.brushSampleCache=A.brushSampleCache or {}
@@ -4720,7 +8740,7 @@ local function brushSampleImage(slot,preset)
 end
 -- Modal brush catalogue. Every preview uses native renderer parameters
 -- only as a schematic sample, never claims a pixel-perfect Android stroke.
--- The larger live inspector uses the existing C++ preview renderer.
+-- The larger live inspector uses the existing Lua preview renderer.
 -- It is a scratch image, never a document stroke.
 local function drawBrushLab(rect)
     local p=Lab.layout(rect)
@@ -4750,15 +8770,20 @@ local function drawBrushLab(rect)
     local image=brushSampleImage('inspector',draft)
     local fit=Lab.fit(image.sample.width,image.sample.height,
         halves.draft)
-    text('EM USO',halves.current.x,halves.current.labelY,'small','muted')
     local changes=Lab.differences(brushLabSource(),draft)
-    text(('PRÉVIA · %d alt.'):format(changes),
-        halves.draft.x,halves.draft.labelY,'small',
-        changes>0 and 'accent' or 'muted')
     love.graphics.setColor(1,1,1,1)
     love.graphics.draw(applied.image,currentFit.x,currentFit.y,
         0,currentFit.sx,currentFit.sy)
     love.graphics.draw(image.image,fit.x,fit.y,0,fit.sx,fit.sy)
+    -- Legendas devem ficar visíveis mesmo sobre uma amostra de tinta.
+    box(halves.current.x,halves.current.labelY-2,
+        halves.current.w,18,'card')
+    box(halves.draft.x,halves.draft.labelY-2,
+        halves.draft.w,18,'card')
+    text('EM USO',halves.current.x+4,halves.current.labelY,'small','text')
+    text(('PRÉVIA · %d alterações'):format(changes),
+        halves.draft.x+4,halves.draft.labelY,'small',
+        changes>0 and 'accent' or 'text')
     local names={diameter='Tamanho',opacity='Opacidade',
         stabilization='Estabil.'}
     for _,kind in ipairs({'diameter','opacity','stabilization'}) do
@@ -4788,18 +8813,18 @@ local function drawBrushLab(rect)
     button('Repor',reset.x,reset.y,reset.w,reset.h,
         resetBrushLab,false,changes==0)
     button(changes>0 and 'Aplicar *' or 'Aplicar',
-        p.x+61,p.y+p.h-36,p.w-69,31,applyBrushLab)
+        p.x+80,p.y+p.h-36,p.w-88,31,applyBrushLab)
 end
 local function drawBrushLibrary(w,h)
     local rect=Presets.layout(w,h)
-    love.graphics.setColor(0,0,0,.78)
+    love.graphics.setColor(0,0,0,.67)
     love.graphics.rectangle('fill',0,0,w,h)
     box(rect.x,rect.y,rect.w,rect.h,'panel')
-    c('accent')
-    love.graphics.rectangle('fill',rect.x,rect.y,4,rect.h)
-    text('Biblioteca de pincéis',rect.x+20,rect.y+12,'title')
-    text('Pincéis raster locais · básicos e pessoais',
-        rect.x+20,rect.y+52,'small','muted')
+    c('line')
+    love.graphics.rectangle('fill',rect.x+703,rect.y+79,1,371)
+    text('Pincéis',rect.x+20,rect.y+12,'title')
+    text('Básicos e personalizados · visualização de traços',
+        rect.x+20,rect.y+53,'small','muted')
     local saved=Presets.custom(A.brushes)
     local filled=0
     for i=1,Presets.LIMIT do
@@ -4811,67 +8836,50 @@ local function drawBrushLibrary(w,h)
         switchBrushCategory('builtin') end,A.brushFilter=='builtin')
     button('Meus ('..filled..')',rect.x+567,rect.y+47,110,30,function()
         switchBrushCategory('personal') end,A.brushFilter=='personal')
-    local half=(Lab.CATALOGUE_WIDTH-56)/2
-    for i=1,8 do
-        local column,line=Presets.cardPosition(A.brushFilter,i)
-        -- Invisible slots have no geometry or UI actions in this category.
-        local x=column and rect.x+20+column*(half+16) or nil
-        local y=line and rect.y+80+line*88 or nil
+    local rows=IbisPanels.brushRows(A.brushFilter,saved)
+    for row,item in ipairs(rows) do
+        local i=item.index
+        local r=IbisPanels.brushRow(rect,row)
         local preset=i<=4 and Presets.BUILTINS[i] or saved[i-4]
-        if Presets.visible(A.brushFilter,i) and preset then
+        if preset then
             local selected=Presets.matches(preset,A)
-            button('',x,y,half,80,function()
+            button('',r.x,r.y,r.w,r.h,function()
                 applyBrushPreset(preset)
             end,selected)
-            text(preset.name,x+12,y+5,'body')
-            text(('%d px  ·  %s  ·  %.0f%%  ·  Est. %d'):format(
-                preset.diameter,preset.style=='hard' and 'rígido' or 'suave',
-                preset.opacity*100,preset.stabilization),
-                x+12,y+28,'small','muted')
-            local place=Samples.cardRect(x,y,half)
-            -- Checkerboard makes partial transparency legible.
-            for row=0,1 do for col=0,11 do
-                local bright=(row+col)%2==0
-                local t=bright and .79 or .58
-                love.graphics.setColor(t,t,t,1)
-                love.graphics.rectangle('fill',
-                    place.x+col*place.w/12,place.y+row*place.h/2,
-                    place.w/12+.25,place.h/2+.25)
-            end end
+            if selected then
+                c('accent')
+                love.graphics.rectangle('fill',r.x,r.y,3,r.h,1,1)
+            end
+            fitted(preset.name,r.x+11,r.y+12,'small',
+                selected and 'accent' or 'text',153)
+            local preview=IbisPanels.brushPreview(rect,row)
+            box(preview.x,preview.y,preview.w,preview.h,'canvas')
             local image=brushSampleImage(i,preset)
             love.graphics.setColor(1,1,1,1)
-            love.graphics.draw(image.image,place.x,place.y,0,
-                place.w/image.sample.width,
-                place.h/image.sample.height)
-            -- Separate preview-only action. Clicking the card elsewhere
-            -- still applies immediately, preserving the classic workflow.
-            local previewAction=BrushCard.previewButton(x,y,half)
-            button('Prévia',previewAction.x,previewAction.y,
-                previewAction.w,previewAction.h,function()
-                    A.brushFocus=i
-                    brushLabFromFocus()
-                    status('Prévia: '..preset.name..
-                        ' · Ajuste parâmetros e clique Aplicar ajustes')
-                end,A.brushFocus==i)
-            if A.brushFocus==i then
-                c('accent');love.graphics.setLineWidth(2)
-                love.graphics.rectangle('line',
-                    x+2,y+2,half-4,76,4,4)
-                love.graphics.setLineWidth(1)
-            end
-        elseif Presets.visible(A.brushFilter,i) then
-            box(x,y,half,80,'card')
-            text('Espaço pessoal '..(i-4),x+12,y+16,'body','muted')
-            text('Salve o pincel atual abaixo',x+12,y+42,'small','muted')
+            love.graphics.draw(image.image,preview.x,preview.y,0,
+                preview.w/image.sample.width,
+                preview.h/image.sample.height)
+            text(('%d px · %.0f%%'):format(
+                preset.diameter,preset.opacity*100),
+                r.x+391,r.y+12,'small','muted')
+            local focus=IbisPanels.brushPreviewAction(rect,row)
+            button('Editar',focus.x,focus.y,focus.w,focus.h,function()
+                A.brushFocus=i
+                brushLabFromFocus()
+                status('Prévia: '..preset.name..' · Aplicar ajustes')
+            end,A.brushFocus==i)
+        else
+            box(r.x,r.y,r.w,r.h,'card')
+            text('Pincel pessoal '..(i-4)..' · vazio',
+                r.x+13,r.y+12,'small','muted')
         end
     end
-    text('Prévia para examinar · Clique no cartão para aplicar',
-        rect.x+20,rect.y+434,'small','muted')
+    text('Toque no traço para usar · Editar para visualizar',
+        rect.x+20,rect.y+436,'small','muted')
     drawBrushLab(rect)
-    text(('AJUSTES SALVOS  %d / %d · Amostras C++'):format(
-        filled,Presets.LIMIT),
-        rect.x+20,rect.y+452,'small','muted')
-    button('Salvar pincel atual',rect.x+20,rect.y+480,210,37,
+    text(('PINCEIS PESSOAIS  %d / %d'):format(filled,Presets.LIMIT),
+        rect.x+20,rect.y+456,'small','muted')
+    button('Guardar pincel atual',rect.x+20,rect.y+480,210,37,
         saveCustomBrush,false,filled>=Presets.LIMIT)
     button('Excluir pessoal',rect.x+240,rect.y+480,170,37,
         deleteCustomBrush,false,not A.selectedBrushCustom or
@@ -4896,6 +8904,72 @@ local function drawColorTile(color,x,y,w,h)
     c('line')
     love.graphics.rectangle('line',x,y,w,h,2,2)
 end
+-- Losango HSB independente do canvas: textura GPU regenerada somente
+-- quando a matiz arredondada muda. Nenhum pixel da obra é modificado.
+local function drawColorDiamond(p,hue)
+    local tone=math.floor(hue+.5)%360
+    local rect=ColorPanel.svRect(p)
+    local cache=A.colorDiamondCache
+    if not cache or cache.hue~=tone then
+        if cache and cache.image then cache.image:release() end
+        local pixels=love.image.newImageData(rect.w+1,rect.h+1)
+        for yy=0,rect.h do
+            for xx=0,rect.w do
+                local px,py=rect.x+xx,rect.y+yy
+                if ColorPanel.svHit(p,px,py) then
+                    local sat,bright=ColorPanel.svAt(p,px,py)
+                    local rgba=ColorPanel.fromHSB(tone,sat,bright,255)
+                    local r,g,b=Colors.channels(rgba)
+                    pixels:setPixel(xx,yy,r/255,g/255,b/255,1)
+                else
+                    pixels:setPixel(xx,yy,0,0,0,0)
+                end
+            end
+        end
+        local image=love.graphics.newImage(pixels)
+        pixels:release()
+        image:setFilter('linear','linear')
+        cache={hue=tone,image=image}
+        A.colorDiamondCache=cache
+    end
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.draw(cache.image,rect.x,rect.y)
+    local cx,cy=rect.x+rect.w/2,rect.y+rect.h/2
+    local r=rect.w/2
+    love.graphics.setColor(.12,.12,.13,.85)
+    love.graphics.setLineWidth(1.5)
+    love.graphics.polygon('line',cx,cy-r,cx+r,cy,
+        cx,cy+r,cx-r,cy)
+end
+local function drawHSBMiniSliders(p,hue,sat,bright)
+    for _,spec in ipairs({
+        {key='H',value=hue,max=360,title='H'},
+        {key='S',value=sat,max=100,title='S'},
+        {key='V',value=bright,max=100,title='B'}}) do
+        local rail=ColorPanel.hsbMiniRect(p,spec.key)
+        text(('%s: %.0f%s'):format(spec.title,spec.value,
+            spec.key=='H' and '°' or '%'),
+            rail.x,rail.y-24,'small','text')
+        for i=0,43 do
+            local t=i/43
+            local value=spec.key=='H'
+                and ColorPanel.fromHSB(t*360,100,100,255)
+                or spec.key=='S' and ColorPanel.fromHSB(hue,t*100,100,255)
+                or ColorPanel.fromHSB(hue,sat,t*100,255)
+            local red,green,blue=Colors.channels(value)
+            love.graphics.setColor(red/255,green/255,blue/255,1)
+            love.graphics.rectangle('fill',
+                rail.x+i*rail.w/44,rail.y,
+                math.ceil(rail.w/44)+.1,rail.h,1,1)
+        end
+        local t=math.max(0,math.min(1,spec.value/spec.max))
+        local dx=rail.x+rail.w*t
+        love.graphics.setColor(.08,.09,.10,1)
+        love.graphics.circle('fill',dx,rail.y+rail.h/2,6.5,16)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.circle('line',dx,rail.y+rail.h/2,5,16)
+    end
+end
 local function drawColorPopup(p)
     local x,y=p.x,p.y
     text('Atual',x+22,y+49,'small','muted')
@@ -4912,42 +8986,38 @@ local function drawColorPopup(p)
         A.colorMode='palette' end,A.colorMode=='palette')
     if A.colorMode=='hsb' then
         local hue,sat,bright,alpha=ColorPanel.hsb(A.color)
-        local square=ColorPanel.svRect(p)
-        local count=14
-        for row=0,count-1 do
-            for col=0,count-1 do
-                local value=ColorPanel.fromHSB(hue,col/(count-1)*100,
-                    (1-row/(count-1))*100,255)
-                local r,g,b=Colors.channels(value)
-                love.graphics.setColor(r/255,g/255,b/255,1)
-                love.graphics.rectangle('fill',
-                    square.x+col*square.w/count,
-                    square.y+row*square.h/count,
-                    math.ceil(square.w/count)+.2,
-                    math.ceil(square.h/count)+.2)
-            end
-        end
-        local selectX=square.x+square.w*sat/100
-        local selectY=square.y+square.h*(1-bright/100)
-        c('text');love.graphics.setLineWidth(2)
-        love.graphics.circle('line',selectX,selectY,5,18)
-        local hueRect=ColorPanel.hueRect(p)
-        for i=0,35 do
-            local value=ColorPanel.fromHSB(i*10,100,100,255)
+        drawColorDiamond(p,hue)
+        local selectX,selectY=ColorPanel.svPoint(p,sat,bright)
+        love.graphics.setLineWidth(2)
+        love.graphics.setColor(.09,.10,.11,1)
+        love.graphics.circle('fill',selectX,selectY,7,20)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.circle('line',selectX,selectY,6,20)
+        -- A roda interativa representa a matiz ao redor da caixa
+        -- de saturacao/brilho. A hitbox usa a mesma geometria pura.
+        local wheel=IbisPanels.wheel(p)
+        for i=0,95 do
+            local a0=i*math.pi/48
+            local a1=(i+1)*math.pi/48
+            local value=ColorPanel.fromHSB(i*360/96,100,100,255)
             local r,g,b=Colors.channels(value)
             love.graphics.setColor(r/255,g/255,b/255,1)
-            love.graphics.rectangle('fill',hueRect.x,
-                hueRect.y+i*hueRect.h/36,hueRect.w,
-                math.ceil(hueRect.h/36)+.1)
+            love.graphics.polygon('fill',
+                wheel.cx+math.cos(a0)*wheel.outer,
+                wheel.cy+math.sin(a0)*wheel.outer,
+                wheel.cx+math.cos(a1)*wheel.outer,
+                wheel.cy+math.sin(a1)*wheel.outer,
+                wheel.cx+math.cos(a1)*wheel.inner,
+                wheel.cy+math.sin(a1)*wheel.inner,
+                wheel.cx+math.cos(a0)*wheel.inner,
+                wheel.cy+math.sin(a0)*wheel.inner)
         end
-        c('text');love.graphics.setLineWidth(2)
-        local yy=hueRect.y+hueRect.h*hue/360
-        love.graphics.rectangle('line',hueRect.x-2,yy-2,
-            hueRect.w+4,4,1,1)
-        text(('H %.0f°'):format(hue),x+299,y+195,'small')
-        text(('S %.0f%%'):format(sat),x+299,y+226,'small')
-        text(('B %.0f%%'):format(bright),x+299,y+257,'small')
-        text(('A %d'):format(alpha),x+299,y+288,'small')
+        local hx,hy=IbisPanels.wheelPoint(p,hue)
+        love.graphics.setColor(.11,.12,.13,1)
+        love.graphics.circle('fill',hx,hy,7,20)
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.circle('line',hx,hy,7,20)
+        drawHSBMiniSliders(p,hue,sat,bright)
         local rail=ColorPanel.hsbAlphaRect(p)
         c('line');love.graphics.rectangle('fill',rail.x,rail.y+3,
             rail.w,5,2,2)
@@ -4956,7 +9026,7 @@ local function drawColorPopup(p)
         c('text')
         love.graphics.circle('fill',rail.x+rail.w*alpha/255,
             rail.y+5,5,18)
-        text('Alfa',x+23,y+350,'small','muted')
+        text('Opacidade',x+21,y+370,'small','muted')
     elseif A.colorMode=='rgb' then
         local r,g,b,a=Colors.channels(A.color)
         local values={R=r,G=g,B=b,A=a}
@@ -4974,19 +9044,36 @@ local function drawColorPopup(p)
         text('Canais 0 a 255 · precisão de 1 unidade',
             x+21,y+368,'small','muted')
     else
-        text('Cores da paleta local',x+22,y+183,'small','muted')
-        for i,value in ipairs(A.savedColors) do
-            local col=(i-1)%6
-            local row=math.floor((i-1)/6)
-            local px=x+22+col*61
-            local py=y+211+row*46
-            drawColorTile(value,px,py,49,32)
-            A.buttons[#A.buttons+1]={x=px,y=py,w=49,h=32,
+        -- O tutorial do ibisPaint mostra uma paleta inicial pronta.
+        -- As amostras abaixo são nossas, não dados extraídos do APK.
+        button('Cores básicas',x+22,y+169,165,31,function()
+            A.paletteTab='standard'
+        end,A.paletteTab=='standard')
+        button(('Minhas (%d)'):format(#A.savedColors),
+            x+199,y+169,189,31,function()
+                A.paletteTab='personal'
+            end,A.paletteTab=='personal')
+        local items=PaletteUI.entries(A.paletteTab,A.savedColors)
+        for i,value in ipairs(items) do
+            local cell=PaletteUI.swatch(p,i)
+            drawColorTile(value,cell.x,cell.y,cell.w,cell.h)
+            A.buttons[#A.buttons+1]={
+                x=cell.x,y=cell.y,w=cell.w,h=cell.h,
                 fn=function()chooseColor(value)end}
+            if A.color==value then
+                c('accent')
+                love.graphics.setLineWidth(2)
+                love.graphics.rectangle('line',cell.x-2,cell.y-2,
+                    cell.w+4,cell.h+4,3,3)
+            end
         end
-        text(('Salvas: %d / %d'):format(#A.savedColors,
-            ColorPanel.PALETTE_LIMIT),x+22,y+316,'small','muted')
-        button('Guardar cor atual',x+204,y+310,184,32,
+        if A.paletteTab=='personal' and #items==0 then
+            text('Você ainda não guardou cores.',
+                x+22,y+246,'body','muted')
+        end
+        text(('Pessoais: %d / %d'):format(#A.savedColors,
+            ColorPanel.PALETTE_LIMIT),x+22,y+367,'small','muted')
+        button('Guardar cor atual',x+205,y+357,183,29,
             savePaletteColor,false,
             #A.savedColors>=ColorPanel.PALETTE_LIMIT)
     end
@@ -5000,12 +9087,12 @@ local function drawColorPopup(p)
             fn=function()chooseColor(value)end}
     end
 end
--- Live preview is a native C++ raster on a separate scratch buffer.
+-- Live preview is a native Lua raster on a separate scratch buffer.
 -- Its GPU image cache is shared with the stage-35 catalogue.
 local function drawCompactBrushPreview(p)
     local rect=Inspector.preview(p)
     local caption=Inspector.caption(p)
-    text('PRÉVIA C++',caption.x,caption.y,'small','muted')
+    text('PRÉVIA Lua',caption.x,caption.y,'small','muted')
     for row=0,math.ceil(rect.h/9)-1 do
         for col=0,math.ceil(rect.w/9)-1 do
             local v=(row+col)%2==0 and .81 or .59
@@ -5025,35 +9112,829 @@ local function drawCompactBrushPreview(p)
 end
 local function drawCompactPopup(w,h)
     local kind=A.compactPanel
-    local p=Compact.popup(w,h,kind)
-    box(p.x+5,p.y+7,p.w,p.h,'bg')
-    box(p.x,p.y,p.w,p.h,'panel')
-    c('line');love.graphics.rectangle('line',p.x+.5,p.y+.5,
-        p.w-1,p.h-1,5,5)
-    c('accent');love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,2)
-    text(kind=='tools' and 'Ferramentas' or
-        kind=='layers' and 'Camadas raster' or
-        kind=='color' and 'Cores · RGBA' or
-        'Ajustes',p.x+14,p.y+13,'body')
-    button('×',p.x+p.w-44,p.y+8,31,30,function()
-        A.compactPanel=nil end)
-    if kind=='tools' then
-        for i,tool in ipairs(EditorTools.items) do
-            local x=p.x+14+(i-1)%2*156
-            local y=p.y+52+math.floor((i-1)/2)*70
-            button(' ',x,y,148,62,function()
-                if selectTool(tool.id) then A.compactPanel=nil end
-            end,A.tool==tool.id)
-            c(A.tool==tool.id and 'accent' or 'text')
-            Icons.draw(tool.id,x+24,y+16,15)
-            text(tool.label,x+44,y+15,'small')
-            text(tool.key,x+121,y+39,'small','muted')
+    local p=Compact.popup(w,h,kind,
+        kind=='tools' and (A.toolPopupColumns or 2) or nil)
+    -- Camadas tem sua propria superficie cinza e linhas claras.
+    if kind=='layers' then
+        LayerChrome.frame(p)
+    else
+        c('bg',.38)
+        love.graphics.rectangle('fill',p.x+4,p.y+6,p.w,p.h,7,7)
+        c('panel',kind=='tools' and .94 or .98)
+        love.graphics.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+        c('line',.75)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle('line',p.x+.5,p.y+.5,
+            p.w-1,p.h-1,7,7)
+        if kind~='tools' then
+            c('line',.62)
+            love.graphics.rectangle('fill',p.x+1,p.y+44,p.w-2,1)
         end
-        button('Ajuda · F1',p.x+14,p.y+p.h-57,p.w-28,34,
-            function()A.compactPanel=nil;A.toolHelp=true end)
+    end
+    if kind=='tools' then
+        text('Ferramentas',p.x+12,p.y+6,'small','text')
+    else
+        text(kind=='tools' and 'Ferramentas' or
+        kind=='layers' and 'Camadas' or
+        kind=='blends' and 'Modos de mesclagem' or
+        kind=='filters' and 'Filtros' or
+        kind=='text' and 'Texto' or
+        kind=='transform' and 'Transformar' or
+        kind=='wand' and 'Varinha Mágica' or
+        kind=='lasso' and 'Laço' or
+        kind=='smudge' and 'Borrar' or
+        kind=='blur' and 'Desfoque' or
+        kind=='special' and 'Caneta Especial' or
+        kind=='vector' and 'Vetor' or
+        kind=='frame' and 'Dividir Quadros' or
+        kind=='color' and 'Cores · RGBA' or
+        kind=='view' and 'Visualização' or
+        kind=='stabilizer' and 'Estabilizador' or
+        kind=='ruler' and 'Régua' or
+        kind=='materials' and 'Materiais' or
+        A.tool=='shape' and 'Formas' or
+        A.tool=='select' and 'Seleção' or
+        'Ajustes',p.x+14,p.y+13,'body')
+    end
+    if kind=='tools' then
+        -- Fechar tambem funciona por Escape, pelo dock ou clique externo.
+        c('muted')
+        love.graphics.setFont(A.fonts.body)
+        love.graphics.print('×',p.x+p.w-20,p.y+3)
+        A.buttons[#A.buttons+1]={x=p.x+p.w-30,y=p.y+2,
+            w=27,h=24,fn=guard(function()
+                navigateCompactPanel(nil)
+            end)}
+    else
+        button('×',p.x+p.w-44,p.y+8,31,30,function()
+            navigateCompactPanel(nil)
+        end)
+    end
+    if kind=='blends' or kind=='filters' or kind=='text'
+        or kind=='transform' or kind=='wand' or kind=='lasso'
+        or kind=='smudge' or kind=='blur' or kind=='special'
+        or kind=='vector' or kind=='frame' then
+        button('<',p.x+p.w-79,p.y+8,31,30,function()
+            navigateCompactPanel(kind=='blends' and 'layers' or 'tools')
+        end)
+    end
+    if kind=='tools' then
+        -- Colunas e exibicao dos nomes agora ficam no menu oficial
+        -- Voltar > Configuracoes. O popup volta a ter cabecalho limpo.
+        local columns=A.toolPopupColumns or 2
+        local page=A.toolPopupPage or 1
+        local mx,my=love.mouse.getPosition()
+        for _,item in ipairs(IbisTools.pageItems(columns,page)) do
+            local tool=item.entry
+            local r=IbisTools.grid(p,item.index,columns,page)
+            local active=(not A.visualPendingTool
+                and tool.backend~=nil and tool.backend==A.tool)
+                or A.visualPendingTool==tool.id
+            local hover=mx>=r.x and mx<r.x+r.w
+                and my>=r.y and my<r.y+r.h
+            if active or hover then
+                c(active and 'selected' or 'line',.85)
+                love.graphics.rectangle('fill',r.x+1,r.y+1,
+                    r.w-2,r.h-2,3,3)
+            end
+            c(active and 'accent' or
+                tool.backend and 'text' or 'muted')
+            if columns==1 and A.toolPopupLabels then
+                Icons.draw(tool.icon,r.x+24,r.y+19,20)
+                fitted(tool.label,r.x+49,r.y+12,
+                    'small','text',r.w-54)
+            else
+                Icons.draw(tool.icon,r.x+r.w/2,
+                    r.y+(A.toolPopupLabels and 12 or 19),19)
+                if A.toolPopupLabels then
+                    love.graphics.setFont(A.fonts.micro)
+                    c(active and 'accent' or 'text')
+                    love.graphics.printf(tool.label,r.x+3,
+                        r.y+25,r.w-6,'center')
+                end
+            end
+            A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w,h=r.h,
+                fn=guard(function()activateIbisTool(tool)end)}
+        end
+        if columns==1 then
+            for _,delta in ipairs({-1,1}) do
+                local step=IbisTools.pageButton(p,delta)
+                button(delta==-1 and '‹' or '›',
+                    step.x,step.y,step.w,step.h,
+                    function()
+                        A.toolPopupPage=math.max(1,
+                            math.min(IbisTools.pages(columns),page+delta))
+                    end,false,(delta==-1 and page==1)
+                        or (delta==1 and page==IbisTools.pages(columns)))
+            end
+            fitted(('%d / %d'):format(page,IbisTools.pages(columns)),
+                p.x+88,p.y+p.h-53,'small','text',65)
+        end
+        c('line',.66)
+        love.graphics.rectangle('fill',p.x+8,p.y+p.h-27,p.w-16,1)
+        fitted('Ferramentas sem motor: prévia apenas',
+            p.x+12,p.y+p.h-19,'micro','muted',p.w-24)
+    elseif kind=='vector' or kind=='frame' then
+        local draft=assert(A.vectorFrameUi,'Rascunho vetorial ausente')
+        assert(draft.kind==kind,'Ferramenta visual divergente')
+        for i,tab in ipairs(VectorFrameUI.tabs[kind]) do
+            local r=VectorFrameUI.tabRect(p,i)
+            button(tab.label,r.x,r.y,r.w,r.h,function()
+                VectorFrameUI.chooseTab(draft,tab.id)
+            end,draft.tab==tab.id)
+        end
+        if kind=='vector' then
+            local area=VectorFrameUI.vectorPreview(p)
+            box(area.x,area.y,area.w,area.h,'card')
+            c('muted')
+            love.graphics.setLineWidth(1.6)
+            local midX,midY=area.x+area.w/2,area.y+56
+            love.graphics.line(midX-75,midY+16,
+                midX-44,midY-22,midX+4,midY+12,
+                midX+57,midY-18,midX+74,midY+18)
+            c('accent')
+            for _,pt in ipairs({{-75,16},{-44,-22},{4,12},{57,-18},{74,18}}) do
+                love.graphics.circle('fill',midX+pt[1],midY+pt[2],3.5,12)
+            end
+            fitted('Exemplo vetorial · somente interface',
+                area.x+18,area.y+105,'small','muted',area.w-36)
+            local first=VectorFrameUI.vectorAction(p,1)
+            local second=VectorFrameUI.vectorAction(p,2)
+            if draft.tab=='select' then
+                button(draft.multi and 'Modo: múltiplas formas'
+                    or 'Modo: uma forma',first.x,first.y,
+                    first.w,first.h,function()
+                    VectorFrameUI.toggleMulti(draft)
+                end,draft.multi)
+                button('Selecionar forma · indisponível',
+                    second.x,second.y,second.w,second.h,
+                    function()end,false,true)
+            elseif draft.tab=='vertices' then
+                button('Editar vértices · indisponível',
+                    first.x,first.y,first.w,first.h,
+                    function()end,false,true)
+                button('Editar curvas · indisponível',
+                    second.x,second.y,second.w,second.h,
+                    function()end,false,true)
+            else
+                button('Trazer para frente · indisponível',
+                    first.x,first.y,first.w,first.h,
+                    function()end,false,true)
+                button('Enviar para trás · indisponível',
+                    second.x,second.y,second.w,second.h,
+                    function()end,false,true)
+            end
+            text('Sem camada vetorial editável no motor.',
+                p.x+16,p.y+376,'small','warn')
+        else
+            local fields=VectorFrameUI.fieldsFor(draft)
+            for i,key in ipairs(fields) do
+                local item=VectorFrameUI.fields[key]
+                local r=VectorFrameUI.frameRow(p,i)
+                box(r.x,r.y,r.w,r.h,'card')
+                fitted(item.label,r.x+8,r.y+16,
+                    'small','text',184)
+                fitted(tostring(draft[key])..item.unit,
+                    r.x+194,r.y+16,'small','muted',100)
+                for _,direction in ipairs({-1,1}) do
+                    local control=VectorFrameUI.frameStep(p,i,direction)
+                    button(direction==1 and '+' or '−',
+                        control.x,control.y,control.w,control.h,
+                        function()
+                            VectorFrameUI.adjust(draft,key,direction)
+                        end,false,direction==1 and
+                            draft[key]>=item.max or
+                            direction==-1 and draft[key]<=item.min)
+                end
+            end
+            if draft.tab=='divide' then
+                for i,cut in ipairs({
+                    {id='vertical',label='Corte vertical'},
+                    {id='horizontal',label='Corte horizontal'}}) do
+                    local r=VectorFrameUI.cutRect(p,i)
+                    button(cut.label,r.x,r.y,r.w,r.h,function()
+                        VectorFrameUI.chooseCut(draft,cut.id)
+                    end,draft.cut==cut.id)
+                end
+            elseif draft.tab=='border' then
+                local r=VectorFrameUI.frameRow(p,3)
+                button('Cor da borda · pendente',
+                    r.x,r.y+4,r.w,37,function()end,false,true)
+            end
+            local preview=VectorFrameUI.framePreview(p)
+            box(preview.x,preview.y,preview.w,preview.h,'card')
+            local x=preview.x+math.min(55,draft.horizontal/3+18)
+            local y=preview.y+math.min(15,draft.vertical/9+8)
+            local pw=preview.w-2*(x-preview.x)
+            local ph=preview.h-2*(y-preview.y)
+            c('muted')
+            love.graphics.setLineWidth(math.min(4,draft.thickness))
+            love.graphics.rectangle('line',x,y,pw,ph)
+            if draft.tab=='divide' then
+                c('accent')
+                if draft.cut=='vertical' then
+                    love.graphics.line(x+pw/2,y,x+pw/2,y+ph)
+                else
+                    love.graphics.line(x,y+ph/2,x+pw,y+ph/2)
+                end
+            end
+            local action=VectorFrameUI.frameDisabledAction(p)
+            button('Criar / aplicar quadro · pendente',
+                action.x,action.y,action.w,action.h,
+                function()end,false,true)
+        end
+        local footer=VectorFrameUI.footer(p)
+        fitted('Estado visual apenas · motor Lua pendente.',
+            footer.x,footer.y,'small','warn',footer.w)
+    elseif kind=='smudge' or kind=='blur' or kind=='special' then
+        local draft=assert(A.effectUi,'Rascunho de efeito ausente')
+        assert(draft.kind==kind,'Painel de efeito divergente')
+        if kind=='smudge' or kind=='blur' then
+            text('PARÂMETROS VISUAIS',p.x+16,p.y+61,'small','muted')
+            for i,item in ipairs({
+                {field='diameter',name='Tamanho',unit=' px'},
+                {field='opacity',name='Opacidade',unit='%' }}) do
+                local r=EffectUI.paintRow(p,i)
+                box(r.x,r.y,r.w,r.h,'card')
+                text(item.name,r.x+12,r.y+8,'small','muted')
+                fitted(tostring(draft[item.field])..item.unit,
+                    r.x+150,r.y+34,'small','text',128)
+                for _,dir in ipairs({-1,1}) do
+                    local b=EffectUI.paintButton(p,i,dir)
+                    button(dir==1 and '+' or '−',
+                        b.x,b.y,b.w,b.h,function()
+                        EffectUI.adjust(draft,item.field,dir)
+                    end)
+                end
+            end
+            local preview=EffectUI.paintPreview(p)
+            box(preview.x,preview.y,preview.w,preview.h,'card')
+            c('line')
+            love.graphics.rectangle('line',preview.x+.5,preview.y+.5,
+                preview.w-1,preview.h-1,5,5)
+            c('muted')
+            love.graphics.circle('line',preview.x+70,
+                preview.y+57,math.min(36,8+draft.diameter/12),32)
+            love.graphics.setLineWidth(3)
+            love.graphics.line(preview.x+156,preview.y+64,
+                preview.x+191,preview.y+47,preview.x+221,preview.y+69,
+                preview.x+250,preview.y+44)
+            fitted('Amostra vetorial; não altera a obra.',
+                preview.x+115,preview.y+87,'small','muted',preview.w-125)
+        else
+            text('TIPOS DE CANETA ESPECIAL',p.x+16,p.y+48,
+                'small','muted')
+            for i,item in ipairs(EffectUI.specials) do
+                local r=EffectUI.specialRect(p,i)
+                button('',r.x,r.y,r.w,r.h,function()
+                    EffectUI.selectSpecial(draft,item.id)
+                    status(item.label..' · algoritmo ainda pendente')
+                end,draft.specialId==item.id)
+                c(draft.specialId==item.id and 'accent' or 'muted')
+                Icons.draw('special',r.x+23,r.y+21,17)
+                fitted(item.label,r.x+40,r.y+10,'small','text',r.w-47)
+                text('Pendente',r.x+40,r.y+32,'small','warn')
+            end
+            if draft.specialId=='liquify' then
+                text('LIQUIFY · OPÇÕES VISUAIS',p.x+16,
+                    p.y+246,'small','muted')
+                for i,item in ipairs(EffectUI.liquifyModes) do
+                    local r=EffectUI.liquifyModeRect(p,i)
+                    button(item.label,r.x,r.y,r.w,r.h,function()
+                        EffectUI.selectLiquify(draft,item.id)
+                    end,draft.liquifyId==item.id)
+                end
+                local strength=EffectUI.strengthRow(p)
+                box(strength.x,strength.y,strength.w,strength.h,'card')
+                fitted('Força: '..draft.strength..'%',
+                    strength.x+10,strength.y+11,'small','text',
+                    strength.w-108)
+                for _,dir in ipairs({-1,1}) do
+                    local b=EffectUI.strengthButton(p,dir)
+                    button(dir==1 and '+' or '−',
+                        b.x,b.y,b.w,b.h,function()
+                        EffectUI.adjust(draft,'strength',dir)
+                    end)
+                end
+            else
+                local pnd=EffectUI.pendingRect(p)
+                box(pnd.x,pnd.y,pnd.w,pnd.h,'card')
+                c('muted')
+                Icons.draw('special',pnd.x+35,pnd.y+35,25)
+                fitted(EffectUI.special(draft.specialId).label,
+                    pnd.x+69,pnd.y+25,'body','text',pnd.w-83)
+                fitted('Algoritmo de edição ainda indisponível.',
+                    pnd.x+14,pnd.y+80,'small','warn',pnd.w-28)
+                fitted('Nenhuma operação ocorre no canvas.',
+                    pnd.x+14,pnd.y+105,'small','muted',pnd.w-28)
+            end
+        end
+        local footer=EffectUI.footer(p)
+        fitted('Motor Lua de efeitos pendente · sem aplicar.',
+            footer.x,footer.y,'small','warn',footer.w)
+    elseif kind=='wand' or kind=='lasso' then
+        local state=assert(A.selectionToolUi,
+            'Estado de seleção visual ausente')
+        assert(state.kind==kind,'Painel de seleção divergente')
+        for i,mode in ipairs(SelectionToolUI.modes) do
+            local r=SelectionToolUI.modeRect(p,i)
+            button(mode.label,r.x,r.y,r.w,r.h,function()
+                SelectionToolUI.selectMode(state,mode.id)
+            end,state.mode==mode.id)
+        end
+        if kind=='wand' then
+            text('REFERÊNCIA',p.x+14,p.y+109,'small','muted')
+            for i,src in ipairs(SelectionToolUI.sources) do
+                local r=SelectionToolUI.sourceRect(p,i)
+                button(src.label,r.x,r.y,r.w,r.h,function()
+                    SelectionToolUI.selectSource(state,src.id)
+                end,state.source==src.id)
+            end
+            local row=SelectionToolUI.toleranceRow(p)
+            box(row.x,row.y,row.w,row.h,'card')
+            fitted(('Tolerância RGBA: %d'):format(
+                state.tolerance),row.x+10,row.y+9,'small',
+                'text',row.w-107)
+            for _,delta in ipairs({-1,1}) do
+                local r=SelectionToolUI.toleranceButton(p,delta)
+                button(delta==1 and '+' or '−',
+                    r.x,r.y,r.w,r.h,function()
+                        SelectionToolUI.adjustTolerance(state,delta)
+                    end,false,delta==1 and state.tolerance>=100
+                        or delta==-1 and state.tolerance<=0)
+            end
+            for i,opt in ipairs(SelectionToolUI.toggles) do
+                local r=SelectionToolUI.toggleRect(p,i)
+                button(opt.label,r.x,r.y,r.w,r.h,function()
+                    SelectionToolUI.toggle(state,opt.id)
+                end,state[opt.id])
+            end
+        else
+            local area=SelectionToolUI.lassoIllustration(p)
+            box(area.x,area.y,area.w,area.h,'card')
+            c('accent')
+            love.graphics.setLineWidth(2)
+            local cx=area.x+area.w/2
+            local cy=area.y+70
+            love.graphics.line(cx-56,cy+8,cx-42,cy-22,
+                cx-4,cy-35,cx+41,cy-16,cx+53,cy+14,
+                cx+12,cy+36,cx-30,cy+29,cx-56,cy+8)
+            text('Selecione uma região desenhando um laço',
+                area.x+16,area.y+131,'small','text')
+            text('Captura de traçado: motor pendente',
+                area.x+16,area.y+163,'small','warn')
+        end
+        for i,label in ipairs({'Inverter · pendente','Limpar máscara'}) do
+            local r=SelectionToolUI.actionRect(p,i)
+            local enabled=kind=='wand' and i==2 and A.wandSelection~=nil
+            button(label,r.x,r.y,r.w,r.h,function()
+                if enabled then clearWandSelection() end
+            end,false,not enabled)
+        end
+        local footer=SelectionToolUI.footerRect(p)
+        fitted(kind=='wand' and
+            'Clique na tela · máscara não limita edição ainda'
+            or 'Laço: captura de traçado ainda indisponível.',
+            footer.x,footer.y,'small','warn',footer.w)
+    elseif kind=='transform' then
+        local draft=assert(A.transformUi,'Rascunho Transformar ausente')
+        for i,mode in ipairs(TransformUI.modes) do
+            local r=TransformUI.modeRect(p,i)
+            button(mode.label,r.x,r.y,r.w,r.h,function()
+                TransformUI.chooseMode(draft,mode.id)
+            end,draft.mode==mode.id)
+        end
+        if draft.mode=='translate' then
+            local toggles={{key='scaling',name='Escala'},
+                {key='rotation',name='Rotação'},
+                {key='repeatDisplay',name='Repetição'}}
+            for i,item in ipairs(toggles) do
+                local r=TransformUI.toggleRect(p,i)
+                button(item.name,r.x,r.y,r.w,r.h,function()
+                    TransformUI.toggle(draft,item.key)
+                end,draft[item.key])
+            end
+            for i,item in ipairs(TransformUI.fields) do
+                local r=TransformUI.fieldRow(p,i)
+                box(r.x,r.y,r.w,r.h,'card')
+                fitted(item.label,r.x+9,r.y+9,'small','text',115)
+                fitted(tostring(draft[item.id])..item.unit,
+                    r.x+132,r.y+9,'small','muted',156)
+                local minus=TransformUI.minusRect(p,i)
+                local plus=TransformUI.plusRect(p,i)
+                button('−',minus.x,minus.y,minus.w,minus.h,function()
+                    TransformUI.adjust(draft,item.id,-1)
+                end,false,draft[item.id]<=item.minimum)
+                button('+',plus.x,plus.y,plus.w,plus.h,function()
+                    TransformUI.adjust(draft,item.id,1)
+                end,false,draft[item.id]>=item.maximum)
+            end
+            for i,target in ipairs({
+                {id='layer',name='Camada'},
+                {id='canvas',name='Tela inteira'}}) do
+                local r=TransformUI.targetRect(p,i)
+                button(target.name,r.x,r.y,r.w,r.h,function()
+                    TransformUI.chooseTarget(draft,target.id)
+                end,draft.target==target.id)
+            end
+            local frame=TransformUI.frameRect(p)
+            button('Moldura visível',frame.x,frame.y,
+                frame.w,frame.h,function()
+                    TransformUI.toggle(draft,'showFrame')
+                end,draft.showFrame)
+        else
+            local area=TransformUI.pendingArea(p)
+            box(area.x,area.y,area.w,area.h,'card')
+            c('muted')
+            Icons.draw('select',area.x+area.w/2,
+                area.y+56,34)
+            fitted(draft.mode=='perspective'
+                and 'Transformação em perspectiva'
+                or 'Transformação por malha',
+                area.x+20,area.y+110,'body','text',area.w-40)
+            fitted('Controles e algoritmo Lua ainda pendentes.',
+                area.x+20,area.y+150,'small','warn',area.w-40)
+            fitted('Nenhuma transformação será aplicada.',
+                area.x+20,area.y+178,'small','muted',area.w-40)
+        end
+        local footer=TransformUI.footerRect(p)
+        fitted('Prévia de parâmetros · aplicar indisponível',
+            footer.x,footer.y,'small','warn',footer.w)
+    elseif kind=='text' then
+        local draft=assert(A.textUi,'Rascunho de texto ausente')
+        for i,tab in ipairs(TextUI.tabs) do
+            local r=TextUI.tabRect(p,i)
+            button(tab.label,r.x,r.y,r.w,r.h,function()
+                draft.focused=false
+                love.keyboard.setTextInput(false)
+                draft.tab=tab.id
+            end,draft.tab==tab.id)
+        end
+        local x=p.x+20
+        local function property(index,label,key,unit)
+            local r=TextUI.propertyRow(p,index)
+            text(label,r.x,r.y,'small','muted')
+            button('−',r.x,r.y+22,40,29,function()
+                TextUI.step(draft,key,-1)
+            end)
+            fitted(tostring(draft[key])..(unit or ''),
+                r.x+50,r.y+28,'small','text',r.w-138)
+            button('+',r.x+r.w-40,r.y+22,40,29,function()
+                TextUI.step(draft,key,1)
+            end)
+        end
+        if draft.tab=='content' then
+            text('DIGITE O TEXTO',x,p.y+108,'small','muted')
+            local field=TextUI.inputRect(p)
+            button('',field.x,field.y,field.w,field.h,function()
+                draft.focused=true
+                love.keyboard.setTextInput(true)
+            end,draft.focused)
+            c('text')
+            love.graphics.setFont(A.fonts.body)
+            love.graphics.setScissor(field.x+9,field.y+8,
+                field.w-18,field.h-16)
+            love.graphics.printf(draft.value~='' and draft.value
+                or 'Clique e digite aqui...',field.x+12,field.y+11,
+                field.w-24,'left')
+            love.graphics.setScissor()
+            text('Texto ainda nao sera colocado na tela.',
+                x,p.y+237,'small','warn')
+            local alignments={{id='left',label='Esquerda'},
+                {id='center',label='Centro'},
+                {id='right',label='Direita'}}
+            for i,a in ipairs(alignments) do
+                local r=TextUI.alignmentRect(p,i)
+                button(a.label,r.x,r.y,r.w,r.h,function()
+                    draft.alignment=a.id
+                    draft.focused=false
+                    love.keyboard.setTextInput(false)
+                end,draft.alignment==a.id)
+            end
+            for i,o in ipairs({
+                {vertical=false,label='Horizontal'},
+                {vertical=true,label='Vertical'}}) do
+                local r=TextUI.orientationRect(p,i)
+                button(o.label,r.x,r.y,r.w,r.h,function()
+                    draft.vertical=o.vertical
+                    draft.focused=false
+                    love.keyboard.setTextInput(false)
+                end,draft.vertical==o.vertical)
+            end
+        elseif draft.tab=='size' then
+            text('FONTE',x,p.y+103,'small','muted')
+            button('Fontes: pendente',x,p.y+134,p.w-40,40,
+                function()end,false,true)
+            text('TAMANHO (RASCUNHO)',x,p.y+193,'small','muted')
+            property(3,'Tamanho visual','size',' px')
+        elseif draft.tab=='style' then
+            text('ESTILO DO TEXTO',x,p.y+103,'small','muted')
+            button('Cor do texto: pendente',x,p.y+133,p.w-40,39,
+                function()end,false,true)
+            button('Cor do contorno: pendente',x,p.y+193,p.w-40,39,
+                function()end,false,true)
+            property(3,'Espessura do contorno','stroke',' px')
+        elseif draft.tab=='background' then
+            property(1,'Opacidade do fundo','bgOpacity','%')
+            property(2,'Margem horizontal','marginX',' px')
+            property(3,'Margem vertical','marginY',' px')
+            text('Cor de fundo: seletor pendente.',
+                x,p.y+348,'small','warn')
+        elseif draft.tab=='spacing' then
+            property(1,'Espaco entre caracteres','letterSpacing',' px')
+            property(2,'Espaco entre linhas','lineSpacing',' px')
+            text('Ajustes apenas de rascunho.',
+                x,p.y+290,'small','muted')
+        end
+        fitted('Motor de texto pendente: nao aplica ao desenho.',
+            x,p.y+p.h-29,'small','warn',p.w-40)
+    elseif kind=='filters' then
+        local current=A.filterCategory or 'adjust'
+        local page=A.filterPage or 1
+        local totalPages=FilterUI.pageCount(current)
+        for i,category in ipairs(FilterUI.categories) do
+            local r=FilterUI.categoryRect(p,i)
+            button(category.label,r.x,r.y,r.w,r.h,function()
+                A.filterCategory=category.id
+                A.filterPage=1
+                A.filterPendingId=nil
+            end,current==category.id)
+        end
+        for i,item in ipairs(FilterUI.pageItems(current,page)) do
+            local r=FilterUI.filterRow(p,i)
+            button('',r.x,r.y,r.w,r.h,function()
+                -- Seleção é visual: nenhuma API de raster é acionada.
+                A.filterPendingId=item.id
+                status(item.label..' · motor Lua pendente')
+            end,A.filterPendingId==item.id)
+            box(r.x+6,r.y+6,41,37,'panel')
+            c('muted')
+            Icons.draw('filter',r.x+26,r.y+24,18)
+            fitted(item.label,r.x+54,r.y+7,'small','text',r.w-64)
+            text('Pendente',r.x+54,r.y+29,'small','warn')
+        end
+        button('‹',p.x+151,p.y+346,35,29,function()
+            A.filterPage=page-1
+            A.filterPendingId=nil
+        end,false,page==1)
+        fitted(('Página %d / %d'):format(page,totalPages),
+            p.x+194,p.y+353,'small','text',133)
+        button('›',p.x+p.w-47,p.y+346,35,29,function()
+            A.filterPage=page+1
+            A.filterPendingId=nil
+        end,false,page==totalPages)
+        fitted('Prévia e aplicação: motor Lua pendente.',
+            p.x+151,p.y+p.h-29,'small','muted',p.w-163)
+    elseif kind=='view' then
+        local x,y=p.x+16,p.y+53
+        text('TELA',x,y,'small','muted')
+        button('Ajustar ao espaço',x,y+30,p.w-32,36,fit)
+        button('−',x,y+83,44,34,
+            function()zoomCanvas(1/1.25)end)
+        text(('Zoom: %.0f%%'):format(A.zoom*100),
+            x+54,y+91,'small','text')
+        button('+',x+p.w-76,y+83,44,34,
+            function()zoomCanvas(1.25)end)
+        text('ROTAÇÃO',x,y+137,'small','muted')
+        iconButton('rotate-left',x,y+162,54,34,
+            function()rotateCanvas(-math.pi/12)end)
+        button('0°',x+65,y+162,p.w-162,34,resetCanvasRotation)
+        iconButton('rotate-right',x+p.w-86,y+162,54,34,
+            function()rotateCanvas(math.pi/12)end)
+        button(A.previewEnabled and 'Prévia: ligada'
+            or 'Prévia: desligada',x,y+213,p.w-32,34,function()
+                A.previewEnabled=not A.previewEnabled
+            end,A.previewEnabled)
+    elseif kind=='stabilizer' then
+        -- ibisPaint 14.1: Real Time Constant/Fast Strokes e Fade.
+        -- So a regulagem Legado Lua 0..5 e conectada ao raster.
+        local draft=A.stabilizerVisual or IbisPanels.stabilizer.new()
+        A.stabilizerVisual=draft
+        for i,tab in ipairs(IbisPanels.stabilizer.tabs) do
+            local r=IbisPanels.stabilizer.tabRect(p,i)
+            button(tab.label,r.x,r.y,r.w,r.h,function()
+                IbisPanels.stabilizer.tab(draft,tab.id)
+            end,draft.tab==tab.id)
+        end
+        local scope=IbisPanels.stabilizer.scopeRect(p)
+        local scopeKey=draft.tab=='fade' and 'fadeScope' or 'scope'
+        button('Apenas para este pincel · prévia',
+            scope.x,scope.y,scope.w,scope.h,function()
+                IbisPanels.stabilizer.toggle(draft,scopeKey)
+                status('Escopo por pincel: apenas estado visual')
+            end,draft[scopeKey])
+        if draft.tab=='stabilization' then
+            for i,method in ipairs({
+                {label='Tempo real',id='realtime'},
+                {label='Após · pendente',id='after'}}) do
+                local r=IbisPanels.stabilizer.methodRect(p,i)
+                button(method.label,r.x,r.y,r.w,r.h,
+                    function()end,i==1,i==2)
+            end
+            local legacy=IbisPanels.stabilizer.legacyRow(p)
+            text('MOTOR LUA · ESTABILIZAÇÃO LEGADA',
+                legacy.x,legacy.y,'small','muted')
+            button('−',legacy.x,legacy.y+17,36,27,function()
+                finishStroke()
+                A.stabilization=math.max(0,A.stabilization-1)
+            end,false,A.stabilization==0)
+            fitted(('Nível %d / 5 · aplicado'):format(A.stabilization),
+                legacy.x+47,legacy.y+23,'small','text',178)
+            button('+',legacy.x+legacy.w-36,legacy.y+17,
+                36,27,function()
+                finishStroke()
+                A.stabilization=math.min(5,A.stabilization+1)
+            end,false,A.stabilization==5)
+            for i,field in ipairs({
+                {id='constant',label='Constante'},
+                {id='fast',label='Traços rápidos'}}) do
+                local r=IbisPanels.stabilizer.draftRow(p,i)
+                fitted(field.label..' · prévia',
+                    r.x,r.y,'small','text',r.w-90)
+                fitted(draft[field.id]==0 and 'OFF'
+                    or tostring(draft[field.id]),
+                    r.x+175,r.y+6,'small','muted',55)
+                for _,delta in ipairs({-1,1}) do
+                    local b=IbisPanels.stabilizer.draftButton(p,i,delta)
+                    button(delta==-1 and '−' or '+',
+                        b.x,b.y,b.w,b.h,function()
+                        IbisPanels.stabilizer.step(draft,field.id,delta)
+                    end,false,delta==-1 and draft[field.id]==0
+                        or delta==1 and draft[field.id]==100)
+                end
+            end
+            local note=IbisPanels.stabilizer.footerRect(p)
+            fitted('Modos 14.1: sem efeito no motor atual',
+                note.x,note.y,'small','warn',note.w)
+        else
+            local toggle=IbisPanels.stabilizer.fadeToggleRect(p)
+            button('Forçar Fade · prévia',
+                toggle.x,toggle.y,toggle.w,toggle.h,
+                function()IbisPanels.stabilizer.toggle(draft,'fadeEnabled')end,
+                draft.fadeEnabled)
+            for i,field in ipairs({
+                {id='start',label='Comprimento inicial'},
+                {id='end',label='Comprimento final'}}) do
+                local r=IbisPanels.stabilizer.fadeRow(p,i)
+                fitted(field.label,r.x,r.y,
+                    'small','text',r.w-90)
+                fitted(tostring(draft[field.id]),
+                    r.x+175,r.y+5,'small','muted',55)
+                for _,delta in ipairs({-1,1}) do
+                    local b=IbisPanels.stabilizer.fadeButton(p,i,delta)
+                    button(delta==-1 and '−' or '+',
+                        b.x,b.y,b.w,b.h,function()
+                        IbisPanels.stabilizer.step(draft,field.id,delta)
+                    end,false,delta==-1 and draft[field.id]==0
+                        or delta==1 and draft[field.id]==100)
+                end
+            end
+            for i,item in ipairs({
+                {id='smooth',label='Suave'},
+                {id='linear',label='Linear'}}) do
+                local r=IbisPanels.stabilizer.shapeRect(p,i)
+                button(item.label,r.x,r.y,r.w,r.h,function()
+                    IbisPanels.stabilizer.shape(draft,item.id)
+                end,draft.shape==item.id)
+            end
+            local note=IbisPanels.stabilizer.footerRect(p)
+            fitted('Fade: somente controles visuais',
+                note.x,note.y,'small','warn',note.w)
+        end
+    elseif kind=='ruler' then
+        -- Icones simbolicos, todos locais ao painel, sem guias no canvas.
+        local draft=A.rulerUi or RulerUI.new()
+        A.rulerUi=draft
+        for i,item in ipairs(RulerUI.types) do
+            local r=RulerUI.cell(p,i)
+            local active=draft.previewId==item.id
+            button('',r.x,r.y,r.w,r.h,function()
+                RulerUI.select(draft,item.id)
+                status(item.name..' · régua não aplicada, motor pendente')
+            end,active)
+            local sx,sy=r.x+26,r.y+23
+            box(r.x+5,r.y+7,41,40,'panel')
+            c(active and 'accent' or 'muted')
+            love.graphics.push()
+            love.graphics.translate(sx,sy)
+            love.graphics.scale(1.65,1.65)
+            love.graphics.setLineWidth(1.1)
+            for _,cmd in ipairs(RulerUI.symbol(item.id)) do
+                if cmd.op=='line' then
+                    love.graphics.line(unpack(cmd.a))
+                elseif cmd.op=='circle' then
+                    love.graphics.circle('line',unpack(cmd.a))
+                elseif cmd.op=='ellipse' then
+                    love.graphics.ellipse('line',unpack(cmd.a))
+                elseif cmd.op=='rectangle' then
+                    love.graphics.rectangle('line',unpack(cmd.a))
+                end
+            end
+            love.graphics.pop()
+            fitted(item.name,r.x+53,r.y+8,'small','text',r.w-61)
+            text('Pendente',r.x+53,r.y+33,'small','warn')
+        end
+        local clear=RulerUI.clear(p)
+        button('Limpar',clear.x,clear.y,clear.w,clear.h,function()
+            RulerUI.select(draft,nil)
+        end,false,draft.previewId==nil)
+        local caption=RulerUI.caption(p)
+        local current=RulerUI.get(draft.previewId)
+        fitted(current and ('Opção: '..current.name) or 'Nenhuma régua',
+            caption.x,caption.y,'small','text',caption.w)
+        fitted('Guias não implementadas · apenas aparência.',
+            p.x+14,p.y+p.h-28,'small','warn',p.w-28)
+    elseif kind=='materials' then
+        local state=A.materialUi or MaterialUI.new()
+        A.materialUi=state
+        local search=MaterialUI.searchRect(p)
+        button('',search.x,search.y,search.w,search.h,function()
+            state.focused=true
+            love.keyboard.setTextInput(true)
+        end,state.focused)
+        fitted(state.query~='' and state.query or 'Pesquisar materiais...',
+            search.x+11,search.y+11,'small',
+            state.query~='' and 'text' or 'muted',search.w-22)
+        local searchButton=MaterialUI.searchButton(p)
+        button('Buscar',searchButton.x,searchButton.y,
+            searchButton.w,searchButton.h,function()
+            MaterialUI.submit(state)
+            love.keyboard.setTextInput(false)
+            status('Busca local: catálogo de materiais ainda indisponível')
+        end,false,state.query=='')
+        for i,category in ipairs(MaterialUI.categories) do
+            local cell=MaterialUI.categoryRect(p,i)
+            button(category.label,cell.x,cell.y,cell.w,cell.h,function()
+                MaterialUI.setCategory(state,category.id)
+                state.focused=false
+                love.keyboard.setTextInput(false)
+                status(category.label..' · sem arquivos locais')
+            end,state.category==category.id)
+        end
+        local area=MaterialUI.emptyRect(p)
+        box(area.x,area.y,area.w,area.h,'card')
+        c('line')
+        love.graphics.rectangle('line',area.x+.5,area.y+.5,
+            area.w-1,area.h-1,4,4)
+        c('muted')
+        Icons.draw('top-material',area.x+area.w/2,
+            area.y+28,28)
+        local active=MaterialUI.category(state.category)
+        fitted(active.label..' · nenhuma miniatura carregada',
+            area.x+14,area.y+52,'small','text',area.w-28)
+        fitted(state.submittedQuery~='' and
+            ('Busca "'..state.submittedQuery..'": 0 resultados locais')
+            or 'Catálogo original ainda não importado.',
+            area.x+14,area.y+80,'small','muted',area.w-28)
+        fitted('Seleção e aplicação de material: pendentes.',
+            area.x+14,area.y+103,'small','warn',area.w-28)
+        local footer=MaterialUI.footerRect(p)
+        fitted('Nenhuma camada será alterada ao navegar.',
+            footer.x,footer.y,'small','muted',footer.w)
     elseif kind=='properties' then
         local x,y=p.x+17,p.y+54
-        if A.tool=='fill' then
+        if A.tool=='shape' then
+            text('TIPO DE FORMA',x,y,'small','muted')
+            button('Retângulo',x,y+28,125,34,
+                function()A.shapeKind=0 end,A.shapeKind==0)
+            button('Elipse',x+139,y+28,125,34,
+                function()A.shapeKind=1 end,A.shapeKind==1)
+            button('Linha',x,y+74,125,34,
+                function()A.shapeKind=2 end,A.shapeKind==2)
+            button('Contorno',x,y+130,125,34,
+                function()A.shapeFilled=false end,not A.shapeFilled)
+            button('Preencher',x+139,y+130,125,34,
+                function()A.shapeFilled=true end,A.shapeFilled)
+            text(('Espessura: %d px'):format(A.shapeWidth),
+                x,y+189,'small','muted')
+            button('−',x,y+213,62,31,function()
+                A.shapeWidth=math.max(1,A.shapeWidth-1)
+            end,false,A.shapeWidth==1)
+            button('+',x+79,y+213,62,31,function()
+                A.shapeWidth=math.min(128,A.shapeWidth+1)
+            end,false,A.shapeWidth==128)
+        elseif A.tool=='select' then
+            local rect=A.selection
+            text('SELEÇÃO RETANGULAR',x,y,'small','muted')
+            text(rect and ('Área: '..rect.w..' × '..rect.h..' px')
+                or 'Arraste na tela para selecionar.',
+                x,y+31,'small','muted')
+            button('Girar -90°',x,y+73,125,34,
+                function()applySelectionTransform(3,1)end,
+                false,not rect or rect.h>A.doc.width or
+                    rect.w>A.doc.height)
+            button('Girar +90°',x+139,y+73,125,34,
+                function()applySelectionTransform(1,1)end,
+                false,not rect or rect.h>A.doc.width or
+                    rect.w>A.doc.height)
+            button('Diminuir 50%',x,y+125,125,34,
+                function()applySelectionTransform(0,.5)end,false,not rect)
+            button('Ampliar 200%',x+139,y+125,125,34,
+                function()applySelectionTransform(0,2)end,
+                false,not rect or rect.w*2>A.doc.width
+                    or rect.h*2>A.doc.height)
+            text('Ctrl+D remove a seleção.',x,y+193,'small','muted')
+        elseif A.tool=='fill' then
             text('Tolerância: '..A.fillTolerance..'/255',x,y,'body')
             button('−',x,y+32,60,34,function()
                 A.fillTolerance=math.max(0,A.fillTolerance-8) end)
@@ -5088,127 +9969,356 @@ local function drawCompactPopup(w,h)
                 drawCompactBrushPreview(p)
             end
         end
-        button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
-            openBrushLibrary)
+        if A.tool=='brush' or A.tool=='erase' then
+            button('Biblioteca de pincéis',x,p.y+p.h-54,p.w-34,34,
+                openBrushLibrary)
+        end
     elseif kind=='color' then
         drawColorPopup(p)
+    elseif kind=='blends' then
+        text('MODO DA CAMADA ATIVA',p.x+15,p.y+48,'small','muted')
+        for i,mode in ipairs(LayerUI.modes) do
+            local r=LayerUI.blendRow(p,i)
+            button(mode.label,r.x,r.y,r.w,r.h,function()
+                if mode.available then A.compactPanel='layers' end
+            end,mode.id=='normal',not mode.available)
+            if not mode.available then
+                text('Pendente',r.x+r.w-89,r.y+10,'small','warn')
+            end
+        end
+        fitted('Demais modos: motor Lua pendente.',
+            p.x+14,p.y+p.h-27,'small','muted',p.w-28)
     elseif kind=='layers' then
         local ls=A.layerSession
         local count=#A.doc.layers
         local active=A.doc.active_layer
-        button('+',p.x+14,p.y+44,53,32,function()
-            finishStroke();ls:add();A.compactLayerStart=nil
-            A.dirty=true;rebuildImage()
-        end,false,count>=Store.MAX_LAYERS)
-        button('Duplicar',p.x+76,p.y+44,97,32,
-            duplicateActiveLayer,false,count>=Store.MAX_LAYERS)
-        button('Excluir',p.x+181,p.y+44,101,32,function()
-            finishStroke();ls:remove(A.doc.active_layer)
-            clearLayerThumbs();A.compactLayerStart=nil
-            A.dirty=true;rebuildImage()
-        end,false,count<=1)
-        local start,stop,maxStart=Thumbnails.window(count,active,
+        for _,item in ipairs(LayerChrome.toolbar(p,'top')) do
+            local disabled=(item.id=='delete' and count<=1)
+                or (item.id~='delete' and count>=Store.MAX_LAYERS)
+            LayerChrome.paintAction(item,disabled,A.fonts.small)
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=item.x,y=item.y,
+                    w=item.w,h=item.h,fn=guard(function()
+                    if item.id=='add' then
+                        finishStroke();ls:add();A.compactLayerStart=nil
+                        A.dirty=true;rebuildImage()
+                    elseif item.id=='duplicate' then
+                        duplicateActiveLayer()
+                    elseif item.id=='delete' then
+                        finishStroke();ls:remove(A.doc.active_layer)
+                        clearLayerThumbs();A.compactLayerStart=nil
+                        A.dirty=true;rebuildImage()
+                    end
+                end)}
+            end
+        end
+        -- Linha distinta para seleção: existe na janela original,
+        -- mas não fingimos que o raster atual tem uma camada especial.
+        local selection=LayerUI.selectionRow(p)
+        local area=A.selection
+        local selectionInfo=area and
+            ('Seleção: '..area.w..' × '..area.h..' px')
+            or 'Nenhuma área selecionada'
+        LayerChrome.selection(selection,selectionInfo,A.fonts.small)
+                local start,stop,maxStart=Thumbnails.window(count,active,
             Compact.layerRows(p),A.compactLayerStart)
-        local y=p.y+87
+        local row=0
         for index=stop,start,-1 do
+            row=row+1
             local i=index
             local layer=A.doc.layers[i]
             local visual=LayerRowVisual.presentation(layer.visible,
                 active==i,layer.opacity)
-            button(' ',p.x+13,y,231,35,function()
-                if i~=A.doc.active_layer then
-                    finishStroke();ls:select(i);A.dirty=true
-                end
-                A.compactLayerStart=start
-            end,active==i)
+            local r=IbisPanels.layerRow(p,row)
+            A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w-35,h=r.h,
+                fn=guard(function()
+                    if i~=A.doc.active_layer then
+                        finishStroke();ls:select(i);A.dirty=true
+                    end
+                    A.compactLayerStart=start
+                end)}
+            LayerChrome.row(r,active==i)
             for ty=0,3 do for tx=0,3 do
                 local bright=(tx+ty)%2==0
                 love.graphics.setColor(bright and .8 or .59,
                     bright and .81 or .61,bright and .82 or .63,1)
-                love.graphics.rectangle('fill',p.x+19+tx*7,
-                    y+3+ty*7,7,7)
+                love.graphics.rectangle('fill',r.x+6+tx*10,
+                    r.y+5+ty*10,10,10)
             end end
+            local thumb=layerThumb(i)
+            local tw,th=thumb:getDimensions()
             love.graphics.setColor(1,1,1,visual.thumbnailAlpha)
-            love.graphics.draw(layerThumb(i),p.x+19,y+3)
+            love.graphics.draw(thumb,r.x+6,r.y+5,0,40/tw,40/th)
             love.graphics.setColor(1,1,1,1)
-            if visual.selected then
-                c('accent')
-                love.graphics.rectangle('fill',p.x+13,y+5,3,25,1,1)
-            end
-            fitted(i..' · '..layer.name,p.x+57,y+9,
-                'small',visual.textColor,Inspector.rowLabelWidth())
-            text(('%.0f%%'):format(layer.opacity*100),
-                p.x+190,y+9,'small',visual.textColor)
-            iconButton(visual.eyeIcon,
-                p.x+251,y+3,33,29,
-                function()
+            LayerChrome.label(r,i,layer.name,layer.opacity,
+                A.fonts.body,A.fonts.small)
+            local eye=LayerChrome.eye(r,layer.visible,Icons.draw)
+            A.buttons[#A.buttons+1]={x=eye.x,y=eye.y,w=eye.w,
+                h=eye.h,fn=guard(function()
                     finishStroke();ls:setVisible(i,not layer.visible)
                     A.dirty=true;rebuildImage()
-                end,layer.visible)
-            y=y+40
+                end)}
+            if i==active then
+                A.buttons[#A.buttons+1]={x=r.x+54,y=r.y+26,w=90,h=21,
+                    fn=guard(function()A.compactPanel='blends'end)}
+                love.graphics.setColor(.19,.43,.71,1)
+                love.graphics.rectangle('fill',
+                    r.x+54,r.y+26,90,20,3,3)
+                love.graphics.setColor(1,1,1,1)
+                love.graphics.setFont(A.fonts.small)
+                love.graphics.print('Normal',r.x+60,r.y+28)
+            else
+                love.graphics.setColor(LayerChrome.colors.muted)
+                love.graphics.setFont(A.fonts.small)
+                love.graphics.print('Normal',r.x+57,r.y+29)
+            end
         end
-        iconButton('up',p.x+13,p.y+p.h-87,34,28,function()
-            A.compactLayerStart=Thumbnails.scroll(start,maxStart,1)
-        end,false,start>=maxStart)
-        iconButton('down',p.x+54,p.y+p.h-87,34,28,function()
-            A.compactLayerStart=Thumbnails.scroll(start,maxStart,-1)
-        end,false,start<=1)
-        button('Nome',p.x+95,p.y+p.h-87,84,28,openLayerRename)
-        button('Mesclar',p.x+186,p.y+p.h-87,98,28,
-            mergeActiveLayerDown,false,active<=1)
+        local bg=LayerChrome.backgroundRow(p,stop-start+1)
+        if bg then LayerChrome.background(bg,A.fonts.small) end
+        -- O grupo de acoes fica junto aos botoes superiores.
+        -- O rodape segue a hierarquia oficial: clipping/bloqueio,
+        -- modo de mistura e barra de opacidade.
+        for _,item in ipairs(LayerChrome.toolbar(p,'footer')) do
+            local disabled=(item.id=='previous' and start>=maxStart)
+                or (item.id=='next' and start<=1)
+                or (item.id=='merge' and active<=1)
+            LayerChrome.paintAction(item,disabled,A.fonts.small)
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=item.x,y=item.y,
+                    w=item.w,h=item.h,fn=guard(function()
+                    if item.id=='previous' then
+                        A.compactLayerStart=Thumbnails.scroll(
+                            start,maxStart,1)
+                    elseif item.id=='next' then
+                        A.compactLayerStart=Thumbnails.scroll(
+                            start,maxStart,-1)
+                    elseif item.id=='rename' then
+                        openLayerRename()
+                    elseif item.id=='merge' then
+                        mergeActiveLayerDown()
+                    end
+                end)}
+            end
+        end
+        for _,slot in ipairs(LayerChrome.footerControls(p)) do
+            slot.selected=slot.id=='alpha' and
+                A.doc.layers[A.doc.active_layer].alpha_lock==true
+            LayerChrome.paintFooterControl(slot,A.fonts.small)
+            if slot.available and slot.id=='alpha' then
+                A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
+                    w=slot.w,h=slot.h,fn=guard(function()
+                    finishStroke()
+                    local index=A.doc.active_layer
+                    local enabled=A.doc.layers[index].alpha_lock~=true
+                    if ls:setAlphaLock(index,enabled) then
+                        A.dirty=true
+                        status(enabled and 'Alpha Lock ativado'
+                            or 'Alpha Lock desativado')
+                    end
+                end)}
+            elseif slot.available and slot.id=='blend' then
+                A.buttons[#A.buttons+1]={x=slot.x,y=slot.y,
+                    w=slot.w,h=slot.h,
+                    fn=guard(function()A.compactPanel='blends'end)}
+            end
+        end
+        local mx,my=love.mouse.getPosition()
+        local hint=LayerChrome.actionHint(p,mx,my)
+        if hint then
+            fitted(hint,p.x+94,p.y+15,'small','muted',145)
+        end
         local layer=A.doc.layers[A.doc.active_layer]
         local drag=A.compactLayerOpacityDrag
         local shown=drag and drag.index==A.doc.active_layer and
             drag.value or layer.opacity
-        text(('Opacidade %.0f%%'):format(shown*100),
-            p.x+14,p.y+p.h-45,'small')
+        love.graphics.setColor(1,1,1,1)
+        love.graphics.setFont(A.fonts.small)
+        love.graphics.print(('%.0f%%'):format(shown*100),
+            p.x+7,p.y+p.h-29)
         local track=LayerOpacity.rect(p)
-        c('line')
+        love.graphics.setColor(.54,.56,.58,1)
         love.graphics.rectangle('fill',track.x,track.y+4,
             track.w,5,2,2)
-        c('accent')
+        love.graphics.setColor(.93,.94,.96,1)
         love.graphics.rectangle('fill',track.x,track.y+4,
             math.max(1,track.w*LayerOpacity.fraction(shown)),5,2,2)
-        c('text')
+        love.graphics.setColor(1,1,1,1)
         love.graphics.circle('fill',
             track.x+track.w*LayerOpacity.fraction(shown),
-            track.y+6.5,5,16)
-        button('−',p.x+190,p.y+p.h-49,41,30,function()
-            finishStroke()
-            ls:setOpacity(A.doc.active_layer,
-                LayerOpacitySteps.change(A.doc.layers[A.doc.active_layer].opacity,-1))
-            A.dirty=true;rebuildImage()
-        end,false,not LayerOpacitySteps.canChange(layer.opacity,-1))
-        button('+',p.x+242,p.y+p.h-49,41,30,function()
-            finishStroke()
-            ls:setOpacity(A.doc.active_layer,
-                LayerOpacitySteps.change(A.doc.layers[A.doc.active_layer].opacity,1))
-            A.dirty=true;rebuildImage()
-        end,false,not LayerOpacitySteps.canChange(layer.opacity,1))
+            track.y+6.5,7,20)
+        for _,direction in ipairs({-1,1}) do
+            local item=LayerChrome.step(p,direction)
+            local disabled=not LayerOpacitySteps.canChange(
+                layer.opacity,direction)
+            LayerChrome.paintAction(item,disabled,A.fonts.small)
+            if not disabled then
+                A.buttons[#A.buttons+1]={x=item.x,y=item.y,
+                    w=item.w,h=item.h,fn=guard(function()
+                    finishStroke()
+                    ls:setOpacity(A.doc.active_layer,
+                        LayerOpacitySteps.change(
+                            A.doc.layers[A.doc.active_layer].opacity,
+                            direction))
+                    A.dirty=true;rebuildImage()
+                end)}
+            end
+        end
     end
 end
-function love.draw()
-    A.buttons={};A.galleryPreviewBudget=1
-    local w,h=love.graphics.getDimensions();c('bg')
-    love.graphics.clear((A.compactUi and compactPalette or palette).bg)
-    box(0,0,w,64,'panel')
-    c('accent');love.graphics.rectangle('fill',0,0,4,64)
-    text('Ibis Rebuild',24,13,'title')
-    if A.screen=='gallery' or w>=1120 then
-        local name=A.screen=='editor' and A.doc and A.doc.name
-            or 'Minha galeria'
-        fitted(name,232,24,'body','muted',
-            A.screen=='editor' and Visual.headerNameWidth(w) or 320)
+-- Painel de navegacao do botao Voltar e Definicoes.
+-- Controle de selecao configuravel sem manipular canvas ou historico.
+local function drawNavigationChoice(label,r,callback,active,disabled)
+    local lg=love.graphics
+    if disabled then lg.setColor(.80,.82,.84,1)
+    elseif active then lg.setColor(.64,.78,.95,1)
+    else lg.setColor(.96,.97,.98,1) end
+    lg.rectangle('fill',r.x,r.y,r.w,r.h,5,5)
+    lg.setColor(.62,.66,.70,1)
+    lg.rectangle('line',r.x+.5,r.y+.5,r.w-1,r.h-1,5,5)
+    lg.setColor(disabled and .54 or .13,
+        disabled and .55 or .17,disabled and .56 or .22,1)
+    lg.setFont(A.fonts.body)
+    lg.printf(label,r.x+4,r.y+(r.h-A.fonts.body:getHeight())/2,
+        r.w-8,'center')
+    if not disabled then
+        A.buttons[#A.buttons+1]={x=r.x,y=r.y,w=r.w,h=r.h,
+            fn=guard(callback)}
     end
-    c(Native.available and 'accent' or 'warn')
-    love.graphics.circle('fill',w-201,31,3.2,14)
-    text(Native.available and 'Editor local' or 'Motor indisponível',
-        w-191,24,'small',Native.available and 'accent' or 'warn')
+end
+local function drawBackMenu(w,h)
+    local lg=love.graphics
+    lg.setColor(0,0,0,.68)
+    lg.rectangle('fill',0,0,w,h)
+    local p=SettingsUI.menu(w,h)
+    lg.setColor(.91,.92,.94,1)
+    lg.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+    lg.setColor(.19,.21,.24,1)
+    lg.rectangle('fill',p.x,p.y,p.w,50,7,7)
+    lg.setColor(1,1,1,1)
+    lg.setFont(A.fonts.title)
+    lg.print('Voltar',p.x+22,p.y+11)
+    drawNavigationChoice('Voltar para A Minha Galeria',
+        SettingsUI.menuItem(p,1),toGallery)
+    drawNavigationChoice('Configurações',
+        SettingsUI.menuItem(p,2),function()
+            A.backMenu=false;A.settingsOpen=true
+        end)
+    drawNavigationChoice('Cancelar',
+        SettingsUI.menuItem(p,3),function()
+            A.backMenu=false
+        end)
+end
+local function drawIbisSettings(w,h)
+    local lg=love.graphics
+    lg.setColor(0,0,0,.75)
+    lg.rectangle('fill',0,0,w,h)
+    local p=SettingsUI.panel(w,h)
+    lg.setColor(.92,.93,.95,1)
+    lg.rectangle('fill',p.x,p.y,p.w,p.h,7,7)
+    lg.setColor(.19,.21,.24,1)
+    lg.rectangle('fill',p.x,p.y,p.w,55,7,7)
+    lg.setColor(1,1,1,1)
+    lg.setFont(A.fonts.title)
+    lg.print('Configurações',p.x+24,p.y+11)
+    lg.setFont(A.fonts.small)
+    lg.setColor(.29,.33,.37,1)
+    lg.print('INTERFACE DO USUÁRIO',p.x+29,p.y+69)
+    lg.print('Posição da seleção de ferramentas',
+        p.x+29,p.y+96)
+    for i,item in ipairs({
+        {id='left',label='Esquerda'},
+        {id='right',label='Direita'},
+        {id='popup',label='Popup'}}) do
+        local choice=item
+        drawNavigationChoice(item.label,SettingsUI.positionRect(p,i),
+            function()
+                saveToolPreference('toolRailPosition',choice.id)
+            end,A.toolRailPosition==choice.id,
+            not SettingsUI.positionAvailable(choice.id))
+    end
+    lg.setColor(.29,.33,.37,1)
+    lg.print('Número de colunas no seletor popup',
+        p.x+29,p.y+192)
+    for i=1,3 do
+        local count=i
+        drawNavigationChoice(tostring(count),
+            SettingsUI.columnRect(p,i),function()
+                saveToolPreference('toolPopupColumns',count)
+            end,A.toolPopupColumns==count)
+    end
+    lg.setColor(.29,.33,.37,1)
+    lg.print('Mostrar nomes das ferramentas',
+        p.x+29,p.y+285)
+    for i=1,2 do
+        local show=(i==1)
+        drawNavigationChoice(show and 'Ativado' or 'Desativado',
+            SettingsUI.labelRect(p,i),function()
+                saveToolPreference('toolPopupLabels',show)
+            end,A.toolPopupLabels==show)
+    end
+    lg.setColor(.45,.48,.52,1)
+    lg.setFont(A.fonts.small)
+    lg.print('Esquerda/Direita: faixa; Popup: barra inferior.',
+        p.x+29,p.y+370)
+    drawNavigationChoice('Concluir',SettingsUI.closeRect(p),
+        function()A.settingsOpen=false end,true)
+end
+function love.draw()
+    A.buttons={};A.galleryPreviewBudget=A.screen=='gallery' and 5 or 1
+    local w,h=love.graphics.getDimensions()
+    local theme=(A.screen=='gallery' or A.screen=='home')
+        and galleryPalette or (A.compactUi and compactPalette or palette)
+    love.graphics.clear(theme.bg)
+    if A.screen=='home' then
+        IbisPanels.home.draw(w,h,A.fonts)
+        local rect=IbisPanels.home.layout(w,h).gallery
+        A.buttons[#A.buttons+1]={
+            x=rect.x,y=rect.y,w=rect.w,h=rect.h,
+            fn=function()A.screen='gallery';refreshGallery() end}
+    else
+    if A.screen=='editor' and not A.compactUi then
+        box(0,0,w,64,'panel')
+        c('accent');love.graphics.rectangle('fill',0,62,w,2)
+        text('Ibis Rebuild',24,15,'title')
+    end
+    if A.screen=='editor' and not A.compactUi and A.doc and w>=1120 then
+        fitted(A.doc.name,232,24,'body','muted',
+            Visual.headerNameWidth(w))
+    end
     if A.screen=='gallery' then drawGallery(w,h)else drawEditor(w,h)end
-    box(0,h-48,w,48,'panel')
-    fitted(A.message or '',20,h-33,'small','muted',w-260)
-    if A.testReport then text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')end
-    if A.modal then A.buttons={};drawModal(w,h)
+    -- Faixa lateral e overlay visual sobre o canvas, fora da funcao
+    -- monolitica drawEditor (limite LuaJIT de 60 upvalues).
+    -- O HUD auxiliar F10 ocupa o canto superior esquerdo e nao
+    -- deve cruzar o seletor em duas colunas. Ocultar a faixa e
+    -- suas hitboxes somente enquanto F10 estiver visivel.
+    if A.screen=='editor' and A.compactUi and not A.focusMode
+        and not A.windowsHud
+        and (A.toolRailPosition or 'left')~='popup' then
+        drawEditorToolRail(w,h)
+    end
+    -- O rodape legado cobre os icones inferiores do editor compacto.
+    -- Seu fundo ja e desenhado por drawEditor: nao sobrepor controles.
+    if A.screen=='editor' and not A.compactUi then
+        box(0,h-48,w,48,'panel')
+        fitted(A.message or '',20,h-33,'small','muted',w-260)
+    end
+    if A.testReport and (A.screen~='editor' or not A.compactUi) then
+        text(A.testReport.ok and 'TESTES LUA OK' or 'FALHA NOS TESTES',
+            w-220,h-32,'small',A.testReport.ok and 'accent' or 'warn')
+    end
+    if (A.galleryCreateMenu or A.galleryMoveMenu
+        or A.galleryDeleteMenu or A.galleryRestoreMenu
+        or A.galleryMoreMenu)
+        and A.screen=='gallery' then
+        A.buttons={}
+        drawGalleryCreateMenu(w,h)
+    elseif A.settingsOpen then
+        A.buttons={}
+        drawIbisSettings(w,h)
+    elseif A.backMenu then
+        A.buttons={}
+        drawBackMenu(w,h)
+    elseif A.modal then A.buttons={};drawModal(w,h)
     elseif A.toolHelp and A.screen=='editor' then
         A.buttons={}
         drawToolHelp(w,h)
@@ -5222,6 +10332,7 @@ function love.draw()
         A.buttons={}
         drawCompactPopup(w,h)
     end
+    end -- nao mostrar editor/galeria por baixo da tela inicial
     if A.showcase and A.showcase.frames>=3 and
         not A.showcase.pending then
         local sh=A.showcase
@@ -5236,6 +10347,75 @@ function love.draw()
     end
 end
 local function pointerPressed(x,y,buttonNumber,pressure)
+    if A.screen=='home' then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w and
+                    y>=b.y and y<b.y+b.h then b.fn();return end
+            end
+        end
+        return -- A tela inicial nao propaga entrada ao editor.
+    end
+    if (A.galleryCreateMenu or A.galleryMoveMenu
+        or A.galleryDeleteMenu or A.galleryRestoreMenu
+        or A.galleryMoreMenu)
+        and A.screen=='gallery' then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w and
+                    y>=b.y and y<b.y+b.h then b.fn();return end
+            end
+            A.galleryCreateMenu=false
+            A.galleryMoreMenu=false
+            A.galleryDeleteMenu=nil;A.galleryRestoreMenu=nil
+            if A.galleryMoveMenu then
+                if A.galleryMoveMenu.creating then
+                    GalleryShell.cancelNewFolder(A.galleryMoveMenu)
+                else A.galleryMoveMenu=nil end
+                love.keyboard.setTextInput(false)
+            end
+        end
+        return -- Fechar nao dispara clique na obra sob o popup.
+    end
+    if A.backMenu or A.settingsOpen then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w
+                    and y>=b.y and y<b.y+b.h then
+                    b.fn();return
+                end
+            end
+        end
+        return -- Navegacao nunca transmite cliques para a tela.
+    end
+    if A.screen=='gallery' and A.galleryDetailId then
+        if buttonNumber==1 then
+            for i=#A.buttons,1,-1 do
+                local b=A.buttons[i]
+                if x>=b.x and x<b.x+b.w and
+                    y>=b.y and y<b.y+b.h then b.fn();return end
+            end
+            A.galleryDetailSwipe={x=x,y=y}
+        end
+        return -- Nenhum clique ampliado alcança canvas ou arrasto.
+    end
+    if buttonNumber==1 and A.modal and A.modal.kind=='new' then
+        local w,h=love.graphics.getDimensions()
+        local rect=GalleryUI.dialog(w,h)
+        for _,axis in ipairs({2,3}) do
+            local track=IbisPanels.canvasReference.slider(
+                IbisPanels.canvasReference.layout(w,h),axis)
+            if GalleryUI.sliderHit(track,x,y) then
+                A.canvasDimensionDrag=axis
+                A.modal.values[axis]=GalleryUI.sliderValue(track,x)
+                A.modal.focus=axis
+                return -- O slider jamais alcanca canvas nem galeria.
+            end
+        end
+    end
     pressure=Pressure.normalize(pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
     if A.compactUi and A.compactPanel then
@@ -5261,18 +10441,18 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 local channel=ColorPanel.trackHit(p,'rgb',x,y)
                 if channel then kind='rgb-'..channel end
             else
-                local square=ColorPanel.svRect(p)
-                local hue=ColorPanel.hueRect(p)
                 local alpha=ColorPanel.hsbAlphaRect(p)
-                if x>=square.x and x<=square.x+square.w and
-                    y>=square.y and y<=square.y+square.h then
+                if ColorPanel.svHit(p,x,y) then
                     kind='sv'
-                elseif x>=hue.x-3 and x<=hue.x+hue.w+3 and
-                    y>=hue.y-3 and y<=hue.y+hue.h+3 then
-                    kind='hue'
-                elseif x>=alpha.x-3 and x<=alpha.x+alpha.w+3 and
-                    y>=alpha.y-5 and y<=alpha.y+alpha.h+5 then
-                    kind='alpha'
+                elseif IbisPanels.wheelHit(p,x,y) then
+                    kind='wheel'
+                else
+                    local mini=ColorPanel.hsbMiniHit(p,x,y)
+                    if mini then kind='mini-'..mini
+                    elseif x>=alpha.x-3 and x<=alpha.x+alpha.w+3 and
+                        y>=alpha.y-5 and y<=alpha.y+alpha.h+5 then
+                        kind='alpha'
+                    end
                 end
             end
             if kind then
@@ -5290,7 +10470,13 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                 end
             end
         end
-        A.compactPanel=nil;A.colorDrag=nil
+        -- Presses em áreas internas desabilitadas (ex.: modos de
+        -- mistura sem motor) não devem fechar o popup nem pintar.
+        local ww,hh=love.graphics.getDimensions()
+        if Compact.contains(Compact.popup(ww,hh,A.compactPanel),x,y) then
+            return
+        end
+        navigateCompactPanel(nil);A.colorDrag=nil
         return -- Closing a palette must not paint behind it.
     end
     if A.toolHelp then
@@ -5365,6 +10551,19 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         (A.tool=='brush' or A.tool=='erase') and
         not A.modal and not A.spaceHeld then
         local w,h=love.graphics.getDimensions()
+        local stepKind,direction=Compact.quickButton(w,h,x,y)
+        if stepKind then
+            finishStroke()
+            if stepKind=='diameter' then
+                A.brushDiameter=Compact.quickStep(
+                    stepKind,A.brushDiameter,direction)
+            else
+                A.brushOpacity=Compact.quickStep(
+                    stepKind,A.brushOpacity,direction)
+            end
+            A.quickDrag=nil
+            return -- Botao nunca inicia pintura ou drag.
+        end
         local kind=Compact.quickHit(w,h,x,y)
         if kind then
             finishStroke()
@@ -5406,8 +10605,106 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             return
         end
     end
-    -- Middle/right mouse or Space+left pan the view without opening any
-    -- painting, shape, selection or undo transaction.
+    -- A44: navegação exclusiva para CANETA Windows Ink.
+    -- Alt+Space arrastar = zoom; Shift+Space circular = rotação.
+    -- Mouse preserva roda/Shift+roda e Space+arrastar.
+    if buttonNumber==1 and A.screen=='editor' and A.doc
+        and A.inkPenId~=nil and A.spaceHeld
+        and not A.modal and not A.toolHelp and not A.contextMenu
+        and not A.brushLibrary and not A.compactPanel
+        and not A.windowsHud and not A.panning
+        and not A.drawing and not A.brushSizeDrag then
+        local mode=A.windowsPenViewApi.mode(true,true,
+            love.keyboard.isDown('lalt','ralt'),
+            love.keyboard.isDown('lshift','rshift'))
+        if mode then
+            local w,h=love.graphics.getDimensions()
+            if Workspace.contains(w,h,paneHidden(),x,y,
+                A.compactUi and not A.focusMode) then
+                local overControl=false
+                for _,b in ipairs(A.buttons) do
+                    if x>=b.x and x<b.x+b.w and
+                        y>=b.y and y<b.y+b.h then
+                        overControl=true;break
+                    end
+                end
+                if not overControl then
+                    local px,py=canvasPoint(x,y)
+                    if px>=0 and py>=0 and
+                        px<A.doc.width and py<A.doc.height then
+                        local pivotX,pivotY=View.center(viewData(),w,h)
+                        local gesture=A.windowsPenViewApi.begin(
+                            mode,x,y,pivotX,pivotY)
+                        if gesture then
+                            finishStroke()
+                            A.penViewDrag=gesture
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end
+    -- A43: Ctrl+Alt+arrastar com esquerdo — atalho documentado
+    -- para espessura do pincel no ibisPaint Windows. A prioridade
+    -- e anterior a pintura; a gestualidade nao grava pixels.
+    if buttonNumber==1 and A.screen=='editor' and A.doc and
+        (A.tool=='brush' or A.tool=='erase') and
+        not A.modal and not A.toolHelp and not A.contextMenu
+        and not A.brushLibrary and not A.compactPanel
+        and not A.windowsHud and not A.spaceHeld
+        and not A.panning and not A.drawing and not A.quickDrag
+        and not A.sliderDrag and
+        love.keyboard.isDown('lctrl','rctrl') and
+        love.keyboard.isDown('lalt','ralt') then
+        local w,h=love.graphics.getDimensions()
+        if Workspace.contains(w,h,paneHidden(),x,y,
+            A.compactUi and not A.focusMode) then
+            local controlHit=false
+            for _,button in ipairs(A.buttons) do
+                if x>=button.x and x<button.x+button.w and
+                    y>=button.y and y<button.y+button.h then
+                    controlHit=true;break
+                end
+            end
+            if not controlHit then
+                local px,py=canvasPoint(x,y)
+                if px>=0 and py>=0 and
+                    px<A.doc.width and py<A.doc.height then
+                    finishStroke()
+                    A.brushSizeDrag=A.windowsBrushSizeGesture.begin(
+                        x,A.brushDiameter)
+                    return
+                end
+            end
+        end
+    end
+    -- A42: Quick Eyedropper confirmado para ibisPaint Windows
+    -- (tutorial no=167). Direito com pincel = colher, sem trocar tool.
+    -- Nunca ler pixels sob os controles de interface.
+    if buttonNumber==2 and A.screen=='editor' and A.doc
+        and A.tool=='brush' and not A.visualPendingTool
+        and not A.modal and not A.spaceHeld and not A.panning then
+        local w,h=love.graphics.getDimensions()
+        if Workspace.contains(w,h,paneHidden(),x,y,
+            A.compactUi and not A.focusMode) then
+            for _,b in ipairs(A.buttons) do
+                if x>=b.x and x<b.x+b.w
+                    and y>=b.y and y<b.y+b.h then
+                    return
+                end
+            end
+            local px,py=canvasPoint(x,y)
+            if px>=0 and py>=0 and
+                px<A.doc.width and py<A.doc.height then
+                finishStroke()
+                pickColor(px,py)
+                return
+            end
+        end
+    end
+    -- Middle mouse or Space+left pan, as before; right-button pan
+    -- remains only for contexts not using the quick eyedropper.
     if A.screen=='editor' and not A.modal and
         (buttonNumber==2 or buttonNumber==3 or
         (buttonNumber==1 and A.spaceHeld)) then
@@ -5419,7 +10716,54 @@ local function pointerPressed(x,y,buttonNumber,pressure)
         end
     end
     if buttonNumber==1 then
-        for i=#A.buttons,1,-1 do local b=A.buttons[i];if x>=b.x and x<=b.x+b.w and y>=b.y and y<=b.y+b.h then A.shapePreview=nil;b.fn();return end end
+        for i=#A.buttons,1,-1 do
+            local b=A.buttons[i]
+            if x>=b.x and x<=b.x+b.w and
+                y>=b.y and y<=b.y+b.h then
+                A.shapePreview=nil
+                if A.screen=='gallery' and not A.gallerySelecting
+                    and not A.galleryTrash and b.galleryKey
+                    and (not A.showcase or A.showcase.stage>100) then
+                    A.galleryGesture=GalleryShell.dragBegin(
+                        b.galleryKey,x,y,love.timer.getTime(),b.fn)
+                else b.fn() end
+                return
+            end
+        end
+        -- An unimplemented visual tool must NEVER fall through to the
+        -- previously active brush. Magic Wand is the first pixel-mask
+        -- engine here; other pending modes consume the click safely.
+        if A.screen=='editor' and A.compactUi and
+            A.visualPendingTool and not A.modal then
+            if Workspace.contains(love.graphics.getWidth(),
+                love.graphics.getHeight(),paneHidden(),x,y,
+                not A.focusMode) then
+                if A.visualPendingTool=='wand' then
+                    guard(function()
+                        local vx,vy=canvasPoint(x,y)
+                        if vx>=0 and vy>=0 and vx<A.doc.width
+                            and vy<A.doc.height then
+                            local state=assert(A.selectionToolUi)
+                            local source=state.source=='current'
+                                and A.layerSession:activeBuffer()
+                                or A.layerSession.composite
+                            local mask=A.wandEngine.select(
+                                source,math.floor(vx),math.floor(vy),
+                                state.tolerance,state.mode,
+                                state.continuous,A.wandSelection)
+                            local preview=A.wandEngine.preview(mask)
+                            clearWandSelection()
+                            A.wandSelection=mask
+                            A.wandOverlay=preview
+                            status(('Varinha: %d pixels na máscara · edição mascarada pendente'):format(mask.count))
+                        end
+                    end)()
+                else
+                    status('Ferramenta visual pendente · nenhum pixel modificado')
+                end
+            end
+            return
+        end
         if A.screen=='editor' and not A.modal and Workspace.contains(
             love.graphics.getWidth(),love.graphics.getHeight(),paneHidden(),x,y,A.compactUi and not A.focusMode) then
             guard(function()
@@ -5455,7 +10799,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                         A.color,A.fillTolerance)
                     if changed>0 then
                         A.dirty=true;rebuildImage()
-                        status(('Balde C++ · %d pixels preenchidos · Ctrl+Z desfaz'):format(changed))
+                        status(('Balde Lua · %d pixels preenchidos · Ctrl+Z desfaz'):format(changed))
                     else
                         status('Balde: nenhum pixel alterado')
                     end
@@ -5464,7 +10808,7 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     A.layerSession:pixel(math.floor(px),math.floor(py),A.color)
                     A.layerSession:finishEdit()
                     A.dirty=true;rebuildImage()
-                    status('Pixel gravado pelo C++ · Ctrl+Z para desfazer')
+                    status('Pixel gravado pelo Lua · Ctrl+Z para desfazer')
                 elseif A.tool=='brush' or A.tool=='erase' then
                     A.layerSession:beginEdit()
                     A.layerSession:beginStrokeAccum()
@@ -5488,14 +10832,119 @@ local function pointerPressed(x,y,buttonNumber,pressure)
                     A.stabilizer=Stabilizer.new(A.stabilization,px,py)
                     A.strokePath=StrokePath.new(px,py,pressure)
                     A.pendingBrushRect=nil
-                    status(A.tool=='erase' and 'Borracha C++ · apaga a camada ativa'
-                        or 'Pincel C++ · histórico por pincelada · Ctrl+Z')
+                    status(A.tool=='erase' and 'Borracha Lua · apaga a camada ativa'
+                        or 'Pincel Lua · histórico por pincelada · Ctrl+Z')
                 end
             end)()
         end
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if b==1 and A.penViewDrag then
+        local v=A.windowsPenViewApi.move(A.penViewDrag,x,y)
+        if A.penViewDrag.kind=='zoom' then
+            zoomCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        else
+            rotateCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        end
+        A.penViewDrag=nil
+        return -- Sem pintura ou historico na soltura da caneta.
+    end
+    if b==1 and A.brushSizeDrag then
+        A.brushDiameter=A.windowsBrushSizeGesture.move(
+            A.brushSizeDrag,x)
+        A.brushSizeDrag=nil
+        return -- Encerrar ajuste sem fechar traço ou mudar histórico.
+    end
+    if A.screen=='home' then return end
+    if b==1 and A.canvasDimensionDrag then
+        local axis=A.canvasDimensionDrag
+        A.canvasDimensionDrag=nil
+        if A.modal and A.modal.kind=='new' then
+            local w,h=love.graphics.getDimensions()
+            local track=IbisPanels.canvasReference.slider(IbisPanels.canvasReference.layout(w,h),axis)
+            A.modal.values[axis]=GalleryUI.sliderValue(track,x)
+        end
+        return
+    end
+    if A.screen=='gallery' and b==1 and A.galleryDetailSwipe then
+        local swipe=A.galleryDetailSwipe
+        A.galleryDetailSwipe=nil
+        if A.galleryDetailId then
+            local direction=IbisPanels.galleryDetail.swipe(swipe.x,swipe.y,x,y)
+            if direction==0 then A.galleryDetailId=nil
+            elseif direction then
+                A.galleryDetailId=IbisPanels.galleryDetail.step(
+                    A.galleryItems,A.galleryDetailId,
+                    A.galleryFilter,direction)
+            end
+        end
+        return
+    end
+    if A.screen=='gallery' and b==1 and A.galleryGesture then
+        local gesture=A.galleryGesture
+        A.galleryGesture=nil
+        GalleryShell.dragAdvance(gesture,x,y,love.timer.getTime())
+        if gesture.active then
+            local w,h=love.graphics.getDimensions()
+            local target=GalleryShell.dragTarget(w,h,A.galleryScroll,
+                A.galleryItems or {},x,y)
+            local parent
+            if A.folder~='' then
+                for _,folder in ipairs(A.store.catalog.folders) do
+                    if folder.id==A.folder then
+                        parent=folder.parent;break
+                    end
+                end
+            end
+            local targetRect
+            if target then
+                for i,item in ipairs(A.galleryItems or {}) do
+                    if item.key==target then
+                        targetRect=GalleryShell.card(
+                            w,h,i,A.galleryScroll)
+                        break
+                    end
+                end
+            end
+            local action=GalleryShell.dropAction(
+                A.folder,parent,gesture.key,target,w,h,x,y,targetRect)
+            if action then
+                guard(function()
+                    if action.kind=='group' then
+                        local report=A.store:groupArtworks(
+                            gesture.key:sub(3),action.target:sub(3),
+                            A.folder)
+                        refreshGallery()
+                        if report.moved==2 and not report.error then
+                            status(('Pasta %s criada com duas obras')
+                                :format(report.name))
+                        else
+                            status(('Agrupamento incompleto (%d/2): %s')
+                                :format(report.moved,
+                                    tostring(report.error)))
+                        end
+                    elseif action.kind=='move' then
+                        local report=A.store:moveProjects(
+                            {gesture.key:sub(3)},action.folder,A.folder)
+                        assert(report.moved==1 and not report.error,
+                            report.error or 'Falha ao mover obra')
+                        refreshGallery()
+                        status('Obra movida para a pasta de destino')
+                    elseif A.store:reorderGallery(
+                        A.folder,gesture.key,action.target) then
+                        refreshGallery()
+                        status('Ordem das obras salva na galeria')
+                    end
+                end)()
+            else
+                status('Arrasto cancelado; ordem preservada')
+            end
+        elseif not gesture.moved and gesture.callback then
+            gesture.callback()
+        end
+        return
+    end
     if A.desktopLayerOpacityDrag and b==1 then
         local drag=A.desktopLayerOpacityDrag
         A.desktopLayerOpacityDrag=nil
@@ -5575,6 +11024,23 @@ local function pointerReleased(x,y,b,pressure)
 end
 local function pointerMoved(x,y,dx,dy,pressure)
     A.hoverX=x;A.hoverY=y;A.mouseOutside=false
+    if A.canvasDimensionDrag then
+        if A.modal and A.modal.kind=='new' then
+            local w,h=love.graphics.getDimensions()
+            local axis=A.canvasDimensionDrag
+            local track=IbisPanels.canvasReference.slider(
+                IbisPanels.canvasReference.layout(w,h),axis)
+            A.modal.values[axis]=GalleryUI.sliderValue(track,x)
+        else
+            A.canvasDimensionDrag=nil
+        end
+        return
+    end
+    if A.screen=='gallery' and A.galleryGesture then
+        GalleryShell.dragAdvance(A.galleryGesture,x,y,
+            love.timer.getTime())
+        return
+    end
     if A.desktopLayerOpacityDrag then
         A.desktopLayerOpacityDrag.value=DesktopOpacity.value(
             love.graphics.getWidth(),love.graphics.getHeight(),x)
@@ -5600,6 +11066,20 @@ local function pointerMoved(x,y,dx,dy,pressure)
     if A.sliderDrag then
         applyParameterSlider(A.sliderDrag,x)
         return
+    end
+    if A.penViewDrag then
+        local v=A.windowsPenViewApi.move(A.penViewDrag,x,y)
+        if A.penViewDrag.kind=='zoom' then
+            zoomCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        else
+            rotateCanvas(v,A.penViewDrag.pivotX,A.penViewDrag.pivotY)
+        end
+        return
+    end
+    if A.brushSizeDrag then
+        A.brushDiameter=A.windowsBrushSizeGesture.move(
+            A.brushSizeDrag,x)
+        return -- Nunca propagar este arrasto ao stroke/canvas.
     end
     if A.toolHelp then return end
     if A.panning then
@@ -5690,6 +11170,7 @@ dispatchInkEvent=function(e)
             pointerMoved(e.x,e.y,0,0,Pressure.normalize(e.pressure))
         elseif e.kind==3 or e.kind==4 then
             if e.kind==4 then
+                A.penViewDrag=nil
                 guard(finishStroke)()
                 A.shapePreview=nil
                 guard(finishSelection)()
@@ -5708,6 +11189,7 @@ end
 function love.mousefocus(focused)
     if not focused then
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
+        A.brushSizeDrag=nil;A.penViewDrag=nil
     end
 end
 function love.focus(focused)
@@ -5715,14 +11197,41 @@ function love.focus(focused)
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
         A.compactLayerOpacityDrag=nil;A.desktopLayerOpacityDrag=nil
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
+        A.galleryGesture=nil;A.galleryDetailSwipe=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
-        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil;A.compactPanel=nil
+        A.brushSizeDrag=nil;A.penViewDrag=nil
+        A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil
+        navigateCompactPanel(nil)
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
         guard(finishSelection)()
         guard(finishStroke)()
     end
 end
 function love.wheelmoved(x,y)
+    if A.modal and A.modal.kind=='new' then
+        local w,h=love.graphics.getDimensions()
+        local rect=IbisPanels.canvasReference.layout(w,h)
+        A.modal.canvasListScroll=IbisPanels.canvasReference.scroll(
+            rect,A.modal.canvasListScroll or 0,y)
+        return -- Nao rolar galeria nem zoom por baixo da janela.
+    end
+    if A.screen=='gallery' then
+        if A.galleryDetailId then return end
+        A.galleryGesture=nil
+        if A.modal or A.galleryCreateMenu or A.galleryMoveMenu
+            or A.galleryMoreMenu or A.galleryDeleteMenu
+            or A.galleryRestoreMenu then return end
+        local total=A.galleryTrash and #(A.trashProjects or {})
+            or ((GalleryUI.filter(A.galleryFilter,'folder')
+                and #A.folders or 0)+
+                (GalleryUI.filter(A.galleryFilter,'work')
+                and #A.projects or 0))
+        local w,h=love.graphics.getDimensions()
+        A.galleryScroll=GalleryShell.scroll(w,h,total,
+            A.galleryScroll or 0,y)
+        return
+    end
+    if A.backMenu or A.settingsOpen then return end
     if A.screen=='editor' and A.compactUi and
         A.compactPanel=='layers' and not A.modal and
         not A.toolHelp and not A.contextMenu and not A.brushLibrary then
@@ -5773,9 +11282,123 @@ function love.wheelmoved(x,y)
     end
 end
 function love.textinput(t)
-    if A.modal then local i=A.modal.focus;A.modal.values[i]=A.modal.values[i]..t end
+    if A.screen=='gallery' and A.galleryMoveMenu and
+        A.galleryMoveMenu.creating then
+        GalleryShell.appendFolderName(A.galleryMoveMenu,t)
+        A.galleryMoveMenu.createError=nil
+        return
+    end
+    if A.modal then
+        local i=A.modal.focus
+        A.modal.values[i]=A.modal.values[i]..t
+    elseif A.screen=='editor' and A.compactPanel=='text'
+        and A.textUi and A.textUi.focused then
+        A.textUi.value=TextUI.append(A.textUi.value,t)
+    elseif A.screen=='editor' and A.compactPanel=='materials'
+        and A.materialUi and A.materialUi.focused then
+        MaterialUI.appendQuery(A.materialUi,t)
+    end
 end
 function love.keypressed(key)
+    if A.screen=='home' then
+        if key=='return' or key=='kpenter' then
+            A.screen='gallery';refreshGallery()
+        end
+        return
+    end
+    if A.screen=='gallery' and A.galleryDetailId then
+        if key=='escape' or key=='backspace' then
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+        elseif key=='left' or key=='right' then
+            A.galleryDetailId=IbisPanels.galleryDetail.step(
+                A.galleryItems,A.galleryDetailId,A.galleryFilter,
+                key=='left' and -1 or 1)
+        elseif key=='return' or key=='kpenter' then
+            local target=A.galleryDetailId
+            A.galleryDetailId=nil;A.galleryDetailSwipe=nil
+            guard(function()
+                openDoc(A.store:openProject(target))
+            end)()
+        end
+        return
+    end
+    if A.screen=='gallery' and A.galleryMoveMenu and
+        A.galleryMoveMenu.creating then
+        local state=A.galleryMoveMenu
+        if key=='escape' then
+            GalleryShell.cancelNewFolder(state)
+            love.keyboard.setTextInput(false)
+        elseif key=='backspace' then
+            GalleryShell.backspaceFolderName(state)
+            state.createError=nil
+        elseif key=='return' or key=='kpenter' then
+            if state.createName~='' then
+                local ok,id=GalleryShell.createDestination(
+                    A.store,state,A.folder)
+                if ok then
+                    love.keyboard.setTextInput(false)
+                    refreshGallery()
+                    status('Pasta criada e selecionada para mover')
+                else status('Não foi possível criar a pasta: '..
+                    tostring(id)) end
+            end
+        end
+        return -- Nenhum atalho do editor durante edicao de nome.
+    end
+    if A.screen=='gallery' and A.gallerySelecting and
+        not A.modal and not A.galleryCreateMenu
+        and not A.galleryMoveMenu and not A.galleryMoreMenu
+        and not A.galleryDeleteMenu and not A.galleryRestoreMenu and
+        love.keyboard.isDown('lctrl','rctrl') then
+        if key=='a' then
+            A.gallerySelected=GalleryShell.selectAll(
+                GalleryShell.selectionKeys(
+                    A.folders,A.projects,A.galleryFilter))
+            return
+        elseif key=='d' then
+            A.gallerySelected={}
+            return
+        end
+    end
+    if A.screen=='gallery' and key=='escape' then
+        if A.galleryGesture then
+            A.galleryGesture=nil
+            status('Reorganização cancelada')
+        elseif A.modal then
+            A.modal=nil;love.keyboard.setTextInput(false)
+        elseif A.galleryCreateMenu then A.galleryCreateMenu=false
+        elseif A.galleryMoreMenu then A.galleryMoreMenu=false
+        elseif A.galleryDeleteMenu then A.galleryDeleteMenu=nil
+        elseif A.galleryRestoreMenu then A.galleryRestoreMenu=nil
+        elseif A.galleryMoveMenu then
+            A.galleryMoveMenu=nil
+            love.keyboard.setTextInput(false)
+        elseif A.gallerySelecting then
+            A.gallerySelecting=false;A.gallerySelected={}
+        elseif A.galleryTrash then
+            A.galleryDetailId=nil
+            A.galleryTrash=false
+            A.galleryFilter=A.galleryBeforeTrash or 'all'
+            A.galleryBeforeTrash=nil;A.galleryScroll=0
+            refreshGallery()
+        elseif A.folder~='' then
+            local parent=''
+            for _,f in ipairs(A.store.catalog.folders) do
+                if f.id==A.folder then parent=f.parent;break end
+            end
+            setFolder(parent)
+        else
+            A.screen='home'
+        end
+        return
+    end
+    if A.backMenu or A.settingsOpen then
+        if key=='escape' then
+            if A.settingsOpen then A.settingsOpen=false
+            else A.backMenu=false end
+        end
+        return -- Nenhum atalho pode editar pixels sob Configuracoes.
+    end
     if A.desktopLayerOpacityDrag then
         if key=='escape' then
             A.desktopLayerOpacityDrag=nil
@@ -5826,6 +11449,50 @@ function love.keypressed(key)
         return
     end
     if A.screen=='editor' and A.compactPanel then
+        if A.compactPanel=='vector' or A.compactPanel=='frame' then
+            if key=='escape' then navigateCompactPanel('tools') end
+            return
+        end
+        if A.compactPanel=='smudge' or A.compactPanel=='blur'
+            or A.compactPanel=='special' then
+            if key=='escape' then navigateCompactPanel('tools') end
+            return
+        end
+        if A.compactPanel=='wand' or A.compactPanel=='lasso' then
+            if key=='escape' then navigateCompactPanel('tools') end
+            return
+        end
+        if A.compactPanel=='transform' then
+            if key=='escape' then
+                navigateCompactPanel('tools')
+            end
+            return
+        end
+        if A.compactPanel=='materials' then
+            if key=='escape' then
+                navigateCompactPanel(nil)
+            elseif A.materialUi and A.materialUi.focused then
+                if key=='backspace' then
+                    MaterialUI.backspace(A.materialUi)
+                elseif key=='return' or key=='kpenter' then
+                    MaterialUI.submit(A.materialUi)
+                    love.keyboard.setTextInput(false)
+                end
+            end
+            return
+        end
+        if A.compactPanel=='text' then
+            if key=='escape' then
+                navigateCompactPanel('tools')
+            elseif A.textUi and A.textUi.focused then
+                if key=='backspace' then
+                    A.textUi.value=TextUI.backspace(A.textUi.value)
+                elseif key=='return' or key=='kpenter' then
+                    A.textUi.value=TextUI.newline(A.textUi.value)
+                end
+            end
+            return
+        end
         if A.compactPanel=='layers' and not A.compactLayerOpacityDrag then
             local nextIndex=LayerKeys.target(key,A.doc.active_layer,
                 #A.doc.layers)
@@ -5851,11 +11518,29 @@ function love.keypressed(key)
         end
         if key=='escape' then
             A.compactLayerOpacityDrag=nil
-            A.compactPanel=nil;A.colorDrag=nil
+            if A.compactPanel=='filters' then
+                navigateCompactPanel('tools')
+            else
+                navigateCompactPanel(nil)
+            end
+            A.colorDrag=nil
         elseif EditorTools.fromKey(key) then
             selectTool(EditorTools.fromKey(key).id)
             A.compactPanel=nil
         end
+        return
+    end
+    if A.screen=='editor' and A.brushSizeDrag then
+        if key=='escape' then
+            A.brushDiameter=A.brushSizeDrag.origin
+            A.brushSizeDrag=nil
+        end
+        return -- Nenhum comando pode disparar durante o arrasto.
+    end
+    if A.screen=='editor' and key=='f10' and
+        A.compactUi and not A.focusMode and
+        not A.toolHelp and not A.contextMenu then
+        A.windowsHud=not A.windowsHud
         return
     end
     if A.screen=='editor' and A.toolHelp then
@@ -5953,11 +11638,25 @@ function love.keypressed(key)
         A.spaceHeld=true
         return
     end
+    -- A43: atalhos oficiais [ e ] para espessura de 1 px.
+    -- Em texto/modal/popup, o handler anterior ja retornou.
+    if A.screen=='editor' and
+        A.windowsBrushSizeGesture.keyDirection(key) and
+        (A.tool=='brush' or A.tool=='erase') and
+        not A.windowsHud and
+        not love.keyboard.isDown('lctrl','rctrl','lalt','ralt') then
+        finishStroke()
+        A.brushDiameter=A.windowsBrushSizeGesture.step(
+            A.brushDiameter,
+            A.windowsBrushSizeGesture.keyDirection(key))
+        return
+    end
     if A.screen=='editor' and key=='escape' and A.shapePreview then
         A.shapePreview=nil;status('Forma cancelada')
     elseif A.screen=='editor' and (key=='escape' or
         (key=='d' and love.keyboard.isDown('lctrl','rctrl'))) and A.selection then
-        guard(finishSelection)();A.selection=nil;status('Seleção desmarcada')
+        guard(finishSelection)();A.selection=nil;clearWandSelection()
+        status('Seleção desmarcada')
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='z' then
         if love.keyboard.isDown('lshift','rshift') then guard(redoDoc)() else guard(undoDoc)() end
     elseif A.screen=='editor' and love.keyboard.isDown('lctrl','rctrl') and key=='y' then guard(redoDoc)()
@@ -5975,7 +11674,7 @@ function love.keypressed(key)
 end
 function love.keyreleased(key)
     if key=='space' then
-        A.spaceHeld=false
+        A.spaceHeld=false;A.penViewDrag=nil
         if A.panning and A.panButton==1 then
             A.panning=false;A.panButton=nil
         end
@@ -5988,6 +11687,7 @@ function love.resize()
     if A.doc then fit() end
 end
 function love.quit()
+    gpuUpload:clear()
     Ink.close()
     releaseTipCache()
     releaseBrushSamples()

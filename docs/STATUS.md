@@ -1,3 +1,42 @@
+# Estado atual — migração Lua (01/11/2026)
+
+**Prioridade atual: reconstrução visual do ibisPaint 14.1.2.**
+Galeria remodelada, barra compacta com nove ações e seletor com
+quinze categorias e sinalização honesta do motor disponível.
+O backend Lua e o histórico RBD2 foram preservados.
+[Detalhes, evidências e pendências](VISUAL_SHELL_PHASE1.md).
+
+
+**Etapa de pinceladas longas:** o rasterizador Lua agora recorta
+conservadoramente a faixa de pixels examinada em cada linha de um
+segmento, acelerando diagonais extensas sem alterar os RGBA. Testes
+comparam 200 configurações e quatro gestos acumulados byte a byte,
+além de 160 segmentos com undo/redo e salvamento RBD2 no Windows.
+[Ver benchmark e limitações](STROKE_SCANLINES.md). Aumento de FPS
+ou redução de latência em caneta física não foram comprovados.
+
+**Nova etapa:** upload parcial de textura GPU em `app/gpu_upload.lua`,
+com reutilização de `ImageData` e orçamento limitado a 1 MiB. Eventos
+Windows Ink do mesmo pacote passam a unir suas regiões de pintura para
+uma composição e um envio por pacote. Testes de bytes RGBA, cache e
+leitura da textura real foram adicionados. Consulte
+[GPU_UPLOAD.md](GPU_UPLOAD.md). Não há comprovação de aumento de FPS.
+
+A implementação ativa da branch `migration/lua-only-engine` substituiu
+o motor próprio C++ e scripts Python por LuaJIT/LÖVE, com build Windows
+verificado, testes de raster, RBD2 e GUI real. A entrada Windows Ink
+agora possui ponte LuaJIT/FFI experimental validada em uma janela real,
+com controle para desativá-la. O desempenho e a pressão/inclinação
+em caneta física não foram validados. A etapa atual também acrescentou
+histórico de movimentos Windows Ink via LuaJIT FFI e otimização da
+composição RGBA com testes byte a byte. O benchmark de 256/1024/2048
+pixels está documentado em
+[RASTER_PERFORMANCE.md](RASTER_PERFORMANCE.md). Consulte
+[LUA_ONLY_MIGRATION.md](LUA_ONLY_MIGRATION.md). O diagnóstico abaixo é
+**histórico**, da arquitetura antiga.
+
+---
+
 # Estado atualizado — validação CI Windows x64 (23/10/2026)
 
 Este documento preserva abaixo o diagnóstico **histórico** do checkout anterior em um Windows com bloqueios de paths e compilador. Não confundir com o resultado de um novo runner independente.

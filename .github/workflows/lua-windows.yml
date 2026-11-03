@@ -1,0 +1,292 @@
+name: Windows Lua-only package and tests
+
+on:
+  push:
+    branches:
+      - 'migration/**'
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/lua_builder/**'
+      - 'tools/lua_tests/**'
+      - 'build.ps1'
+      - 'test.ps1'
+      - '.github/workflows/lua-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lua-windows:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified LÖVE 11.5 for Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/love2d/love/releases/download/11.5/love-11.5-win64.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'love-11.5-win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+          $expected = 'BA6E56BE2685E53C817749C4A5007F51137136FE5A3AB64920508BABC2E74369'
+          if ($hash -ne $expected) { throw "Checksum inesperado: $hash" }
+          Expand-Archive -LiteralPath $zip -DestinationPath $env:RUNNER_TEMP -Force
+          $rt = Join-Path $env:RUNNER_TEMP 'love-11.5-win64'
+          if (!(Test-Path (Join-Path $rt 'lovec.exe'))) { throw 'lovec.exe nao encontrado' }
+          "LOVE_RUNTIME=$rt" >> $env:GITHUB_ENV
+      - name: Run LuaJIT regression tests
+        shell: pwsh
+        run: .\test.ps1 -Runtime "$env:LOVE_RUNTIME"
+      - name: Build Windows application using Lua
+        shell: pwsh
+        run: .\build.ps1 -Runtime "$env:LOVE_RUNTIME"
+      - name: Assert package contents and ZIP integrity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = 'dist/Android1412Rebuild.exe'
+          $archive = 'dist/Android1412Rebuild.love'
+          if (!(Test-Path $exe) -or !(Test-Path $archive)) { throw 'Pacote Windows incompleto' }
+          if ((Get-Item $exe).Length -le (Get-Item $archive).Length) { throw 'LÖVE nao foi fundido' }
+          if (Test-Path 'dist/rebuild_core.dll') { throw 'DLL propria nao permitida' }
+          Add-Type -AssemblyName System.IO.Compression
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $archive).Path)
+          try {
+            $names = @($zip.Entries | ForEach-Object { $_.FullName })
+            foreach ($required in @('main.lua','native.lua','raster_lua.lua','raster_stroke.lua','raster_tools.lua')) {
+              if ($required -notin $names) { throw "Fonte nao empacotado: $required" }
+            }
+            $legacy = @($names | Where-Object { $_ -match '\.(exe|dll|py|cpp|h)$' })
+            if ($legacy.Count -ne 0) { throw "Binarios/codigo legado no pacote: $legacy" }
+            Write-Host "Arquivo .love validado com $($names.Count) entradas"
+          } finally { $zip.Dispose() }
+          if (!(Get-ChildItem 'dist' -Filter '*.dll')) { throw 'Runtime LÖVE incompleto' }
+      - name: Prepare pinned software OpenGL for GUI test only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-msvc.7z'
+          $archive = Join-Path $env:RUNNER_TEMP 'mesa3d-26.2.4-release-msvc.7z'
+          $dest = Join-Path $env:RUNNER_TEMP 'mesa3d-26.2.4'
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $hash = (Get-FileHash -Path $archive -Algorithm SHA256).Hash
+          $expected = '351FC8C8B695878FFB3EAA044B3EAD08672A48B1A045E3C3E3975811DF0F6695'
+          if ($hash -ne $expected) { throw "Mesa checksum inesperado: $hash" }
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          & 'C:\Program Files\7-Zip\7z.exe' x $archive "-o$dest" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao extrair Mesa' }
+          $gl = Get-ChildItem $dest -Recurse -File -Filter opengl32.dll |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } | Select-Object -First 1
+          if (!$gl) { throw 'OpenGL x64 nao encontrado' }
+          foreach ($file in @('opengl32.dll','libgallium_wgl.dll')) {
+            $source = Join-Path $gl.DirectoryName $file
+            if (!(Test-Path $source)) { throw "Mesa incompleto: $file" }
+            Copy-Item $source (Join-Path $env:LOVE_RUNTIME $file) -Force
+          }
+          Set-Content -Path (Join-Path $env:LOVE_RUNTIME 'lovec.exe.local') -Value '' -NoNewline
+      - name: Verify live Lua editor with official LÖVE runtime
+        shell: pwsh
+        env:
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runner = Join-Path $env:LOVE_RUNTIME 'lovec.exe'
+          $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-gui-smoke'
+          & $runner (Join-Path (Get-Location) 'app') '--lua-gui-smoke' '--data-dir' $root
+          if ($LASTEXITCODE -ne 0) { throw "Editor Lua falhou: $LASTEXITCODE" }
+      - name: Verify optional mouse/touch fallback without Windows Ink
+        shell: pwsh
+        env:
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runner = Join-Path $env:LOVE_RUNTIME 'lovec.exe'
+          $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-no-ink-smoke'
+          & $runner (Join-Path (Get-Location) 'app') '--lua-gui-smoke' '--no-windows-ink' '--data-dir' $root
+          if ($LASTEXITCODE -ne 0) { throw "Fallback sem caneta falhou: $LASTEXITCODE" }
+      - name: Verify fused Windows executable launches real GUI
+        shell: pwsh
+        env:
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($file in @('opengl32.dll','libgallium_wgl.dll')) {
+            Copy-Item (Join-Path $env:LOVE_RUNTIME $file) (Join-Path (Get-Location) 'dist' $file) -Force
+          }
+          Set-Content -Path 'dist/Android1412Rebuild.exe.local' -Value '' -NoNewline
+          $runner = Join-Path (Get-Location) 'dist/Android1412Rebuild.exe'
+          $root = Join-Path $env:RUNNER_TEMP 'ibis-lua-fused-smoke'
+          # Executaveis GUI do Windows retornam o controle antes do encerramento
+          # quando chamados com &, portanto usamos Start-Process -Wait.
+          $process = Start-Process -FilePath $runner -ArgumentList @('--lua-gui-smoke','--data-dir',$root) -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "EXE Lua falhou: $($process.ExitCode)" }
+          Remove-Item 'dist/Android1412Rebuild.exe.local','dist/opengl32.dll','dist/libgallium_wgl.dll' -Force
+      - name: Capture actual Lua editor screenshots
+        shell: pwsh
+        env:
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runner = Join-Path $env:LOVE_RUNTIME 'lovec.exe'
+          $screens = Join-Path (Get-Location) 'build/showcase'
+          $root = Join-Path $env:RUNNER_TEMP 'ibis-showcase-lua'
+          New-Item -ItemType Directory -Path $screens -Force | Out-Null
+          & $runner (Join-Path (Get-Location) 'app') '--showcase-dir' $screens '--data-dir' $root '--no-windows-ink'
+          if ($LASTEXITCODE -ne 0) { throw "Captura do editor Lua falhou: $LASTEXITCODE" }
+          $report = Get-Content (Join-Path $screens 'showcase-report.json') -Raw | ConvertFrom-Json
+          if (!$report.ok -or !$report.real_love_render) { throw 'Capturas nao verificadas' }
+          $expected = @('00-inicial.png','01-galeria.png','02-editor-compacto.png',
+            '03-biblioteca-pinceis.png','04-seletor-cores.png',
+            '05-camadas.png','06-editor-desktop.png',
+            '07-editor-960x640.png','08-ajustes-pincel.png',
+            '09-opacidade-camadas.png','10-seletor-ferramentas.png',
+            '11-criar-tela.png','12-galeria-desenhos.png',
+            '13-menu-visualizacao.png','14-estabilizador.png',
+            '15-opcoes-forma.png','16-materiais-pendentes.png',
+            '17-losango-hsb.png','18-sliders-rgb.png',
+            '19-paleta-cores.png','20-cores-pessoais.png',
+            '21-camada-selecao.png','22-modos-mesclagem.png',
+            '23-selecao-ativa.png','24-catalogo-filtros.png',
+            '25-texto-rascunho.png','26-texto-estilo.png',
+            '27-reguas-catalogo.png','28-regua-espelho.png',
+            '29-materiais-categorias.png','30-materiais-busca.png',
+            '31-transformar-mover.png','32-transformar-perspectiva.png',
+            '33-varinha-magica.png','34-laco.png',
+            '35-borrar.png','36-desfoque.png',
+            '37-caneta-especial.png','38-liquify.png',
+            '39-vetor.png','40-dividir-quadros.png',
+            '41-quadros-divisao.png',
+            '42-busca-fechada.png','43-texto-foco-encerrado.png',
+            '44-editor-faixa-ferramentas.png','45-editor-faixa-interacao.png',
+            '46-paleta-ferramentas.png','47-janela-camadas.png',
+            '48-camadas-visuais.png','49-camada-selecionada.png',
+            '50-camadas-comandos.png','51-camadas-adicionar.png',
+            '52-camadas-duplicar.png',
+            '53-camadas-rodape-oficial.png',
+            '54-camadas-mesclagem-rodape.png',
+            '55-varinha-mascara-real.png',
+            '56-ferramenta-pendente-nao-pinta.png',
+            '57-ferramentas-uma-coluna.png',
+            '58-ferramentas-uma-coluna-pagina2.png',
+            '59-ferramentas-tres-colunas.png',
+            '60-menu-voltar.png','61-configuracoes-ibis.png',
+            '62-ferramentas-sem-rotulos.png',
+            '63-galeria-miniaturas.png','64-galeria-rolagem.png',
+            '65-galeria-selecao-visual.png',
+            '66-estabilizador-1412-tempo-real.png',
+            '67-estabilizador-1412-fade.png',
+            '68-estabilizador-1412-rascunho.png',
+            '69-estabilizador-legado-lua.png',
+            '70-nova-tela-tamanhos-basicos.png',
+            '71-nova-tela-formatos-oficiais.png',
+            '72-nova-tela-proporcao-3-4.png',
+            '73-nova-tela-a4-pixels.png',
+            '74-nova-tela-presets-preservados.png',
+            '75-galeria-selecao-rodape.png',
+            '76-galeria-selecionar-todos.png',
+            '77-galeria-limpar-selecao.png',
+            '78-galeria-excluir-pendente.png',
+            '79-galeria-mover-abrir.png',
+            '80-galeria-mover-escolher-pasta.png',
+            '81-galeria-obra-movida.png',
+            '82-galeria-destino-verificado.png',
+            '83-mover-criar-pasta.png',
+            '84-mover-nova-pasta-criada.png',
+            '85-mover-obra-para-pasta-nova.png',
+            '86-mover-pasta-nova-verificada.png',
+            '87-mover-criacao-cancelada.png',
+            '88-excluir-confirmacao.png',
+            '89-excluir-cancelado.png',
+            '90-excluir-recuperavel.png',
+            '91-excluidos-recentemente.png',
+            '92-recuperar-confirmacao.png',
+            '93-desenho-recuperado.png',
+            '94-galeria-menu-tres-pontos.png',
+            '95-excluidos-prazo-recuperacao.png',
+            '96-excluidos-selecao-em-lote.png',
+            '97-excluidos-lote-recuperado.png',
+            '98-galeria-sem-abas-inventadas.png',
+            '99-galeria-rolagem-sem-abas.png',
+            '100-galeria-selecao-sem-abas.png',
+            '101-galeria-arrasto-pressionado.png',
+            '102-galeria-ordem-alterada.png',
+            '103-galeria-ordem-persistida.png',
+            '104-galeria-arrasto-curto-cancelado.png',
+            '105-galeria-pastas-e-obras-reordenadas.png',
+            '106-arrastar-desenho-para-pasta.png',
+            '107-desenho-dentro-da-pasta.png',
+            '108-arrastar-desenho-para-voltar.png',
+            '109-desenho-movido-para-pasta-pai.png',
+            '110-agrupar-desenho-sobre-outro.png',
+            '111-pasta-criada-com-dois-desenhos.png',
+            '112-conteudo-da-pasta-agrupada.png',
+            '113-agrupar-com-nome-duplicado.png',
+            '114-arrasto-rolagem-para-baixo.png',
+            '115-arrasto-rolagem-para-cima.png',
+            '116-arrasto-rolagem-cancelado.png',
+            '117-alpha-lock-camada-ativado.png',
+            '118-alpha-lock-pintura-real.png',
+            '119-alpha-lock-rbd2-reaberto.png',
+            '120-ferramentas-direita.png',
+            '121-ferramentas-popup-sem-faixa.png',
+            '122-galeria-imagem-ampliada.png',
+            '123-galeria-proxima-obra.png',
+            '124-galeria-gesto-voltar.png',
+            '125-galeria-editar-obra.png')
+          foreach ($name in $expected) {
+            $path = Join-Path $screens $name
+            if (!(Test-Path $path)) { throw "Falta captura: $name" }
+            if ((Get-Item $path).Length -le 1024) { throw "PNG vazio: $name" }
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            if ($bytes[0] -ne 137 -or $bytes[1] -ne 80 -or $bytes[2] -ne 78 -or $bytes[3] -ne 71) {
+              throw "PNG corrompido: $name"
+            }
+          }
+          $unique = @($expected | Select-Object -Unique)
+          if ($unique.Count -ne $expected.Count) {
+            throw 'Capturas com nomes duplicados'
+          }
+          foreach ($name in $expected) {
+            $png = [System.IO.File]::ReadAllBytes((Join-Path $screens $name))
+            if ($png.Length -lt 33) { throw "PNG incompleto: $name" }
+            $width = [System.Net.IPAddress]::NetworkToHostOrder([BitConverter]::ToInt32($png,16))
+            $height = [System.Net.IPAddress]::NetworkToHostOrder([BitConverter]::ToInt32($png,20))
+            if ($width -lt 960 -or $height -lt 640 -or $width -gt 4096 -or $height -gt 2160) {
+              throw "Dimensao incorreta: $name"
+            }
+          }
+          foreach ($pair in @(
+            @('33-varinha-magica.png','34-laco.png'),
+            @('35-borrar.png','36-desfoque.png'),
+            @('39-vetor.png','40-dividir-quadros.png'),
+            @('40-dividir-quadros.png','41-quadros-divisao.png'),
+            @('42-busca-fechada.png','43-texto-foco-encerrado.png'))) {
+            $a = (Get-FileHash (Join-Path $screens $pair[0]) -Algorithm SHA256).Hash
+            $b = (Get-FileHash (Join-Path $screens $pair[1]) -Algorithm SHA256).Hash
+            if ($a -eq $b) { throw "Estados visuais identicos: $($pair[0]) e $($pair[1])" }
+          }
+          Write-Host "$($expected.Count) capturas reais verificadas"
+      - name: Publish real Lua editor screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: IbisRebuild-Lua-Real-Screenshots
+          path: build/showcase/*.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Publish tested Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: IbisRebuild-Lua-Windows
+          path: |
+            dist/Android1412Rebuild.exe
+            dist/Android1412Rebuild.love
+            dist/*.dll
+          if-no-files-found: error
+          retention-days: 7

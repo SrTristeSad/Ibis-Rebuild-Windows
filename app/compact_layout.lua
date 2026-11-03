@@ -1,19 +1,21 @@
 -- Layout for an independently implemented, mobile-like workspace.
--- The seven main toolbar categories follow the official ibisPaint tutorial
--- (brush/eraser, tools, properties, color, full screen, layers, back).
--- This is a layout reference, NOT an Android view/asset extraction.
+-- As nove acoes principais seguem a ordem documentada na barra
+-- ibisPaint: pincel/borracha, ferramentas, ajustes, cor, tela,
+-- desfazer, refazer, camadas, voltar. Desenhos vetoriais sao originais.
 local UI={}
-UI.IDS={'brush','tools','properties','color','fullscreen','layers','back'}
-UI.LABELS={'Pincel','Ferramentas','Ajustes','Cor','Tela','Camadas','Voltar'}
-UI.WIDTH=82
-UI.GAP=8
-UI.HEIGHT=50
+UI.IDS={'brush','tools','properties','color','fullscreen',
+    'undo','redo','layers','back'}
+UI.LABELS={'Pincel','Ferramentas','Ajustes','Cor','Tela',
+    'Desfazer','Refazer','Camadas','Voltar'}
+UI.WIDTH=60
+UI.GAP=5
+UI.HEIGHT=44
 function UI.toolbar(w,h)
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Dimensão insuficiente')
     local total=#UI.IDS*UI.WIDTH+(#UI.IDS-1)*UI.GAP
     local x=math.floor((w-total)/2)
-    local y=h-112
+    local y=h-52
     local result={}
     for i,id in ipairs(UI.IDS) do
         result[i]={id=id,label=UI.LABELS[i],
@@ -21,6 +23,15 @@ function UI.toolbar(w,h)
             w=UI.WIDTH,h=UI.HEIGHT}
     end
     return result
+end
+-- A41: a caixa de realce visual fica restrita ao ícone.
+-- A área clicável permanece o slot inteiro, independente do realce.
+function UI.iconFrame(slot)
+    assert(type(slot)=='table' and slot.w>=44 and slot.h>=40,
+        'Slot de comando invalido')
+    local size=36
+    return {x=math.floor(slot.x+(slot.w-size)/2),
+        y=math.floor(slot.y+(slot.h-size)/2),w=size,h=size}
 end
 function UI.pick(w,h,x,y)
     for _,slot in ipairs(UI.toolbar(w,h)) do
@@ -31,18 +42,37 @@ function UI.pick(w,h,x,y)
     end
     return nil
 end
--- Two quick rails live in a single bottom strip above the icon row.
--- Their hit boxes are independent of drawing bounds and popup hit maps.
+-- Canvas inferior: duas barras igualmente alinhadas, com menos/mais
+-- na extremidade (tutoriais publicos do ibisPaint). O retangulo da
+-- linha e os botoes sao distintos para que nenhum clique seja fantasma.
+-- A faixa continua uma adaptacao Windows: dimensoes nao sao medidas
+-- no APK Android 14.1.2.
 function UI.quick(w,h)
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela pequena para os ajustes')
-    local left=math.floor((w-640)/2)
-    return {
-        diameter={x=left+92,y=h-159,w=160,h=14,
-            labelX=left+10,valueX=left+258},
-        opacity={x=left+409,y=h-159,w=160,h=14,
-            labelX=left+319,valueX=left+576}
-    }
+    local left=math.floor((w-690)/2)
+    local function make(y)
+        return {x=left+187,y=y,w=350,h=14,
+            labelX=left+12,valueX=left+113,
+            minus={x=left+151,y=y-5,w=24,h=24},
+            plus={x=left+547,y=y-5,w=24,h=24}}
+    end
+    return {diameter=make(h-123),opacity=make(h-97)}
+end
+-- Retornar direcao sem alterar estado; o motor aplica o valor no
+-- mesmo caminho usado pelo arrasto da barra.
+function UI.quickButton(w,h,x,y)
+    local bars=UI.quick(w,h)
+    for _,kind in ipairs({'diameter','opacity'}) do
+        for _,button in ipairs({'minus','plus'}) do
+            local r=bars[kind][button]
+            if x>=r.x and x<r.x+r.w and
+                y>=r.y and y<r.y+r.h then
+                return kind,button=='minus' and -1 or 1
+            end
+        end
+    end
+    return nil
 end
 local ranges={
     diameter={min=1,max=256,step=1},
@@ -52,6 +82,19 @@ function UI.quickFraction(kind,value)
     local r=assert(ranges[kind],'Ajuste rápido inválido')
     assert(type(value)=='number' and value==value,'Valor inválido')
     return math.max(0,math.min(1,(value-r.min)/(r.max-r.min)))
+end
+function UI.quickStep(kind,value,direction)
+    local r=assert(ranges[kind],'Ajuste rapido desconhecido')
+    assert(type(value)=='number' and value==value,
+        'Valor de ajuste invalido')
+    assert(direction==-1 or direction==1,
+        'Direcao de ajuste invalida')
+    local count=math.floor((r.max-r.min)/r.step+.5)
+    local index=math.floor((value-r.min)/r.step+.5)+direction
+    index=math.max(0,math.min(count,index))
+    local nextValue=r.min+index*r.step
+    return tonumber(string.format('%.4f',
+        math.max(r.min,math.min(r.max,nextValue))))
 end
 function UI.quickValue(kind,w,h,x)
     local r=assert(ranges[kind],'Ajuste rápido inválido')
@@ -71,22 +114,55 @@ function UI.quickHit(w,h,x,y)
     end
     return nil
 end
-function UI.popup(w,h,kind)
+function UI.popup(w,h,kind,columns)
+    columns=columns or 2
+    if kind=='tools' then
+        assert(columns==1 or columns==2 or columns==3,
+            'Colunas do seletor invalidas')
+    end
     assert(kind=='tools' or kind=='layers' or kind=='properties'
-        or kind=='color','Janela compacta desconhecida')
+        or kind=='color' or kind=='view' or kind=='stabilizer'
+        or kind=='ruler' or kind=='materials' or kind=='blends'
+        or kind=='filters' or kind=='text' or kind=='transform'
+        or kind=='wand' or kind=='lasso' or kind=='smudge'
+        or kind=='blur' or kind=='special'
+        or kind=='vector' or kind=='frame',
+        'Janela compacta desconhecida')
     assert(type(w)=='number' and w>=960 and
         type(h)=='number' and h>=640,'Janela compacta inválida')
-    local width=kind=='color' and 404 or kind=='tools' and 332 or 298
-    local height=kind=='color' and 450 or kind=='tools' and 410 or
-        kind=='layers' and math.min(440,h-260) or 354
-    return {x=(kind=='layers' or kind=='color') and w-width-20 or 20,
-        y=134,w=width,h=height}
+    local isTop=kind=='view' or kind=='stabilizer'
+        or kind=='ruler' or kind=='materials'
+    local width=kind=='tools' and (columns==3 and 358 or 242) or
+        kind=='stabilizer' and 348 or kind=='color' and 404 or kind=='ruler' and 390
+        or kind=='materials' and 444 or (kind=='tools' or
+        kind=='filters' or kind=='text' or kind=='transform'
+        or kind=='wand' or kind=='lasso' or kind=='smudge'
+        or kind=='blur' or kind=='special'
+        or kind=='vector' or kind=='frame') and 420
+        or isTop and 318 or 298
+    local height=kind=='color' and 450 or
+        (kind=='tools' and (columns==3 and 288 or 383)) or
+        ((kind=='filters' or kind=='text' or kind=='transform'
+            or kind=='wand' or kind=='lasso' or kind=='smudge'
+            or kind=='blur' or kind=='special'
+            or kind=='vector' or kind=='frame')
+            and math.min(440,h-188)) or
+        kind=='layers' and math.min(440,h-260) or
+        kind=='view' and 314 or kind=='stabilizer' and 430 or
+        kind=='blends' and math.min(440,h-260) or
+        kind=='ruler' and 402 or kind=='materials' and 440 or 354
+    local x=(kind=='tools' and 85) or
+        ((kind=='layers' or kind=='color' or kind=='blends' or isTop)
+        and w-width-20 or 20)
+    local y=(kind=='tools' and math.max(125,h-130-height-6)) or
+        (kind=='layers' and math.max(134,h-130-height-8)) or 134
+    return {x=x,y=y,w=width,h=height}
 end
 function UI.contains(rect,x,y)
     return x>=rect.x and x<rect.x+rect.w and
         y>=rect.y and y<rect.y+rect.h
 end
 function UI.layerRows(rect)
-    return math.max(2,math.min(5,math.floor((rect.h-178)/40)))
+    return math.max(2,math.min(4,math.floor((rect.h-188)/52)))
 end
 return UI

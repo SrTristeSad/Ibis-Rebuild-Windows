@@ -1,0 +1,93 @@
+name: Lua engine migration checks
+on:
+  push:
+    branches:
+      - 'migration/**'
+  pull_request:
+    paths:
+      - 'app/raster_*.lua'
+      - 'tests/test_raster_*.lua'
+      - '.github/workflows/lua-migration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lua-raster:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT runtime
+        run: sudo apt-get update && sudo apt-get install -y luajit
+      - name: Compile complete Lua editor entrypoint
+        run: luajit -b app/main.lua /tmp/ibis-editor-main-check.luac
+      - name: Lua ibisPaint visual panel geometry (no raster changes)
+        run: luajit -e "local t=loadfile('tests/test_ibis_visual_panels.lua')(); assert(t.run().passed)"
+      - name: Lua ibis settings navigation and geometry
+        run: luajit -e "package.path='app/?.lua;'..package.path; local t=loadfile('tests/test_ibis_settings_ui.lua')(); assert(t.run().passed)"
+      - name: Lua gallery tabs and new-canvas preview
+        run: luajit -e "local t=loadfile('tests/test_ibis_gallery_ui.lua')(); assert(t.run().passed)"
+      - name: Lua top-right ibis toolbar safety and layout
+        run: luajit -e "local t=loadfile('tests/test_ibis_top_toolbar.lua')(); assert(t.run().passed)"
+      - name: Lua ibisPaint 14.1 stabilizer visual layout and pending modes
+        run: luajit -e "package.path='app/?.lua;'..package.path; local t=loadfile('tests/test_ibis_stabilizer_ui.lua')(); assert(t.run().passed)"
+      - name: Lua built-in and personal palette layout
+        run: luajit -e "local t=loadfile('tests/test_ibis_palette_ui.lua')(); assert(t.run().passed)"
+      - name: Lua layer window and blend-mode UI layout
+        run: luajit -e "local t=loadfile('tests/test_ibis_layer_ui.lua')(); assert(t.run().passed)"
+      - name: Lua filter catalog layout and pending actions
+        run: luajit -e "local t=loadfile('tests/test_ibis_filter_ui.lua')(); assert(t.run().passed)"
+      - name: Lua text draft and layout regression
+        run: luajit -e "local t=loadfile('tests/test_ibis_text_ui.lua')(); assert(t.run().passed)"
+      - name: Lua ruler visual catalog and nonfunctional state
+        run: luajit -e "local t=loadfile('tests/test_ibis_ruler_ui.lua')(); assert(t.run().passed)"
+      - name: Lua material categories, UTF-8 search and empty state
+        run: luajit -e "local t=loadfile('tests/test_ibis_material_ui.lua')(); assert(t.run().passed)"
+      - name: Lua transform tool visual geometry and backend isolation
+        run: luajit -e "local t=loadfile('tests/test_ibis_transform_ui.lua')(); assert(t.run().passed)"
+      - name: Lua Magic Wand and Lasso visual states and layout
+        run: luajit -e "local t=loadfile('tests/test_ibis_selection_tool_ui.lua')(); assert(t.run().passed)"
+      - name: Lua smudge blur and special pen visual geometry
+        run: luajit -e "local t=loadfile('tests/test_ibis_effect_tools_ui.lua')(); assert(t.run().passed)"
+      - name: Lua vector and manga frame visual UI isolation
+        run: luajit -e "local t=loadfile('tests/test_ibis_vector_frame_ui.lua')(); assert(t.run().passed)"
+      - name: Lua popup focus lifecycle regression
+        run: luajit -e "local t=loadfile('tests/test_compact_popup_focus.lua')(); assert(t.run().passed)"
+      - name: Lua original-style editor left tool rail geometry
+        run: luajit -e "local t=loadfile('tests/test_ibis_editor_rail.lua')(); assert(t.run().passed)"
+      - name: Lua Windows toolbar and tool glyph registry
+        run: luajit -e "package.path='app/?.lua;'..package.path; assert(loadfile('tests/test_ui_icons.lua')().run().passed); assert(loadfile('tests/test_ibis_visual_tools.lua')().run().passed)"
+      - name: Lua Windows brush-size Ctrl Alt gesture and bracket shortcuts
+        run: luajit -e "local t=loadfile('tests/test_ibis_windows_brush_size.lua')(); assert(t.run().passed)"
+      - name: Lua Windows Ink pen zoom and rotate geometry
+        run: luajit -e "local t=loadfile('tests/test_ibis_windows_pen_view.lua')(); assert(t.run().passed)"
+      - name: Lua standalone layer chrome geometry
+        run: luajit -e "local t=loadfile('tests/test_ibis_layer_chrome.lua')(); assert(t.run().passed)"
+      - name: Lua raster buffer and composite regression
+        run: luajit tests/test_raster_lua.lua
+      - name: Lua stroke raster regression
+        run: luajit tests/test_raster_stroke.lua
+      - name: Real Lua Magic Wand flood mask and union regression
+        run: luajit tests/test_wand_selection.lua
+      - name: Lua selections and geometry regression
+        run: luajit tests/test_raster_tools.lua
+      - name: Lua layer manager integration regression
+        run: luajit tests/test_raster_layer_integration.lua
+      - name: GPU ImageData scratch cache regression
+        run: luajit tests/test_gpu_upload.lua
+      - name: Lua Windows Ink queue and pressure model
+        run: luajit tests/test_windows_ink_lua.lua
+      - name: Byte-identical brush scanline regression
+        run: luajit tests/test_raster_stroke_scanlines.lua
+      - name: Stroke CPU benchmark (informational)
+        run: luajit tests/bench_raster_stroke_scanlines.lua
+      - name: RGBA compositor equivalence
+        run: luajit tests/test_raster_compositor_equivalence.lua
+      - name: Multi-layer opaque-row regression
+        run: luajit tests/test_raster_opaque_rows.lua
+      - name: Canvas composition benchmark (informational)
+        run: luajit tests/bench_raster_composition.lua
+      - name: Compare opaque-row and per-pixel compositor (informational)
+        run: luajit tests/bench_raster_comparison.lua

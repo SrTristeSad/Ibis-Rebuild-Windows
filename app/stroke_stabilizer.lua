@@ -1,5 +1,5 @@
 -- Event-driven, bounded mouse stroke smoothing for desktop input.
--- Independent smoothing; rasterisation stays exclusively in the C++ core.
+-- Independent smoothing; rasterisation stays exclusively in the Lua raster engine.
 local Stabilizer={}
 Stabilizer.__index=Stabilizer
 local function valid(n)
