@@ -125,6 +125,23 @@ function M.run()
         'Disco nao reflete os canais RGB ou perdeu a centralizacao')
     check(not pcall(Icons.drawColorSwatch,110,145,21,1.5,0,0),
         'Canal de cor fora de [0,1] nao pode ser aceito')
+    -- A51: a acao Tela da barra Windows e representada por seta
+    -- para baixo; a antiga caixa de quatro cantos nao deve voltar.
+    local screen=Icons.commands('fullscreen')
+    check(#screen==2 and screen[1].op=='line' and
+        screen[2].op=='line',
+        'Tela deve usar haste e ponta, sem cantos de enquadramento')
+    local shaft,head=screen[1].points,screen[2].points
+    check(#shaft==4 and shaft[1]==0 and shaft[3]==0 and
+        shaft[2]<0 and shaft[4]>0,
+        'Haste de Tela deve ser vertical e apontar para baixo')
+    check(#head==6 and head[1]<0 and head[5]>0 and
+        head[2]==head[6] and head[4]>head[2] and
+        head[3]==0 and head[4]==shaft[4],
+        'Ponta de Tela deve formar um V centralizado para baixo')
+    check(Compact.IDS[5]=='fullscreen' and
+        Icons.commands(Compact.IDS[5])==screen,
+        'A nova seta precisa manter o ID e o slot Tela')
     check(Icons.commands('unknown')==nil,'Unknown tools should not have glyphs')
     check(#Tools.items==8,'Existing eight tool set must stay intact')
     return {suite='editor-vector-tool-icons',passed=true,assertions=checks,
