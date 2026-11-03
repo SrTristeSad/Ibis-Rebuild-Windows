@@ -168,7 +168,7 @@ local showcaseNames={[0]='00-inicial.png','01-galeria.png','02-editor-compacto.p
     '123-galeria-proxima-obra.png',
     '124-galeria-gesto-voltar.png',
     '125-galeria-editar-obra.png'}
-local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,windowsHudApi=require('ibis_windows_hud'),quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,windowsHudApi=require('ibis_windows_hud'),windowsBrushSizeGesture=require('ibis_windows_brush_size'),brushSizeDrag=nil,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
         A.wandOverlay:release()
@@ -517,6 +517,7 @@ local function toggleFocusMode()
     finishStroke()
     A.shapePreview=nil
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
+    A.brushSizeDrag=nil
     navigateCompactPanel(nil);A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
     A.focusMode=not A.focusMode
     A.windowsHud=false
@@ -529,6 +530,7 @@ local function toggleCompactUi()
     finishStroke()
     A.shapePreview=nil;A.selectAction=nil;A.movePreview=nil
     A.panning=false;A.panButton=nil;A.sliderDrag=nil;A.quickDrag=nil
+    A.brushSizeDrag=nil
     A.contextMenu=nil;A.brushLibrary=false;A.toolHelp=false
     navigateCompactPanel(nil);A.compactLayerStart=nil;A.colorDrag=nil
     A.desktopLayerOpacityDrag=nil
@@ -5369,6 +5371,63 @@ function love.update(dt)
                 A.tool=originalTool
                 A.brushDiameter=originalDiameter
                 A.brushOpacity=originalOpacity
+                -- A43: teclado real do LÖVE, mais mouse com Ctrl+Alt
+                -- simulado por isDown (sem exigir teclado no runner).
+                local previousSize=A.brushDiameter
+                local previousTool=A.tool
+                local previousInk=A.dirty
+                local originalUndo=layers:historyStats().undo
+                local originalPixels=Native.bytes(layers.composite)
+                A.tool='brush';A.brushDiameter=24
+                love.keypressed('leftbracket')
+                assert(A.brushDiameter==23,
+                    'Colchete esquerdo nao diminuiu brush')
+                love.keypressed('rightbracket')
+                assert(A.brushDiameter==24,
+                    'Colchete direito nao aumentou brush')
+                local down=love.keyboard.isDown
+                love.keyboard.isDown=function(...)
+                    for i=1,select('#',...) do
+                        local key=select(i,...)
+                        if key=='lctrl' or key=='rctrl'
+                            or key=='lalt' or key=='ralt' then
+                            return true
+                        end
+                    end
+                    return down(...)
+                end
+                local gestureOk,gestureErr=xpcall(function()
+                    love.draw()
+                    love.mousepressed(sx,sy,1,false)
+                    assert(A.brushSizeDrag and not A.drawing and
+                        not A.panning,
+                        'Ctrl+Alt+esquerdo iniciou pintura ou pan')
+                    love.mousemoved(sx+16,sy,16,0,false)
+                    assert(A.brushDiameter==28,
+                        'Drag Ctrl+Alt nao ajustou 4 pixels')
+                    love.mousemoved(sx-8,sy,-24,0,false)
+                    assert(A.brushDiameter==22,
+                        'Drag reverso deve usar origem fixa')
+                    love.mousereleased(sx+8,sy,1,false)
+                    assert(A.brushDiameter==26 and
+                        not A.brushSizeDrag and not A.drawing,
+                        'Soltura nao finalizou ajuste Ctrl+Alt')
+                    A.brushDiameter=24
+                    A.compactPanel='tools'
+                    love.draw()
+                    love.mousepressed(sx,sy,1,false)
+                    assert(not A.brushSizeDrag and not A.drawing,
+                        'Ctrl+Alt atravessou popup')
+                    love.mousereleased(sx,sy,1,false)
+                    A.compactPanel=nil
+                end,debug.traceback)
+                love.keyboard.isDown=down
+                if not gestureOk then error(gestureErr) end
+                assert(Native.bytes(layers.composite)==originalPixels
+                    and layers:historyStats().undo==originalUndo
+                    and A.dirty==previousInk,
+                    'Atalhos Ctrl+Alt/[] modificaram raster ou dirty')
+                A.brushDiameter=previousSize;A.tool=previousTool
                 local loaded=A.store:openProject(A.doc.id)
                 assert(loaded and loaded.layers and
                     loaded.layers[1].pixels==Native.bytes(layers:activeBuffer()),
@@ -10461,6 +10520,40 @@ local function pointerPressed(x,y,buttonNumber,pressure)
             return
         end
     end
+    -- A43: Ctrl+Alt+arrastar com esquerdo — atalho documentado
+    -- para espessura do pincel no ibisPaint Windows. A prioridade
+    -- e anterior a pintura; a gestualidade nao grava pixels.
+    if buttonNumber==1 and A.screen=='editor' and A.doc and
+        (A.tool=='brush' or A.tool=='erase') and
+        not A.modal and not A.toolHelp and not A.contextMenu
+        and not A.brushLibrary and not A.compactPanel
+        and not A.windowsHud and not A.spaceHeld
+        and not A.panning and not A.drawing and not A.quickDrag
+        and not A.sliderDrag and
+        love.keyboard.isDown('lctrl','rctrl') and
+        love.keyboard.isDown('lalt','ralt') then
+        local w,h=love.graphics.getDimensions()
+        if Workspace.contains(w,h,paneHidden(),x,y,
+            A.compactUi and not A.focusMode) then
+            local controlHit=false
+            for _,button in ipairs(A.buttons) do
+                if x>=button.x and x<button.x+button.w and
+                    y>=button.y and y<button.y+button.h then
+                    controlHit=true;break
+                end
+            end
+            if not controlHit then
+                local px,py=canvasPoint(x,y)
+                if px>=0 and py>=0 and
+                    px<A.doc.width and py<A.doc.height then
+                    finishStroke()
+                    A.brushSizeDrag=A.windowsBrushSizeGesture.begin(
+                        x,A.brushDiameter)
+                    return
+                end
+            end
+        end
+    end
     -- A42: Quick Eyedropper confirmado para ibisPaint Windows
     -- (tutorial no=167). Direito com pincel = colher, sem trocar tool.
     -- Nunca ler pixels sob os controles de interface.
@@ -10622,6 +10715,12 @@ local function pointerPressed(x,y,buttonNumber,pressure)
     end
 end
 local function pointerReleased(x,y,b,pressure)
+    if b==1 and A.brushSizeDrag then
+        A.brushDiameter=A.windowsBrushSizeGesture.move(
+            A.brushSizeDrag,x)
+        A.brushSizeDrag=nil
+        return -- Encerrar ajuste sem fechar traço ou mudar histórico.
+    end
     if A.screen=='home' then return end
     if b==1 and A.canvasDimensionDrag then
         local axis=A.canvasDimensionDrag
@@ -10833,6 +10932,11 @@ local function pointerMoved(x,y,dx,dy,pressure)
         applyParameterSlider(A.sliderDrag,x)
         return
     end
+    if A.brushSizeDrag then
+        A.brushDiameter=A.windowsBrushSizeGesture.move(
+            A.brushSizeDrag,x)
+        return -- Nunca propagar este arrasto ao stroke/canvas.
+    end
     if A.toolHelp then return end
     if A.panning then
         View.pan(A,dx,dy)
@@ -10940,6 +11044,7 @@ end
 function love.mousefocus(focused)
     if not focused then
         A.mouseOutside=true;A.hoverX=nil;A.hoverY=nil
+        A.brushSizeDrag=nil
     end
 end
 function love.focus(focused)
@@ -10949,6 +11054,7 @@ function love.focus(focused)
         A.shapePreview=nil;A.touchId=nil;A.inkPenId=nil
         A.galleryGesture=nil;A.galleryDetailSwipe=nil
         A.panning=false;A.panButton=nil;A.spaceHeld=false
+        A.brushSizeDrag=nil
         A.toolHelp=false;A.contextMenu=nil;A.brushLibrary=false;A.brushLabDrag=nil;A.sliderDrag=nil
         navigateCompactPanel(nil)
         if A.inkPreviousTool then A.tool=A.inkPreviousTool;A.inkPreviousTool=nil end
@@ -11279,6 +11385,13 @@ function love.keypressed(key)
         end
         return
     end
+    if A.screen=='editor' and A.brushSizeDrag then
+        if key=='escape' then
+            A.brushDiameter=A.brushSizeDrag.origin
+            A.brushSizeDrag=nil
+        end
+        return -- Nenhum comando pode disparar durante o arrasto.
+    end
     if A.screen=='editor' and key=='f10' and
         A.compactUi and not A.focusMode and
         not A.toolHelp and not A.contextMenu then
@@ -11378,6 +11491,19 @@ function love.keypressed(key)
     end
     if A.screen=='editor' and key=='space' then
         A.spaceHeld=true
+        return
+    end
+    -- A43: atalhos oficiais [ e ] para espessura de 1 px.
+    -- Em texto/modal/popup, o handler anterior ja retornou.
+    if A.screen=='editor' and
+        A.windowsBrushSizeGesture.keyDirection(key) and
+        (A.tool=='brush' or A.tool=='erase') and
+        not A.windowsHud and
+        not love.keyboard.isDown('lctrl','rctrl','lalt','ralt') then
+        finishStroke()
+        A.brushDiameter=A.windowsBrushSizeGesture.step(
+            A.brushDiameter,
+            A.windowsBrushSizeGesture.keyDirection(key))
         return
     end
     if A.screen=='editor' and key=='escape' and A.shapePreview then

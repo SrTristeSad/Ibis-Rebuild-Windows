@@ -48,7 +48,8 @@ local integration={
     'test_ibis_effect_tools_ui.lua',
     'test_ibis_vector_frame_ui.lua',
     'test_compact_popup_focus.lua',
-    'test_ibis_editor_rail.lua'
+    'test_ibis_editor_rail.lua',
+    'test_ibis_windows_brush_size.lua'
 }
 local function test(root,name,withStore)
     io.write('[Lua] '..name..'...\n')
