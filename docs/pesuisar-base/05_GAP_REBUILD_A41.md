@@ -78,3 +78,16 @@ A46 redesenha só esses três glifos em vetores próprios, compartilhados
 entre faixa lateral e seletor popup, com IDs e callbacks preservados.
 A referência promocional não contém build/DPI/zoom medidos; o desenho
 novo **não é certificado 1:1**. Outros ícones continuam sob auditoria.
+
+## Atualização A47 — Pincel, Borracha e Balde com silhuetas Windows
+
+O [atlas IMG-M04](02_ATLAS_VISUAL.md) passou a guardar uma segunda
+imagem oficial da Microsoft Store em que a barra lateral apresenta
+Pincel (cabo/ponta diagonal), Borracha (bloco inclinado) e
+Balde/Lata de Tinta (recipiente/gota). O rebuild A46 usava desenhos
+muito abstratos. A47 altera **somente** seus três vetores no registro
+Lua compartilhado; preserva o catálogo de ferramentas, as barras,
+os controles inferiores e os motores. Tamanho, posição, fidelidade
+exata e efeito de escuro/selecionado seguem **não verificados** na
+versão-alvo PC instalada.
+

@@ -9,17 +9,32 @@ local glyphs={
         {op='rectangle',mode='fill',x=-4.2,y=-4.2,w=8.4,h=8.4},
         {op='rectangle',mode='fill',x=4.9,y=-5.5,w=2,h=2},
         {op='rectangle',mode='fill',x=-6.6,y=4.4,w=2,h=2}},
+    -- A47: silhuetas inspiradas nas ferramentas PC observadas na
+    -- Microsoft Store. Vetores próprios; sem copiar sprites oficiais.
     brush={
-        {op='line',points={-5.7,5.9,-3.2,2.8,2.7,-3.1,5.8,-6.1}},
-        {op='circle',mode='fill',x=-5.5,y=5.6,r=2.1},
-        {op='line',points={-3.2,2.8,0.1,4.1,4.0,0.1}}},
+        -- Pincel inclinado: corpo, virola e ponta com cerdas.
+        {op='polygon',mode='fill',
+            points={1.8,-5.6,3.6,-7,6.2,-4.5,4.4,-2.9,
+                -1.1,2.4,-3.1,.3}},
+        {op='line',points={-2.0,1.6,.1,3.5}},
+        {op='polygon',mode='fill',
+            points={-2.7,1.2,-.2,3.3,-2.2,5.5,-5.7,6.4,
+                -5.0,3.2}},
+        {op='line',points={-6.2,6.6,-3.6,6.6}}},
     erase={
-        {op='polygon',mode='line',points={-6,2,-1,-5,6,0,1,6,-3,6}},
-        {op='line',points={-3,6,5,6}}},
+        -- Bloco de borracha diagonal preenchido, nao seta/losango.
+        {op='polygon',mode='fill',
+            points={-6.2,1.6,-1.9,-5.8,5.4,-1.6,1.2,5.6,
+                -4.0,5.6}},
+        {op='line',points={-4.5,6.5,5.8,6.5}}},
     fill={
-        {op='polygon',mode='line',points={-5,-2,0,-6,5,-1,0,4}},
-        {op='line',points={-7,4,3,4}},
-        {op='circle',mode='fill',x=5.5,y=5.3,r=1.8}},
+        -- Lata de tinta virada e gota separada.
+        {op='polygon',mode='line',
+            points={-5.3,-2.1,.4,-6.2,5.8,-.7,.2,4.9,-5.4,-.4}},
+        {op='line',points={-6.4,-3.0,-4.8,-4.4,-3.5,-4.5}},
+        {op='line',points={-6.2,5.6,2.0,5.6}},
+        {op='polygon',mode='fill',
+            points={4.2,3.4,5.5,1.1,6.9,3.6,5.4,5.6}}},
     select={
         {op='line',points={-6,-3,-6,-6,-3,-6}},
         {op='line',points={1,-6,5,-6,5,-3}},

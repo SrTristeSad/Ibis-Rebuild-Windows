@@ -358,6 +358,17 @@
       "source": "https://ibis-paint.en.uptodown.com/windows",
       "quality": "low-unverified",
       "local_copy": false
+    },
+    {
+      "id": "IMG-M04",
+      "type": "image",
+      "platform": "windows-marketing",
+      "version": "unknown",
+      "title": "Brush Eraser Bucket and toolbar on Windows marketing screenshot",
+      "url": "https://store-images.s-microsoft.com/image/apps.32378.14202576542330599.5d8d33ef-6e70-4d7f-953d-99930bb9592a.1715e9a7-d182-4d1e-a9b7-883949af7782",
+      "source": "W08",
+      "quality": "marketing-unversioned",
+      "local_copy": false
     }
   ]
 }

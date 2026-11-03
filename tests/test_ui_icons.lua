@@ -46,6 +46,20 @@ function M.run()
     for _,id in ipairs(Compact.IDS) do
         validate(id)
     end
+    -- Brush da barra inferior reutiliza exatamente o mesmo desenho
+    -- vetorial do seletor (e nunca um ícone paralelo genérico).
+    local brush=VisualTools.get('brush')
+    local eraser=VisualTools.get('eraser')
+    local bucket=VisualTools.get('bucket')
+    check(brush.icon=='brush' and eraser.icon=='erase'
+        and bucket.icon=='fill',
+        'Botões de ferramenta mudaram seus ícones oficiais de referência')
+    check(Compact.IDS[1]=='brush' and
+        Icons.commands(Compact.IDS[1])==Icons.commands(brush.icon),
+        'Barra inferior não reutiliza o ícone do pincel')
+    check(Icons.commands(eraser.icon)~=Icons.commands(brush.icon)
+        and Icons.commands(bucket.icon)~=Icons.commands(brush.icon),
+        'Borracha ou balde aponta para ícone do pincel')
     check(Icons.commands('unknown')==nil,'Unknown tools should not have glyphs')
     check(#Tools.items==8,'Existing eight tool set must stay intact')
     return {suite='editor-vector-tool-icons',passed=true,assertions=checks,

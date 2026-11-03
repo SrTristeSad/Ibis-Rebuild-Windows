@@ -113,6 +113,19 @@ Fonte: [Microsoft Store ibisPaint Windows](https://apps.microsoft.com/detail/9pf
 Não presumir que número de pincéis, textos traduzidos ou cores
 sejam os da versão local.
 
+### IMG-M04 — Microsoft Store: quinze ferramentas e painel de pincéis (Windows promocional, versão não identificada)
+
+![Captura promocional Windows com ferramentas Pincel, Borracha e Lata de Tinta](https://store-images.s-microsoft.com/image/apps.32378.14202576542330599.5d8d33ef-6e70-4d7f-953d-99930bb9592a.1715e9a7-d182-4d1e-a9b7-883949af7782)
+
+Fonte: [ibisPaint Windows na Microsoft Store](https://apps.microsoft.com/detail/9pfdf2zd4z4n).
+A faixa esquerda apresenta ícones de **pincel diagonal**, **bloco de
+borracha inclinado**, **recipiente de tinta** e seus rótulos; a barra
+inferior mostra controles e ícones do editor. Evidência de **forma
+geral**: versão, escala e dimensões não são documentadas. Na A47
+redesenhamos três silhuetas próprias com base nessa referência; isso
+não é equivalência pixel a pixel nem autoriza alterar posição ou
+tamanho dos botões inferiores.
+
 ### IMG-M02 — Microsoft Store: textos/fontes e régua (marketing Windows)
 
 ![Imagem promocional de texto e réguas no ibisPaint Windows](https://store-images.s-microsoft.com/image/apps.28260.14202576542330599.b2b42d35-09bb-4a4c-86fb-3e9ca2034d9b.fb3f18d3-a3c3-4d7a-ae87-f2dcbdbc7bc3)

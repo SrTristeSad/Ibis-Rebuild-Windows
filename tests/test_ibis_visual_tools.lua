@@ -32,6 +32,33 @@ function T.run()
         fx[2].op=='line' and fx[3].op=='line' and
         fx[4].op=='line' and fx[5].op=='line',
         'Filtro precisa de FX dentro de um circulo')
+    -- A47: o pincel e a borracha no PC sao silhuetas de
+    -- ferramentas diagonais; Balde deve ter lata e gota.
+    -- Os IDs/callbacks sao os mesmos, sem novos modos visuais.
+    assert(Catalog.get('brush').icon=='brush' and
+        Catalog.get('brush').backend=='brush' and
+        Catalog.get('eraser').icon=='erase' and
+        Catalog.get('eraser').backend=='erase' and
+        Catalog.get('bucket').icon=='fill' and
+        Catalog.get('bucket').backend=='fill',
+        'Catalogo/callback de pincel, borracha ou balde foi modificado')
+    local brushGlyph=Icons.commands('brush')
+    local eraserGlyph=Icons.commands('erase')
+    local bucketGlyph=Icons.commands('fill')
+    assert(brushGlyph[1].op=='polygon' and
+        brushGlyph[1].mode=='fill' and
+        brushGlyph[3].op=='polygon' and
+        brushGlyph[3].mode=='fill',
+        'Pincel precisa de cabo e cerdas reconheciveis')
+    assert(eraserGlyph[1].op=='polygon' and
+        eraserGlyph[1].mode=='fill' and
+        #eraserGlyph[1].points>=10,
+        'Borracha precisa de silhueta preenchida inclinada')
+    assert(bucketGlyph[1].op=='polygon' and
+        bucketGlyph[1].mode=='line' and
+        bucketGlyph[4].op=='polygon' and
+        bucketGlyph[4].mode=='fill',
+        'Balde precisa de recipiente e gota separados')
     for i,entry in ipairs(Catalog.entries) do
         assert(entry.id==reference[i],'Ordem visual de ferramentas divergente')
         assert(not seen[entry.id] and Catalog.get(entry.id)==entry,
