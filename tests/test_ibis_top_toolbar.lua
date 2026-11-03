@@ -53,6 +53,46 @@ function T.run()
         check(view.h>=314 and stabilize.h>=254 and pending.h>=222,
             'Painel superior insuficiente')
     end
+    -- A38: o cabeçalho desktop não intercepta o canvas compacto
+    -- quando F10 estiver fechado. Todos os comandos continuam
+    -- disponíveis ao abrir o painel, em três resoluções.
+    local Hud=require('ibis_windows_hud')
+    check(not Hud.visible('editor',true,false,false,nil),
+        'Comandos Windows não devem aparecer por padrão')
+    check(Hud.visible('editor',true,false,true,nil),
+        'Comandos Windows F10 não aparecem ao solicitar')
+    for _,screen in ipairs({'home','gallery'}) do
+        check(not Hud.visible(screen,true,false,true,nil),
+            'Comandos Windows surgem fora do editor')
+    end
+    check(not Hud.visible('editor',false,false,true,nil) and
+        not Hud.visible('editor',true,true,true,nil) and
+        not Hud.visible('editor',true,false,true,'tools'),
+        'Comandos Windows surgem em modo inadequado')
+    for _,dim in ipairs({{960,640},{1220,800},{1920,1080}}) do
+        local w,h=dim[1],dim[2]
+        local controls=Hud.rects(w,h)
+        check(Hud.hit(w,h,105,20,false)==nil and
+            Hud.hit(w,h,150,60,false)==nil,
+            'Botões invisíveis estão capturando canvas')
+        for _,id in ipairs({'save','desktop','properties',
+            'zoomOut','zoomIn','fit'}) do
+            local r=controls[id]
+            check(r.x>=0 and r.y>=0 and
+                r.x+r.w<=w and r.y+r.h<h-130,
+                'Comando Windows não cabe na janela')
+            check(Hud.hit(w,h,r.x+r.w/2,r.y+r.h/2,true)==id,
+                'Comando Windows não coincide com a área visual')
+        end
+        check(controls.background.x>75 and
+            controls.background.x+controls.background.w<
+                Top.toolbar(w,h)[1].x,
+            'Painel F10 invade faixa ou controles superiores')
+        check(Hud.hit(w,h,w/2,h/2,true)==nil,
+            'Painel F10 intercepta canvas fora da sua área')
+    end
+    check(not pcall(Hud.rects,320,480),
+        'Viewport pequena aceita painel Windows inválido')
     check(Top.byId('made-up')==nil,
         'Nao permitir controles superiores inexistentes')
     check(not pcall(Top.toolbar,400,300),

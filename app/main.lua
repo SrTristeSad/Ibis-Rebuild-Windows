@@ -43,6 +43,7 @@ IbisPanels.canvasDimensionSlider=require('ibis_canvas_dimension_slider')
 IbisPanels.canvasDialogChrome=require('ibis_canvas_dialog_chrome')
 IbisPanels.canvasReferenceDraw=require('ibis_canvas_reference_draw')
 IbisPanels.home=require('ibis_home_screen')
+IbisPanels.windowsHud=require('ibis_windows_hud')
 IbisPanels.galleryCardChrome=require('ibis_gallery_card_chrome')
 local LayerUI=require('ibis_layer_ui')
 local LayerChrome=require('ibis_layer_chrome')
@@ -168,7 +169,7 @@ local showcaseNames={[0]='00-inicial.png','01-galeria.png','02-editor-compacto.p
     '123-galeria-proxima-obra.png',
     '124-galeria-gesto-voltar.png',
     '125-galeria-editar-obra.png'}
-local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
+local A={wandEngine=require('wand_selection'),toolRailPage=1,screen='gallery',galleryDetailId=nil,galleryDetailSwipe=nil,folder='',galleryFilter='all',dirty=false,buttons={},zoom=1,rotation=0,panX=0,panY=0,tool='inspect',color=0x192d40ff,view='grid',brushDiameter=12,brushStyle='hard',brushOpacity=1,penTiltEnabled=true,pressureCurve='linear',pressureSize=true,pressureOpacity=true,stabilization=0,stabilizer=nil,touchId=nil,inkPenId=nil,inkPreviousTool=nil,inkTiltX=0,inkTiltY=0,lastPressure=1,fillTolerance=0,shapeKind=0,pickerSource='composite',shapeFilled=false,shapeWidth=2,shapePreview=nil,drawing=false,sideTab='layers',spaceHeld=false,panning=false,panButton=nil,toolHelp=false,contextMenu=nil,brushLibrary=false,selectedBrushCustom=nil,brushFocus=nil,brushSampleCache=nil,brushLabDraft=nil,brushLabEdited=false,brushLabDrag=nil,sliderDrag=nil,previewEnabled=true,tipCache=nil,hoverX=nil,hoverY=nil,mouseOutside=false,focusMode=false,compactUi=false,windowsHud=false,quickDrag=nil,compactPanel=nil,colorMode='hsb',paletteTab='standard',colorDrag=nil,colorHistory={},savedColors={},previousColor=nil,brushFilter='all',compactLayerStart=nil,compactLayerOpacityDrag=nil,desktopLayerOpacityDrag=nil,layerScroll=nil,layerThumbs=nil,layerThumbDirty=nil,sidebarScroll=0,sidebarDrawing=false}
 local function clearWandSelection()
     if A.wandOverlay then
         A.wandOverlay:release()
@@ -419,7 +420,7 @@ local function openDoc(doc)
     releaseBrushSamples()
     A.screen='editor';A.dirty=false;A.focusMode=false;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.desktopLayerOpacityDrag=nil;A.hoverX=nil;A.hoverY=nil;A.mouseOutside=false;A.sidebarScroll=0
     A.compactUi=not (A.options and (A.options.selfTest or A.options.luaTest))
-    A.compactPanel=nil;A.compactLayerStart=nil
+    A.compactPanel=nil;A.compactLayerStart=nil;A.windowsHud=false
     A.selection=nil;A.selectAction=nil;A.movePreview=nil;A.shapePreview=nil
     A.toolHelp=false
     rebuildImage();fit()
@@ -519,6 +520,7 @@ local function toggleFocusMode()
     A.panning=false;A.panButton=nil;A.contextMenu=nil;A.brushLibrary=false;A.sliderDrag=nil;A.quickDrag=nil
     navigateCompactPanel(nil);A.colorDrag=nil;A.desktopLayerOpacityDrag=nil
     A.focusMode=not A.focusMode
+    A.windowsHud=false
     status(A.focusMode and 'Modo foco · Tab restaura painel' or
         'Painel de ferramentas restaurado')
     return A.focusMode
@@ -532,6 +534,7 @@ local function toggleCompactUi()
     navigateCompactPanel(nil);A.compactLayerStart=nil;A.colorDrag=nil
     A.desktopLayerOpacityDrag=nil
     A.compactUi=not A.compactUi
+    A.windowsHud=false
     status(A.compactUi and 'Interface compacta · barra inferior ativa' or
         'Interface desktop · painel lateral restaurado')
 end
@@ -539,6 +542,7 @@ local function toggleCompactPanel(kind)
     assert(A.compactUi and A.screen=='editor','Painel compacto indisponível')
     finishStroke()
     A.shapePreview=nil;A.panning=false;A.panButton=nil
+    A.windowsHud=false
     navigateCompactPanel(A.compactPanel==kind and nil or kind)
 end
 local function undoDoc()
@@ -7593,22 +7597,35 @@ local function drawEditor(w,h)
         if A.focusMode then
             button('Mostrar interface · Tab',18,8,196,36,toggleFocusMode)
         else
-            -- Controles desktop ficam discretos no canto superior
-            -- esquerdo, fora do seletor de ferramentas.
-            button('Salvar',85,7,70,28,saveDoc,A.dirty)
-            button('Desktop',161,7,79,28,toggleCompactUi)
-            button('Ajustes',246,7,70,28,function()
-                toggleCompactPanel('properties')
-            end)
-            button('−',104,48,33,29,function()
-                zoomCanvas(1/1.25)
-            end,false,A.zoom<=View.MIN_ZOOM)
-            button('+',141,48,33,29,function()
-                zoomCanvas(1.25)
-            end,false,A.zoom>=View.MAX_ZOOM)
-            button('Ajustar',180,48,68,29,fit)
-            text(('%d%%'):format(math.floor(A.zoom*100+.5)),
-                258,55,'small','muted')
+            -- A38: deixar a superfície principal sem botões de PC.
+            -- F10 expõe os comandos existentes sem interceptar pintura
+            -- com hitboxes invisíveis quando o painel estiver fechado.
+            if IbisPanels.windowsHud.visible(A.screen,A.compactUi,
+                A.focusMode,A.windowsHud,A.compactPanel) then
+                local r=IbisPanels.windowsHud.rects(w,h)
+                box(r.background.x,r.background.y,
+                    r.background.w,r.background.h,'panel')
+                button('Salvar',r.save.x,r.save.y,
+                    r.save.w,r.save.h,saveDoc,A.dirty)
+                button('Desktop',r.desktop.x,r.desktop.y,
+                    r.desktop.w,r.desktop.h,toggleCompactUi)
+                button('Ajustes',r.properties.x,r.properties.y,
+                    r.properties.w,r.properties.h,function()
+                        toggleCompactPanel('properties')
+                    end)
+                button('−',r.zoomOut.x,r.zoomOut.y,
+                    r.zoomOut.w,r.zoomOut.h,function()
+                        zoomCanvas(1/1.25)
+                    end,false,A.zoom<=View.MIN_ZOOM)
+                button('+',r.zoomIn.x,r.zoomIn.y,
+                    r.zoomIn.w,r.zoomIn.h,function()
+                        zoomCanvas(1.25)
+                    end,false,A.zoom>=View.MAX_ZOOM)
+                button('Ajustar',r.fit.x,r.fit.y,
+                    r.fit.w,r.fit.h,fit)
+                text(('%d%%'):format(math.floor(A.zoom*100+.5)),
+                    r.zoomLabel.x,r.zoomLabel.y,'small','muted')
+            end
             drawTopToolbar(w,h)
         end
     end
@@ -8347,6 +8364,8 @@ local function drawToolHelp(w,h)
         x+22,y+423,'small','muted')
     text('F1 ou H: abrir/fechar · Esc: fechar · Nenhum pixel é alterado.',
         x+22,y+447,'small','muted')
+    text('F10 · comandos auxiliares Windows: salvar, desktop, zoom',
+        x+22,y+470,'small','muted')
     button('Fechar ajuda',x+width-174,y+height-49,150,33,
         function()A.toolHelp=false end)
 end
@@ -11028,6 +11047,11 @@ function love.keypressed(key)
             selectTool(EditorTools.fromKey(key).id)
             A.compactPanel=nil
         end
+        return
+    end
+    if A.screen=='editor' and key=='f10' and
+        A.compactUi and not A.focusMode then
+        A.windowsHud=not A.windowsHud
         return
     end
     if A.screen=='editor' and A.toolHelp then
