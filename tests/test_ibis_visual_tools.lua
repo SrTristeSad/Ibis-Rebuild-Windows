@@ -88,6 +88,32 @@ function T.run()
         end
         count=count+1
     end
+    -- A52: o seletor inferior usa o glifo da ferramenta real em
+    -- vez de um mosaico fixo, preservando IDs e motores.
+    assert(Catalog.toolbarIcon('brush')=='brush' and
+        Catalog.toolbarIcon('erase')=='erase' and
+        Catalog.toolbarIcon('fill')=='fill' and
+        Catalog.toolbarIcon('picker')=='picker',
+        'Seletor nao acompanha as ferramentas de pintura')
+    for _,tool in ipairs(Tools.items) do
+        local icon=Catalog.toolbarIcon(tool.id)
+        assert(icon==tool.id and Icons.commands(icon)~=nil,
+            'Seletor perdeu ferramenta ativa: '..tool.id)
+    end
+    for _,entry in ipairs(Catalog.entries) do
+        local icon=Catalog.toolbarIcon('brush',entry.id)
+        assert(icon==entry.icon and Icons.commands(icon)~=nil,
+            'Seletor perdeu categoria visual: '..entry.id)
+    end
+    assert(Catalog.toolbarIcon('brush','wand')=='magic'
+        and Catalog.toolbarIcon('brush','filter')=='filter'
+        and Catalog.toolbarIcon('erase','lasso')=='lasso',
+        'Categoria pendente deve prevalecer sobre o ultimo pincel')
+    assert(Catalog.toolbarIcon('__unknown__')=='tools'
+        and Catalog.toolbarIcon('brush','__unknown__')=='tools',
+        'Seletor precisa de fallback seguro para estado invalido')
+    assert(UI.IDS[2]=='tools',
+        'Identidade do segundo botao da barra foi alterada')
     for _,size in ipairs({{960,640},{1220,800},{1920,1080}}) do
         local popup=UI.popup(size[1],size[2],'tools')
         assert(popup.w==242 and popup.h==383
