@@ -39,3 +39,10 @@ nenhuma alteração na branch `main`.
 
 Verificar CI Linux/Windows e **capturas reais do LÖVE** antes de
 aprovar a fase.
+
+## Validação real adicional
+
+O teste `--lua-gui-smoke` do Windows agora utiliza eventos reais de
+mouse do LÖVE para acionar os quatro botões, confere os incrementos
+1 px / 1% e restaura o estado inicial. Também compara os bytes da
+composição e as estatísticas de undo antes e depois dos cliques.

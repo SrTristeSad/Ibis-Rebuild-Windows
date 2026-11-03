@@ -5283,6 +5283,41 @@ function love.update(dt)
                 assert(Native.bytes(layers.composite)==pixelsBefore and
                     layers:historyStats().undo==undoBefore,
                     'HUD F10 alterou raster ou historico')
+                -- A40: confirmar no LÖVE real o caminho de clique
+                -- dos botoes +/- sem executar pintura ou historico.
+                local originalTool=A.tool
+                local originalDiameter=A.brushDiameter
+                local originalOpacity=A.brushOpacity
+                A.tool='brush'
+                A.brushDiameter=24
+                A.brushOpacity=.70
+                love.draw()
+                local controls=require('compact_layout').quick(w,h)
+                local function clickQuick(rect)
+                    local px=rect.x+rect.w/2
+                    local py=rect.y+rect.h/2
+                    love.mousepressed(px,py,1,false)
+                    love.mousereleased(px,py,1,false)
+                end
+                clickQuick(controls.diameter.minus)
+                assert(A.brushDiameter==23 and
+                    not A.quickDrag and not A.drawing,
+                    'Botao - nao ajustou tamanho real')
+                clickQuick(controls.diameter.plus)
+                assert(A.brushDiameter==24,
+                    'Botao + nao restaurou tamanho')
+                clickQuick(controls.opacity.minus)
+                assert(math.abs(A.brushOpacity-.69)<.00001,
+                    'Botao - nao ajustou opacidade em 1%')
+                clickQuick(controls.opacity.plus)
+                assert(math.abs(A.brushOpacity-.70)<.00001,
+                    'Botao + nao restaurou opacidade')
+                assert(Native.bytes(layers.composite)==pixelsBefore and
+                    layers:historyStats().undo==undoBefore,
+                    'Botoes +/- mudaram pixels ou historico')
+                A.tool=originalTool
+                A.brushDiameter=originalDiameter
+                A.brushOpacity=originalOpacity
                 local loaded=A.store:openProject(A.doc.id)
                 assert(loaded and loaded.layers and
                     loaded.layers[1].pixels==Native.bytes(layers:activeBuffer()),
