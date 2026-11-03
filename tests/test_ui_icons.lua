@@ -60,6 +60,17 @@ function M.run()
     check(Icons.commands(eraser.icon)~=Icons.commands(brush.icon)
         and Icons.commands(bucket.icon)~=Icons.commands(brush.icon),
         'Borracha ou balde aponta para ícone do pincel')
+    -- A48: Camadas deve preservar o glifo documentado de tres folhas.
+    -- O primeiro e segundo contornos ficam atras da folha preenchida.
+    local layers=Icons.commands('layers')
+    check(#layers==3,'Camadas deve manter exatamente tres folhas')
+    check(layers[1].op=='line' and layers[2].op=='line',
+        'Camadas perdeu os dois contornos traseiros')
+    check(layers[3].op=='rectangle' and layers[3].mode=='fill',
+        'Camadas perdeu a folha frontal preenchida')
+    check(layers[1].points[1]>layers[2].points[1]
+        and layers[2].points[1]>layers[3].x,
+        'Camadas perdeu a ordem de deslocamento das folhas')
     check(Icons.commands('unknown')==nil,'Unknown tools should not have glyphs')
     check(#Tools.items==8,'Existing eight tool set must stay intact')
     return {suite='editor-vector-tool-icons',passed=true,assertions=checks,
