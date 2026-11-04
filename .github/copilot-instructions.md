@@ -37,6 +37,16 @@
   novo retângulo até dentro da seleção anterior. Resultado vazio
   desmarca; nenhum passo de undo raster é criado, nem em Layer Lock/
   Alpha Lock. Testar PNG e gestos mistos sem regressão.
+- Expansão/contração de seleção exclusivamente BINÁRIA usa
+  `Selection.morph(mask,"expand"|"contract")` (vizinhança 8-conexa,
+  elemento estruturante 3×3). Ctrl+Alt+Up expande, Ctrl+Alt+Down
+  contrai, um pixel por acionamento. Tratar exterior do canvas como
+  desmarcado (expansão recortada e contração reduzindo a borda).
+  Máscara de origem imutável; seleção contraída até zero vira nil.
+  Sem pintar, dirty ou histórico raster, inclusive Layer Lock/Alpha Lock;
+  persistência continua em selection.png. Testar cantos, buracos,
+  ilhas, atalhos, reabertura e rejeição sem seleção.
+  Não declarar feather/suavização alfa como implementados.
 - Histórico raster persiste em `history.tsv` e PNGs versionados por geração
   para documentos de até 1.048.576 pixels, com até 8 snapshots em cada
   pilha (undo e redo). Os arquivos de snapshot devem ser validados em

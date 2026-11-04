@@ -29,6 +29,18 @@ bloqueadas/Alpha Lock. Resultado vazio significa desmarcar, sem erro.
 No primeiro gesto, somar equivale a selecionar; subtrair e intersectar
 sem seleção resultam em máscara vazia. A seleção combinada segue
 sendo salva em `selection.png`, sem criar novo formato.
+Expansão/contração de máscara binária: `Selection.morph(s,"expand")`
+e `Selection.morph(s,"contract")` usam vizinhança 8-conexa quadrada
+de 3×3, sem alterar a máscara original. **Ctrl+Alt+Up** expande
+1 pixel; **Ctrl+Alt+Down** contrai 1 pixel, acionamentos repetidos
+permitem vários passos. Exterior do canvas conta como desmarcado:
+expansão recorta nas bordas e contração da seleção total perde
+uma borda de 1 pixel. Contração até vazio vira nil sem erro;
+sem seleção ativa retornar erro não mutável. Não modificar pintura,
+dirty ou histórico raster, nem depender de Layer Lock/Alpha Lock.
+Persistência usa o mesmo PNG binário por obra. Testar buracos,
+ilhas desconectadas, canto, ausência de seleção e atalhos/reabertura.
+Não declarar feather ou máscaras alfa fracionárias concluídos.
 Copiar/Recortar/Colar são internos à aplicação (Ctrl+C, Ctrl+X, Ctrl+V);
 colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+R, Ctrl+Shift+L) e escala nearest-neighbour 200%/50%
