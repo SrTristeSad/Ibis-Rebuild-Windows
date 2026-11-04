@@ -19,6 +19,20 @@ function Selection.contains(s, x, y)
     return s.mask[index(s.w, x, y)] == true
 end
 
+-- Máscaras existentes são binárias; pesos fracionários opcionais deixam
+-- o feather compatível com qualquer código que use Selection.contains.
+-- Sem seleção, toda a tela está disponível para pintar.
+function Selection.coverage(s, x, y)
+    if not s then return 1 end
+    if not Selection.contains(s, x, y) then return 0 end
+    local key = index(s.w, x, y)
+    return s.weights and s.weights[key] or 1
+end
+
+function Selection.is_soft(s)
+    return s ~= nil and s.weights ~= nil
+end
+
 local function finalize(s)
     if s.count == 0 then return nil end
     local outline = {}
@@ -53,11 +67,21 @@ local function empty(w, h, kind)
     }
 end
 
-local function add(s, x, y)
+local function add(s, x, y, coverage)
     if x < 0 or y < 0 or x >= s.w or y >= s.h then return end
+    coverage = coverage or 1
+    if type(coverage) ~= "number" or coverage ~= coverage or
+       coverage <= 0 then return end
+    coverage = math.min(1, coverage)
     local k = index(s.w, x, y)
     if s.mask[k] then return end
     s.mask[k] = true
+    if coverage < 1 then
+        if not s.weights then s.weights = {} end
+        s.weights[k] = coverage
+    elseif s.weights then
+        s.weights[k] = 1
+    end
     s.count = s.count + 1
     s.min_x = math.min(s.min_x, x)
     s.max_x = math.max(s.max_x, x)
@@ -163,16 +187,19 @@ function Selection.translate(s, dx, dy)
     local shifted = empty(s.w, s.h, s.kind)
     for y = s.min_y, s.max_y do
         for x = s.min_x, s.max_x do
-            if Selection.contains(s, x, y) then add(shifted, x + dx, y + dy) end
+            if Selection.contains(s, x, y) then
+                add(shifted, x + dx, y + dy, Selection.coverage(s, x, y))
+            end
         end
     end
     if shifted.count == 0 then
         -- Um deslocamento completamente para fora do canvas deixa a seleção vazia.
-        s.mask, s.count, s.outline = {}, 0, {}
+        s.mask, s.weights, s.count, s.outline = {}, nil, 0, {}
         s.min_x, s.min_y, s.max_x, s.max_y = s.w, s.h, -1, -1
         return s
     end
     finalize(shifted)
+    for key in pairs(s) do s[key] = nil end
     for key, value in pairs(shifted) do s[key] = value end
     return s
 end
@@ -187,7 +214,8 @@ function Selection.from_mask(w, h, mask, kind)
     for k, marked in pairs(mask) do
         if marked and type(k) == "number" and k == math.floor(k) and
            k >= 0 and k < w * h then
-            add(s, k % w, math.floor(k / w))
+            add(s, k % w, math.floor(k / w),
+                type(marked) == "number" and marked or 1)
         end
     end
     return finalize(s)
@@ -213,11 +241,11 @@ function Selection.invert(s, w, h)
     if s.w ~= w or s.h ~= h then
         return nil, "Máscara incompatível com as dimensões do documento."
     end
-    if s.count == w * h then return nil end
+    if s.count == w * h and not Selection.is_soft(s) then return nil end
     local inverse = empty(w, h, "inverted")
     for y = 0, h - 1 do
         for x = 0, w - 1 do
-            if not s.mask[index(w, x, y)] then add(inverse, x, y) end
+            add(inverse, x, y, 1 - Selection.coverage(s, x, y))
         end
     end
     return finalize(inverse)
@@ -239,18 +267,23 @@ function Selection.combine(base, incoming, mode, w, h)
     end
     if mode == "replace" then return Selection.clone(incoming) end
     local next_mask = {}
-    if (mode == "add" or mode == "subtract" or mode == "intersect") and base then
-        for k in pairs(base.mask) do
-            if mode == "add" or
-               (mode == "subtract" and
-                (not incoming or not incoming.mask[k])) or
-               (mode == "intersect" and incoming and incoming.mask[k]) then
-                next_mask[k] = true
-            end
-        end
+    local function at(mask, key)
+        if not mask or not mask.mask[key] then return 0 end
+        return mask.weights and mask.weights[key] or 1
     end
-    if mode == "add" and incoming then
-        for k in pairs(incoming.mask) do next_mask[k] = true end
+    -- Percorrer a união das chaves evita varrer todo o canvas para masks
+    -- pequenas. Máximo/mínimo para composição geométrica previsível;
+    -- diferença usa cobertura da máscara subtraída.
+    local keys = {}
+    if base then for k in pairs(base.mask) do keys[k] = true end end
+    if incoming then for k in pairs(incoming.mask) do keys[k] = true end end
+    for k in pairs(keys) do
+        local a, b = at(base, k), at(incoming, k)
+        local alpha
+        if mode == "add" then alpha = math.max(a, b)
+        elseif mode == "subtract" then alpha = a * (1 - b)
+        else alpha = math.min(a, b) end
+        if alpha > 0 then next_mask[k] = alpha end
     end
     return Selection.from_mask(w, h, next_mask, "combined_" .. mode)
 end
@@ -273,27 +306,79 @@ function Selection.morph(s, operation)
     for key in pairs(s.mask) do
         local x, y = key % s.w, math.floor(key / s.w)
         if operation == "expand" then
+            local source_weight = Selection.coverage(s, x, y)
             for ny = math.max(0, y - 1), math.min(s.h - 1, y + 1) do
                 for nx = math.max(0, x - 1), math.min(s.w - 1, x + 1) do
-                    next_mask[index(s.w, nx, ny)] = true
+                    local target = index(s.w, nx, ny)
+                    next_mask[target] = math.max(next_mask[target] or 0, source_weight)
                 end
             end
         else
-            local surrounded = true
+            local minimum = 1
             for dy = -1, 1 do
                 for dx = -1, 1 do
-                    if not Selection.contains(s, x + dx, y + dy) then
-                        surrounded = false
-                        break
-                    end
+                    minimum = math.min(minimum, Selection.coverage(s, x + dx, y + dy))
+                    if minimum <= 0 then break end
                 end
-                if not surrounded then break end
+                if minimum <= 0 then break end
             end
-            if surrounded then next_mask[key] = true end
+            if minimum > 0 then next_mask[key] = minimum end
         end
     end
     return Selection.from_mask(s.w, s.h, next_mask,
                                operation == "expand" and "expanded" or "contracted")
+end
+
+-- Feather separável (box blur) com raio 1..8. Exterior do documento é
+-- transparente. Os pesos são quantizados a 8 bits, o mesmo canal alfa do
+-- PNG de seleção; não alteramos a máscara original nem pixels de camada.
+-- Custo O(w*h), não O(w*h*raio²).
+function Selection.feather(s, radius)
+    if not s or s.count == 0 then
+        return nil, "Selecione uma área antes de suavizar."
+    end
+    local ok, reason = allowed(s.w, s.h)
+    if not ok then return nil, reason end
+    if type(radius) ~= "number" or radius ~= math.floor(radius) or
+       radius < 1 or radius > 8 then
+        return nil, "Feather exige raio inteiro entre 1 e 8 pixels."
+    end
+    local w, h = s.w, s.h
+    local kernel = 2 * radius + 1
+    local horizontal = {}
+    for y = 0, h - 1 do
+        local sum = 0
+        for x = 0, math.min(w - 1, radius) do
+            sum = sum + Selection.coverage(s, x, y)
+        end
+        for x = 0, w - 1 do
+            horizontal[y * w + x] = sum
+            if x - radius >= 0 then
+                sum = sum - Selection.coverage(s, x - radius, y)
+            end
+            if x + radius + 1 < w then
+                sum = sum + Selection.coverage(s, x + radius + 1, y)
+            end
+        end
+    end
+    local weighted = {}
+    for x = 0, w - 1 do
+        local sum = 0
+        for y = 0, math.min(h - 1, radius) do
+            sum = sum + horizontal[y * w + x]
+        end
+        for y = 0, h - 1 do
+            local alpha = math.floor(sum * 255 / (kernel * kernel) + 0.5) / 255
+            if alpha > 0 then weighted[y * w + x] = alpha end
+            if y - radius >= 0 then
+                sum = sum - horizontal[(y - radius) * w + x]
+            end
+            if y + radius + 1 < h then
+                sum = sum + horizontal[(y + radius + 1) * w + x]
+            end
+        end
+    end
+    return Selection.from_mask(w, h, weighted, "feathered")
 end
 
 -- Snapshot independente para restaurar contorno e posição junto com pixels.
@@ -301,10 +386,14 @@ function Selection.clone(s)
     if not s then return nil end
     local copy = {}
     for k, v in pairs(s) do
-        if k ~= "mask" and k ~= "outline" then copy[k] = v end
+        if k ~= "mask" and k ~= "outline" and k ~= "weights" then copy[k] = v end
     end
     copy.mask = {}
     for k, v in pairs(s.mask) do copy.mask[k] = v end
+    if s.weights then
+        copy.weights = {}
+        for k, v in pairs(s.weights) do copy.weights[k] = v end
+    end
     copy.outline = {}
     for i, segment in ipairs(s.outline or {}) do
         copy.outline[i] = {segment[1], segment[2], segment[3], segment[4]}
@@ -320,8 +409,8 @@ function Selection.restore(destination, saved)
     for k, v in pairs(state) do destination[k] = v end
 end
 
--- Persistência da máscara binária em PNG, separada dos PNGs das camadas.
--- O canal alfa representa participação na seleção (0 ou 1).
+-- Persistência de máscaras binárias/feather em PNG, sem alterar formato.
+-- O canal alfa representa a cobertura da seleção (0..1).
 -- A máscara não altera diretamente os pixels da obra.
 local PNG_SIGNATURE = "\137PNG\r\n\26\n"
 local MAX_PNG_BYTES = 16 * 1024 * 1024
@@ -346,7 +435,8 @@ function Selection.save(s, file)
     local pixels = love.image.newImageData(s.w, s.h)
     for key, marked in pairs(s.mask) do
         if marked then
-            pixels:setPixel(key % s.w, math.floor(key / s.w), 1, 1, 1, 1)
+            pixels:setPixel(key % s.w, math.floor(key / s.w), 1, 1, 1,
+                            s.weights and s.weights[key] or 1)
         end
     end
     local success, result = pcall(function()
@@ -381,7 +471,7 @@ function Selection.load(file, w, h)
     for y = 0, h - 1 do
         for x = 0, w - 1 do
             local _, _, _, a = pixels:getPixel(x, y)
-            if a >= 0.5 then add(s, x, y) end
+            if a > 0 then add(s, x, y, a) end
         end
     end
     return finalize(s)

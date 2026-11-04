@@ -12,6 +12,277 @@ local function checkpoint(name)
     io.stdout:flush()
 end
 
+-- Feather separável e pintura com cobertura parcial da máscara em RGBA.
+local function test_feather_paint(E)
+    local Selection = require("lua_selection")
+    local p = E.new(32, 32)
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    E.sync(p, model)
+    local rectangle = assert(Selection.rectangle(32, 32, 4, 4, 8, 8))
+    local feather = assert(Selection.feather(rectangle, 1))
+    assert(feather.kind == "feathered" and Selection.is_soft(feather),
+           "Feather deveria criar máscara com pesos RGBA")
+    local full = Selection.coverage(feather, 6, 6)
+    local corner = Selection.coverage(feather, 4, 4)
+    local outer = Selection.coverage(feather, 3, 3)
+    assert(close(full, 1, 1 / 255) and
+           close(corner, 4 / 9, 1 / 255) and
+           close(outer, 1 / 9, 1 / 255) and
+           Selection.coverage(feather, 2, 2) == 0 and
+           feather.count > rectangle.count and
+           rectangle.count == 25 and not Selection.is_soft(rectangle),
+           "Box blur radius=1 não produziu os pesos de cobertura esperados")
+    assert(Selection.coverage(nil, 0, 0) == 1,
+           "Sem seleção, a pintura não deve ser reduzida")
+    local radius2 = assert(Selection.feather(rectangle, 2))
+    assert(radius2.count > 25 and
+           close(Selection.coverage(radius2, 6, 6), 1) and
+           Selection.coverage(radius2, 2, 2) > 0,
+           "Raio de feather 2 não suavizou a borda em duas células")
+    local smaller = assert(Selection.feather(feather, 1))
+    assert(Selection.is_soft(smaller) and smaller.count >= feather.count,
+           "Feather repetido não manteve a máscara suave")
+    local invalid, reason = Selection.feather(rectangle, 0)
+    assert(not invalid and reason, "Raio 0 de feather foi aceito")
+    invalid, reason = Selection.feather(rectangle, 9)
+    assert(not invalid and reason, "Raio >8 de feather foi aceito")
+    invalid, reason = Selection.feather(rectangle, 1.5)
+    assert(not invalid and reason, "Raio fracionário de feather foi aceito")
+    invalid, reason = Selection.feather(nil, 2)
+    assert(not invalid and reason, "Feather sem máscara foi aceito")
+    local huge = {w = 1025, h = 1025, count = 1, mask = {[0] = true}}
+    invalid, reason = Selection.feather(huge, 2)
+    assert(not invalid and reason, "Feather ignorou limite de canvas")
+
+    -- DAB central com dois passos coincidentes da função stroke.
+    E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1,
+             {1, 0, 0}, 1, false, false, feather)
+    local r, _, _, a = p.layers[1].pixels:getPixel(4, 4)
+    local expected = 1 - (1 - corner) ^ 2
+    assert(close(r, 1) and close(a, expected, 0.018) and
+           select(4, p.layers[1].pixels:getPixel(3, 3)) == 0,
+           "Pincel não respeitou alfa fracionário da seleção")
+    assert(E.undo(p, feather) == false,
+           "Stroke direto sem begin_stroke não deveria criar histórico")
+    local brushmask = assert(Selection.clone(feather))
+    assert(brushmask.weights ~= feather.weights and
+           close(Selection.coverage(brushmask, 4, 4), corner),
+           "Clone compartilhou indevidamente pesos da máscara")
+    assert(Selection.save(feather, "lua-feather-weight.png"))
+    local reopened = assert(Selection.load("lua-feather-weight.png", 32, 32))
+    assert(Selection.is_soft(reopened) and reopened.count == feather.count and
+           close(Selection.coverage(reopened, 4, 4), corner, 1 / 255) and
+           close(Selection.coverage(reopened, 3, 3), outer, 1 / 255) and
+           Selection.coverage(reopened, 2, 2) == 0,
+           "PNG de seleção não preservou intensidade do feather")
+    assert(love.filesystem.remove("lua-feather-weight.png"))
+
+    -- Balde scanline aplica alfa independente a cada pixel sem mudar limites.
+    local fill = E.new(32, 32)
+    E.sync(fill, model)
+    assert(E.fill(fill, 1, 6, 6, {0, 0, 1}, 1, false, feather))
+    local _, _, center_b, center_a = fill.layers[1].pixels:getPixel(6, 6)
+    local _, _, corner_b, corner_a = fill.layers[1].pixels:getPixel(4, 4)
+    local _, _, outer_b, outer_a = fill.layers[1].pixels:getPixel(3, 3)
+    assert(center_b > 0.99 and close(center_a, full, 0.018) and
+           corner_b > 0.99 and close(corner_a, corner, 0.018) and
+           outer_b > 0.99 and close(outer_a, outer, 0.018) and
+           select(4, fill.layers[1].pixels:getPixel(2, 2)) == 0,
+           "Balde não aplicou a máscara com alfa variável")
+
+    -- Borracha reduz alfa multiplicando por (1 - cobertura).
+    local erase = E.new(32, 32)
+    E.sync(erase, model)
+    erase.layers[1].pixels:setPixel(4, 4, 0.5, 0.8, 0.2, 1)
+    E.stroke(erase, 1, 4.5, 4.5, 4.5, 4.5, 1,
+             {0, 0, 0}, 1, true, false, feather)
+    local er, eg, _, ea = erase.layers[1].pixels:getPixel(4, 4)
+    assert(close(ea, (1 - corner) ^ 2, 0.018) and
+           close(er, 0.5, 0.018) and close(eg, 0.8, 0.018),
+           "Borracha modificou RGB ou apagou alfa além da cobertura")
+    -- Alpha Lock mistura apenas RGB, preservando alfa original.
+    local lock = E.new(32, 32)
+    E.sync(lock, model)
+    lock.layers[1].pixels:setPixel(4, 4, 0, 0, 1, 0.7)
+    E.stroke(lock, 1, 4.5, 4.5, 4.5, 4.5, 1,
+             {1, 0, 0}, 1, false, true, feather)
+    local lr, _, lb, la = lock.layers[1].pixels:getPixel(4, 4)
+    assert(close(lr, expected, 0.025) and
+           close(lb, 1 - expected, 0.025) and close(la, 0.7),
+           "Alpha Lock não respeitou feather ou modificou canal alfa")
+
+    local inverted = assert(Selection.invert(feather, 32, 32))
+    assert(close(Selection.coverage(inverted, 4, 4), 1 - corner, 1 / 255) and
+           Selection.coverage(inverted, 2, 2) == 1,
+           "Inversão não preservou pesos da seleção suave")
+    local union = assert(Selection.combine(feather, inverted, "add", 32, 32))
+    assert(close(Selection.coverage(union, 4, 4),
+                 math.max(corner, 1 - corner), 1 / 255),
+           "União alterou incorretamente os pesos do feather")
+    local shrunk = assert(Selection.morph(feather, "contract"))
+    assert(Selection.is_soft(shrunk) and
+           Selection.coverage(shrunk, 5, 5) > 0 and
+           Selection.coverage(shrunk, 5, 5) < 1,
+           "Contração não preservou pesos graduais da máscara")
+end
+
+-- Transformações e prévia GPU preservam frações da seleção.
+local function test_feather_transform(E)
+    local Selection = require("lua_selection")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local p = E.new(32, 32)
+    E.sync(p, model)
+    local mask = assert(Selection.from_mask(32, 32, {
+        [5 + 5 * 32] = 0.5, [6 + 5 * 32] = true
+    }, "feathered"))
+    local layer = p.layers[1]
+    layer.pixels:setPixel(5, 5, 1, 0, 0, 1)
+    layer.pixels:setPixel(6, 5, 0, 0, 1, 1)
+    layer.image:replacePixels(layer.pixels)
+    p.dirty = false
+    local preview = assert(E.begin_move_preview(p, 1, mask))
+    assert(E.update_move_preview(p, mask, preview, 2, 0))
+    local image = preview.image:newImageData()
+    assert(close(select(4, image:getPixel(5, 5)), 0.5, 0.025) and
+           close(select(4, image:getPixel(7, 5)), 0.5, 0.025),
+           "Prévia GPU move ignorou cobertura parcial")
+    assert(not p.dirty and #p.undo == 0 and
+           close(select(4, layer.pixels:getPixel(5, 5)), 1),
+           "Prévia modificou pixels reais")
+    assert(E.move_selection(p, 1, mask, 2, 0))
+    assert(close(select(4, layer.pixels:getPixel(5, 5)), 0.5) and
+           close(select(4, layer.pixels:getPixel(7, 5)), 0.5) and
+           close(Selection.coverage(mask, 7, 5), 0.5) and
+           mask.min_x == 7,
+           "Move CPU não separou conteúdo e geometria suavizados")
+    assert(E.undo(p, mask) and mask.min_x == 5 and
+           close(Selection.coverage(mask, 5, 5), 0.5) and
+           close(select(4, layer.pixels:getPixel(5, 5)), 1),
+           "Undo não restaurou pesos, posição e pixels originais")
+    assert(E.redo(p, mask) and mask.min_x == 7,
+           "Redo não restaurou seleção suave movida")
+    preview.image:release()
+    preview.mask_image:release()
+
+    local copyproj = E.new(32, 32)
+    E.sync(copyproj, model)
+    copyproj.layers[1].pixels:setPixel(5, 5, 1, 0, 0, 1)
+    local soft = assert(Selection.from_mask(32, 32, {[5 + 5 * 32] = 0.5},
+                                         "feathered"))
+    local clip = assert(E.copy_selection(copyproj, 1, soft))
+    assert(close(select(4, clip.pixels:getPixel(0, 0)), 0.5) and
+           close(clip.mask[0], 0.5),
+           "Copiar conteúdo com feather perdeu alfa")
+    local ok, cut = E.cut_selection(copyproj, 1, soft)
+    assert(ok and cut and
+           close(select(4, copyproj.layers[1].pixels:getPixel(5, 5)), 0.5),
+           "Cut apagou conteúdo que deveria permanecer")
+    assert(E.paste_selection(copyproj, 1, clip, 8, 8, soft))
+    assert(close(select(4, copyproj.layers[1].pixels:getPixel(8, 8)), 0.5)
+           and close(Selection.coverage(soft, 8, 8), 0.5),
+           "Paste não preservou alfa ou máscara fracionária")
+    assert(E.undo(copyproj, soft) and
+           close(select(4, copyproj.layers[1].pixels:getPixel(8, 8)), 0),
+           "Undo da colagem com feather falhou")
+
+    local rot = E.new(32, 32)
+    E.sync(rot, model)
+    rot.layers[1].pixels:setPixel(8, 8, 0, 1, 0, 1)
+    local rotated = assert(Selection.from_mask(32, 32, {
+        [8 + 8 * 32] = 0.5, [9 + 8 * 32] = true
+    }, "feathered"))
+    assert(E.reshape_selection(rot, 1, rotated, "flip_horizontal"))
+    assert(close(Selection.coverage(rotated, 9, 8), 0.5) and
+           close(select(4, rot.layers[1].pixels:getPixel(8, 8)), 0.5) and
+           close(select(4, rot.layers[1].pixels:getPixel(9, 8)), 0.5),
+           "Flip não preservou pesos de máscara ou conteúdo residual")
+    assert(E.undo(rot, rotated) and
+           close(Selection.coverage(rotated, 8, 8), 0.5),
+           "Undo de flip com feather perdeu pesos")
+
+    local affine = E.new(32, 32)
+    E.sync(affine, model)
+    for y = 11, 16 do
+        for x = 11, 16 do
+            affine.layers[1].pixels:setPixel(x, y,
+                x / 32, y / 32, 0.8, 0.9)
+        end
+    end
+    affine.layers[1].image:replacePixels(affine.layers[1].pixels)
+    local sel = assert(Selection.feather(
+        assert(Selection.rectangle(32, 32, 11, 11, 16, 16)), 1))
+    local gpu = assert(E.begin_affine_gpu_preview(affine, 1, sel))
+    assert(E.update_affine_gpu_preview(affine, sel, gpu, 20, 1.15, 0.9))
+    local expected = gpu.image:newImageData()
+    assert(E.affine_selection(affine, 1, sel, 20, 1.15, 0.9, "bilinear"))
+    local max_error = 0
+    for y = 0, 31 do
+        for x = 0, 31 do
+            local cr, cg, cb, ca = affine.layers[1].pixels:getPixel(x, y)
+            local pr, pg, pb, pa = expected:getPixel(x, y)
+            max_error = math.max(max_error, math.abs(ca - pa),
+                math.abs(cr * ca - pr * pa),
+                math.abs(cg * ca - pg * pa),
+                math.abs(cb * ca - pb * pa))
+        end
+    end
+    assert(max_error < 0.07,
+           string.format("Feather GPU/CPU afim divergiu: %.4f", max_error))
+    assert(Selection.is_soft(sel) and E.undo(affine, sel) and
+           Selection.is_soft(sel) and E.redo(affine, sel),
+           "Undo/redo da transformação afim perdeu pesos")
+    gpu.image:release()
+    gpu.mask_image:release()
+end
+
+-- Ponte: Ctrl+Alt+F aplica feather de 2 px, com persistência PNG.
+local function test_feather_bridge(Bridge, model, art)
+    local Selection = require("lua_selection")
+    local info = model.layers[1]
+    local old_lock, old_alpha = info.locked, info.alpha_lock
+    info.locked, info.alpha_lock = true, true
+    local warnings = 0
+    local function notice() warnings = warnings + 1 end
+    Bridge.clear_selection()
+    assert(not Bridge.selection_command(model, "feather_selection", notice)
+           and warnings == 1 and not Bridge.selection_snapshot(),
+           "Feather sem seleção deveria falhar sem alterar o documento")
+    assert(Bridge.selection_command(model, "select_all"),
+           "Ctrl+A da ponte não criou seleção")
+    local hard = assert(Bridge.selection_snapshot())
+    assert(hard.count == hard.w * hard.h and not Selection.is_soft(hard))
+    local original_down = love.keyboard.isDown
+    love.keyboard.isDown = function(...)
+        for i = 1, select("#", ...) do
+            local key = select(i, ...)
+            if key == "lctrl" or key == "lalt" then return true end
+        end
+        return false
+    end
+    local consumed = Bridge.keypressed("f", model, notice)
+    love.keyboard.isDown = original_down
+    assert(consumed, "Ctrl+Alt+F não foi interceptado")
+    local feather = assert(Bridge.selection_snapshot())
+    local border = Selection.coverage(feather, 0, 0)
+    assert(Selection.is_soft(feather) and border > 0 and border < 1 and
+           Selection.coverage(feather, 8, 8) == 1 and
+           Selection.coverage(feather, 0, 8) < 1 and
+           hard.count == hard.w * hard.h and not Selection.is_soft(hard),
+           "Feather pela ponte não respeitou bordas nem preservou máscara")
+    assert(Bridge.save(), "Feather não foi salvo")
+    Bridge.open(model, art)
+    local reopened = assert(Bridge.selection_snapshot())
+    assert(Selection.is_soft(reopened) and
+           close(Selection.coverage(reopened, 0, 0), border, 1 / 255),
+           "Reabrir a obra perdeu o alfa parcial da seleção")
+    assert(Bridge.selection_command(model, "select_all"))
+    assert(not Selection.is_soft(Bridge.selection_snapshot()) and
+           Selection.coverage(Bridge.selection_snapshot(), 0, 0) == 1,
+           "Ctrl+A não voltou a uma seleção binária plena")
+    Bridge.clear_selection()
+    info.locked, info.alpha_lock = old_lock, old_alpha
+end
+
 -- Expansão/contração morfológica 8-conexa, sem tocar no raster.
 local function test_selection_morph(E)
     local Selection = require("lua_selection")
@@ -1923,6 +2194,10 @@ function love.load()
            "Redo de movimento inconsistente")
 
     test_clipboard_transform(E)
+    checkpoint("feather alpha masks and paint")
+    test_feather_paint(E)
+    checkpoint("feather alpha transform and GPU parity")
+    test_feather_transform(E)
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
     checkpoint("selection boolean algebra and PNG")
@@ -2080,6 +2355,8 @@ function love.load()
         "A escala da ponte não manteve o histórico")
     checkpoint("selection PNG roundtrip")
     test_selection_roundtrip(Bridge, model4, art4)
+    checkpoint("bridge feather shortcut and PNG")
+    test_feather_bridge(Bridge, model4, art4)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge boolean gestures rectangle lasso wand")
@@ -2102,6 +2379,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: selection morph expand/contract + boolean + PNG + GPU + history")
+    print("PASS: feather alpha paint/transforms + selection morph + PNG + GPU")
     love.event.quit(0)
 end

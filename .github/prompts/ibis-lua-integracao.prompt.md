@@ -40,7 +40,21 @@ sem seleção ativa retornar erro não mutável. Não modificar pintura,
 dirty ou histórico raster, nem depender de Layer Lock/Alpha Lock.
 Persistência usa o mesmo PNG binário por obra. Testar buracos,
 ilhas desconectadas, canto, ausência de seleção e atalhos/reabertura.
-Não declarar feather ou máscaras alfa fracionárias concluídos.
+Feather **foi implementado** com a API `Selection.feather(s,radius)`,
+raios inteiros 1..8 (atalho **Ctrl+Alt+F** usa 2 px, sem slider).
+Máscaras antigas seguem binárias; `Selection.coverage(s,x,y)` expõe
+a fração 0..1 opcional em `s.weights`, mantendo `Selection.contains`
+compatível para os pixels com cobertura positiva. `selection.png` e
+os snapshots de histórico armazenam pesos no canal alfa, quantizados
+em 8 bits, sem novo formato ou campos de TSV. Clonar/restaurar máscara
+NÃO pode compartilhar tabela de pesos. O feather é box blur separável,
+não gaussiano. Pincel, borracha, balde e Alpha Lock usam intensidade
+multiplicada pela cobertura; movimento, cópia/corte/cola, giros,
+espelhamento, escala e prévias GPU devem preservar pesos, separar
+o alfa residual na origem e compor source-over no destino. Testar
+GPU/CPU com máscara fracionária e undo/redo de edição raster.
+Operações só de máscara não criam histórico raster. Não declarar
+feather gaussiano, slider visual ou paridade ibisPaint.
 Copiar/Recortar/Colar são internos à aplicação (Ctrl+C, Ctrl+X, Ctrl+V);
 colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+R, Ctrl+Shift+L) e escala nearest-neighbour 200%/50%
@@ -93,7 +107,8 @@ Não persista histórico de alterações estruturais de camadas.
 Mantenha os testes de reabertura, duas camadas, undo/redo com contorno,
 corrupção e limpeza de arquivos antigos.
 A seleção ativa agora é salva em `selection.png` por obra, como máscara
-binária independente das camadas. Reabertura valida assinatura PNG,
+binária ou com alfa fracionário, independente das camadas.
+Reabertura valida assinatura PNG,
 dimensões e limite de bytes; arquivo ausente ou inválido não deve impedir
 a abertura de desenhos antigos. Ctrl+D/Esc seguido de salvamento remove
 a máscara antiga. O clipboard interno não é persistido.
