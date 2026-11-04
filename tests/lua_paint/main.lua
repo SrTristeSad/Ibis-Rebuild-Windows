@@ -813,6 +813,79 @@ local function test_selection_morph_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Amostragem composta usa as mesmas cores do conta-gotas e respeita
+-- visibilidade, mesclagem, clipping, opacidade e fundo transparente.
+local function test_magic_wand_composite_source(E)
+    local Selection = require("lua_selection")
+    local model = {background_mode = "transparent_dark", layers = {
+        {id = 1, visible = true, opacity = 100, blending = "Normal"},
+        {id = 2, visible = true, opacity = 100, blending = "Normal"},
+        {id = 3, visible = false, opacity = 100, blending = "Normal"}
+    }}
+    local p = E.new(12, 12)
+    E.sync(p, model)
+    local bottom = p.layers[1].pixels
+    local top = p.layers[2].pixels
+    local hidden = p.layers[3].pixels
+    bottom:setPixel(2, 2, 1, 0, 0, 1)
+    bottom:setPixel(8, 8, 1, 0, 0, 1)
+    top:setPixel(2, 2, 0, 0, 1, 1)
+    top:setPixel(7, 7, 0, 0, 1, 1)
+    hidden:setPixel(8, 8, 0, 0, 1, 1)
+    local active = assert(Selection.magic_wand(p.layers[1], 12, 12,
+                                                 2, 2, 0, true))
+    assert(active.count == 2 and Selection.contains(active, 8, 8),
+           "Fonte da camada ativa foi modificada")
+    local composite = E.composite_pixel_source(p, model, false)
+    local selected = assert(Selection.magic_wand(composite, 12, 12,
+                                                  2, 2, 0, true))
+    assert(selected.count == 2 and Selection.contains(selected, 7, 7)
+           and not Selection.contains(selected, 8, 8),
+           "Varinha composta não descartou cor oculta pela camada superior")
+    local r, g, b, a = composite.pixels:getPixel(2, 2)
+    local sr, sg, sb, sa = E.sample(p, model, 2, 2)
+    assert(close(r, sr) and close(g, sg) and close(b, sb) and close(a, sa),
+           "Amostragem da varinha divergiu do conta-gotas")
+    model.layers[2].visible = false
+    local without_top = assert(Selection.magic_wand(
+        E.composite_pixel_source(p, model, false), 12, 12, 2, 2, 0, true))
+    assert(without_top.count == 2 and Selection.contains(without_top, 8, 8),
+           "Camada invisível contaminou a varinha composta")
+    model.layers[2].visible = true
+    model.layers[2].opacity = 50
+    local partial = E.composite_pixel_source(p, model, false)
+    r, g, b, a = partial.pixels:getPixel(2, 2)
+    assert(close(r, .5) and close(g, 0) and close(b, .5) and close(a, 1),
+           "Amostragem composta não aplicou opacidade da camada")
+    model.layers[2].blending = "Multiply"
+    local multiplied = E.composite_pixel_source(p, model, false)
+    r, g, b, a = multiplied.pixels:getPixel(2, 2)
+    assert(close(r, .5) and close(b, 0) and close(a, 1),
+           "Amostragem composta não aplicou Multiply")
+    model.layers[2].clipping = true
+    local clipped = E.composite_pixel_source(p, model, false)
+    local _, _, _, off_base = clipped.pixels:getPixel(7, 7)
+    assert(close(off_base, 0) and
+           close(select(4, clipped.pixels:getPixel(2, 2)), 1),
+           "Clipping não recortou amostra fora da base")
+    model.background_mode = "white"
+    local white = E.composite_pixel_source(p, model, true)
+    r, g, b, a = white.pixels:getPixel(0, 0)
+    assert(close(r, 1) and close(g, 1) and close(b, 1) and close(a, 1),
+           "Fundo branco visível não foi amostrado como opaco")
+    local white_mask = assert(Selection.magic_wand(white, 12, 12,
+                                                    0, 0, 0, true))
+    assert(Selection.contains(white_mask, 7, 7) and
+           not Selection.contains(white_mask, 8, 8),
+           "Amostragem branca ignorou o fundo ou incluiu raster vermelho")
+    local transparent = E.composite_pixel_source(p, model, false)
+    assert(close(select(4, transparent.pixels:getPixel(0, 0)), 0),
+           "Amostra transparente ficou opaca fora do modo de fundo branco")
+    assert(not p.dirty and #p.undo == 0 and #p.redo == 0 and
+           close(select(1, bottom:getPixel(2, 2)), 1),
+           "Amostragem composta alterou pintura ou histórico")
+end
+
 -- Seleção por cor global: mesmos canais e tolerância, mas sem conexão.
 local function test_magic_wand_global(E)
     local Selection = require("lua_selection")
@@ -873,6 +946,160 @@ local function test_magic_wand_global(E)
            #p.undo == 0 and #p.redo == 0 and not p.dirty and
            close(select(1, data:getPixel(2, 3)), .4, .005),
            "Modo global modificou a camada ou máscaras já criadas")
+end
+
+-- Atalho de fonte da varinha, edição da camada ativa e metadados
+-- de cinco colunas com fallback para todos os formatos anteriores.
+local function test_magic_wand_sample_all_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {
+            {id = 1, visible = true, opacity = 100,
+             blending = "Normal", name = "Base"},
+            {id = 2, visible = true, opacity = 100,
+             blending = "Normal", name = "Upper"}
+        },
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer()
+        for _, info in ipairs(self.layers) do
+            if info.id == self.active_layer_id then return info end
+        end
+    end
+    local id = gallery:add_artwork(16, 16, "Wand sample visible")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, color)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+                                   view, prefs, color, 1, 100, nil))
+        Bridge.mousereleased()
+    end
+    press(3, 3, {255, 0, 0})
+    press(9, 9, {255, 0, 0})
+    model.active_layer_id = 2
+    press(3, 3, {0, 0, 255})
+    press(8, 8, {0, 0, 255})
+    model.active_layer_id = 1
+    model.active_tool = "magic_wand"
+    local notices = {}
+    local function notify(message) notices[#notices + 1] = message end
+    local function shortcut(key)
+        local original = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" or k == "lalt" then return true end
+            end
+            return false
+        end
+        local handled = Bridge.keypressed(key, model, notify)
+        love.keyboard.isDown = original
+        return handled
+    end
+    local function wand(x, y)
+        press(x, y, {0, 255, 0})
+        return assert(Bridge.selection_snapshot())
+    end
+    assert(Bridge.wand_sample_all(model) == false and
+           Bridge.wand_global(model) == false,
+           "Obra nova deveria amostrar somente a camada ativa")
+    assert(shortcut("g") and Bridge.wand_global(model))
+    local active = wand(3, 3)
+    assert(active.count == 2 and Selection.contains(active, 9, 9)
+           and not Selection.contains(active, 8, 8),
+           "Varinha global da camada ativa incluiu pixels de outra camada")
+    local old_history = Bridge.selection_history_snapshot().undo
+    assert(shortcut("t") and Bridge.wand_sample_all(model) == true
+           and Bridge.selection_history_snapshot().undo == old_history
+           and notices[#notices]:find("camadas visíveis", 1, true),
+           "Ctrl+Alt+T não alternou a fonte independentemente do histórico")
+    local all = wand(3, 3)
+    assert(all.count == 2 and Selection.contains(all, 8, 8)
+           and not Selection.contains(all, 9, 9),
+           "Varinha não amostrou pixels azuis sobre camadas diferentes")
+    assert(shortcut("g") and not Bridge.wand_global(model))
+    all = wand(3, 3)
+    assert(all.count == 1 and not Selection.contains(all, 8, 8),
+           "Fonte composta não respeitou modo contíguo")
+    assert(shortcut("g") and Bridge.wand_global(model))
+    all = wand(3, 3)
+    assert(all.count == 2, "Voltar a global não restaurou fonte composta")
+    -- A máscara é calculada pela composição, mas a pintura subsequente
+    -- deve continuar escrevendo SOMENTE na camada ativa.
+    model.active_tool = "brush"
+    press(8, 8, {0, 255, 0})
+    assert(Bridge.save())
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Wand sample visible", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Não encontrou pasta da amostragem composta")
+    local path = "lua-artworks/" .. key
+    local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
+    assert(metadata:match("\t0\t1\t1$"),
+           "Preferência global e amostragem composta não persistiram")
+    local layer1 = love.image.newImageData(path .. "/layer_1.png")
+    local layer2 = love.image.newImageData(path .. "/layer_2.png")
+    local _, green, _, alpha1 = layer1:getPixel(8, 8)
+    local _, _, blue, alpha2 = layer2:getPixel(8, 8)
+    assert(green > .9 and alpha1 > .9 and blue > .9 and alpha2 > .9,
+           "Pincel após seleção composta não ficou restrito à camada ativa")
+    local other = gallery:add_artwork(16, 16, "Other wand source")
+    Bridge.create(model, other, gallery)
+    assert(Bridge.wand_sample_all(model) == false,
+           "Preferência de amostragem vazou entre obras")
+    Bridge.open(model, id)
+    assert(Bridge.wand_sample_all(model) == true and
+           Bridge.wand_global(model) == true and
+           Bridge.selection_snapshot().count == 2,
+           "Reabertura não recuperou fonte e máscara composta")
+    assert(shortcut("t") and not Bridge.wand_sample_all(model)
+           and shortcut("t") and Bridge.wand_sample_all(model),
+           "Ctrl+Alt+T não é reversível")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t0\t1"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_sample_all(model) == false and
+           Bridge.wand_global(model) == true,
+           "Quatro colunas perderam modo global legado")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t16"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_sample_all(model) == false and
+           Bridge.wand_global(model) == false and
+           Bridge.wand_tolerance(model) == 16,
+           "Três colunas perderam tolerância legada")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_sample_all(model) == false and
+           Bridge.wand_tolerance(model) == 0,
+           "Duas colunas deveriam restaurar preferência padrão")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\twhite\t0\t1\tinvalid"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_sample_all(model) == false and
+           Bridge.wand_global(model) == true,
+           "Fonte inválida deveria voltar à camada ativa sem perder global")
+    assert(Bridge.wand_sample_all({screen = "gallery"}) == nil and
+           not Bridge.toggle_wand_sample_all({screen = "gallery"}),
+           "Atalho da fonte da varinha atuou fora do editor")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Preferência de fonte corrompeu histórico raster")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
 end
 
 -- Ponte: modo por obra, atalho, combinação, undo e metadados legados.
@@ -992,7 +1219,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
     assert(key, "Obra temporária do modo global não foi localizada")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t32\t1$"),
+    assert(meta:match("\t32\t1\t0$"),
            "document.tsv não registrou modo global e tolerância")
     local other = gallery:add_artwork(16, 16, "Wand other mode")
     Bridge.create(model, other, gallery)
@@ -1016,7 +1243,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
            not Selection.contains(Bridge.selection_snapshot(), 2, 2),
            "Modo contíguo deixou escapar pixels de regiões separadas")
     assert(Bridge.save())
-    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0$"))
+    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0$"))
     assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32"))
     Bridge.open(model, id)
     assert(Bridge.wand_tolerance(model) == 32 and
@@ -1208,7 +1435,7 @@ local function test_magic_wand_tolerance_bridge(Bridge, gallery)
     assert(key, "Não encontrou diretório da varinha")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t48\t0$"),
+    assert(meta:match("\t48\t0\t0$"),
            "document.tsv não persistiu tolerância nem modo contíguo")
     -- Abrir outra obra não pode herdar a tolerância desta.
     local id2 = gallery:add_artwork(16, 16, "Temporary wand")
@@ -2951,6 +3178,7 @@ function love.load()
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
     checkpoint("magic wand global color across disconnected regions")
+    test_magic_wand_composite_source(E)
     test_magic_wand_global(E)
     checkpoint("magic wand RGBA tolerance and connectivity")
     test_magic_wand_tolerance(E)
@@ -3118,6 +3346,7 @@ function love.load()
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge magic wand global mode and persistence")
+    test_magic_wand_sample_all_bridge(Bridge, gallery)
     test_magic_wand_global_bridge(Bridge, gallery)
     checkpoint("bridge magic wand tolerance shortcuts and persistence")
     test_magic_wand_tolerance_bridge(Bridge, gallery)
