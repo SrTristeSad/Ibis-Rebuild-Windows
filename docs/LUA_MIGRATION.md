@@ -57,6 +57,16 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   mantêm a máscara vazia. Combinações alteram só geometria, não pixels
   nem histórico raster, e funcionam em camadas bloqueadas. A máscara
   combinada continua persistida em `selection.png`.
+  **Expandir seleção** em 1 pixel: Ctrl+Alt+↑; **contrair seleção** em
+  1 pixel: Ctrl+Alt+↓. As operações usam vizinhança binária 8-conexa
+  (quadrado 3×3): expandir acrescenta pixels adjacentes; contrair
+  elimina pixels que não têm todos os oito vizinhos selecionados.
+  O exterior do canvas é considerado não selecionado: expandir recorta
+  nas bordas, e contrair pode remover totalmente a seleção.
+  São modificações apenas da máscara, sem pintar, criar undo raster ou
+  exigir desbloqueio da camada. Pressionar repetidamente aumenta
+  ou diminui a seleção em passos de 1 pixel. O resultado é salvo em
+  `selection.png`; não há feather nem alfa fracionário nesta etapa.
 - Seleções limitam a pintura e o balde à máscara ativa. O contorno da
   seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
   **Ctrl+A seleciona todo o canvas**; **Ctrl+Shift+I inverte a máscara**
@@ -136,7 +146,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - **Não** há paridade com os algoritmos do ibisPaint oficial.
 - Pincel circular, borracha, balde, conta-gotas, Alpha Lock, recorte básico por
   Clipping e os nove modos de mesclagem visíveis têm implementação independente.
-  Filtros, seleção por tolerância ajustável, interpolação bicúbica,
+  Filtros, feather (seleção suave com alfa parcial),
+  seleção por tolerância ajustável, interpolação bicúbica,
   prévia bilinear do movimento de pixels (o movimento raster inteiro usa
   shader nearest), formas, estabilização, pressão, máscaras adicionais,
   efeitos,
@@ -217,7 +228,10 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O CI também cobre flips H/V de máscaras irregulares, sobreposição
   semitransparente, proteção de pixels externos, histórico gravado/reaberto,
   atalhos Ctrl+Shift+H/V e bloqueio por Layer Lock/Alpha Lock.
-  A suíte cobre também união, diferença e interseção de máscaras
+  A suíte cobre expansão/contração 8-conexa, cantos e bordas do canvas,
+  ilhas desconectadas, buracos internos, contração até vazio e máscaras
+  persistidas, além de atalhos Ctrl+Alt+↑/↓ com camada bloqueada.
+  Também cobre união, diferença e interseção de máscaras
   irregulares, gestos reais de retângulo/laço/varinha, no-op/vazio,
   persistência e histórico raster intacto em camadas bloqueadas.
   Selecionar tudo e inverter também são testados com máscaras irregulares,

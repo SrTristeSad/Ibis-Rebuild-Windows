@@ -255,6 +255,47 @@ function Selection.combine(base, incoming, mode, w, h)
     return Selection.from_mask(w, h, next_mask, "combined_" .. mode)
 end
 
+-- Morfologia binária de uma célula, com vizinhança 8-conexa (3x3).
+-- Expandir adiciona os vizinhos dos pixels selecionados; contrair mantém
+-- somente pixels cercados por 8 vizinhos selecionados. Fora do canvas
+-- equivale a fundo vazio. Nenhum pixel do desenho é modificado.
+-- A operação não muta a máscara de entrada e a contração pode gerar nil.
+function Selection.morph(s, operation)
+    if operation ~= "expand" and operation ~= "contract" then
+        return nil, "Operação morfológica desconhecida."
+    end
+    if not s or s.count == 0 then
+        return nil, "Selecione uma área antes de expandir ou contrair."
+    end
+    local ok, reason = allowed(s.w, s.h)
+    if not ok then return nil, reason end
+    local next_mask = {}
+    for key in pairs(s.mask) do
+        local x, y = key % s.w, math.floor(key / s.w)
+        if operation == "expand" then
+            for ny = math.max(0, y - 1), math.min(s.h - 1, y + 1) do
+                for nx = math.max(0, x - 1), math.min(s.w - 1, x + 1) do
+                    next_mask[index(s.w, nx, ny)] = true
+                end
+            end
+        else
+            local surrounded = true
+            for dy = -1, 1 do
+                for dx = -1, 1 do
+                    if not Selection.contains(s, x + dx, y + dy) then
+                        surrounded = false
+                        break
+                    end
+                end
+                if not surrounded then break end
+            end
+            if surrounded then next_mask[key] = true end
+        end
+    end
+    return Selection.from_mask(s.w, s.h, next_mask,
+                               operation == "expand" and "expanded" or "contracted")
+end
+
 -- Snapshot independente para restaurar contorno e posição junto com pixels.
 function Selection.clone(s)
     if not s then return nil end

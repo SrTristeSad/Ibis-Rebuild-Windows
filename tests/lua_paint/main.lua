@@ -12,6 +12,217 @@ local function checkpoint(name)
     io.stdout:flush()
 end
 
+-- Expansão/contração morfológica 8-conexa, sem tocar no raster.
+local function test_selection_morph(E)
+    local Selection = require("lua_selection")
+    local p = E.new(16, 16)
+    E.sync(p, {layers = {{id = 1, visible = true, opacity = 100}}})
+    p.layers[1].pixels:setPixel(5, 5, 0.2, 0.4, 0.9, 0.6)
+    p.layers[1].image:replacePixels(p.layers[1].pixels)
+    p.dirty = false
+
+    local point = assert(Selection.rectangle(16, 16, 5, 5, 5, 5))
+    local expanded = assert(Selection.morph(point, "expand"))
+    assert(expanded.kind == "expanded" and expanded.count == 9 and
+           expanded.min_x == 4 and expanded.max_x == 6 and
+           expanded.min_y == 4 and expanded.max_y == 6 and
+           Selection.contains(expanded, 4, 4) and
+           Selection.contains(expanded, 6, 6) and
+           point.count == 1 and point.min_x == 5,
+           "Expansão 8-conexa deveria gerar 3x3 sem mudar original")
+    local restored = assert(Selection.morph(expanded, "contract"))
+    assert(restored.count == 1 and restored.kind == "contracted" and
+           Selection.contains(restored, 5, 5),
+           "Contrair 3x3 deveria voltar ao ponto central")
+
+    local corner = assert(Selection.rectangle(16, 16, 0, 0, 0, 0))
+    local clipped = assert(Selection.morph(corner, "expand"))
+    assert(clipped.count == 4 and clipped.min_x == 0 and
+           clipped.max_x == 1 and clipped.max_y == 1 and
+           Selection.contains(clipped, 1, 1),
+           "Expansão nas bordas deve recortar sem sair do canvas")
+    assert(not Selection.morph(clipped, "contract"),
+           "Contrair região que toca a borda deve considerar exterior vazio")
+    assert(not Selection.morph(point, "contract"),
+           "Contrair pixel isolado deveria desmarcar (nil, sem erro)")
+
+    local square = assert(Selection.rectangle(16, 16, 4, 4, 8, 8))
+    local contracted = assert(Selection.morph(square, "contract"))
+    assert(contracted.count == 9 and contracted.min_x == 5 and
+           contracted.max_x == 7 and contracted.min_y == 5 and
+           contracted.max_y == 7 and
+           not Selection.contains(contracted, 4, 4),
+           "Contração 5x5 deveria deixar o centro 3x3")
+    local recovered = assert(Selection.morph(contracted, "expand"))
+    assert(recovered.count == 25 and
+           Selection.contains(recovered, 4, 4) and
+           Selection.contains(recovered, 8, 8),
+           "Expandir após contrair bloco sólido não restaurou sua área")
+    assert(square.count == 25 and Selection.contains(square, 4, 4),
+           "Morfologia modificou a máscara original")
+
+    local islands = assert(Selection.from_mask(16, 16, {
+        [2 + 2 * 16] = true, [12 + 12 * 16] = true
+    }, "lasso"))
+    local grown = assert(Selection.morph(islands, "expand"))
+    assert(grown.count == 18 and
+           Selection.contains(grown, 1, 1) and
+           Selection.contains(grown, 13, 13),
+           "Ilhas desconectadas não expandiram independentemente")
+    local shrunk = assert(Selection.morph(grown, "contract"))
+    assert(shrunk.count == 2 and
+           Selection.contains(shrunk, 2, 2) and
+           Selection.contains(shrunk, 12, 12),
+           "Contração de ilhas 3x3 não restaurou seus centros")
+    local no_hole = {}
+    for y = 4, 8 do
+        for x = 4, 8 do
+            if not (x == 6 and y == 6) then
+                no_hole[y * 16 + x] = true
+            end
+        end
+    end
+    local ring = assert(Selection.from_mask(16, 16, no_hole, "lasso"))
+    assert(not Selection.morph(ring, "contract"),
+           "Contração deve respeitar lacunas internas da máscara")
+
+    local whole = assert(Selection.all(16, 16))
+    local inset = assert(Selection.morph(whole, "contract"))
+    assert(inset.count == 196 and inset.min_x == 1 and
+           inset.max_x == 14 and inset.min_y == 1 and inset.max_y == 14,
+           "Contrair seleção completa deve remover a borda do canvas")
+    local full_again = assert(Selection.morph(inset, "expand"))
+    assert(full_again.count == 256,
+           "Expandir a área interna deve restaurar a seleção total")
+
+    local invalid, error_text = Selection.morph(point, "blur")
+    assert(not invalid and error_text, "Operação não suportada foi aceita")
+    local none, no_selection = Selection.morph(nil, "expand")
+    assert(not none and no_selection, "Expandir sem seleção deveria falhar")
+    local huge = {w = 1025, h = 1025, count = 1, mask = {[0] = true}}
+    local rejected, limit = Selection.morph(huge, "expand")
+    assert(not rejected and limit, "Morfologia ignorou o limite de pixels")
+    assert(#p.undo == 0 and #p.redo == 0 and not p.dirty and
+           select(3, p.layers[1].pixels:getPixel(5, 5)) > 0.85 and
+           close(select(4, p.layers[1].pixels:getPixel(5, 5)), 0.6),
+           "Operações de máscara alteraram pixels, dirty ou histórico")
+
+    local path = "lua-morph-tests"
+    assert(love.filesystem.createDirectory(path))
+    assert(Selection.save(grown, path .. "/selection.png"))
+    local loaded = assert(Selection.load(path .. "/selection.png", 16, 16))
+    assert(loaded.count == grown.count and
+           Selection.contains(loaded, 1, 1) and
+           Selection.contains(loaded, 13, 13) and
+           not Selection.contains(loaded, 7, 7),
+           "PNG de máscara expandida não preservou regiões desconectadas")
+    assert(love.filesystem.remove(path .. "/selection.png"))
+    assert(love.filesystem.remove(path))
+end
+
+-- Atalhos da ponte e persistência da máscara, inclusive camadas bloqueadas.
+local function test_selection_morph_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Morph layer"}},
+        active_layer_id = 1, active_tool = "transform",
+        background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Morph selection")
+    Bridge.create(model, id, gallery)
+    local function shortcut(key, alt, shift)
+        local old = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" then return true end
+                if alt and k == "lalt" then return true end
+                if shift and k == "lshift" then return true end
+            end
+            return false
+        end
+        local consumed = Bridge.keypressed(key, model)
+        love.keyboard.isDown = old
+        return consumed
+    end
+    local warnings = 0
+    assert(not Bridge.selection_command(model, "expand_selection",
+                                      function() warnings = warnings + 1 end))
+    assert(warnings == 1 and not Bridge.selection_snapshot(),
+           "Expandir sem seleção deve informar falha, sem criar máscara")
+    model.layers[1].locked = true
+    model.layers[1].alpha_lock = true
+    assert(shortcut("a", false, false), "Ctrl+A não criou máscara")
+    assert(shortcut("down", true, false), "Ctrl+Alt+Down não contraiu")
+    local inset = assert(Bridge.selection_snapshot())
+    assert(inset.count == 196 and inset.min_x == 1 and
+           inset.max_y == 14 and
+           not Selection.contains(inset, 0, 0),
+           "Atalho de contração não preservou geometria/bordas")
+    assert(shortcut("up", true, false), "Ctrl+Alt+Up não expandiu")
+    assert(Bridge.selection_snapshot().count == 256,
+           "Atalho de expansão não restaurou seleção integral")
+    assert(not Bridge.undo(), "Morfologia de máscara gerou undo raster")
+
+    Bridge.clear_selection()
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local cx = 62 + (1024 - 62 - 34) / 2
+    local cy = 62 + (768 - 160) / 2
+    local mx = cx + (5 + 0.5 - 8) * 11
+    local my = cy + (5 + 0.5 - 8) * 11
+    assert(Bridge.mousepressed(model, id, mx, my, 1024, 768, view, prefs,
+                               {255, 0, 0}, 1, 100, nil))
+    assert(Bridge.mousereleased(model, mx, my, 1),
+           "Gesto retangular de um pixel falhou")
+    local point = assert(Bridge.selection_snapshot())
+    assert(point.count == 1, "Gesto de um pixel não criou máscara esperada")
+    assert(shortcut("up", true, false))
+    local grown = assert(Bridge.selection_snapshot())
+    assert(grown.count == 9 and grown.min_x == 4,
+           "Ctrl+Alt+Up não ampliou a seleção de 1 pixel")
+    assert(shortcut("down", true, false))
+    assert(Bridge.selection_snapshot().count == 1,
+           "Ctrl+Alt+Down não restaurou pixel único")
+    assert(shortcut("down", true, false) and not Bridge.selection_snapshot(),
+           "Contrair um pixel isolado deveria desmarcar")
+    assert(not Bridge.undo(), "Contração até vazio criou histórico raster")
+
+    assert(shortcut("a", false, false))
+    assert(shortcut("down", true, false))
+    model.layers[1].locked = false
+    model.layers[1].alpha_lock = false
+    assert(Bridge.save(), "Salvar a seleção contraída falhou")
+    local saved_mask = assert(Bridge.selection_snapshot())
+    Bridge.open(model, id)
+    local reloaded = assert(Bridge.selection_snapshot())
+    assert(reloaded.count == saved_mask.count and
+           reloaded.min_x == 1 and reloaded.max_x == 14,
+           "Reabertura não restaurou a seleção contraída")
+    assert(not Bridge.undo(), "Reabertura criou undo raster para seleção")
+    assert(not Bridge.selection_command({screen = "gallery"},
+                                        "expand_selection"),
+           "Morfologia não deve atuar fora do editor")
+
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Morph selection", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Pasta da obra temporária não encontrada")
+    local path = "lua-artworks/" .. key
+    require("lua_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Combinação booleana pura de máscaras arbitrárias.
 local function test_selection_boolean(E)
     local Selection = require("lua_selection")
@@ -1712,6 +1923,8 @@ function love.load()
            "Redo de movimento inconsistente")
 
     test_clipboard_transform(E)
+    checkpoint("selection morphology expand contract")
+    test_selection_morph(E)
     checkpoint("selection boolean algebra and PNG")
     test_selection_boolean(E)
     checkpoint("selection full canvas and inverse")
@@ -1867,6 +2080,8 @@ function love.load()
         "A escala da ponte não manteve o histórico")
     checkpoint("selection PNG roundtrip")
     test_selection_roundtrip(Bridge, model4, art4)
+    checkpoint("bridge selection morphology shortcuts")
+    test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge boolean gestures rectangle lasso wand")
     test_selection_boolean_bridge(Bridge, gallery)
     checkpoint("bridge select all and invert shortcuts")
@@ -1887,6 +2102,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: selection union/subtract/intersect + PNG + GPU + history")
+    print("PASS: selection morph expand/contract + boolean + PNG + GPU + history")
     love.event.quit(0)
 end

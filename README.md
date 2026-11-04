@@ -41,6 +41,10 @@ Com **Transformar (retângulo), Laço e Varinha**, os modificadores
 **Ctrl+Shift** somam áreas, **Ctrl+Alt** subtraem e
 **Ctrl+Shift+Alt** intersectam; essas operações não modificam a
 pintura e persistem no `selection.png`.
+**Ctrl+Alt+↑** expande a seleção em 1 pixel e **Ctrl+Alt+↓**
+contrai em 1 pixel (máscara binária, vizinhança de 8 pixels).
+Essas operações preservam a pintura e são salvas como seleção PNG;
+não implementam feather/suavização de alfa.
 O arraste normal do Transformar também exibe uma prévia GPU do deslocamento inteiro,
 com máscara/cache reutilizados sem recalcular todos os pixels em Lua
 a cada movimento subpixel. O visual e os

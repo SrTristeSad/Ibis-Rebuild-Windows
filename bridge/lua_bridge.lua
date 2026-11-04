@@ -609,7 +609,13 @@ function Bridge.selection_command(model, command, notice)
 
     -- São mudanças de máscara, NÃO operações raster: permitidas inclusive
     -- em camadas bloqueadas / Alpha Lock e sem adicionar passos ao histórico.
-    if command == "select_all" or command == "invert_selection" then
+    if command == "select_all" or command == "invert_selection" or
+       command == "expand_selection" or command == "contract_selection" then
+        if (command == "expand_selection" or command == "contract_selection")
+           and not selection then
+            if notice then notice("Selecione uma área antes de expandir ou contrair.") end
+            return false
+        end
         discard_preview(gesture)
         gesture = nil
         if command == "select_all" and selection and
@@ -617,14 +623,17 @@ function Bridge.selection_command(model, command, notice)
         local next_mask, reason
         if command == "select_all" then
             next_mask, reason = Selection.all(p.w, p.h)
-        else
+        elseif command == "invert_selection" then
             next_mask, reason = Selection.invert(selection, p.w, p.h)
+        else
+            next_mask, reason = Selection.morph(selection,
+                   command == "expand_selection" and "expand" or "contract")
         end
         if reason then
             if notice then notice(reason) end
             return false
         end
-        -- Se o inverso está vazio, nil representa desmarcar.
+        -- Máscara nula válida: inversão integral ou contração até desaparecer.
         selection = next_mask
         return true
     end
@@ -679,6 +688,16 @@ function Bridge.keypressed(key, model, notice)
     if not love.keyboard.isDown("lctrl", "rctrl") then return false end
     if key == "d" then Bridge.clear_selection(); return true end
     local shift = love.keyboard.isDown("lshift", "rshift")
+    local alt = love.keyboard.isDown("lalt", "ralt")
+    if alt and not shift then
+        if key == "up" then
+            Bridge.selection_command(model, "expand_selection", notice)
+            return true
+        elseif key == "down" then
+            Bridge.selection_command(model, "contract_selection", notice)
+            return true
+        end
+    end
     if not shift and key == "a" then
         return Bridge.selection_command(model, "select_all", notice)
     end
