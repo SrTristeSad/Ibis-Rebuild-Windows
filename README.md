@@ -37,6 +37,11 @@ seleção **horizontal (Ctrl+Shift+H)** e **vertical (Ctrl+Shift+V)**
 reflete pixels e máscara irregular com undo/redo.
 **Ctrl+A** seleciona todo o canvas e **Ctrl+Shift+I** inverte a
 máscara, sem alterar pixels ou histórico raster.
+A **Varinha Mágica** tem tolerância ajustável por obra: **Ctrl+Alt+→**
+aumenta 16 níveis, **Ctrl+Alt+←** diminui 16 e **Ctrl+Alt+0**
+restaura a seleção exata. A faixa é 0–255 por canal RGBA;
+a ferramenta seleciona apenas pixels conectados ao ponto clicado.
+O ajuste é salvo em `document.tsv` e não modifica a pintura.
 Com **Transformar (retângulo), Laço e Varinha**, os modificadores
 **Ctrl+Shift** somam áreas, **Ctrl+Alt** subtraem e
 **Ctrl+Shift+Alt** intersectam; essas operações não modificam a

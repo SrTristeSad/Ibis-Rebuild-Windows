@@ -137,13 +137,23 @@ function Selection.lasso(w, h, points)
     return finalize(s)
 end
 
-function Selection.magic_wand(layer, w, h, x, y)
+-- Varinha usa tolerância por CANAL RGBA, em unidades inteiras 8-bit.
+-- Zero mantém equivalência à seleção exata antiga (margem de
+-- quantização); valor 255 inclui todas as cores/transparências conexas.
+-- Somente pixels conectados em 4 direções ao ponto inicial são incluídos.
+function Selection.magic_wand(layer, w, h, x, y, tolerance)
     local ok, err = allowed(w, h)
     if not ok then return nil, err end
+    if tolerance == nil then tolerance = 0 end
+    if type(tolerance) ~= "number" or tolerance ~= math.floor(tolerance) or
+       tolerance < 0 or tolerance > 255 then
+        return nil, "Tolerância da varinha deve ser um inteiro de 0 a 255."
+    end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= w or y >= h then return nil end
     local data = layer.pixels
     local tr, tg, tb, ta = data:getPixel(x, y)
+    local threshold = tolerance / 255 + TOLERANCE
     local s = empty(w, h, "magic_wand")
     local visited = {}
     local function matches(px, py)
@@ -151,9 +161,9 @@ function Selection.magic_wand(layer, w, h, x, y)
         local key = index(w, px, py)
         if visited[key] or s.mask[key] then return false end
         local r, g, b, a = data:getPixel(px, py)
-        local same = math.abs(r - tr) <= TOLERANCE and
-            math.abs(g - tg) <= TOLERANCE and
-            math.abs(b - tb) <= TOLERANCE and math.abs(a - ta) <= TOLERANCE
+        local same = math.abs(r - tr) <= threshold and
+            math.abs(g - tg) <= threshold and
+            math.abs(b - tb) <= threshold and math.abs(a - ta) <= threshold
         if not same then visited[key] = true end
         return same
     end

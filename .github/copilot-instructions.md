@@ -25,6 +25,15 @@
 - Um modo diferente de Normal ou Clipping usa renderização em dois canvases
   alternados com estado de textura e transformações isoladas. Não regredir
   o caminho direto Normal nem os testes de semitransparência.
+- Varinha Mágica: tolerância por obra 0..255 passos 8-bit por canal RGBA,
+  com comparação a cada canal do seed e flood-fill 4-conexo.
+  `Selection.magic_wand(..., tolerance)` omite argumento para zero,
+  mantendo compatibilidade da seleção exata. Ctrl+Alt+Right aumenta
+  16, Ctrl+Alt+Left diminui 16, Ctrl+Alt+0 zera e mostra notice existente.
+  Não marca raster dirty nem cria undo de máscara ao ajustar preferência.
+  Gravar valor na terceira coluna opcional de `document.tsv` e ler zero
+  em obras antigas (2 colunas) ou dados inválidos. Não alterar UI.
+  Testar canal alfa, regiões isoladas, histórico e persistência.
 - Seleção raster ativa fica em bridge/lua_selection.lua: Varinha Mágica,
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam
