@@ -83,6 +83,16 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   `document.tsv` (0=4, 1=8); arquivos de duas a cinco colunas e valores
   inválidos preservam quatro vizinhos. Alternar a conectividade não
   altera a seleção atual, pixels, dirty ou histórico.
+  **Ctrl+Alt+R** alterna a comparação da Varinha entre **RGBA**
+  (padrão, compara R/G/B/A) e **somente RGB** (ignora o canal alfa).
+  Ambos mantêm a tolerância 0..255 por canal, contiguidade 4/8,
+  modo global, fonte camada ativa/composição visível, limites e álgebra
+  de máscaras. A escolha muda apenas quais pixels entram na máscara:
+  não modifica a transparência dos pixels, o histórico ou o dirty.
+  Em pixels de alfa zero, RGB pode estar armazenado apesar de invisível
+  e continua sendo considerado no modo RGB. A opção por obra
+  `wand_rgb_only` usa a sétima coluna de `document.tsv` (0/1);
+  arquivos com 2–6 colunas ou flag inválida seguem no RGBA padrão.
   **Laço** seleciona pixels dentro do contorno livre arrastado; **Transformar**
   cria uma seleção retangular ao arrastar sem seleção e move pixels selecionados
   ao arrastar dentro da seleção. Não foram criados controles visuais.
@@ -320,6 +330,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   A nova suíte de conectividade 8-conexa cobre pontes diagonais, bordas,
   canal alfa/tolerância, independência do modo global, Ctrl+Alt+8,
   persistência por obra, arquivos 2–6 colunas e histórico raster.
+  Os testes de RGB-only exercitam alfa 0/25/50/100%, conexidade 4/8,
+  modo global, tolerância, fonte composta, Ctrl+Alt+R, formatos 2–7
+  colunas, preservação do alfa salvo e histórico raster.
   Também cobre a varinha com tolerância RGBA ajustável, conectividade de
   quatro vizinhos, limites 0/255, canal alfa, combinações preservadas,
   atalhos Ctrl+Alt+←/→/0, ausência de histórico ao mudar configuração
