@@ -296,7 +296,9 @@ function Engine.draw(project, model, interpolation)
     local front, back = canvases[1], canvases[2]
     love.graphics.setCanvas(front)
     love.graphics.clear(0, 0, 0, 0)
-    love.graphics.setBlendMode("replace")
+    -- Canvas intermediário guarda RGB straight: o modo alpha padrão
+    -- premultiplica RGB mesmo quando o BlendMode é "replace".
+    love.graphics.setBlendMode("replace", "premultiplied")
     local shader = shader_for_layers()
 
     for index, info in ipairs(model.layers) do
