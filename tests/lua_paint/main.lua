@@ -1557,7 +1557,7 @@ local function test_magic_wand_rgb_only_bridge(Bridge, gallery)
     assert(key, "Diretório da obra RGB-only não encontrado")
     local path = "lua-artworks/" .. key
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t16\t1\t0\t0\t1\t0$"),
+    assert(saved:match("\t16\t1\t0\t0\t1\t0\t0$"),
            "document.tsv não gravou sétima coluna RGB-only")
     local image = love.image.newImageData(path .. "/layer_1.png")
     local _, _, _, alpha = image:getPixel(5, 3)
@@ -1710,7 +1710,7 @@ local function test_magic_wand_diagonal_bridge(Bridge, gallery)
     assert(key, "Pasta do teste diagonal ausente")
     local path = "lua-artworks/" .. key
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t16\t0\t0\t1\t0\t0$"),
+    assert(saved:match("\t16\t0\t0\t1\t0\t0\t0$"),
            "Documento não salvou sexta coluna de conectividade")
     local other = gallery:add_artwork(16, 16, "Wand another diagonal")
     Bridge.create(model, other, gallery)
@@ -2001,7 +2001,7 @@ local function test_magic_wand_sample_all_bridge(Bridge, gallery)
     assert(key, "Não encontrou pasta da amostragem composta")
     local path = "lua-artworks/" .. key
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t1\t1\t0\t0\t0$"),
+    assert(metadata:match("\t0\t1\t1\t0\t0\t0\t0$"),
            "Preferência global e amostragem composta não persistiram")
     local layer1 = love.image.newImageData(path .. "/layer_1.png")
     local layer2 = love.image.newImageData(path .. "/layer_2.png")
@@ -2173,7 +2173,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
     assert(key, "Obra temporária do modo global não foi localizada")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t32\t1\t0\t0\t0\t0$"),
+    assert(meta:match("\t32\t1\t0\t0\t0\t0\t0$"),
            "document.tsv não registrou modo global e tolerância")
     local other = gallery:add_artwork(16, 16, "Wand other mode")
     Bridge.create(model, other, gallery)
@@ -2197,7 +2197,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
            not Selection.contains(Bridge.selection_snapshot(), 2, 2),
            "Modo contíguo deixou escapar pixels de regiões separadas")
     assert(Bridge.save())
-    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0\t0\t0$"))
+    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0\t0\t0\t0$"))
     assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32"))
     Bridge.open(model, id)
     assert(Bridge.wand_tolerance(model) == 32 and
@@ -2389,7 +2389,7 @@ local function test_magic_wand_tolerance_bridge(Bridge, gallery)
     assert(key, "Não encontrou diretório da varinha")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t48\t0\t0\t0\t0\t0$"),
+    assert(meta:match("\t48\t0\t0\t0\t0\t0\t0$"),
            "document.tsv não persistiu tolerância nem modo contíguo")
     -- Abrir outra obra não pode herdar a tolerância desta.
     local id2 = gallery:add_artwork(16, 16, "Temporary wand")
