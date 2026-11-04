@@ -761,7 +761,9 @@ end
 -- parâmetro/limite não modificam documento, histórico ou seleção.
 -- Preparação pura: pixels e máscara são calculados em buffers temporários.
 -- Nenhuma operação de pré-visualização altera camadas, dirty ou undo/redo.
-local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
+-- Validação compartilhada entre a prévia GPU e o commit CPU. O retângulo
+-- de destino é conservador: não recorta nenhum pixel fora do canvas.
+local function affine_geometry(project, selected, degrees, sx, sy, filter)
     if not selected or selected.count == 0 then
         return nil, "Selecione uma área antes de transformar."
     end
@@ -782,7 +784,6 @@ local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
     if math.abs(angle) < 1e-10 and sx == 1 and sy == 1 then
         return nil, "A transformação não altera a seleção."
     end
-    local layer = assert(project.layers[id], "Camada inexistente")
     local cx = (selected.min_x + selected.max_x + 1) / 2
     local cy = (selected.min_y + selected.max_y + 1) / 2
     local co, si = math.cos(angle), math.sin(angle)
@@ -805,6 +806,18 @@ local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
     if xmin < 0 or ymin < 0 or xmax >= project.w or ymax >= project.h then
         return nil, "Transformação ultrapassaria os limites do canvas."
     end
+    return {cx = cx, cy = cy, co = co, si = si, angle = angle,
+            xmin = xmin, ymin = ymin, xmax = xmax, ymax = ymax}
+end
+
+local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
+    local geometry, reason = affine_geometry(project, selected,
+                                            degrees, sx, sy, filter)
+    if not geometry then return nil, reason end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local cx, cy, co, si = geometry.cx, geometry.cy, geometry.co, geometry.si
+    local xmin, xmax = geometry.xmin, geometry.xmax
+    local ymin, ymax = geometry.ymin, geometry.ymax
     local function source_at(x, y)
         local dx, dy = x + 0.5 - cx, y + 0.5 - cy
         return (co * dx + si * dy) / sx + cx,
@@ -981,6 +994,140 @@ function Engine.update_move_preview(project, selected, preview, dx, dy)
     love.graphics.draw(preview.source_image, 0, 0)
     love.graphics.pop()
     preview.active = true
+    preview.renders = preview.renders + 1
+    return true
+end
+
+
+-- Prévia GPU da transformação afim: máscara raster e Canvas só são
+-- alocados UMA vez por gesto; atualização usa uniforme e shader bilinear.
+-- Os pixels de commit continuam vindo do caminho CPU prepare_affine.
+local affine_preview_shader
+
+local function affine_shader()
+    if not affine_preview_shader then
+        affine_preview_shader = love.graphics.newShader([[
+            extern Image selectionMask;
+            extern vec2 dimensions;
+            extern vec2 pivot;
+            extern vec2 rotationTrig;
+            extern vec2 inverseScale;
+
+            // Seleção e pixels fora do documento são transparentes.
+            float membership(vec2 q) {
+                if (q.x < 0.0 || q.y < 0.0 ||
+                    q.x >= dimensions.x || q.y >= dimensions.y) return 0.0;
+                return Texel(selectionMask, (floor(q) + vec2(0.5)) /
+                    dimensions).a;
+            }
+            vec4 effect(vec4 vertexColor, Image texture,
+                        vec2 textureCoords, vec2 screenCoords) {
+                vec2 destination = textureCoords * dimensions;
+                vec4 original = Texel(texture, textureCoords);
+                vec4 base = membership(destination) > 0.5
+                    ? vec4(0.0) : original;
+
+                vec2 delta = destination - pivot;
+                float c = rotationTrig.x;
+                float s = rotationTrig.y;
+                vec2 src = vec2(c * delta.x + s * delta.y,
+                                -s * delta.x + c * delta.y);
+                src = src * inverseScale + pivot;
+                // Máscara transformada usa nearest, igual ao CPU.
+                if (membership(src) <= 0.5) return base;
+
+                // Bilinear com RGBA premultiplicado, sem vazamento
+                // de pixels vizinhos fora da seleção.
+                vec2 corner = src - vec2(0.5);
+                vec2 p0 = floor(corner);
+                vec2 fraction = corner - p0;
+                vec3 premul = vec3(0.0);
+                float accumulatedAlpha = 0.0;
+                for (int j = 0; j < 2; ++j) {
+                    for (int i = 0; i < 2; ++i) {
+                        vec2 samplePixel = p0 + vec2(float(i), float(j));
+                        if (membership(samplePixel) > 0.5) {
+                            float weight = (i == 0 ? 1.0 - fraction.x :
+                                                       fraction.x) *
+                                           (j == 0 ? 1.0 - fraction.y :
+                                                       fraction.y);
+                            vec4 sampleColor = Texel(texture,
+                                 (samplePixel + vec2(0.5)) / dimensions);
+                            float contribution = weight * sampleColor.a;
+                            premul += sampleColor.rgb * contribution;
+                            accumulatedAlpha += contribution;
+                        }
+                    }
+                }
+                vec3 sourceRgb = accumulatedAlpha > 0.0000001
+                    ? premul / accumulatedAlpha : vec3(0.0);
+                float outAlpha = accumulatedAlpha +
+                    base.a * (1.0 - accumulatedAlpha);
+                vec3 outRgb = vec3(0.0);
+                if (outAlpha > 0.0000001) {
+                    outRgb = (sourceRgb * accumulatedAlpha +
+                        base.rgb * base.a * (1.0 - accumulatedAlpha)) /
+                        outAlpha;
+                }
+                return vec4(outRgb, outAlpha);
+            }
+        ]])
+    end
+    return affine_preview_shader
+end
+
+function Engine.begin_affine_gpu_preview(project, id, selected)
+    if not selected or selected.count == 0 or
+       project.w * project.h > MAX_TRANSFORM_PIXELS then
+        return nil, LIMIT_MESSAGE
+    end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local mask_data = love.image.newImageData(project.w, project.h)
+    for key in pairs(selected.mask) do
+        mask_data:setPixel(key % project.w, math.floor(key / project.w),
+                           1, 1, 1, 1)
+    end
+    local mask_image = love.graphics.newImage(mask_data)
+    mask_image:setFilter("nearest", "nearest")
+    local canvas = love.graphics.newCanvas(project.w, project.h)
+    canvas:setFilter("nearest", "nearest")
+    return {kind = "affine_gpu", image = canvas,
+            mask_image = mask_image, source_image = layer.image,
+            active = false, renders = 0, degrees = nil}
+end
+
+function Engine.update_affine_gpu_preview(project, selected, preview,
+                                         degrees, sx, sy)
+    assert(preview and preview.kind == "affine_gpu",
+           "Prévia afim GPU incompatível.")
+    local geometry, reason = affine_geometry(project, selected,
+                                             degrees, sx, sy, "bilinear")
+    if not geometry then
+        preview.active = false
+        return false, reason
+    end
+    if preview.active and preview.degrees == degrees and
+       preview.sx == sx and preview.sy == sy then
+        return true
+    end
+    local shader = affine_shader()
+    love.graphics.push("all")
+    love.graphics.origin()
+    love.graphics.setCanvas(preview.image)
+    love.graphics.setBlendMode("replace", "premultiplied")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setShader(shader)
+    shader:send("selectionMask", preview.mask_image)
+    shader:send("dimensions", {project.w, project.h})
+    shader:send("pivot", {geometry.cx, geometry.cy})
+    shader:send("rotationTrig", {geometry.co, geometry.si})
+    shader:send("inverseScale", {1 / sx, 1 / sy})
+    preview.source_image:setFilter("nearest", "nearest")
+    love.graphics.draw(preview.source_image, 0, 0)
+    love.graphics.pop()
+    preview.active = true
+    preview.degrees, preview.sx, preview.sy = degrees, sx, sy
+    preview.cx, preview.cy = geometry.cx, geometry.cy
     preview.renders = preview.renders + 1
     return true
 end

@@ -463,6 +463,93 @@ local function test_bilinear_preview(E)
     assert(not unknown, "Filtro desconhecido foi aceito")
 end
 
+-- Prévia GPU afim reaproveita máscaras/texturas; commit CPU mantém paridade.
+local function test_affine_gpu_preview(E)
+    local Selection = require("lua_selection")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local p = E.new(64, 64)
+    E.sync(p, model)
+    local layer = p.layers[1]
+    -- Bordas transparentes coloridas e amostras semitransparentes.
+    layer.pixels:setPixel(24, 24, 1, 0, 0, 0.55)
+    layer.pixels:setPixel(25, 24, 0, 0, 1, 1)
+    layer.pixels:setPixel(23, 24, 0, 1, 0, 0)
+    layer.pixels:setPixel(29, 29, 0.3, 0.6, 0.9, 0.7)
+    layer.pixels:setPixel(35, 35, 0.2, 0.9, 0.3, 1)
+    layer.image:replacePixels(layer.pixels)
+    p.dirty = false
+    local mask = assert(Selection.rectangle(64, 64, 20, 20, 31, 31))
+    local initial = Selection.clone(mask)
+    local preview = assert(E.begin_affine_gpu_preview(p, 1, mask))
+    assert(preview.kind == "affine_gpu" and preview.image and
+           preview.mask_image and preview.renders == 0 and not preview.active,
+           "Prévia afim GPU não criou texturas uma vez")
+    local cache_canvas, cache_mask = preview.image, preview.mask_image
+    assert(E.update_affine_gpu_preview(p, mask, preview, 30, 1.35, 0.85),
+           "GPU não renderizou rotação livre com escala anisotrópica")
+    assert(preview.active and preview.renders == 1 and
+           not p.dirty and #p.undo == 0 and #p.redo == 0 and
+           Selection.contains(mask, 24, 24) and
+           select(1, layer.pixels:getPixel(24, 24)) > 0.9,
+           "Prévia GPU alterou o estado original do projeto")
+    assert(E.update_affine_gpu_preview(p, mask, preview, 30, 1.35, 0.85))
+    assert(preview.renders == 1 and preview.image == cache_canvas and
+           preview.mask_image == cache_mask,
+           "Mesmo parâmetro deveria reutilizar cache sem renderizar")
+    local expected = preview.image:newImageData()
+    assert(E.affine_selection(p, 1, mask, 30, 1.35, 0.85, "bilinear"),
+           "Commit bilinear de controle não executou")
+    local max_difference = 0
+    local changed_pixels = 0
+    for y = 0, 63 do
+        for x = 0, 63 do
+            local cr, cg, cb, ca = layer.pixels:getPixel(x, y)
+            local pr, pg, pb, pa = expected:getPixel(x, y)
+            max_difference = math.max(max_difference,
+                math.abs(ca - pa), math.abs(cr * ca - pr * pa),
+                math.abs(cg * ca - pg * pa), math.abs(cb * ca - pb * pa))
+            if ca > 0.05 or pa > 0.05 then
+                changed_pixels = changed_pixels + 1
+            end
+        end
+    end
+    assert(changed_pixels > 5 and max_difference < 0.045,
+        string.format("Shader afim/CPU divergiram em RGBA: %.4f",
+            max_difference))
+    assert(#p.undo == 1 and p.dirty and mask.count > 0,
+           "Commit afim não gerou histórico após prévia")
+    assert(E.undo(p, mask) and mask.count == initial.count,
+           "Undo após prévia afim não restaurou seleção")
+    assert(E.redo(p, mask), "Redo após prévia afim falhou")
+
+    -- O mesmo Canvas GPU deve ser reutilizado com novos parâmetros.
+    assert(E.update_affine_gpu_preview(p, initial, preview, -17.5, 1, 1))
+    assert(preview.active and preview.renders == 2 and
+           preview.image == cache_canvas and preview.mask_image == cache_mask,
+           "Mudança angular recriou recursos da GPU")
+    local old_renders = preview.renders
+    local invalid, reason = E.update_affine_gpu_preview(p, initial, preview,
+                                                         math.huge, 1, 1)
+    assert(not invalid and reason and not preview.active and
+           preview.renders == old_renders,
+           "Prévia inválida deveria ser desativada sem novo render")
+    assert(E.update_affine_gpu_preview(p, initial, preview, 30, 1, 1),
+           "Prévia não voltou após rejeição de parâmetros")
+
+    preview.image:release()
+    preview.mask_image:release()
+
+    local edge = assert(Selection.rectangle(64, 64, 60, 60, 63, 63))
+    local at_edge = assert(E.begin_affine_gpu_preview(p, 1, edge))
+    local before = #p.undo
+    local ok, err = E.update_affine_gpu_preview(p, edge, at_edge, 30, 2, 2)
+    assert(not ok and err and #p.undo == before and
+           edge.min_x == 60 and not at_edge.active,
+           "Prévia perto da borda deveria rejeitar sem tocar a obra")
+    at_edge.image:release()
+    at_edge.mask_image:release()
+end
+
 -- Prévia de deslocamento usa GPU + máscara criada só uma vez por gesto.
 local function test_move_preview_engine(E)
     local Selection = require("lua_selection")
@@ -673,9 +760,18 @@ local function test_affine_bridge(Bridge, gallery)
     assert(Bridge.mousemoved(model, rx, ry, 1), "Prévia da rotação não consumiu gesto")
     local rotating_preview = assert(Bridge.preview_snapshot(),
         "Alt+arrastar não criou prévia antes de soltar")
-    assert(rotating_preview.selection.count > 0 and
+    assert(rotating_preview.kind == "affine_gpu" and
+           rotating_preview.active and rotating_preview.image and
+           rotating_preview.mask_image and rotating_preview.renders == 1 and
            Bridge.selection_snapshot().min_x == selection.min_x,
-           "Prévia mudou prematuramente a máscara ativa")
+           "Prévia GPU não surgiu ou mudou prematuramente a seleção")
+    local same_rx, same_ry = screen(30, 37)
+    assert(Bridge.mousemoved(model, same_rx, same_ry, 1))
+    local same_rotation = assert(Bridge.preview_snapshot())
+    assert(same_rotation.renders == 1 and
+           same_rotation.image == rotating_preview.image and
+           same_rotation.mask_image == rotating_preview.mask_image,
+           "Rotação não reutilizou Canvas e máscara com mesmo ângulo")
     local preview_image = love.graphics.newCanvas(64, 64)
     love.graphics.push("all")
     love.graphics.setCanvas(preview_image)
@@ -713,8 +809,9 @@ local function test_affine_bridge(Bridge, gallery)
            "Prévia da escala modificou a máscara antes de soltar")
     assert(release(35, 34), "Shift+arrastar não aplicou escala independente")
     local scaled = assert(Bridge.selection_snapshot())
-    assert(scaled.count == scaling_preview.selection.count and
-           not Bridge.preview_snapshot(), "Prévia da escala divergiu ou não foi liberada")
+    assert(scaling_preview.kind == "affine_gpu" and
+           scaling_preview.active and scaling_preview.renders == 1 and
+           not Bridge.preview_snapshot(), "Prévia GPU não foi liberada após escala")
     assert(scaled.count > rotated.count, "Escala livre não expandiu a seleção")
     assert(Bridge.undo(), "Gesto de escala não gerou undo")
     local restored = assert(Bridge.selection_snapshot())
@@ -1001,6 +1098,8 @@ function love.load()
     test_clipboard_transform(E)
     checkpoint("affine rotation and nonuniform scaling")
     test_affine_transforms(E)
+    checkpoint("GPU affine preview vs CPU bilinear")
+    test_affine_gpu_preview(E)
     checkpoint("GPU move preview vs CPU commit")
     test_move_preview_engine(E)
     checkpoint("bilinear preview and commit")
@@ -1160,6 +1259,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: GPU move preview/commit + bilinear + history + layers")
+    print("PASS: GPU affine/move previews + CPU commit + history + layers")
     love.event.quit(0)
 end

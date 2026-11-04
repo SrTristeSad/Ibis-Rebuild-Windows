@@ -77,9 +77,12 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   verticalmente de maneira independente, conforme o deslocamento do mouse.
   O gesto normal sem modificadores continua movendo pixels.
   **Durante Alt/Shift+arrastar**, a área transformada já aparece no canvas
-  com contorno temporário. A prévia usa uma cópia da camada: não altera o
-  documento, thumbnails, dirty ou histórico antes de soltar o mouse.
-  Ao soltar, o resultado é gravado em um único passo reversível.
+  com contorno temporário. A prévia agora usa um shader da GPU:
+  máscara e Canvas temporários são criados uma única vez por gesto,
+  enquanto ângulos/fatores são atualizados por uniforms GLSL.
+  O contorno é transformado graficamente, sem criar outra máscara
+  raster em Lua por movimento. Documento, miniaturas, dirty e histórico
+  não mudam antes de soltar. A CPU grava o resultado em um passo reversível.
   A API `Engine.affine_selection(project,id,selection,angle,sx,sy,filter)`
   aceita ângulo fracionário em graus, escala X/Y contínua e filtro
   opcional `"bilinear"`. O padrão da API permanece `nearest` para
@@ -138,11 +141,14 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   admite rotação livre e escalas independentes por gesto na ferramenta
   Transformar; os atalhos anteriores de 90° e 50%/200% continuam disponíveis.
   Os fatores da API livre devem estar entre 0,1 e 8 por eixo.
-  Os gestos livres usam bilinear RGBA e os atalhos antigos / chamadas sem
-  filtro permanecem nearest-neighbour. A prévia raster é recalculada durante
-  o arraste e pode ter custo alto em seleções grandes; o resultado é
-  atualizado em tempo real para Alt/Shift, sem filtros bicúbicos ou
-  alças vetoriais. Operações cuja nova área exceda as bordas da tela
+  Os gestos livres usam bilinear RGBA e os atalhos anteriores / chamadas
+  sem filtro continuam nearest-neighbour. A prévia GPU dos gestos Alt/Shift
+  atualiza uniforms e renderiza um Canvas, sem refazer a seleção na CPU
+  a cada mousemoved. Isso ainda exige VRAM e tempo de GPU. A CPU prepara
+  a máscara final e modifica pixels apenas na confirmação. Durante a
+  prévia, o contorno usa transformação geométrica das arestas, podendo
+  divergir um pouco do limite raster em ângulos fracionários.
+  Não há filtros bicúbicos nem alças vetoriais. Operações cuja nova área exceda as bordas da tela
   falham sem cortar pixels.
   O movimento é deslocamento inteiro, limitado para manter a máscara no
   canvas. Sua prévia GPU usa uma máscara e um Canvas do tamanho do
@@ -184,10 +190,11 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Testes adicionais cobrem ângulos livres, escalas X/Y independentes,
   pixels RGBA preservados, parâmetros inválidos, operações nas bordas
   e gestos Alt/Shift reais na ponte com undo/redo.
-  A suíte também verifica que a prévia bilinear não toca no documento,
-  produz mistura real de cores sem halos de RGB transparente, corresponde
-  ao commit pixel a pixel, exibe o canvas antes de soltar e é descartada
-  depois do gesto. A prévia de movimento GPU é comparada ao commit
+  A suíte verifica que a API de prévia bilinear CPU não altera a obra
+  e coincide com o commit pixel a pixel. A prévia GPU de rotação/escala
+  compara RGBA pré-multiplicado com o commit CPU (tolerância GLSL),
+  reutiliza máscara e Canvas, rejeita parâmetros inválidos e evita
+  mutação antes de soltar. O contorno gráfico usa origem centralizada. A prévia de movimento GPU é comparada ao commit
   raster CPU, inclusive em sobreposições com transparência, e testa
   reutilização da máscara/Canvas, deslocamento quantizado, renderização
   e cancelamento no Bridge.

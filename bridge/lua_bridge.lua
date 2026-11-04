@@ -232,8 +232,7 @@ function Bridge.draw(model, visual)
     local p = ensure(model)
     if not p then return end
     local d = gesture
-    if d and d.preview and
-       (d.preview.kind ~= "move" or d.preview.active) and
+    if d and d.preview and d.preview.active and
        d.layer and p.layers[d.layer] then
         -- Projeta uma camada alternativa em memória, sem tocar em p.layers,
         -- nas pilhas undo/redo, em dirty ou nas miniaturas persistidas.
@@ -245,19 +244,27 @@ function Bridge.draw(model, visual)
         if not p.compose_canvases then
             p.compose_canvases = temporary.compose_canvases
         end
+        -- O canvas é centrado, mas a máscara raster usa (0,0) no canto.
+        -- Transformar o CONTORNO no shader/draw evita construir outra
+        -- Selection.from_mask em cada movimento.
+        love.graphics.push()
+        love.graphics.translate(-p.w / 2, -p.h / 2)
         if d.preview.kind == "move" then
-            -- O contorno acompanha o arraste com uma translação gráfica;
-            -- não reconstrói a máscara de até 1 Mi de pixels por frame.
-            love.graphics.push()
             love.graphics.translate(d.preview.dx, d.preview.dy)
-            Selection.draw(selection)
-            love.graphics.pop()
-        else
-            Selection.draw(d.preview.selection)
+        elseif d.preview.kind == "affine_gpu" then
+            love.graphics.translate(d.preview.cx, d.preview.cy)
+            love.graphics.rotate(math.rad(d.preview.degrees))
+            love.graphics.scale(d.preview.sx, d.preview.sy)
+            love.graphics.translate(-d.preview.cx, -d.preview.cy)
         end
+        Selection.draw(selection)
+        love.graphics.pop()
     else
         Engine.draw(p, model, visual and visual.interpolation)
+        love.graphics.push()
+        love.graphics.translate(-p.w / 2, -p.h / 2)
         Selection.draw(selection)
+        love.graphics.pop()
     end
 end
 
@@ -446,11 +453,18 @@ function Bridge.mousemoved(model, rx, ry, scale)
             end
             if changed and (d.kind == "rotate_free" or
                             d.kind == "scale_free") then
-                discard_preview(d)
                 local degrees, sx, sy = affine_gesture_args(d)
-                if degrees then
-                    d.preview = Engine.preview_affine(project, d.layer,
-                                    selection, degrees, sx, sy, "bilinear")
+                if degrees and selection and d.layer then
+                    if not d.preview then
+                        d.preview = Engine.begin_affine_gpu_preview(
+                            project, d.layer, selection)
+                    end
+                    if d.preview then
+                        Engine.update_affine_gpu_preview(project, selection,
+                            d.preview, degrees, sx, sy)
+                    end
+                elseif d.preview then
+                    d.preview.active = false
                 end
             end
             if d.kind == "lasso" then
@@ -532,6 +546,15 @@ function Bridge.preview_snapshot()
             kind = "move", selection = mask, image = d.preview.image,
             active = d.preview.active, dx = d.preview.dx, dy = d.preview.dy,
             renders = d.preview.renders, mask_image = d.preview.mask_image
+        }
+    end
+    if d.preview.kind == "affine_gpu" then
+        return {
+            kind = "affine_gpu", active = d.preview.active,
+            image = d.preview.image, mask_image = d.preview.mask_image,
+            degrees = d.preview.degrees, sx = d.preview.sx, sy = d.preview.sy,
+            cx = d.preview.cx, cy = d.preview.cy,
+            renders = d.preview.renders
         }
     end
     return {
