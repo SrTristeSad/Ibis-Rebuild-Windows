@@ -104,6 +104,23 @@ de 2–7 colunas ou valor inválido assumem 0, preservando preferências
 da Varinha. Não alterar Ibis-Lua nem adicionar componentes gráficos.
 Testar tolerância 0/16/48/64/255, fronteiras, ilhas, Alpha Lock,
 seleção e feather, opacidade baixa, loops, no-op/undo e compatibilidade.
+**Modo global por cor do Balde**: Ctrl+Alt+B alterna
+`project.bucket_global` entre false (padrão 4-conexo)
+e true (varredura global RGBA, incluindo ilhas sem conexão).
+`Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode)`
+aceita último booleano opcional; nil/false preserva exatamente
+o algoritmo contíguo. O modo global usa o mesmo critério RGBA/tolerância
+e identifica todos os pixels da camada ativa que combinam antes de
+qualquer alteração do raster. Respeita a máscara e o Alpha Lock,
+alfa fracionário e undo/redo de um único passo; no-op não deve criar
+dirty nem histórico. Independente da Varinha e de suas preferências;
+não amostra a composição visível, não afeta outras camadas. O toggle
+não altera pixels, máscara ou histórico, apenas preferência e notice.
+Persistir a flag opcional (0/1) na nona coluna de `document.tsv`,
+com modo contíguo para arquivos anteriores 2–8 colunas e valor inválido,
+preservando as configurações já armazenadas. Testar ilhas, diagonais,
+tolerância, alfa, seleção, Alpha Lock, no-op, atalho, persistência e undo.
+Não modificar Ibis-Lua nem introduzir elementos gráficos.
 **Comparação RGB-only opcional da Varinha**: Ctrl+Alt+R alterna
 `project.wand_rgb_only`. Com false/nil (padrão) a comparação considera
 R/G/B/A com tolerância independente 0..255 em cada canal. Com true,
