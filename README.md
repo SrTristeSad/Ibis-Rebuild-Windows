@@ -62,6 +62,15 @@ Arquivos anteriores usam 0, equivalente ao preenchimento RGBA
 contíguo exato. Antes de pintar, o balde identifica a região usando
 os pixels originais; mesmo com tolerância elevada ou tinta de baixa
 opacidade, não reprocessa pixels, e não grava undo para no-op.
+**Ctrl+Alt+B** alterna entre o Balde **contíguo** (padrão, região
+4-conexa ao clique) e **global por cor**, que preenche todas as
+regiões RGBA semelhantes da camada ativa, mesmo ilhas desconectadas
+ou pixels unidos somente pela diagonal. Os dois modos respeitam a
+tolerância própria do Balde, Alpha Lock, a seleção ativa e a opacidade,
+e não afetam a Varinha. Alternar a configuração não pinta nem cria
+histórico; o modo é salvo na **nona coluna opcional** de `document.tsv`.
+Obras antigas iniciam no modo contíguo. O Ibis-Lua não ganhou
+controles novos.
 Nenhum controle visual da interface original foi adicionado.
 **Ctrl+Alt+R** alterna a comparação entre **RGBA** (padrão, incluindo
 a transparência) e **somente RGB** (desconsidera diferenças de alfa).

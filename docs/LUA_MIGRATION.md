@@ -34,6 +34,18 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   está dentro da tolerância; operações sem alteração real não criam
   dirty nem histórico. Continua contíguo 4-conexo, respeita seleção,
   Alpha Lock, opacidade e desfazer/refazer; sem novo controle visual.
+  **Ctrl+Alt+B** alterna independentemente entre Balde **contíguo**
+  (padrão 4-conexo) e **global por cor**, preenchendo todas as regiões
+  da camada ativa semelhantes em RGBA, ainda que desconectadas.
+  O modo global varre cada pixel original uma única vez, antes de
+  pintar; Alpha Lock e a seleção ativa também restringem a varredura.
+  O toggle não edita pixels/máscaras, não marca dirty e não cria
+  histórico. `project.bucket_global` ocupa a **nona coluna opcional**
+  de `document.tsv` (0/1); obras anteriores com 2–8 colunas ou
+  flag inválida começam no contíguo, sem perder tolerância ou outras
+  preferências. Não depende de `wand_global`, `wand_rgb_only` ou
+  de `wand_sample_all`; não amostra camadas compostas.
+  Sem controles visuais novos.
 - Conta-gotas que lê a composição RGBA das camadas visíveis, considerando
   opacidade e fundo branco, e atualiza o seletor de cores existente.
 - Miniaturas reais em PNG na galeria para obras salvas e pixels reais
@@ -314,7 +326,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O uso de shader exige dispositivo compatível com LÖVE 11.5; o CI valida
   a composição recortada no renderizador software Mesa, mas não substitui
   testes em hardware gráfico físico.
-- O balde compara RGBA da camada ativa com tolerância 0–255 por canal;
+- O balde compara RGBA da camada ativa com tolerância 0–255 por canal,
+  em modo contíguo ou global por cor (Ctrl+Alt+B);
   não há slider integrado na interface Lua, apenas os atalhos
   Ctrl+Alt+PageUp/PageDown/Home. O algoritmo de duas fases mantém
   uma região fixa, não contamina a comparação com pixels recém-pintados
@@ -323,6 +336,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - A suíte cobre Balde de Tinta com tolerância RGBA 0/16/48/64/255,
   fronteira, ilhas, Alpha Lock, seleção, tinta de baixa opacidade,
   no-op sem histórico, atalhos, preferências por obra e legados 2–8 colunas.
+  Testes adicionais verificam Balde global RGBA com regiões separadas,
+  diagonais, tolerância por canal, alfa, máscara, Alpha Lock, opacidade
+  baixa, história raster, Ctrl+Alt+B e arquivos de 2–9 colunas.
 - A suíte de pixels usa o LÖVE real para verificar tinta, borracha, balde,
   Alpha Lock, Clipping e os nove modos de blend na CPU e GPU,
   leitura de cores, composição semitransparente, miniatura,
