@@ -38,6 +38,21 @@
   inválidas, sem apagar os campos anteriores. Não modificar o submódulo
   nem adicionar controles visuais. Testar regiões desconectadas,
   diagonais, transparência, histórico, Ctrl+Alt+B e retrocompatibilidade.
+- Balde RGB-only opcional via Ctrl+Alt+M:
+  `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode,rgb_only)`
+  recebe booleano opcional no último parâmetro. Nil/false preserva
+  comparação RGBA; true ignora alfa apenas para decidir quais pixels
+  correspondem ao seed. O source-over de pintura permanece inalterado:
+  a aplicação pode aumentar o alfa, salvo quando Alpha Lock ativo.
+  Pixels com alfa zero e RGB armazenado podem ser selecionados.
+  O parâmetro independe de global, tolerância e preferências da Varinha;
+  validação estrita de booleano deve ocorrer antes de modificar raster.
+  `project.bucket_rgb_only` é false por padrão, persiste na décima
+  coluna opcional de `document.tsv` (0/1). Legados 2–9 colunas ou
+  flag inválida usam false mantendo as outras configurações.
+  Toggle não modifica seleção, dirty, pixels nem histórico.
+  Testar RGBA vs RGB, transparência total/fracionária, ilhas, source-over,
+  Alpha Lock, limites, no-op/undo, persistência e atalho. Não alterar UI.
 - Alpha Lock preserva o alfa dos pixels; Clipping usa a máscara da camada-base
   na composição Lua/LÖVE, sem modificar os pixels salvos da camada clipada.
   Preserve testes que comparam a amostra CPU com o resultado de shader GPU.
