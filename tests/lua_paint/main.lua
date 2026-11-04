@@ -372,6 +372,9 @@ function love.load()
         active_layer_id = 1, active_tool = "brush", background_mode = "white"
     }
     function model4:active_layer() return self.layers[1] end
+    function model4:set_color(red, green_, blue_)
+        self.color = {red, green_, blue_}
+    end
     local art4 = gallery:add_artwork(16, 16, "Selection test")
     Bridge.create(model4, art4, gallery)
     assert(Bridge.mousepressed(model4, art4, x, y, 1024, 768,
