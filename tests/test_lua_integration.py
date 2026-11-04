@@ -95,6 +95,14 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn("History.save(", bridge)
         self.assertIn("SelectionHistory.load(", bridge)
         self.assertIn("SelectionHistory.save(", bridge)
+        workflow = (ROOT / ".github" / "workflows" / "windows-x64.yml").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            "Copy-Item bridge/lua_selection_history.lua tests/lua_paint/",
+            workflow)
+        self.assertIn(
+            "Copy-Item bridge/lua_selection_history.lua tests/lua_syntax/",
+            workflow)
 
 
 
