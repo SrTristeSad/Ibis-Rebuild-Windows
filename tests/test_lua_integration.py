@@ -56,6 +56,12 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn("function Engine.begin_affine_gpu_preview(", engine)
         self.assertIn("function Engine.update_affine_gpu_preview(", engine)
         self.assertTrue((stage / "lua_history.lua").is_file())
+        self.assertTrue((stage / "lua_selection_history.lua").is_file())
+        selection_history = (stage / "lua_selection_history.lua").read_text(encoding="utf-8")
+        self.assertIn("function SelectionHistory.save(", selection_history)
+        self.assertIn("function SelectionHistory.load(", selection_history)
+        self.assertIn("function SelectionHistory.cleanup(", selection_history)
+        self.assertIn("selection_history.tsv", selection_history)
         bridge = (stage / "lua_bridge.lua").read_text(encoding="utf-8")
         self.assertIn("Bridge.selection_command(", bridge)
         self.assertIn("rotate_cw", bridge)
@@ -87,6 +93,8 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn("Engine.update_affine_gpu_preview(", bridge)
         self.assertIn("History.load(", bridge)
         self.assertIn("History.save(", bridge)
+        self.assertIn("SelectionHistory.load(", bridge)
+        self.assertIn("SelectionHistory.save(", bridge)
 
 
 

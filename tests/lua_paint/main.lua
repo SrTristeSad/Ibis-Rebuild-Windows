@@ -235,6 +235,123 @@ local function test_feather_transform(E)
     gpu.mask_image:release()
 end
 
+-- Persistência independente de undo/redo da seleção: PNGs, nil, alfa,
+-- revisão de gerações e rejeição total de conjuntos inconsistentes.
+local function test_selection_history_storage()
+    local Selection = require("lua_selection")
+    local Store = require("lua_selection_history")
+    local path = "lua-selection-history-storage-test"
+    assert(love.filesystem.createDirectory(path))
+    local rect = assert(Selection.rectangle(16, 16, 2, 2, 6, 6))
+    local soft = assert(Selection.feather(rect, 1))
+    local whole = assert(Selection.all(16, 16))
+    local undo = {{mask = nil}, {mask = rect}, {mask = soft}}
+    local redo = {{mask = whole}, {mask = nil}}
+    local saved, total = Store.save(path, 16, 16, rect, undo, redo)
+    assert(saved and total == 5,
+           "Falha ao salvar histórico de seleção com máscaras nil/feather")
+    local current_manifest = assert(love.filesystem.read(
+        path .. "/selection_history.tsv"))
+    local old_generation = assert(current_manifest:match(
+        "IBIS_LUA_SELECTION_HISTORY_V1\t16\t16\t(%d+_%d+)"))
+    assert(love.filesystem.getInfo(path ..
+        "/selection_history_" .. old_generation .. "_undo_3.png"),
+        "Snapshot PNG de feather não foi gravado")
+    local recovered = assert(Store.load(path, 16, 16, rect))
+    assert(#recovered.undo == 3 and #recovered.redo == 2 and
+           recovered.undo[1].mask == nil and
+           recovered.redo[2].mask == nil and
+           recovered.undo[2].mask.count == 25 and
+           Selection.is_soft(recovered.undo[3].mask) and
+           close(Selection.coverage(recovered.undo[3].mask, 2, 2),
+                 Selection.coverage(soft, 2, 2), 1 / 255),
+           "Reabertura perdeu a máscara nil, ordem ou alfa fracionário")
+    -- O conjunto não pode ser usado para restaurar uma outra seleção.
+    local stale, stale_reason = Store.load(path, 16, 16, whole)
+    assert(not stale and stale_reason,
+           "Manifesto de outra máscara foi aceito para a obra")
+    assert(not Store.load(path, 15, 16, rect),
+           "Histórico não rejeitou dimensões diferentes")
+    assert(not Store.load(path, 1025, 1025, rect),
+           "Histórico excedeu limite de 1 Mi de pixels")
+    assert(not Store.save(path, 16, 16, rect,
+        {{mask = rect}, {mask = rect}, {mask = rect}, {mask = rect},
+         {mask = rect}, {mask = rect}, {mask = rect}, {mask = rect},
+         {mask = rect}}, {}),
+        "Salvamento permitiu mais de oito snapshots")
+    assert(love.filesystem.read(path .. "/selection_history.tsv") ==
+           current_manifest,
+           "Falha de salvamento sobrescreveu um manifesto válido")
+
+    -- Novo salvamento publica geração nova e descarta PNGs antigos.
+    assert(Store.save(path, 16, 16, soft, {{mask = rect}}, {}))
+    local next_manifest = assert(love.filesystem.read(
+        path .. "/selection_history.tsv"))
+    local next_generation = assert(next_manifest:match(
+        "IBIS_LUA_SELECTION_HISTORY_V1\t16\t16\t(%d+_%d+)"))
+    assert(next_generation ~= old_generation and
+           not love.filesystem.getInfo(path ..
+             "/selection_history_" .. old_generation .. "_undo_3.png") and
+           love.filesystem.getInfo(path ..
+             "/selection_history_" .. next_generation .. "_undo_1.png"),
+           "Limpeza de geração de máscara não removeu PNGs antigos")
+    local loaded_again = assert(Store.load(path, 16, 16, soft))
+    assert(#loaded_again.undo == 1 and #loaded_again.redo == 0)
+
+    -- PNG corrompido invalida a timeline INTEIRA, não apenas um passo.
+    assert(love.filesystem.write(path ..
+        "/selection_history_" .. next_generation .. "_undo_1.png",
+        "isto-nao-e-um-png"))
+    local invalid, message = Store.load(path, 16, 16, soft)
+    assert(not invalid and message,
+           "PNG de seleção corrompido não invalidou histórico")
+
+    -- Mesmo um arquivo PNG válido, mas de outra máscara, é rejeitado.
+    assert(Store.save(path, 16, 16, soft, {{mask = rect}}, {}))
+    local regenerated = assert(love.filesystem.read(
+        path .. "/selection_history.tsv"))
+    local newgen = assert(regenerated:match(
+        "IBIS_LUA_SELECTION_HISTORY_V1\t16\t16\t(%d+_%d+)"))
+    assert(Selection.save(whole, path ..
+        "/selection_history_" .. newgen .. "_undo_1.png"))
+    assert(not Store.load(path, 16, 16, soft),
+           "PNG válido trocado não foi rejeitado pela assinatura")
+
+    assert(Store.save(path, 16, 16, soft, {{mask = rect}}, {}))
+    local good = assert(love.filesystem.read(path .. "/selection_history.tsv"))
+    local mismatched, changed = good:gsub(
+        "undo\t1\t1\t%d+_%d+_%d+", "undo\t1\t1\t1_2_3")
+    assert(changed == 1 and
+           love.filesystem.write(path .. "/selection_history.tsv",
+                                 mismatched))
+    assert(not Store.load(path, 16, 16, soft),
+           "Checksum modificado no manifesto foi aceito")
+    assert(love.filesystem.write(path .. "/selection_history.tsv",
+        string.rep("X", 5000)))
+    assert(not Store.load(path, 16, 16, soft),
+           "Manifesto excessivamente grande foi aceito")
+    assert(love.filesystem.write(path .. "/selection_history.tsv",
+        "IBIS_LUA_SELECTION_HISTORY_V1\t16\t16\t1_1\tbad\n" ..
+        "redo\t9\t0\tempty"))
+    assert(not Store.load(path, 16, 16, soft),
+           "Ordem/índice de histórico inválido foi aceito")
+
+    -- Histórico de máscara vazia (nil) é persistível e reversível.
+    assert(Store.save(path, 16, 16, nil, {{mask = soft}}, {{mask = nil}}))
+    local nil_current = assert(Store.load(path, 16, 16, nil))
+    assert(#nil_current.undo == 1 and #nil_current.redo == 1 and
+           nil_current.redo[1].mask == nil and
+           Selection.is_soft(nil_current.undo[1].mask),
+           "Histórico com seleção atual nil não foi restaurado")
+    assert(Store.save(path, 16, 16, nil, {}, {}))
+    assert(not love.filesystem.getInfo(path .. "/selection_history.tsv"))
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        assert(not name:match("^selection_history_"),
+               "Limpeza de histórico vazio deixou snapshot órfão")
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Histórico próprio da máscara (sem criar ou reverter snapshots raster).
 local function test_selection_only_history(Bridge, gallery)
     local Selection = require("lua_selection")
@@ -407,13 +524,18 @@ local function test_selection_only_history(Bridge, gallery)
            "Salvar obra com seleção após timeline falhou")
     Bridge.open(model, art)
     assert(Bridge.selection_snapshot().count == 256 and
-           history().undo == 0 and history().redo == 0,
-           "Ao reabrir, só a máscara PNG deve persistir, não a timeline")
-    assert(keys("z", true, false) and not Bridge.selection_undo(),
-           "Undo da sessão anterior foi preservado")
+           history().undo == 8 and history().redo == 0,
+           "A reabertura deve preservar os oito passos de máscara")
+    assert(keys("z", true, false) and not Bridge.selection_snapshot() and
+           history().redo == 1,
+           "Undo persistente não restaurou a seleção vazia anterior")
+    assert(keys("y", true, false) and
+           Bridge.selection_snapshot().count == 256 and
+           history().redo == 0,
+           "Redo persistente não restaurou a seleção total")
     assert(Bridge.selection_command(model, "invert_selection") and
-           history().undo == 1,
-           "Timeline deve iniciar normalmente após reabertura")
+           history().undo == 8 and not Bridge.selection_snapshot(),
+           "Nova alteração não continuou a timeline persistida")
     Bridge.clear_selection()
 
     local index_data = assert(love.filesystem.read("lua-artworks/index.tsv"))
@@ -1375,6 +1497,7 @@ local function test_selection_roundtrip(Bridge, model, id)
         "Seleção excedente não respeitou limite raster")
     assert(love.filesystem.remove(file))
     require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
     for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv",
                                "document.tsv"}) do
         assert(love.filesystem.remove(path .. "/" .. filename))
@@ -2554,6 +2677,8 @@ function love.load()
     test_selection_roundtrip(Bridge, model4, art4)
     checkpoint("bridge feather shortcut and PNG")
     test_feather_bridge(Bridge, model4, art4)
+    checkpoint("selection history disk and corruption")
+    test_selection_history_storage()
     checkpoint("bridge selection-only undo and redo")
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
@@ -2571,6 +2696,7 @@ function love.load()
 
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
     require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
     for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv", "document.tsv"}) do
         love.filesystem.remove(path .. "/" .. filename)
     end
@@ -2578,6 +2704,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: selection-only undo/redo + feather alpha + raster history + GPU")
+    print("PASS: persistent selection-only history + raster + feather + GPU")
     love.event.quit(0)
 end

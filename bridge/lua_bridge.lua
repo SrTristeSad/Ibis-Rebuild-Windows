@@ -2,6 +2,7 @@
 local Engine = require("lua_engine")
 local Selection = require("lua_selection")
 local History = require("lua_history")
+local SelectionHistory = require("lua_selection_history")
 local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
@@ -14,8 +15,8 @@ local function discard_preview(d)
     end
 end
 
--- Histórico EXCLUSIVO de máscaras. Não ocupa os snapshots raster do
--- Engine e não é persistido: ao reabrir, a seleção salva é o novo início.
+-- Histórico EXCLUSIVO de máscaras. Pilhas independentes dos snapshots
+-- raster, agora persistidas em PNG/TSV por geração com validação integral.
 -- O teto por pilha é 8 estados / 1 Mi de pixels selecionados ao todo.
 local mask_undo, mask_redo = {}, {}
 local MASK_HISTORY_STEPS = 8
@@ -218,6 +219,12 @@ function Bridge.open(model, id)
         -- O histórico é opcional e só é aplicado após validar TODOS
         -- os PNGs: um arquivo inválido nunca impede abrir a pintura.
         History.load(project, path, selection)
+        local saved_mask_history = SelectionHistory.load(
+            path, project.w, project.h, selection)
+        if saved_mask_history then
+            mask_undo, mask_redo =
+                saved_mask_history.undo, saved_mask_history.redo
+        end
     end
     project.dirty = false
 end
@@ -276,6 +283,9 @@ function Bridge.save()
     end
     local history_ok, history_error = History.save(project, path, selection)
     assert(history_ok, history_error)
+    local mask_history_ok, mask_history_error = SelectionHistory.save(
+        path, project.w, project.h, selection, mask_undo, mask_redo)
+    assert(mask_history_ok, mask_history_error)
     local item = gallery_ref and gallery_ref:get(project.id)
     if item then record.name = item.name end
     record.saved = true
