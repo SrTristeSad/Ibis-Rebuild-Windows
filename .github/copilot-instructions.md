@@ -25,6 +25,12 @@
 - Um modo diferente de Normal ou Clipping usa renderização em dois canvases
   alternados com estado de textura e transformações isoladas. Não regredir
   o caminho direto Normal nem os testes de semitransparência.
+- Seleção raster ativa fica em bridge/lua_selection.lua: Varinha Mágica,
+  Laço e seleção retangular via Transformar. Transformar move apenas pixels
+  selecionados da camada ativa com undo/redo; pincel e balde respeitam
+  a seleção. Testar pixels não selecionados, histórico e bordas.
+- A seleção não persiste, não tem rotação/escala/cópia/cola e fica
+  limitada a 1.048.576 pixels. Não apresentar essas funções como prontas.
 - Não alegue paridade visual ou técnica 1:1 com ibisPaint Windows 14.1.4 sem medições verificáveis.
 
 ## Critérios de mudança

@@ -17,7 +17,9 @@ conta-gotas de cor visível, Alpha Lock para preservar transparência, Clipping
 por máscara alfa no shader do LÖVE, os nove modos de blend existentes no painel
 (com fórmulas Lua e shader GPU), histórico raster limitado,
 miniaturas de pixels reais e persistência PNG por camada com
-metadados compatíveis com o formato antigo. Outros controles
+metadados compatíveis com o formato antigo. Varinha Mágica, Laço e
+Transformar conectam gestos existentes a seleções raster temporárias em Lua,
+com movimento de pixels e histórico reversível (limitados a 1 Mi de pixels). Outros controles
 do Ibis-Lua podem continuar simulados; consulte [limitações](docs/LUA_MIGRATION.md).
 
 Para montar, execute `git submodule update --init` e depois

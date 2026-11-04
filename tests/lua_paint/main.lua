@@ -219,6 +219,67 @@ function love.load()
            close(gpu_b / gpu_a, cpu_b, 0.04),
            "Composição com clipping + overlay e alfa parcial divergiu")
 
+    -- Seleção por área retangular, laço livre e varinha por cor contígua.
+    local Selection = require("lua_selection")
+    local rect = assert(Selection.rectangle(16, 16, 2, 2, 4, 4))
+    assert(rect.count == 9 and Selection.contains(rect, 3, 3)
+       and not Selection.contains(rect, 5, 5), "Seleção retangular incorreta")
+    local poly = assert(Selection.lasso(16, 16, {
+        {1, 1}, {11, 1}, {1, 11}
+    }))
+    assert(Selection.contains(poly, 2, 2)
+       and not Selection.contains(poly, 12, 12), "Laço não obedeceu polígono")
+    local wand = E.new(16, 16)
+    E.sync(wand, {layers = {{id = 1, visible = true, opacity = 100}}})
+    wand.layers[1].pixels:setPixel(1, 1, 1, 0, 0, 1)
+    wand.layers[1].pixels:setPixel(2, 1, 1, 0, 0, 1)
+    wand.layers[1].pixels:setPixel(7, 7, 1, 0, 0, 1)
+    local contiguous = assert(Selection.magic_wand(wand.layers[1], 16, 16, 1, 1))
+    assert(contiguous.count == 2 and Selection.contains(contiguous, 2, 1)
+       and not Selection.contains(contiguous, 7, 7),
+       "Varinha selecionou ilha desconectada")
+    local too_large, rejected = Selection.rectangle(1025, 1025, 0, 0, 4, 4)
+    assert(not too_large and rejected, "Faltou limite de tamanho da seleção")
+
+    -- A seleção restringe pincel e balde à máscara (sem afetar outros pixels).
+    local masked = E.new(16, 16)
+    E.sync(masked, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local mask = assert(Selection.rectangle(16, 16, 0, 0, 3, 3))
+    assert(E.fill(masked, 1, 0, 0, {0, 1, 0}, 1, false, mask),
+        "Balde dentro da seleção falhou")
+    local _, green_inside, _, alpha_inside = masked.layers[1].pixels:getPixel(2, 2)
+    local _, _, _, alpha_outside = masked.layers[1].pixels:getPixel(4, 4)
+    assert(green_inside > 0.99 and alpha_inside > 0.99
+       and alpha_outside == 0, "Balde pintou fora da seleção")
+    E.stroke(masked, 1, 3.5, 3.5, 6.5, 6.5, 7, {1, 0, 0}, 1,
+             false, false, mask)
+    local _, _, _, still_empty = masked.layers[1].pixels:getPixel(5, 5)
+    assert(still_empty == 0, "Pincel ultrapassou a seleção")
+
+    -- Mover conteúdo selecionado mantém pixels não selecionados e admite
+    -- undo/redo, inclusive com a posição do contorno acompanhando os pixels.
+    local move = E.new(16, 16)
+    E.sync(move, {layers = {{id = 1, visible = true, opacity = 100}}})
+    move.layers[1].pixels:setPixel(2, 2, 1, 0, 0, 1)
+    move.layers[1].pixels:setPixel(5, 5, 0, 1, 0, 1)
+    local moving = assert(Selection.rectangle(16, 16, 2, 2, 3, 3))
+    assert(E.move_selection(move, 1, moving, 3, 0), "Move não executado")
+    local _, _, _, empty_origin = move.layers[1].pixels:getPixel(2, 2)
+    local moved_red = select(1, move.layers[1].pixels:getPixel(5, 2))
+    local _, kept_green = move.layers[1].pixels:getPixel(5, 5)
+    assert(empty_origin == 0 and moved_red > 0.99 and kept_green > 0.99
+        and Selection.contains(moving, 5, 2),
+        "Move apagou pixels fora da máscara ou não moveu o contorno")
+    assert(E.undo(move, moving), "Move sem undo")
+    local restored_red = select(1, move.layers[1].pixels:getPixel(2, 2))
+    local _, _, _, undone_target = move.layers[1].pixels:getPixel(5, 2)
+    assert(restored_red > 0.99 and undone_target == 0 and
+           Selection.contains(moving, 2, 2), "Undo de movimento inconsistente")
+    assert(E.redo(move, moving), "Move sem redo")
+    assert(Selection.contains(moving, 5, 2) and
+           select(1, move.layers[1].pixels:getPixel(5, 2)) > 0.99,
+           "Redo de movimento inconsistente")
+
     -- Prova de persistência da obra pela ponte usada pelo Ibis-Lua.
     local Bridge = require("lua_bridge")
     local model2 = {
@@ -302,6 +363,42 @@ function love.load()
            model3.layers[1].blending == "Normal",
            "Compatibilidade com layers.tsv legado de quatro colunas falhou")
 
+    -- Ponte real da UI: arrastar Transformar cria seleção retangular e
+    -- o próximo arraste move pixels, respeitando coordenadas e undo.
+    local model4 = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Layer 1"}},
+        active_layer_id = 1, active_tool = "brush", background_mode = "white"
+    }
+    function model4:active_layer() return self.layers[1] end
+    function model4:set_color(red, green_, blue_)
+        self.color = {red, green_, blue_}
+    end
+    local art4 = gallery:add_artwork(16, 16, "Selection test")
+    Bridge.create(model4, art4, gallery)
+    assert(Bridge.mousepressed(model4, art4, x, y, 1024, 768,
+        view, prefs, {255, 0, 0}, 3, 100, colors))
+    Bridge.mousereleased()
+    model4.active_tool = "transform"
+    local from_x, from_y = x - 15, y - 15
+    local to_x, to_y = x + 15, y + 15
+    assert(Bridge.mousepressed(model4, art4, from_x, from_y, 1024, 768,
+        view, prefs, {0, 0, 0}, 3, 100, colors))
+    Bridge.mousemoved(model4, to_x, to_y, 1)
+    Bridge.mousereleased(model4, to_x, to_y, 1)
+    assert(Bridge.mousepressed(model4, art4, x, y, 1024, 768,
+        view, prefs, {0, 0, 0}, 3, 100, colors))
+    Bridge.mousemoved(model4, x + 20, y, 1)
+    Bridge.mousereleased(model4, x + 20, y, 1)
+    assert(Bridge.undo(), "Ponte não permitiu desfazer transformação")
+    assert(Bridge.redo(), "Ponte não permitiu refazer transformação")
+    model4.active_tool = "eyedropper"
+    assert(Bridge.mousepressed(model4, art4, x + 20, y, 1024, 768,
+        view, prefs, {0, 0, 0}, 3, 100, colors))
+    assert(model4.color[1] > 240 and model4.color[2] < 10,
+        "Transformar da UI não moveu pixels para nova posição")
+
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
     for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv", "document.tsv"}) do
         love.filesystem.remove(path .. "/" .. filename)
@@ -309,6 +406,6 @@ function love.load()
     love.filesystem.remove(path)
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
-    print("PASS: Lua nine blend modes CPU/GPU, Alpha Lock/Clipping/PNG")
+    print("PASS: Lua selection/lasso/wand/transform/undo + blend/persist")
     love.event.quit(0)
 end

@@ -12,13 +12,24 @@ preenchimento contíguo, conta-gotas, camadas normais, Alpha Lock,
 Clipping com shader do LÖVE, blend RGBA CPU/GPU para os nove modos
 já presentes no seletor (Normal, Multiply, Screen, Overlay, Darken, Lighten,
 Color Burn, Color Dodge, Soft Light), snapshots limitados, miniaturas dos pixels reais
-e arquivos PNG por camada. layers.tsv com oito colunas deve ler o formato
+e arquivos PNG por camada. Ferramentas já ligadas à máscara raster Lua:
+Varinha Mágica (RGBA contíguo), Laço (contorno livre), Transformar
+(seleção retangular pelo arraste e movimento inteiro de pixels),
+restrição do pincel e balde à seleção e undo/redo da movimentação.
+A seleção não é persistida e tem limite de 1.048.576 pixels, com contorno
+visual limitado a 10.000 segmentos. Não criar botões nem painéis novos.
+layers.tsv com oito colunas deve ler o formato
 legado de quatro colunas; document.tsv mantém camada ativa/fundo. Mantenha estas operações
 regredindo **nunca** e avance conectando exclusivamente os controles existentes.
 Alpha Lock, Clipping e os nove modos de blend já possuem implementações
 independentes e testes: preserve igualdade entre composição CPU e shader GPU,
 inclusive para alfa parcial, sem alterar o alfa original da camada clipada.
 Não invente novos modos nem reivindique equivalência exata com o aplicativo oficial.
+Preserve os eventos do Ibis-Lua: selecionar a ferramenta Transformar permite
+arrastar para criar seleção retangular e arrastar dentro dela para mover os
+pixels da camada ativa; a Varinha e o Laço possuem gestos de seleção
+independentes. Não declare rotação, escala, copiar/colar ou seleção persistente
+até que haja implementação e testes reais.
 
 Prioridade:
 1. Conectar com fidelidade os eventos e estados dos controles existentes do Ibis-Lua a funcionalidades reais.

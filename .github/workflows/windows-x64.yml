@@ -80,6 +80,7 @@ jobs:
         run: |
           Copy-Item bridge/lua_engine.lua tests/lua_paint/lua_engine.lua -Force
           Copy-Item bridge/lua_bridge.lua tests/lua_paint/lua_bridge.lua -Force
+          Copy-Item bridge/lua_selection.lua tests/lua_paint/lua_selection.lua -Force
           $path = (Resolve-Path 'tests/lua_paint').Path
           $stdout = Join-Path $env:RUNNER_TEMP 'lua-paint-stdout.log'
           $stderr = Join-Path $env:RUNNER_TEMP 'lua-paint-stderr.log'

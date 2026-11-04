@@ -1,5 +1,6 @@
 -- Motor de pixels Lua/LÖVE. Nenhuma DLL do projeto é carregada.
 local Engine = {}
+local Selection = require("lua_selection")
 local MAX_AXIS = 4096
 local HISTORY_BYTES = 32 * 1024 * 1024
 local HISTORY_STEPS = 8
@@ -57,24 +58,36 @@ function Engine.begin_stroke(project, id)
     project.redo = {}
 end
 
-local function restore(project, from, to)
+local function restore(project, from, to, selection, direction)
     local entry = table.remove(from)
     if not entry then return false end
     local layer = project.layers[entry.id]
     if not layer then return false end
-    to[#to + 1] = {id = entry.id, pixels = clone_pixels(project, layer)}
+    to[#to + 1] = {
+        id = entry.id, pixels = clone_pixels(project, layer),
+        selection_delta = entry.selection_delta, selection_ref = entry.selection_ref
+    }
     if #to > HISTORY_STEPS then table.remove(to, 1) end
     layer.pixels = entry.pixels
     layer.image:replacePixels(entry.pixels)
+    if selection and selection == entry.selection_ref and entry.selection_delta then
+        Selection.translate(selection,
+            entry.selection_delta[1] * direction,
+            entry.selection_delta[2] * direction)
+    end
     project.dirty = true
     return true
 end
 
-function Engine.undo(project) return restore(project, project.undo, project.redo) end
-function Engine.redo(project) return restore(project, project.redo, project.undo) end
+function Engine.undo(project, selection)
+    return restore(project, project.undo, project.redo, selection, -1)
+end
+function Engine.redo(project, selection)
+    return restore(project, project.redo, project.undo, selection, 1)
+end
 
 -- Composição source-over com RGB não pré-multiplicado, em canais 0..1.
-local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser, alpha_lock)
+local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser, alpha_lock, selection)
     local data = layer.pixels
     local xmin = math.max(0, math.floor(x - radius))
     local xmax = math.min(w - 1, math.ceil(x + radius))
@@ -84,7 +97,8 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser, alpha_lock)
     for py = ymin, ymax do
         for px = xmin, xmax do
             local dx, dy = px + 0.5 - x, py + 0.5 - y
-            if dx * dx + dy * dy <= rr then
+            if dx * dx + dy * dy <= rr and
+                (not selection or Selection.contains(selection, px, py)) then
                 local dr, dg, db, da = data:getPixel(px, py)
                 if alpha_lock then
                     -- Alpha Lock changes RGB only where alpha already exists.
@@ -113,7 +127,7 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser, alpha_lock)
     end
 end
 
-function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha, eraser, alpha_lock)
+function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha, eraser, alpha_lock, selection)
     local layer = assert(project.layers[id], "Camada inexistente")
     local radius = math.max(0.75, math.min(256, diameter) / 2)
     alpha = math.max(0, math.min(1, alpha))
@@ -123,7 +137,7 @@ function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha, eraser
     for i = 0, steps do
         local t = i / steps
         dab(layer, project.w, project.h, x0 + dx * t, y0 + dy * t,
-            radius, rgb, alpha, eraser, alpha_lock)
+            radius, rgb, alpha, eraser, alpha_lock, selection)
     end
     layer.image:replacePixels(layer.pixels)
     project.dirty = true
@@ -383,12 +397,13 @@ end
 -- Balde contíguo, cor RGBA exata (tolerância de 1/510 por canal).
 -- Algoritmo scanline sem recursão; não extrapola os limites do buffer.
 -- Impõe teto conservador de pixels para evitar travamentos da UI Lua.
-function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock)
+function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection)
     if project.w * project.h > 1024 * 1024 then
         return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
     end
     x, y = math.floor(x), math.floor(y)
-    if x < 0 or y < 0 or x >= project.w or y >= project.h then
+    if x < 0 or y < 0 or x >= project.w or y >= project.h or
+       (selection and not Selection.contains(selection, x, y)) then
         return false
     end
     alpha = math.max(0, math.min(1, alpha))
@@ -416,7 +431,10 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock)
 
     local w, h = project.w, project.h
     local function matches(px, py)
-        if px < 0 or py < 0 or px >= w or py >= h then return false end
+        if px < 0 or py < 0 or px >= w or py >= h or
+           (selection and not Selection.contains(selection, px, py)) then
+            return false
+        end
         local r, g, b, a = data:getPixel(px, py)
         if alpha_lock and a <= 0 then return false end
         local tolerance = 1 / 510
@@ -478,6 +496,74 @@ function Engine.thumbnail(project, model)
         end
     end
     return pixels
+end
+
+
+-- Move apenas os pixels selecionados da camada ativa, sem modificar outras
+-- camadas e sem mudar a seleção por fora do canvas. É um único passo de undo.
+function Engine.move_selection(project, id, selected, dx, dy)
+    if not selected or selected.count == 0 then return false end
+    local ok, reason = project.w * project.h <= 1024 * 1024,
+        "Transformação Lua limitada a documentos de até 1.048.576 pixels."
+    if not ok then return false, reason end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local function round_int(value)
+        if value >= 0 then return math.floor(value + 0.5) end
+        return math.ceil(value - 0.5)
+    end
+    dx, dy = round_int(dx), round_int(dy)
+    -- Clamping evita recortes de seleção irreversíveis na borda.
+    dx = math.max(-selected.min_x, math.min(project.w - 1 - selected.max_x, dx))
+    dy = math.max(-selected.min_y, math.min(project.h - 1 - selected.max_y, dy))
+    if dx == 0 and dy == 0 then return false end
+    local snapshot = clone_pixels(project, layer)
+    local data = layer.pixels
+    local visible = false
+    for y = selected.min_y, selected.max_y do
+        for x = selected.min_x, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                local _, _, _, a = snapshot:getPixel(x, y)
+                if a > 0 then visible = true; break end
+            end
+        end
+        if visible then break end
+    end
+    if visible then
+        -- Snapshot ANTES de remover os pixels, para undo restaurar a origem.
+        Engine.begin_stroke(project, id)
+        local entry = project.undo[#project.undo]
+        if entry then
+            entry.selection_delta = {dx, dy}
+            entry.selection_ref = selected
+        end
+    end
+    for y = selected.min_y, selected.max_y do
+        for x = selected.min_x, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                data:setPixel(x, y, 0, 0, 0, 0)
+            end
+        end
+    end
+    for y = selected.min_y, selected.max_y do
+        for x = selected.min_x, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                local sr, sg, sb, sa = snapshot:getPixel(x, y)
+                if sa > 0 then
+                    local tx, ty = x + dx, y + dy
+                    local dr, dg, db, da = data:getPixel(tx, ty)
+                    local out_a = sa + da * (1 - sa)
+                    data:setPixel(tx, ty,
+                        (sr * sa + dr * da * (1 - sa)) / out_a,
+                        (sg * sa + dg * da * (1 - sa)) / out_a,
+                        (sb * sa + db * da * (1 - sa)) / out_a, out_a)
+                end
+            end
+        end
+    end
+    layer.image:replacePixels(data)
+    Selection.translate(selected, dx, dy)
+    if visible then project.dirty = true end
+    return true
 end
 
 return Engine

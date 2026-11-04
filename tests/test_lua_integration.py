@@ -18,7 +18,8 @@ class IntegrationLayoutTest(unittest.TestCase):
         data = (ROOT / "build" / "lua-app" / "main.lua").read_text(encoding="utf-8")
         for snippet in ("Bridge.install(Model)", "Bridge.create(state,active_artwork_id,gallery)",
                         "Bridge.open(state,id)", "Bridge.draw(state,visual)",
-                        "Bridge.mousepressed(", "Bridge.mousemoved(", "Bridge.mousereleased()",
+                        "Bridge.mousepressed(", "Bridge.mousemoved(",
+                        "Bridge.mousereleased(state,rx,ry,scale)",
                         "Bridge.undo()", "Bridge.redo()",
                         "Bridge.draw_gallery_thumbnail(",
                         "Bridge.draw_layer_thumbnail("):
@@ -32,6 +33,8 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertNotIn("require('ffi')", engine)
         self.assertNotIn('require("ffi")', engine)
         self.assertIn("love.image.newImageData", engine)
+        self.assertTrue((stage / "lua_selection.lua").is_file())
+        self.assertIn("lua_selection", engine)
 
 
 if __name__ == "__main__":
