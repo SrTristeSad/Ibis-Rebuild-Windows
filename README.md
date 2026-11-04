@@ -13,6 +13,7 @@
 A interface é o [Ibis-Lua](ui/Ibis-Lua), incorporado por submódulo Git sem
 alterações visuais. O motor de edição ativo fica em [bridge/](bridge),
 sem DLL C++ do projeto. Possui pintura circular, borracha, balde contíguo,
+com tolerância RGBA independente de 0 a 255 por canal,
 conta-gotas de cor visível, Alpha Lock para preservar transparência, Clipping
 por máscara alfa no shader do LÖVE, os nove modos de blend existentes no painel
 (com fórmulas Lua e shader GPU), histórico raster limitado,
@@ -53,6 +54,15 @@ Arquivos anteriores continuam no modo contíguo por padrão.
 Essa preferência é independente da seleção global, da tolerância e da
 fonte de amostragem. É salva na sexta coluna opcional de `document.tsv`;
 arquivos anteriores preservam a conectividade de quatro vizinhos.
+A tolerância própria do **Balde de Tinta** é ajustada com
+**Ctrl+Alt+PageUp** (+16), **Ctrl+Alt+PageDown** (−16) e
+**Ctrl+Alt+Home** (zero). O valor de 0 a 255 é independente da
+Varinha Mágica e salvo na oitava coluna opcional de `document.tsv`.
+Arquivos anteriores usam 0, equivalente ao preenchimento RGBA
+contíguo exato. Antes de pintar, o balde identifica a região usando
+os pixels originais; mesmo com tolerância elevada ou tinta de baixa
+opacidade, não reprocessa pixels, e não grava undo para no-op.
+Nenhum controle visual da interface original foi adicionado.
 **Ctrl+Alt+R** alterna a comparação entre **RGBA** (padrão, incluindo
 a transparência) e **somente RGB** (desconsidera diferenças de alfa).
 Funciona com seleção contígua/global, conectividade 4/8 e a fonte de cor
