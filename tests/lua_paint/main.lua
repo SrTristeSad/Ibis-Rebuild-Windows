@@ -13,6 +13,7 @@ local function checkpoint(name)
 end
 
 local function test_clipboard_transform(E)
+    local Selection = require("lua_selection")
     checkpoint("before clipboard")
     -- Transformações ortogonais e clipboard INTERNO em Lua.
     local copy_project = E.new(16, 16)
