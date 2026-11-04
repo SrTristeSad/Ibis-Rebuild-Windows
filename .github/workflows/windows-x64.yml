@@ -79,6 +79,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
           Copy-Item bridge/lua_engine.lua tests/lua_paint/lua_engine.lua -Force
+          Copy-Item bridge/lua_bridge.lua tests/lua_paint/lua_bridge.lua -Force
           & "$env:LOVE_RUNTIME/lovec.exe" (Resolve-Path 'tests/lua_paint').Path
           if ($LASTEXITCODE -ne 0) { throw "Lua engine test failed ($LASTEXITCODE)" }
 

@@ -22,6 +22,12 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - Desenho por mouse com pincel circular básico e borracha com redução de alfa.
 - Tamanho e opacidade vindos dos controles já existentes do Ibis-Lua.
 - Cor RGB atualmente selecionada pelo painel já existente.
+- Balde de preenchimento contíguo por igualdade RGBA na camada ativa (até
+  1.048.576 pixels por documento), com histórico raster reversível.
+- Conta-gotas que lê a composição RGBA das camadas visíveis, considerando
+  opacidade e fundo branco, e atualiza o seletor de cores existente.
+- Miniaturas reais em PNG na galeria para obras salvas e pixels reais
+  nas miniaturas das camadas, sem redesenhar os controles da interface.
 - Composição visível em ordem de camadas com visibilidade e opacidade no modo normal.
 - Undo/redo do raster por traço pelos botões existentes, Ctrl+Z / Ctrl+Y.
 - Salvamento automático ao voltar do editor para a galeria, ou Ctrl+S.
@@ -30,8 +36,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 
 ## Limitações explícitas
 - **Não** há paridade com os algoritmos do ibisPaint oficial.
-- Apenas pincel circular, borracha e camadas normais têm efeito em pixels.
-  Filtros, blending avançado, clipping, alpha-lock, seleções, formas,
+- Pincel circular, borracha, balde, conta-gotas e camadas normais têm implementação
+  raster básica. Filtros, blending avançado, clipping, alpha-lock, seleções, formas,
   estabilização, pressão, máscaras, efeitos, texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
@@ -42,9 +48,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O formato atual é PNG + metadados TSV, **não RBD2 nem IPV**.
 - O catálogo reconstituído contém obras salvas; pastas e suas mudanças,
   seleção múltipla e outras ações da galeria ainda não são persistidas.
-- Miniaturas demonstrativas da galeria e da janela de camadas ainda não foram
-  substituídas por prévias reais. Isso exige integração específica, não
-  criação de outra interface.
+- As miniaturas da galeria agora mostram pixels reais somente para obras
+  persistidas; a miniatura das camadas exibe o buffer da camada durante a edição.
+  Itens demonstrativos e obras ainda não salvas podem continuar sem prévia.
+- A seleção de modos de blending, Clipping e Alpha Lock ainda é apenas de UI.
+  Enquanto qualquer um deles estiver selecionado, o motor bloqueia novas
+  pinceladas/preenchimentos nessa camada e informa a limitação, em vez de
+  aplicar um resultado incorreto silenciosamente.
+- O balde compara a cor RGBA da camada ativa com tolerância mínima de quantização,
+  sem controlar tolerância por slider. Não equivale ao balde do ibisPaint.
+- A suíte de pixels usa o LÖVE real para verificar tinta, borracha, balde,
+  leitura de cores, composição, miniatura e ciclo salvar/abrir PNG.
 - Os testes Windows precisam passar no GitHub Actions antes de declarar a
   distribuição verificada.
 

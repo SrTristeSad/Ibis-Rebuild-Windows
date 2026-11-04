@@ -19,7 +19,9 @@ class IntegrationLayoutTest(unittest.TestCase):
         for snippet in ("Bridge.install(Model)", "Bridge.create(state,active_artwork_id,gallery)",
                         "Bridge.open(state,id)", "Bridge.draw(state,visual)",
                         "Bridge.mousepressed(", "Bridge.mousemoved(", "Bridge.mousereleased()",
-                        "Bridge.undo()", "Bridge.redo()"):
+                        "Bridge.undo()", "Bridge.redo()",
+                        "Bridge.draw_gallery_thumbnail(",
+                        "Bridge.draw_layer_thumbnail("):
             self.assertIn(snippet, data)
 
     def test_no_native_project_ffi(self):

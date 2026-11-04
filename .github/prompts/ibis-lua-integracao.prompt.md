@@ -7,6 +7,13 @@ A interface de referência é **exclusivamente** https://github.com/SrTristeSad/
 
 O motor de edição ativo deve ser implementado em **Lua/LuaJIT + LÖVE 11.5**, sem chamadas a rebuild_core.dll, FFI, WebView ou C++ do projeto. Separe pixels, persistência e integração de eventos do código visual. Não elimine recursos de UI para facilitar o motor.
 
+Estado funcional conhecido: motor Lua com pincel circular, borracha,
+preenchimento contíguo, conta-gotas, camadas normais, snapshots limitados,
+miniaturas dos pixels reais e arquivos PNG por camada. Mantenha estas operações
+regredindo **nunca** e avance conectando exclusivamente os controles existentes.
+Não anuncie Alpha Lock, Clipping ou blending especial como executados: a UI os
+seleciona, mas o motor ainda não os implementa.
+
 Prioridade:
 1. Conectar com fidelidade os eventos e estados dos controles existentes do Ibis-Lua a funcionalidades reais.
 2. Preservar desenho, fluxo, assets, galeria, painel de pincéis, camadas e seletor de cores.
