@@ -367,39 +367,71 @@ function Engine.load_layer(project, id, filename)
 end
 
 
--- Amostragem da composição visível em modo Normal, com opacidade por camada.
--- RGB retornado é não pré-multiplicado; não altera nenhum pixel do projeto.
-function Engine.sample(project, model, x, y)
-    x, y = math.floor(x), math.floor(y)
-    if x < 0 or y < 0 or x >= project.w or y >= project.h then return nil end
-    local r, g, b, a = 0, 0, 0, 0
+-- Fonte de pixels virtual para seleção e conta-gotas: prepara uma única
+-- vez a pilha visível, sem criar uma textura composta nem tocar no raster.
+-- Usa a mesma matemática RGBA, mesclagem e clipping da composição CPU.
+function Engine.composite_pixel_source(project, model, include_background)
+    local sources = {}
     for index, info in ipairs(model.layers) do
         local layer = project.layers[info.id]
         if layer and info.visible then
-            local sr, sg, sb, sa = layer.pixels:getPixel(x, y)
-            sa = sa * clamp01((info.opacity or 100) / 100)
+            local clip_pixels, clip_opacity
             if info.clipping then
                 local base = clip_base(model, index)
                 local mask = base and project.layers[base.id] or nil
-                if mask and base.visible then
-                    local _, _, _, base_a = mask.pixels:getPixel(x, y)
-                    sa = sa * base_a * clamp01((base.opacity or 100) / 100)
-                else
-                    sa = 0
+                if base and base.visible and mask then
+                    clip_pixels = mask.pixels
+                    clip_opacity = clamp01((base.opacity or 100) / 100)
                 end
             end
-            if sa > 0 then
-                local next_a = sa + a * (1 - sa)
-                local mode = assert(blend_ids[info.blending or "Normal"],
-                    "Modo de mesclagem não suportado")
-                r = compose_channel(r, sr, a, sa, mode, next_a)
-                g = compose_channel(g, sg, a, sa, mode, next_a)
-                b = compose_channel(b, sb, a, sa, mode, next_a)
-                a = next_a
+            -- Sem base visível, a camada clipada é invisível.
+            if not info.clipping or clip_pixels then
+                sources[#sources + 1] = {
+                    pixels = layer.pixels,
+                    opacity = clamp01((info.opacity or 100) / 100),
+                    mode = assert(blend_ids[info.blending or "Normal"],
+                        "Modo de mesclagem não suportado"),
+                    clip_pixels = clip_pixels,
+                    clip_opacity = clip_opacity or 1
+                }
             end
         end
     end
-    return r, g, b, a
+    local white = include_background and model.background_mode == "white"
+    local pixels = {}
+    function pixels:getPixel(x, y)
+        local r, g, b, a = 0, 0, 0, 0
+        for _, source in ipairs(sources) do
+            local sr, sg, sb, sa = source.pixels:getPixel(x, y)
+            sa = sa * source.opacity
+            if source.clip_pixels then
+                local _, _, _, base_a = source.clip_pixels:getPixel(x, y)
+                sa = sa * base_a * source.clip_opacity
+            end
+            if sa > 0 then
+                local next_a = sa + a * (1 - sa)
+                r = compose_channel(r, sr, a, sa, source.mode, next_a)
+                g = compose_channel(g, sg, a, sa, source.mode, next_a)
+                b = compose_channel(b, sb, a, sa, source.mode, next_a)
+                a = next_a
+            end
+        end
+        -- O fundo branco é visível (como no conta-gotas); os dois
+        -- fundos quadriculados preservam a transparência real do canvas.
+        if white then
+            return r * a + (1 - a), g * a + (1 - a),
+                   b * a + (1 - a), 1
+        end
+        return r, g, b, a
+    end
+    return {pixels = pixels}
+end
+
+-- Mantém a API pública de conta-gotas, sem misturar o fundo de exibição.
+function Engine.sample(project, model, x, y)
+    x, y = math.floor(x), math.floor(y)
+    if x < 0 or y < 0 or x >= project.w or y >= project.h then return nil end
+    return Engine.composite_pixel_source(project, model, false).pixels:getPixel(x, y)
 end
 
 -- Balde contíguo, cor RGBA exata (tolerância de 1/510 por canal).
@@ -498,11 +530,12 @@ end
 function Engine.thumbnail(project, model)
     local tw, th = math.min(128, project.w), math.min(128, project.h)
     local pixels = love.image.newImageData(tw, th)
+    local source = Engine.composite_pixel_source(project, model, false).pixels
     for py = 0, th - 1 do
         for px = 0, tw - 1 do
             local sx = math.min(project.w - 1, math.floor((px + 0.5) * project.w / tw))
             local sy = math.min(project.h - 1, math.floor((py + 0.5) * project.h / th))
-            local r, g, b, a = Engine.sample(project, model, sx, sy)
+            local r, g, b, a = source:getPixel(sx, sy)
             pixels:setPixel(px, py, r, g, b, a)
         end
     end

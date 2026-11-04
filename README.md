@@ -48,6 +48,13 @@ semelhantes da camada ativa, mesmo ilhas separadas e diagonais.
 A preferência de modo é salva por obra na quarta coluna opcional de
 `document.tsv`, sem modificar pixels, seleção nem histórico.
 Arquivos anteriores continuam no modo contíguo por padrão.
+**Ctrl+Alt+T** alterna independentemente a fonte de cor: **camada ativa**
+(padrão) ou **composição visível de todas as camadas**. A amostra composta
+respeita visibilidade, opacidade, modos de mesclagem, clipping e o fundo
+branco, sem alterar a camada em que o pincel edita. Nos fundos transparentes,
+o canal alfa real continua sendo comparado. Essa preferência é salva na
+quinta coluna opcional de `document.tsv`; obras anteriores iniciam na
+camada ativa. Nenhum controle do Ibis-Lua original foi modificado.
 Com **Transformar (retângulo), Laço e Varinha**, os modificadores
 **Ctrl+Shift** somam áreas, **Ctrl+Alt** subtraem e
 **Ctrl+Shift+Alt** intersectam; essas operações não modificam a
