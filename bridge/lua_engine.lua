@@ -74,7 +74,7 @@ function Engine.undo(project) return restore(project, project.undo, project.redo
 function Engine.redo(project) return restore(project, project.redo, project.undo) end
 
 -- Composição source-over com RGB não pré-multiplicado, em canais 0..1.
-local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser)
+local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser, alpha_lock)
     local data = layer.pixels
     local xmin = math.max(0, math.floor(x - radius))
     local xmax = math.min(w - 1, math.ceil(x + radius))
@@ -86,7 +86,16 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser)
             local dx, dy = px + 0.5 - x, py + 0.5 - y
             if dx * dx + dy * dy <= rr then
                 local dr, dg, db, da = data:getPixel(px, py)
-                if eraser then
+                if alpha_lock then
+                    -- Alpha Lock changes RGB only where alpha already exists.
+                    -- The alpha channel is preserved exactly; erasing is a no-op.
+                    if da > 0 and not eraser then
+                        data:setPixel(px, py,
+                            dr * (1 - alpha) + rgb[1] * alpha,
+                            dg * (1 - alpha) + rgb[2] * alpha,
+                            db * (1 - alpha) + rgb[3] * alpha, da)
+                    end
+                elseif eraser then
                     local a = da * (1 - alpha)
                     if a < 0.0001 then data:setPixel(px, py, 0, 0, 0, 0)
                     else data:setPixel(px, py, dr, dg, db, a) end
@@ -104,7 +113,7 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser)
     end
 end
 
-function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha, eraser)
+function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha, eraser, alpha_lock)
     local layer = assert(project.layers[id], "Camada inexistente")
     local radius = math.max(0.75, math.min(256, diameter) / 2)
     alpha = math.max(0, math.min(1, alpha))
@@ -114,21 +123,62 @@ function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha, eraser
     for i = 0, steps do
         local t = i / steps
         dab(layer, project.w, project.h, x0 + dx * t, y0 + dy * t,
-            radius, rgb, alpha, eraser)
+            radius, rgb, alpha, eraser, alpha_lock)
     end
     layer.image:replacePixels(layer.pixels)
     project.dirty = true
 end
 
+-- O recorte usa o alfa da camada-base mais próxima abaixo das camadas
+-- marcadas como Clipping. O raster original da camada superior não muda.
+local function clip_base(model, index)
+    if not model.layers[index].clipping then return nil end
+    for i = index - 1, 1, -1 do
+        if not model.layers[i].clipping then return model.layers[i] end
+    end
+    return nil
+end
+
+local clipping_shader
+local function shader_for_clipping()
+    if not clipping_shader then
+        clipping_shader = love.graphics.newShader([[
+            extern Image clipImage;
+            extern number clipOpacity;
+            vec4 effect(vec4 color, Image texture, vec2 texcoords, vec2 screencoords) {
+                vec4 result = Texel(texture, texcoords) * color;
+                result.a *= Texel(clipImage, texcoords).a * clipOpacity;
+                return result;
+            }
+        ]])
+    end
+    return clipping_shader
+end
+
 function Engine.draw(project, model, interpolation)
     love.graphics.push("all")
     love.graphics.setBlendMode("alpha", "alphamultiply")
-    for _, info in ipairs(model.layers) do
+    local filter = interpolation == "pixelated" and "nearest" or "linear"
+    for index, info in ipairs(model.layers) do
         if info.visible then
             local layer = project.layers[info.id]
-            if layer then
+            local mask_info = clip_base(model, index)
+            local mask = mask_info and project.layers[mask_info.id] or nil
+            local enabled = not info.clipping or
+                (mask_info and mask_info.visible and mask ~= nil)
+            if layer and enabled then
+                layer.image:setFilter(filter)
+                if mask then
+                    mask.image:setFilter(filter)
+                    local shader = shader_for_clipping()
+                    shader:send("clipImage", mask.image)
+                    shader:send("clipOpacity",
+                        math.max(0, math.min(100, mask_info.opacity or 100)) / 100)
+                    love.graphics.setShader(shader)
+                else
+                    love.graphics.setShader()
+                end
                 local opacity = math.max(0, math.min(100, info.opacity or 100)) / 100
-                layer.image:setFilter(interpolation == "pixelated" and "nearest" or "linear")
                 love.graphics.setColor(1, 1, 1, opacity)
                 love.graphics.draw(layer.image, -project.w / 2, -project.h / 2)
             end
@@ -154,11 +204,22 @@ function Engine.sample(project, model, x, y)
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= project.w or y >= project.h then return nil end
     local r, g, b, a = 0, 0, 0, 0
-    for _, info in ipairs(model.layers) do
+    for index, info in ipairs(model.layers) do
         local layer = project.layers[info.id]
         if layer and info.visible then
             local sr, sg, sb, sa = layer.pixels:getPixel(x, y)
             sa = sa * math.max(0, math.min(100, info.opacity or 100)) / 100
+            if info.clipping then
+                local base = clip_base(model, index)
+                local mask = base and project.layers[base.id] or nil
+                if mask and base.visible then
+                    local _, _, _, base_a = mask.pixels:getPixel(x, y)
+                    sa = sa * base_a *
+                        math.max(0, math.min(100, base.opacity or 100)) / 100
+                else
+                    sa = 0
+                end
+            end
             if sa > 0 then
                 local next_a = sa + a * (1 - sa)
                 r = (sr * sa + r * a * (1 - sa)) / next_a
@@ -174,7 +235,7 @@ end
 -- Balde contíguo, cor RGBA exata (tolerância de 1/510 por canal).
 -- Algoritmo scanline sem recursão; não extrapola os limites do buffer.
 -- Impõe teto conservador de pixels para evitar travamentos da UI Lua.
-function Engine.fill(project, id, x, y, rgb, alpha)
+function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock)
     if project.w * project.h > 1024 * 1024 then
         return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
     end
@@ -187,10 +248,18 @@ function Engine.fill(project, id, x, y, rgb, alpha)
     local layer = assert(project.layers[id], "Camada inexistente")
     local data = layer.pixels
     local tr, tg, tb, ta = data:getPixel(x, y)
-    local na = alpha + ta * (1 - alpha)
-    local nr = (rgb[1] * alpha + tr * ta * (1 - alpha)) / na
-    local ng = (rgb[2] * alpha + tg * ta * (1 - alpha)) / na
-    local nb = (rgb[3] * alpha + tb * ta * (1 - alpha)) / na
+    if alpha_lock and ta <= 0 then return false end
+    local na = alpha_lock and ta or alpha + ta * (1 - alpha)
+    local nr, ng, nb
+    if alpha_lock then
+        nr, ng, nb = tr * (1 - alpha) + rgb[1] * alpha,
+            tg * (1 - alpha) + rgb[2] * alpha,
+            tb * (1 - alpha) + rgb[3] * alpha
+    else
+        nr = (rgb[1] * alpha + tr * ta * (1 - alpha)) / na
+        ng = (rgb[2] * alpha + tg * ta * (1 - alpha)) / na
+        nb = (rgb[3] * alpha + tb * ta * (1 - alpha)) / na
+    end
     local epsilon = 0.5 / 255
     if math.abs(nr - tr) < epsilon and math.abs(ng - tg) < epsilon
        and math.abs(nb - tb) < epsilon and math.abs(na - ta) < epsilon then
@@ -201,17 +270,25 @@ function Engine.fill(project, id, x, y, rgb, alpha)
     local function matches(px, py)
         if px < 0 or py < 0 or px >= w or py >= h then return false end
         local r, g, b, a = data:getPixel(px, py)
+        if alpha_lock and a <= 0 then return false end
         local tolerance = 1 / 510
         return math.abs(r - tr) <= tolerance and math.abs(g - tg) <= tolerance
            and math.abs(b - tb) <= tolerance and math.abs(a - ta) <= tolerance
     end
     local function paint(px, py)
         local dr, dg, db, da = data:getPixel(px, py)
-        local out_a = alpha + da * (1 - alpha)
-        data:setPixel(px, py,
-            (rgb[1] * alpha + dr * da * (1 - alpha)) / out_a,
-            (rgb[2] * alpha + dg * da * (1 - alpha)) / out_a,
-            (rgb[3] * alpha + db * da * (1 - alpha)) / out_a, out_a)
+        if alpha_lock then
+            data:setPixel(px, py,
+                dr * (1 - alpha) + rgb[1] * alpha,
+                dg * (1 - alpha) + rgb[2] * alpha,
+                db * (1 - alpha) + rgb[3] * alpha, da)
+        else
+            local out_a = alpha + da * (1 - alpha)
+            data:setPixel(px, py,
+                (rgb[1] * alpha + dr * da * (1 - alpha)) / out_a,
+                (rgb[2] * alpha + dg * da * (1 - alpha)) / out_a,
+                (rgb[3] * alpha + db * da * (1 - alpha)) / out_a, out_a)
+        end
     end
     Engine.begin_stroke(project, id)
     local stack = {{x, y}}

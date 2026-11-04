@@ -12,6 +12,13 @@
 - Não adicione chamadas FFI à DLL C++, rebuild_core.dll, dependência WebView ou um mecanismo de pintura oculto em C++.
 - native/, app/, CMakeLists.txt e scripts Python legados são apenas referência/histórico e não integram o build Lua ativo.
 - Não afirme que tudo está funcional: documente recursos conectados, limitações e funções ainda simuladas.
+- Alpha Lock preserva o alfa dos pixels; Clipping usa a máscara da camada-base
+  na composição Lua/LÖVE, sem modificar os pixels salvos da camada clipada.
+  Preserve testes que comparam a amostra CPU com o resultado de shader GPU.
+- Formato de persistência: PNGs, layers.tsv com oito colunas (legado de quatro
+  colunas aceito) e document.tsv com camada ativa/fundo. Preserve compatibilidade.
+- Os modos de mesclagem diferentes de Normal **não** estão implementados no motor;
+  a seleção na interface não comprova renderização efetiva. Não invente equivalência.
 - Não alegue paridade visual ou técnica 1:1 com ibisPaint Windows 14.1.4 sem medições verificáveis.
 
 ## Critérios de mudança
