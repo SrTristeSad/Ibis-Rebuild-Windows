@@ -140,6 +140,21 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   A interpolação bilinear ocorre em RGB pré-multiplicado e considera pixels
   fora da máscara como transparentes, evitando halos nas bordas;
   o resultado final tem o mesmo raster da pré-visualização.
+- **Histórico independente de seleção (na sessão)**:
+  **Ctrl+Alt+Z** desfaz e **Ctrl+Alt+Y** refaz operações APENAS de
+  máscara: selecionar tudo, inverter, expandir, contrair, feather,
+  desmarcar (Ctrl+D/Esc), retângulo, laço, varinha e suas combinações.
+  São até 8 estados por pilha (undo/redo), com orçamento de até
+  1.048.576 pixels marcados por pilha; snapshots mais antigos são
+  descartados se o orçamento for excedido. Pesos alfa do feather são
+  restaurados integralmente. Comando sem alteração não cria novo passo;
+  uma nova edição invalida redo. O histórico raster é separado e
+  continua em Ctrl+Z / Ctrl+Y, sem passos extras por máscara.
+  Transformações de pixels que movem a máscara zeram seu histórico
+  independente para não desalinhá-la do desenho. Ao reabrir uma obra,
+  a seleção atual vem de `selection.png`, mas as pilhas de seleção
+  começam vazias: **não são persistidas**, diferentemente do histórico
+  raster `history.tsv`.
 - Undo/redo do raster por traço pelos botões existentes, Ctrl+Z / Ctrl+Y.
   O histórico raster agora persiste por obra em `history.tsv` e PNGs de
   snapshots com geração identificada. Ao reabrir, recupera as pilhas de
@@ -181,7 +196,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   abrir a pintura: o histórico inválido é ignorado, e referências antigas
   a camadas removidas são descartadas no salvamento. Operações estruturais
   de camadas não entram no histórico raster. O histórico não cobre mudanças
-  de interface, seleção feita sem pintura ou alterações externas aos PNGs.
+  de interface nem alterações externas aos PNGs. Operações puras de máscara
+  possuem pilhas em memória SEPARADAS, não inseridas nos arquivos raster.
 - A seleção ativa persiste como máscara `selection.png` na pasta da obra,
   e é validada por assinatura PNG, dimensões e limite de tamanho ao reabrir.
   Seleções inválidas são ignoradas sem afetar o conteúdo das camadas.
@@ -245,7 +261,11 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O CI também cobre flips H/V de máscaras irregulares, sobreposição
   semitransparente, proteção de pixels externos, histórico gravado/reaberto,
   atalhos Ctrl+Shift+H/V e bloqueio por Layer Lock/Alpha Lock.
-  A suíte agora cobre feather de raio 1/2, pesos de alfa por pixel,
+  O CI cobre histórico independente de máscara, oito passos limitados,
+  Ctrl+Alt+Z/Y, redo invalidado por nova seleção, máscara nula e feather
+  restaurados, gestos de retângulo e soma de áreas, convivência com
+  undo/redo raster e reinício do histórico de máscara ao reabrir a obra.
+  A suíte também cobre feather de raio 1/2, pesos de alfa por pixel,
   compatibilidade PNG, pincel/balde/borracha/Alpha Lock, recorte e colagem,
   movimento, espelhamento, transformação livre e prévia GPU/CPU com
   transparência parcial, inclusive atalhos Ctrl+Alt+F e reabertura.

@@ -53,8 +53,22 @@ multiplicada pela cobertura; movimento, cópia/corte/cola, giros,
 espelhamento, escala e prévias GPU devem preservar pesos, separar
 o alfa residual na origem e compor source-over no destino. Testar
 GPU/CPU com máscara fracionária e undo/redo de edição raster.
-Operações só de máscara não criam histórico raster. Não declarar
-feather gaussiano, slider visual ou paridade ibisPaint.
+Operações só de máscara não criam histórico raster. Existe agora um
+**histórico SEPARADO de máscara somente na sessão**, por
+`Bridge.selection_undo()`, `Bridge.selection_redo()` e
+`Bridge.selection_history_snapshot()`. **Ctrl+Alt+Z/Y** desfaz/refaz
+máscara; Ctrl+Z/Y continuam exclusivamente raster.
+Todas as mudanças puras de seleção (Ctrl+A, Ctrl+Shift+I,
+Ctrl+Alt+F/Up/Down, Ctrl+D/Esc, retângulo, laço, varinha e combinações)
+registram snapshot ANTES da confirmação, incluindo nil e pesos alfa.
+Nenhum no-op cria passo; nova edição invalida redo. Limitar a 8 estados
+e 1.048.576 pixels marcados por pilha (descartar os estados antigos).
+Transformações raster que movem pixels+seleção limpam a timeline
+independente para evitar geometria dessincronizada. Undo raster que
+realmente modifica a máscara também limpa a timeline só de seleção.
+Ao reabrir, a seleção atual persiste em PNG, mas a timeline de seleção
+recomeça vazia; o histórico raster continua persistido em history.tsv.
+Não declarar feather gaussiano, slider visual ou paridade ibisPaint.
 Copiar/Recortar/Colar são internos à aplicação (Ctrl+C, Ctrl+X, Ctrl+V);
 colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+R, Ctrl+Shift+L) e escala nearest-neighbour 200%/50%

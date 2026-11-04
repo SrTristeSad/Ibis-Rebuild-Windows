@@ -50,6 +50,14 @@ alfa fracionário em pincel, borracha, balde e transformações;
 a seleção suavizada é persistida no canal alfa de `selection.png`.
 A API Lua também aceita raios de 1 a 8 px; não há slider de feather
 nem implementação de blur gaussiano.
+**Ctrl+Alt+Z** e **Ctrl+Alt+Y** desfazem/refazem exclusivamente
+mudanças de seleção (retângulo, laço, varinha, soma/subtração,
+inversão, expansão, feather ou desmarcar), incluindo o alfa parcial.
+Esse histórico tem até oito estados por pilha e orçamento de memória;
+**Ctrl+Z/Y continuam para os pixels**. As pilhas de seleção existem
+apenas durante a sessão e reiniciam ao reabrir a obra, mas a máscara
+atual continua salva no `selection.png`. Transformações que deslocam
+pixels e máscara encerram essa timeline para evitar dessincronização.
 O arraste normal do Transformar também exibe uma prévia GPU do deslocamento inteiro,
 com máscara/cache reutilizados sem recalcular todos os pixels em Lua
 a cada movimento subpixel. O visual e os

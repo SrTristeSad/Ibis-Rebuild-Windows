@@ -235,6 +235,203 @@ local function test_feather_transform(E)
     gpu.mask_image:release()
 end
 
+-- Histórico próprio da máscara (sem criar ou reverter snapshots raster).
+local function test_selection_only_history(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Mask timeline"}},
+        active_layer_id = 1, active_tool = "transform",
+        background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    local art = gallery:add_artwork(16, 16, "Selection timeline")
+    Bridge.create(model, art, gallery)
+    local function keys(key, alt, shift)
+        local old = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" then return true end
+                if alt and k == "lalt" then return true end
+                if shift and k == "lshift" then return true end
+            end
+            return false
+        end
+        local consumed = Bridge.keypressed(key, model)
+        love.keyboard.isDown = old
+        return consumed
+    end
+    local function coverage(x, y)
+        return Selection.coverage(Bridge.selection_snapshot(), x, y)
+    end
+    local function history()
+        return Bridge.selection_history_snapshot()
+    end
+    assert(keys("z", true, false) and keys("y", true, false) and
+           not Bridge.selection_undo() and not Bridge.selection_redo() and
+           history().undo == 0 and history().redo == 0,
+           "Novo documento não deve começar com histórico de máscara")
+    assert(keys("a", false, false))
+    assert(Bridge.selection_snapshot().count == 256 and
+           history().undo == 1 and history().redo == 0,
+           "Ctrl+A deveria criar um passo na timeline da seleção")
+    assert(keys("a", false, false) and history().undo == 1,
+           "Ctrl+A repetido não deveria gravar um no-op")
+    model.layers[1].locked, model.layers[1].alpha_lock = true, true
+    assert(keys("f", true, false))
+    local soft = assert(Bridge.selection_snapshot())
+    local softened = coverage(0, 0)
+    assert(softened > 0 and softened < 1 and
+           Selection.is_soft(soft) and history().undo == 2,
+           "Feather não entrou no histórico independente")
+    assert(keys("z", true, false) and
+           not Selection.is_soft(Bridge.selection_snapshot()) and
+           coverage(0, 0) == 1 and
+           history().undo == 1 and history().redo == 1,
+           "Ctrl+Alt+Z não restaurou máscara binária anterior")
+    assert(keys("y", true, false) and
+           close(coverage(0, 0), softened, 1 / 255) and
+           Selection.is_soft(Bridge.selection_snapshot()) and
+           history().redo == 0,
+           "Ctrl+Alt+Y não restaurou a cobertura suave")
+    assert(keys("d", false, false) and not Bridge.selection_snapshot() and
+           history().undo == 3,
+           "Ctrl+D deveria permitir recuperar seleção via mask undo")
+    assert(keys("z", true, false) and
+           close(coverage(0, 0), softened, 1 / 255),
+           "Undo de desmarcar perdeu a intensidade do feather")
+    assert(keys("i", false, true))
+    assert(history().redo == 0,
+           "Nova operação após undo precisa invalidar redo de máscara")
+    assert(keys("y", true, false) and not Bridge.selection_redo(),
+           "Redo obsoleto foi aceito")
+    assert(Bridge.selection_snapshot() ~= nil and
+           history().undo >= 3 and not Bridge.undo(),
+           "Histórico de máscara deveria ser independente do raster")
+    model.layers[1].locked, model.layers[1].alpha_lock = false, false
+
+    -- Cria retângulo através dos eventos reais da ponte. O snapshot de
+    -- antes do mousepress deve ser restaurável, inclusive após replace.
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + 0.5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + 0.5 - 8) * 11
+    end
+    local function shape(x1, y1, x2, y2, ctrl, shift)
+        local mx, my = screen(x1, y1)
+        local nx, ny = screen(x2, y2)
+        local old = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if ctrl and k == "lctrl" then return true end
+                if shift and k == "lshift" then return true end
+            end
+            return false
+        end
+        local accepted = Bridge.mousepressed(model, art, mx, my, 1024, 768,
+                                view, prefs, {255, 0, 0}, 2, 100, nil)
+        love.keyboard.isDown = old
+        assert(accepted and Bridge.mousereleased(model, nx, ny, 1),
+               "Gesto de retângulo na timeline falhou")
+    end
+    local before = assert(Bridge.selection_snapshot())
+    shape(3, 3, 6, 6, false, false)
+    assert(Bridge.selection_snapshot().count == 16)
+    assert(keys("z", true, false))
+    local back = assert(Bridge.selection_snapshot())
+    assert(back.count == before.count and
+           close(Selection.coverage(back, 0, 0),
+                 Selection.coverage(before, 0, 0), 1 / 255),
+           "Undo de gesto replace não recuperou seleção anterior")
+    assert(keys("y", true, false) and
+           Bridge.selection_snapshot().count == 16,
+           "Redo de gesto de retângulo falhou")
+    shape(5, 5, 8, 8, true, true)
+    assert(Bridge.selection_snapshot().count == 28,
+           "União via Ctrl+Shift falhou antes do histórico")
+    assert(keys("z", true, false) and
+           Bridge.selection_snapshot().count == 16,
+           "Undo de combinação booleana não restaurou área anterior")
+    assert(keys("y", true, false) and
+           Bridge.selection_snapshot().count == 28,
+           "Redo de combinação booleana não recuperou área")
+
+    -- Um único snapshot raster não pode ser afetado por mask undo.
+    model.active_tool = "brush"
+    local mx, my = screen(3, 3)
+    assert(Bridge.mousepressed(model, art, mx, my, 1024, 768,
+                               view, prefs, {255, 0, 0}, 2, 100, nil))
+    Bridge.mousereleased()
+    local before_undo_count = history().undo
+    assert(keys("z", true, false) and history().undo == before_undo_count - 1,
+           "Undo da máscara após pincelada falhou")
+    assert(Bridge.undo(), "Ctrl+Z raster não desfez pincelada")
+    assert(keys("y", true, false) and history().undo == before_undo_count,
+           "Undo raster não deveria descartar histórico sem mudar geometria")
+    assert(Bridge.redo(), "Ctrl+Y raster não refez pincelada")
+
+    -- Transformar pixels com seleção ativa invalida somente a timeline
+    -- de máscara, porque reverter só a geometria desalinharia a pintura.
+    model.active_tool = "transform"
+    shape(1, 1, 3, 3, false, false)
+    assert(history().undo > 0)
+    local ok = Bridge.selection_command(model, "flip_horizontal")
+    assert(ok and history().undo == 0 and history().redo == 0 and
+           not Bridge.selection_undo(),
+           "Flip raster deveria encerrar histórico independente da máscara")
+    assert(Bridge.undo(), "Flip raster perdeu o próprio undo")
+
+    -- O orçamento é limitado a 8 passos. Ações sem efeito não aumentam
+    -- a timeline e a nona operação descarta o snapshot mais antigo.
+    Bridge.clear_selection()
+    for i = 1, 12 do
+        assert(keys("a", false, false))
+        assert(keys("i", false, true))
+    end
+    assert(history().undo == 8 and history().redo == 0,
+           "Timeline da seleção não respeitou limite de oito passos")
+    for i = 1, 8 do
+        assert(keys("z", true, false), "Undo de máscara limitado falhou")
+    end
+    assert(keys("z", true, false) and not Bridge.selection_undo() and
+           history().redo == 8,
+           "A pilha da seleção não limitou passos ao orçamento")
+    for i = 1, 8 do assert(keys("y", true, false)) end
+    assert(keys("y", true, false) and not Bridge.selection_redo(),
+           "Redo ultrapassou limite da seleção")
+    assert(keys("a", false, false) and Bridge.save(),
+           "Salvar obra com seleção após timeline falhou")
+    Bridge.open(model, art)
+    assert(Bridge.selection_snapshot().count == 256 and
+           history().undo == 0 and history().redo == 0,
+           "Ao reabrir, só a máscara PNG deve persistir, não a timeline")
+    assert(keys("z", true, false) and not Bridge.selection_undo(),
+           "Undo da sessão anterior foi preservado")
+    assert(Bridge.selection_command(model, "invert_selection") and
+           history().undo == 1,
+           "Timeline deve iniciar normalmente após reabertura")
+    Bridge.clear_selection()
+
+    local index_data = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key
+    for line in index_data:gmatch("[^\r\n]+") do
+        if line:find("Selection timeline", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Diretório temporário da timeline não encontrado")
+    local path = "lua-artworks/" .. key
+    require("lua_history").cleanup(path)
+    for _, file in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. file)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Ponte: Ctrl+Alt+F aplica feather de 2 px, com persistência PNG.
 local function test_feather_bridge(Bridge, model, art)
     local Selection = require("lua_selection")
@@ -2357,6 +2554,8 @@ function love.load()
     test_selection_roundtrip(Bridge, model4, art4)
     checkpoint("bridge feather shortcut and PNG")
     test_feather_bridge(Bridge, model4, art4)
+    checkpoint("bridge selection-only undo and redo")
+    test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge boolean gestures rectangle lasso wand")
@@ -2379,6 +2578,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: feather alpha paint/transforms + selection morph + PNG + GPU")
+    print("PASS: selection-only undo/redo + feather alpha + raster history + GPU")
     love.event.quit(0)
 end
