@@ -45,6 +45,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   flag inválida começam no contíguo, sem perder tolerância ou outras
   preferências. Não depende de `wand_global`, `wand_rgb_only` ou
   de `wand_sample_all`; não amostra camadas compostas.
+  **Ctrl+Alt+M** alterna independentemente a comparação do Balde
+  entre **RGBA** (padrão) e **somente RGB**, ignorando o canal alfa
+  para encontrar pixels semelhantes em ambos os modos (contíguo/global).
+  O RGB armazenado em alfa zero pode coincidir mesmo estando invisível.
+  Isso altera a região encontrada, não a regra de pintura: a aplicação
+  da tinta segue source-over, podendo mudar o alfa; Alpha Lock mantém
+  o alfa original e impede pintar pixels transparentes. O sinalizador
+  `project.bucket_rgb_only` é salvo na **décima coluna opcional**
+  de `document.tsv` (0/1). Arquivos de 2–9 colunas ou sinalizador
+  inválido seguem em RGBA sem perder as outras preferências.
+  Alterar o modo não toca na máscara, dirty, raster ou histórico.
   Sem controles visuais novos.
 - Conta-gotas que lê a composição RGBA das camadas visíveis, considerando
   opacidade e fundo branco, e atualiza o seletor de cores existente.
@@ -327,7 +338,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   a composição recortada no renderizador software Mesa, mas não substitui
   testes em hardware gráfico físico.
 - O balde compara RGBA da camada ativa com tolerância 0–255 por canal,
-  em modo contíguo ou global por cor (Ctrl+Alt+B);
+  ou só RGB (Ctrl+Alt+M), em modo contíguo ou global por cor
+  (Ctrl+Alt+B);
   não há slider integrado na interface Lua, apenas os atalhos
   Ctrl+Alt+PageUp/PageDown/Home. O algoritmo de duas fases mantém
   uma região fixa, não contamina a comparação com pixels recém-pintados
@@ -339,6 +351,10 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Testes adicionais verificam Balde global RGBA com regiões separadas,
   diagonais, tolerância por canal, alfa, máscara, Alpha Lock, opacidade
   baixa, história raster, Ctrl+Alt+B e arquivos de 2–9 colunas.
+  Testes de RGB-only do Balde cobrem alfa 0/25/50/75/100%,
+  conectividade, varredura global, tolerância por canal, limites de
+  seleção, Alpha Lock, preenchimento source-over, no-op, histórico,
+  Ctrl+Alt+M, isolamento por obra e formatos 2–10 colunas.
 - A suíte de pixels usa o LÖVE real para verificar tinta, borracha, balde,
   Alpha Lock, Clipping e os nove modos de blend na CPU e GPU,
   leitura de cores, composição semitransparente, miniatura,
