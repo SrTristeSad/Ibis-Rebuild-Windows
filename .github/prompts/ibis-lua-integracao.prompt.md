@@ -43,6 +43,20 @@ inválido restauram zero. Preservar combinação Ctrl+Shift/Alt no
 clique, seleção PNG e histórico independente. Não criar slider na UI.
 Testar 0, 16, 48, 64 e 255, alfa, conectividade, atalhos, reabertura
 e rejeição de parâmetros inválidos.
+**Modo global por cor** da Varinha é alternado em **Ctrl+Alt+G**:
+`Selection.magic_wand(layer,w,h,x,y,tolerance,global_mode)` aceita
+opcional booleano (false/nil preserva o flood-fill 4-conexo, true
+percorre TODOS os pixels da camada ativa, selecionando inclusive ilhas
+e conexões só diagonais). O critério RGBA e a tolerância são idênticos
+em ambos; global não altera raster ou outras camadas. A preferência
+`project.wand_global` inicia false e é salva na quarta coluna opcional
+de `document.tsv` como 0/1. Metadados legados de duas/três colunas e
+valores inválidos retornam false. O toggle usa o notice da UI original,
+não cria seleção nem undo/redo; somente o clique posterior aplica a
+máscara e deve respeitar combinações Ctrl+Shift/Alt, limites e histórico
+persistente da seleção. Não adicionar slider/painel ou alterar submódulo.
+Testar diferença contígua/global, diagonais, ilhas separadas, alfa,
+tolerância RGBA 0/16/48/64/255, modos combinados, persistência e undo.
 Expansão/contração de máscara binária: `Selection.morph(s,"expand")`
 e `Selection.morph(s,"contract")` usam vizinhança 8-conexa quadrada
 de 3×3, sem alterar a máscara original. **Ctrl+Alt+Up** expande

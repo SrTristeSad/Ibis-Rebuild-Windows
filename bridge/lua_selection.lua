@@ -139,9 +139,10 @@ end
 
 -- Varinha usa tolerância por CANAL RGBA, em unidades inteiras 8-bit.
 -- Zero mantém equivalência à seleção exata antiga (margem de
--- quantização); valor 255 inclui todas as cores/transparências conexas.
--- Somente pixels conectados em 4 direções ao ponto inicial são incluídos.
-function Selection.magic_wand(layer, w, h, x, y, tolerance)
+-- quantização); valor 255 inclui todas as cores/transparências.
+-- Por padrão mantém flood-fill 4-conexo; global_mode=true compara todos
+-- os pixels da camada ativa, inclusive ilhas desconectadas.
+function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode)
     local ok, err = allowed(w, h)
     if not ok then return nil, err end
     if tolerance == nil then tolerance = 0 end
@@ -149,23 +150,38 @@ function Selection.magic_wand(layer, w, h, x, y, tolerance)
        tolerance < 0 or tolerance > 255 then
         return nil, "Tolerância da varinha deve ser um inteiro de 0 a 255."
     end
+    if global_mode ~= nil and type(global_mode) ~= "boolean" then
+        return nil, "Modo global da varinha deve ser booleano."
+    end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= w or y >= h then return nil end
     local data = layer.pixels
     local tr, tg, tb, ta = data:getPixel(x, y)
     local threshold = tolerance / 255 + TOLERANCE
-    local s = empty(w, h, "magic_wand")
-    local visited = {}
+    local s = empty(w, h, global_mode and "magic_wand_global" or "magic_wand")
+    -- No modo global cada pixel é lido uma única vez: não alocar a
+    -- tabela visited do flood-fill, que poderia ocupar 1 Mi entradas.
+    local visited = not global_mode and {} or nil
     local function matches(px, py)
         if px < 0 or py < 0 or px >= w or py >= h then return false end
         local key = index(w, px, py)
-        if visited[key] or s.mask[key] then return false end
+        if (visited and visited[key]) or s.mask[key] then return false end
         local r, g, b, a = data:getPixel(px, py)
         local same = math.abs(r - tr) <= threshold and
             math.abs(g - tg) <= threshold and
             math.abs(b - tb) <= threshold and math.abs(a - ta) <= threshold
-        if not same then visited[key] = true end
+        if not same and visited then visited[key] = true end
         return same
+    end
+    if global_mode then
+        -- Iteração única O(w*h), com o mesmo critério RGBA do flood-fill.
+        -- Não guarda fila/stack: até 1.048.576 pixels e 4 canais.
+        for py = 0, h - 1 do
+            for px = 0, w - 1 do
+                if matches(px, py) then add(s, px, py) end
+            end
+        end
+        return finalize(s)
     end
     local stack = {{x, y}}
     while #stack > 0 do
