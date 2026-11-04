@@ -142,6 +142,7 @@ function Bridge.create(model, id, gallery)
     project.wand_diagonal = false
     project.wand_rgb_only = false
     project.bucket_tolerance = 0
+    project.bucket_global = false
     Engine.sync(project, model)
     counter = counter + 1
     local key = string.format("art_%d_%d", os.time(), counter)
@@ -195,9 +196,15 @@ local function saved_layers(model, path, p)
         local active_id, background =
             metadata:match("^(%d+)\t([%a_]+)")
         local stored_tolerance, stored_global, stored_sample_all,
-              stored_diagonal, stored_rgb_only, stored_bucket_tolerance =
-            metadata:match(
-            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+              stored_diagonal, stored_rgb_only, stored_bucket_tolerance,
+              stored_bucket_global = metadata:match(
+            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        if not stored_tolerance then
+            stored_tolerance, stored_global, stored_sample_all,
+                stored_diagonal, stored_rgb_only, stored_bucket_tolerance =
+                metadata:match(
+                "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        end
         if not stored_tolerance then
             stored_tolerance, stored_global, stored_sample_all,
                 stored_diagonal, stored_rgb_only = metadata:match(
@@ -234,6 +241,7 @@ local function saved_layers(model, path, p)
         p.bucket_tolerance = bucket_number and
             bucket_number >= 0 and bucket_number <= 255 and
             bucket_number == math.floor(bucket_number) and bucket_number or 0
+        p.bucket_global = stored_bucket_global == "1"
         active_id = tonumber(active_id)
         if active_id then
             for _, info in ipairs(layers) do
@@ -260,6 +268,7 @@ function Bridge.open(model, id)
     project.wand_diagonal = false
     project.wand_rgb_only = false
     project.bucket_tolerance = 0
+    project.bucket_global = false
     if record then saved_layers(model, project_path(record.key), project) end
     Engine.sync(project, model)
     if record then
@@ -327,7 +336,8 @@ function Bridge.save()
             project.wand_sample_all and "1" or "0",
             project.wand_diagonal and "1" or "0",
             project.wand_rgb_only and "1" or "0",
-            tostring(project.bucket_tolerance or 0)}, "\t")))
+            tostring(project.bucket_tolerance or 0),
+            project.bucket_global and "1" or "0"}, "\t")))
     -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
     -- retrocompatível e evita que a seleção contamine qualquer camada.
     local mask_path = path .. "/selection.png"
@@ -579,7 +589,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     if tool == "bucket" then
         local _, reason = Engine.fill(p, info.id, px, py, rgb,
             normalized_opacity, info.alpha_lock, selection,
-            p.bucket_tolerance or 0)
+            p.bucket_tolerance or 0, p.bucket_global or false)
         if reason and notice then notice(reason) end
         return true
     end
@@ -980,6 +990,26 @@ function Bridge.adjust_bucket_tolerance(model, delta, notice)
     return true
 end
 
+-- Seleção contígua/global do Balde, independente da Varinha.
+-- Alterar o modo é uma preferência, não pinta nem altera históricos.
+function Bridge.bucket_global(model)
+    local p = ensure(model)
+    if not p then return nil end
+    return p.bucket_global == true
+end
+
+function Bridge.toggle_bucket_global(model, notice)
+    local p = ensure(model)
+    if not p then return false end
+    p.bucket_global = not p.bucket_global
+    if notice then
+        notice(p.bucket_global and
+            "Balde: preencher todas as regiões de cor semelhante" or
+            "Balde: preencher somente região contígua")
+    end
+    return true
+end
+
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" and selection then
@@ -1006,6 +1036,8 @@ function Bridge.keypressed(key, model, notice)
             return Bridge.toggle_wand_diagonal(model, notice)
         elseif key == "r" then
             return Bridge.toggle_wand_rgb_only(model, notice)
+        elseif key == "b" then
+            return Bridge.toggle_bucket_global(model, notice)
         elseif key == "pageup" then
             return Bridge.adjust_bucket_tolerance(model, 16, notice)
         elseif key == "pagedown" then
