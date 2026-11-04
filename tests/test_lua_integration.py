@@ -24,6 +24,8 @@ class IntegrationLayoutTest(unittest.TestCase):
                         "Bridge.draw_gallery_thumbnail(",
                         "Bridge.draw_layer_thumbnail("):
             self.assertIn(snippet, data)
+        self.assertIn("not color_dialog and not brush_search_active", data)
+        self.assertIn("not state.modal and Bridge.keypressed(", data)
 
     def test_no_native_project_ffi(self):
         stage = ROOT / "build" / "lua-app"
@@ -34,6 +36,9 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertNotIn('require("ffi")', engine)
         self.assertIn("love.image.newImageData", engine)
         self.assertTrue((stage / "lua_selection.lua").is_file())
+        selection = (stage / "lua_selection.lua").read_text(encoding="utf-8")
+        self.assertIn("function Selection.all(", selection)
+        self.assertIn("function Selection.invert(", selection)
         self.assertIn("lua_selection", engine)
         self.assertIn("function Engine.affine_selection(", engine)
         self.assertIn('operation == "flip_horizontal"', engine)
@@ -50,6 +55,8 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn("scale_half", bridge)
         self.assertIn('"flip_horizontal"', bridge)
         self.assertIn('"flip_vertical"', bridge)
+        self.assertIn('"invert_selection"', bridge)
+        self.assertIn('"select_all"', bridge)
         self.assertIn("clipboard", bridge)
         self.assertIn("rotate_free", bridge)
         self.assertIn("scale_free", bridge)

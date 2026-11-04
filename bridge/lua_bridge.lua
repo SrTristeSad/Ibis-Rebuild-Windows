@@ -578,6 +578,29 @@ function Bridge.selection_command(model, command, notice)
     if model.screen ~= "editor" then return false end
     local p = ensure(model)
     if not p then return false end
+
+    -- São mudanças de máscara, NÃO operações raster: permitidas inclusive
+    -- em camadas bloqueadas / Alpha Lock e sem adicionar passos ao histórico.
+    if command == "select_all" or command == "invert_selection" then
+        discard_preview(gesture)
+        gesture = nil
+        if command == "select_all" and selection and
+           selection.count == p.w * p.h then return true end
+        local next_mask, reason
+        if command == "select_all" then
+            next_mask, reason = Selection.all(p.w, p.h)
+        else
+            next_mask, reason = Selection.invert(selection, p.w, p.h)
+        end
+        if reason then
+            if notice then notice(reason) end
+            return false
+        end
+        -- Se o inverso está vazio, nil representa desmarcar.
+        selection = next_mask
+        return true
+    end
+
     local info = model:active_layer()
     if not info then return false end
 
@@ -628,7 +651,13 @@ function Bridge.keypressed(key, model, notice)
     if not love.keyboard.isDown("lctrl", "rctrl") then return false end
     if key == "d" then Bridge.clear_selection(); return true end
     local shift = love.keyboard.isDown("lshift", "rshift")
+    if not shift and key == "a" then
+        return Bridge.selection_command(model, "select_all", notice)
+    end
     if shift then
+        if key == "i" then
+            return Bridge.selection_command(model, "invert_selection", notice)
+        end
         if key == "r" then
             Bridge.selection_command(model, "rotate_cw", notice)
             return true

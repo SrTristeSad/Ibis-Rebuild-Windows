@@ -38,8 +38,14 @@
 - Seleção ativa persiste em `selection.png` por obra (máscara binária),
   sem mudar os PNGs das camadas; arquivo ausente, corrompido ou com dimensões
   incorretas não pode impedir a abertura do projeto. Desmarcar e salvar remove
-  o arquivo anterior. O histórico de seleção não persiste e a seleção fica
-  limitada a 1.048.576 pixels. Copiar/recortar/colar operam em clipboard
+  o arquivo anterior. Operações isoladas de seleção não criam histórico raster;
+  a máscara fica limitada a 1.048.576 pixels. Ctrl+A seleciona tudo e
+  Ctrl+Shift+I inverte a seleção em TODO o canvas, inclusive fora do bounding
+  box. Inverter sem seleção seleciona tudo; inverter seleção completa desmarca.
+  Não alterar pixels, dirty ou histórico com essas operações. São permitidas
+  com Layer Lock ou Alpha Lock, somente dentro do editor. Testar dupla
+  inversão, PNG de máscara e atalhos, sem modificar a UI.
+  Copiar/recortar/colar operam em clipboard
   INTERNO do Lua, não na área de transferência do Windows. Rotação 90° e escala 50%/200% são raster nearest-neighbour,
   ancoradas no canto superior esquerdo e devem rejeitar saída fora do canvas.
 - Atalhos sem novos controles: Ctrl+C/X/V (clipboard), Ctrl+Shift+R/L
