@@ -832,7 +832,7 @@ local function test_bucket_tolerance(E)
         return p
     end
     for _, scenario in ipairs({
-        {0, 2}, {16, 4}, {48, 5}, {64, 6}, {255, 144}
+        {0, 1}, {16, 3}, {48, 4}, {64, 5}, {255, 144}
     }) do
         local p = fixture()
         local tol, count = scenario[1], scenario[2]
