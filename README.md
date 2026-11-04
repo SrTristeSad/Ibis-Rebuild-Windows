@@ -28,9 +28,11 @@ Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
 (Ctrl+C/X/V), rotação de 90° (Ctrl+Shift+R/L) e escala 50%/200%
 (Ctrl+Shift+Down/Up). Com Transformar selecionado, Alt+arrastar dentro
 da seleção aplica rotação livre; Shift+arrastar aplica escala X/Y
-independente. Alt/Shift mostram a prévia durante o arraste com
-interpolação **bilinear RGBA**, sem alterar os pixels até soltar o
-mouse; os atalhos antigos mantêm nearest-neighbour. O arraste normal
+independente. Alt/Shift mostram uma prévia **GPU bilinear RGBA**
+com máscara e Canvas reutilizados por gesto, sem recalcular pixels
+em Lua a cada mousemoved. O contorno é transformado graficamente
+e a CPU só grava o resultado ao soltar, preservando undo/redo.
+Os atalhos antigos mantêm nearest-neighbour. O arraste normal
 do Transformar também exibe uma prévia GPU do deslocamento inteiro,
 com máscara/cache reutilizados sem recalcular todos os pixels em Lua
 a cada movimento subpixel. O visual e os

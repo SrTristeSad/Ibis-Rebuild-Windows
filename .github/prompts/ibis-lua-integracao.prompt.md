@@ -24,14 +24,20 @@ No instrumento Transformar, **Alt+arrastar dentro da seleção** ativa
 rotação contínua pelo ângulo relativo ao centro da máscara; **Shift+
 arrastar dentro da seleção** ativa escala independente X/Y pelo
 deslocamento do ponteiro. A função `Engine.affine_selection` aceita filtro opcional: por padrão
-usa nearest-neighbour (compatibilidade), e os gestos Alt/Shift fornecem
-"bilinear". O processamento bilinear amostra RGB pré-multiplicado e
-trata pixels não selecionados como transparentes para impedir halos.
-`Engine.preview_affine` produz um buffer temporário e `Bridge.draw`
-exibe este buffer com composição das camadas e máscara de prévia,
-sem mudar pixels, dirty ou pilhas de undo/redo. O buffer é descartado
-na liberação/cancelamento do gesto. Prévia e commit precisam usar a
-mesma matemática e verificar o retângulo de destino previamente.
+usa nearest-neighbour; os gestos Alt/Shift fornecem "bilinear" com RGB
+premultiplicado e vizinhos não selecionados transparentes.
+A API anterior `Engine.preview_affine` CPU permanece para testes e
+compatibilidade, MAS não deve rodar a cada mousemoved.
+A UI usa `Engine.begin_affine_gpu_preview` para alocar UMA máscara
+e Canvas por gesto; `Engine.update_affine_gpu_preview` valida a mesma
+geometria do commit CPU e usa shader GLSL de bilinear.
+`Bridge.draw` mostra uma camada virtual no compositor e transforma
+graficamente o contorno, com origem corrigida para o canvas centralizado.
+Durante o arraste, não alterar pixels, dirty, histórico ou PNGs.
+O release confirma pela CPU e libera máscara e Canvas GPU. Preservar
+testes de paridade RGBA GPU/CPU com tolerância e de cache de recursos.
+O contorno geométrico de prévia pode diferir ligeiramente do raster
+confirmado em ângulos arbitrários.
 O gesto normal de mover seleção também possui prévia na GPU:
 `Engine.begin_move_preview` monta máscara RGBA e Canvas UMA vez
 por gesto; `Engine.update_move_preview` usa shader de source-over
@@ -81,8 +87,8 @@ arraste comum de deslocamento. A prévia bilinear está disponível nos gestos A
 GPU nearest está disponível no movimento comum do Transformar.
 Não declare movimento bilinear, interpolação bicúbica, transformação
 vetorial nem clipboard Windows como concluídos. Teste comparando
-pixels GPU/CPU do movimento com RGBA, verifique cache reutilizado
-quando o delta inteiro não mudar e retorno ao início sem commit. Testes incluem prévia sem mutação, paridade de pixels
+pixels GPU/CPU do movimento E rotação/escala, reutilização da máscara e
+Canvas, rejeição de parâmetros inválidos e undo/redo após o commit. Testes incluem prévia sem mutação, paridade de pixels
 com commit, transparência sem halo, desfazer/refazer e renderização da
 ponte Lua com a camada virtual de prévia. Preserve testes de PNG roundtrip, arquivo inválido,
 desmarcação e compatibilidade com projetos sem seleção.

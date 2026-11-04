@@ -50,10 +50,15 @@
   com mapeamento inverso e filtro opcional (`nearest` por padrão). Em Transformar:
   Alt+arrastar gira relativamente ao centro da seleção, Shift+arrastar
   redimensiona nos dois eixos, sem alterar o layout/controles visuais.
-  Os gestos Alt/Shift mostram prévia bilinear sobre uma camada virtual
-  (composição com outras camadas preservada), sem alterar buffers reais
-  ou histórico durante o arraste. Aplicar ao soltar com o mesmo filtro,
-  liberar o recurso gráfico da prévia ao encerrar/cancelar.
+  Os gestos Alt/Shift agora usam prévia bilinear GPU e camada virtual
+  com o compositor existente. `Engine.begin_affine_gpu_preview` cria
+  máscara e Canvas uma vez; `Engine.update_affine_gpu_preview` envia
+  apenas os parâmetros de rotação/escala ao shader, reutilizando recursos.
+  A CPU calcula e grava a transformação ao soltar; testar paridade RGBA
+  premultiplicada entre GPU e commit CPU. Nenhum gesto pode alterar
+  buffers reais ou histórico antes de soltar. Liberar Canvas e máscara
+  ao confirmar/cancelar, sem vazamentos. A API antiga `preview_affine`
+  CPU permanece para testes, mas não deve rodar por mousemoved.
   O movimento normal mantém deslocamento inteiro, com prévia GPU
   source-over que não modifica a camada original. O motor reaproveita
   Canvas e máscara por gesto e redesenha só se o deslocamento
