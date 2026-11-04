@@ -139,6 +139,7 @@ function Bridge.create(model, id, gallery)
     project.wand_tolerance = 0
     project.wand_global = false
     project.wand_sample_all = false
+    project.wand_diagonal = false
     Engine.sync(project, model)
     counter = counter + 1
     local key = string.format("art_%d_%d", os.time(), counter)
@@ -191,8 +192,13 @@ local function saved_layers(model, path, p)
     if metadata then
         local active_id, background =
             metadata:match("^(%d+)\t([%a_]+)")
-        local stored_tolerance, stored_global, stored_sample_all = metadata:match(
-            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        local stored_tolerance, stored_global, stored_sample_all,
+              stored_diagonal = metadata:match(
+            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        if not stored_tolerance then
+            stored_tolerance, stored_global, stored_sample_all = metadata:match(
+                "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        end
         if not stored_tolerance then
             stored_tolerance, stored_global = metadata:match(
                 "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)%s*$")
@@ -209,6 +215,7 @@ local function saved_layers(model, path, p)
             and numeric_tolerance or 0
         p.wand_global = stored_global == "1"
         p.wand_sample_all = stored_sample_all == "1"
+        p.wand_diagonal = stored_diagonal == "1"
         active_id = tonumber(active_id)
         if active_id then
             for _, info in ipairs(layers) do
@@ -232,6 +239,7 @@ function Bridge.open(model, id)
     project.wand_tolerance = 0
     project.wand_global = false
     project.wand_sample_all = false
+    project.wand_diagonal = false
     if record then saved_layers(model, project_path(record.key), project) end
     Engine.sync(project, model)
     if record then
@@ -296,7 +304,8 @@ function Bridge.save()
             safe(project.model.background_mode or "white"),
             tostring(project.wand_tolerance or 0),
             project.wand_global and "1" or "0",
-            project.wand_sample_all and "1" or "0"}, "\t")))
+            project.wand_sample_all and "1" or "0",
+            project.wand_diagonal and "1" or "0"}, "\t")))
     -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
     -- retrocompatível e evita que a seleção contamine qualquer camada.
     local mask_path = path .. "/selection.png"
@@ -461,7 +470,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
             Engine.composite_pixel_source(p, model, true) or layer
         local mask, reason = Selection.magic_wand(
             reference, p.w, p.h, px, py, p.wand_tolerance or 0,
-            p.wand_global or false)
+            p.wand_global or false, p.wand_diagonal or false)
         if mask then
             local combined, err = Selection.combine(selection, mask,
                                           selection_merge_mode(), p.w, p.h)
@@ -888,6 +897,26 @@ function Bridge.toggle_wand_sample_all(model, notice)
     return true
 end
 
+-- 4-vizinhos é a conectividade histórica. 8-vizinhos inclui somente
+-- os cantos na varinha CONTÍGUA; modo global não usa conectividade.
+function Bridge.wand_diagonal(model)
+    local p = ensure(model)
+    if not p then return nil end
+    return p.wand_diagonal == true
+end
+
+function Bridge.toggle_wand_diagonal(model, notice)
+    local p = ensure(model)
+    if not p then return false end
+    p.wand_diagonal = not p.wand_diagonal
+    if notice then
+        notice(p.wand_diagonal and
+            "Varinha Mágica: contiguidade por 8 vizinhos (diagonais)" or
+            "Varinha Mágica: contiguidade por 4 vizinhos")
+    end
+    return true
+end
+
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" and selection then
@@ -910,6 +939,8 @@ function Bridge.keypressed(key, model, notice)
             return Bridge.toggle_wand_global(model, notice)
         elseif key == "t" then
             return Bridge.toggle_wand_sample_all(model, notice)
+        elseif key == "8" then
+            return Bridge.toggle_wand_diagonal(model, notice)
         elseif key == "right" then
             return Bridge.adjust_wand_tolerance(model, 16, notice)
         elseif key == "left" then
