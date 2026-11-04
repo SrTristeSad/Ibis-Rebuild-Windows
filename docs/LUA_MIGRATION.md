@@ -42,7 +42,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O desenho original da camada clipada permanece intacto. A renderização usa
   shader de composição do LÖVE; o conta-gotas e a miniatura usam a mesma regra
   na CPU. Não há equivalência 1:1 com o clipping proprietário do ibisPaint.
-- **Varinha Mágica** seleciona uma região contígua por RGBA da camada ativa;
+- **Varinha Mágica** seleciona uma região contígua por RGBA da camada ativa.
+  A tolerância é ajustável de **0 a 255** níveis 8-bit por canal RGBA,
+  comparando cada pixel à cor do ponto inicial. **Ctrl+Alt+→** aumenta
+  16 níveis, **Ctrl+Alt+←** diminui 16 e **Ctrl+Alt+0** restaura zero
+  (comparação exata com margem de quantização). O limite é aplicado a
+  cada canal de forma independente; a região continua conectada por
+  quatro vizinhos, sem unir ilhas distantes. A configuração é própria
+  de cada obra e persistida na terceira coluna opcional de `document.tsv`.
+  Obras antigas de duas colunas e valores malformados usam tolerância zero.
+  Alterar a tolerância não edita pixels, não cria histórico e usa o aviso
+  discreto já presente na UI, sem adicionar botões nem controles.
   **Laço** seleciona pixels dentro do contorno livre arrastado; **Transformar**
   cria uma seleção retangular ao arrastar sem seleção e move pixels selecionados
   ao arrastar dentro da seleção. Não foram criados controles visuais.
@@ -211,7 +221,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O clipboard **não persiste** e não comunica com o Windows. Copiar/colar só manipula
   pixels da camada ativa, sem novos objetos ou camadas. Recortes de seleção,
   movimento, rotação e escala estão limitados a 1.048.576 pixels por documento;
-  a varinha compara RGBA com tolerância mínima de quantização. A rotação
+  a varinha usa tolerância ajustável por obra em RGBA 8-bit (0..255);
+  o valor zero mantém a margem mínima de quantização. A rotação
   admite rotação livre e escalas independentes por gesto na ferramenta
   Transformar; os atalhos anteriores de 90° e 50%/200% continuam disponíveis.
   Os fatores da API livre devem estar entre 0,1 e 8 por eixo.
@@ -267,6 +278,10 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O CI também cobre flips H/V de máscaras irregulares, sobreposição
   semitransparente, proteção de pixels externos, histórico gravado/reaberto,
   atalhos Ctrl+Shift+H/V e bloqueio por Layer Lock/Alpha Lock.
+  O CI cobre a varinha com tolerância RGBA ajustável, conectividade de
+  quatro vizinhos, limites 0/255, canal alfa, combinações preservadas,
+  atalhos Ctrl+Alt+←/→/0, ausência de histórico ao mudar configuração
+  e persistência/compatibilidade de `document.tsv`.
   O CI cobre histórico independente de máscara, oito passos limitados,
   Ctrl+Alt+Z/Y, redo invalidado por nova seleção, máscara nula e feather
   restaurados, gestos de retângulo e soma de áreas, convivência com

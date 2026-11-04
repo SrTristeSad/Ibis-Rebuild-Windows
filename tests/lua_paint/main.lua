@@ -813,6 +813,204 @@ local function test_selection_morph_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Varinha contígua compara TODOS os canais RGBA com tolerância 8-bit.
+local function test_magic_wand_tolerance(E)
+    local Selection = require("lua_selection")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local project = E.new(12, 12)
+    E.sync(project, model)
+    local layer = project.layers[1]
+    local data = layer.pixels
+    data:setPixel(2, 3, .4, .2, .3, 1)
+    data:setPixel(3, 3, .4 + 12 / 255, .2, .3, 1)
+    data:setPixel(3, 4, .4, .2 + 16 / 255, .3, 1)
+    data:setPixel(4, 3, .4 + 39 / 255, .2, .3, 1)
+    data:setPixel(5, 3, .4, .2, .3, .75)
+    data:setPixel(1, 2, .4, .2, .3, 1) -- só diagonal
+    data:setPixel(8, 8, .4, .2, .3, 1) -- ilha isolada
+    layer.image:replacePixels(data)
+    project.dirty = false
+    local exact = assert(Selection.magic_wand(layer, 12, 12, 2, 3))
+    local zero = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 0))
+    assert(exact.count == 1 and zero.count == 1 and
+           Selection.contains(zero, 2, 3) and
+           not Selection.contains(zero, 3, 3) and
+           not Selection.contains(zero, 1, 2),
+           "Tolerância zero mudou o comportamento de seleção exata")
+    local step = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 16))
+    assert(step.count == 3 and
+           Selection.contains(step, 3, 3) and
+           Selection.contains(step, 3, 4) and
+           not Selection.contains(step, 4, 3) and
+           not Selection.contains(step, 1, 2),
+           "Tolerância 16 não selecionou diferenças RGBA adjacentes")
+    local mid = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 48))
+    assert(mid.count == 4 and
+           Selection.contains(mid, 4, 3) and
+           not Selection.contains(mid, 5, 3) and
+           not Selection.contains(mid, 8, 8),
+           "Varinha deve comparar pixels ao seed e respeitar conectividade")
+    local alpha = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 64))
+    assert(alpha.count == 5 and
+           Selection.contains(alpha, 5, 3),
+           "Diferença no canal alfa não obedeceu à tolerância")
+    local all = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 255))
+    assert(all.count == 144 and Selection.contains(all, 8, 8) and
+           Selection.contains(all, 0, 0),
+           "Tolerância máxima deve aceitar todo canvas conectado")
+    local invalid_inputs = {-1, 256, .5, math.huge, -math.huge}
+    for _, value in ipairs(invalid_inputs) do
+        local invalid, reason =
+            Selection.magic_wand(layer, 12, 12, 2, 3, value)
+        assert(not invalid and reason,
+               "Varinha aceitou tolerância RGBA inválida")
+    end
+    local nan = 0 / 0
+    assert(not Selection.magic_wand(layer, 12, 12, 2, 3, nan))
+    local edge = Selection.magic_wand(layer, 12, 12, -1, 0, 16)
+    assert(not edge, "Varinha aceitou ponto fora do documento")
+    assert(exact.count == 1 and step.count == 3 and
+           #project.undo == 0 and #project.redo == 0 and
+           not project.dirty and
+           close(select(1, layer.pixels:getPixel(2, 3)), .4, .005),
+           "Ajuste de tolerância modificou raster ou máscaras antigas")
+end
+
+-- Ponte: atalhos, isolamento por obra e metadados legados.
+local function test_magic_wand_tolerance_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Wand range"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Wand tolerance")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, color)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+                                   view, prefs, color or {100, 50, 75},
+                                   1, 100, nil))
+        Bridge.mousereleased()
+    end
+    press(3, 3, {100, 50, 75})
+    press(4, 3, {112, 50, 75})
+    press(5, 3, {139, 50, 75})
+    press(10, 10, {100, 50, 75})
+    local paint_history_untouched = false
+    local notices = {}
+    local function notify(message) notices[#notices + 1] = message end
+    local function shortcut(key)
+        local original = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" or k == "lalt" then return true end
+            end
+            return false
+        end
+        local handled = Bridge.keypressed(key, model, notify)
+        love.keyboard.isDown = original
+        return handled
+    end
+    local function wand(x, y)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1, 100,
+                                   nil))
+        return assert(Bridge.selection_snapshot())
+    end
+    assert(Bridge.wand_tolerance(model) == 0,
+           "Nova obra deve iniciar varinha com tolerância zero")
+    model.active_tool = "magic_wand"
+    assert(wand(3, 3).count == 1,
+           "Varinha exata inicial selecionou outras cores")
+    local mask_undo = Bridge.selection_history_snapshot().undo
+    assert(shortcut("right") and Bridge.wand_tolerance(model) == 16)
+    assert(#notices == 1 and notices[1]:find("16/255", 1, true) and
+           Bridge.selection_history_snapshot().undo == mask_undo,
+           "Atalho alterou histórico de seleção ou não exibiu tolerância")
+    assert(wand(3, 3).count == 2 and
+           not Selection.contains(Bridge.selection_snapshot(), 5, 3),
+           "Ctrl+Alt+Right não alterou tolerância aplicada ao clique")
+    assert(shortcut("right") and shortcut("right") and
+           Bridge.wand_tolerance(model) == 48)
+    local wide = wand(3, 3)
+    assert(wide.count == 3 and Selection.contains(wide, 5, 3) and
+           not Selection.contains(wide, 10, 10),
+           "Tolerância maior ignorou conectividade ou faixa RGB")
+    assert(shortcut("left") and Bridge.wand_tolerance(model) == 32)
+    assert(wand(3, 3).count == 2,
+           "Ctrl+Alt+Left não reduziu corretamente a tolerância")
+    assert(shortcut("0") and Bridge.wand_tolerance(model) == 0)
+    assert(wand(3, 3).count == 1, "Ctrl+Alt+0 não restaurou seleção exata")
+    assert(Bridge.adjust_wand_tolerance(model, -400) and
+           Bridge.wand_tolerance(model) == 0 and
+           Bridge.adjust_wand_tolerance(model, 999) and
+           Bridge.wand_tolerance(model) == 255,
+           "Tolerância não respeitou limites 0..255")
+    assert(wand(3, 3).count == 256,
+           "Tolerância 255 deveria selecionar o documento inteiro")
+    assert(not Bridge.adjust_wand_tolerance(model, 1.5) and
+           not Bridge.adjust_wand_tolerance({screen="gallery"}, 16),
+           "Atalhos aceitaram incremento inválido ou tela errada")
+    assert(Bridge.adjust_wand_tolerance(model, -207) and
+           Bridge.wand_tolerance(model) == 48)
+    assert(Bridge.selection_history_snapshot().undo > mask_undo)
+    assert(Bridge.save(), "Falha ao salvar tolerância da varinha")
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Wand tolerance", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Não encontrou diretório da varinha")
+    local path = "lua-artworks/" .. key
+    local meta = assert(love.filesystem.read(path .. "/document.tsv"))
+    assert(meta:match("\t48$"), "document.tsv não persistiu tolerância")
+    -- Abrir outra obra não pode herdar a tolerância desta.
+    local id2 = gallery:add_artwork(16, 16, "Temporary wand")
+    Bridge.create(model, id2, gallery)
+    assert(Bridge.wand_tolerance(model) == 0,
+           "Tolerância vazou entre obras diferentes")
+    Bridge.open(model, id)
+    assert(Bridge.wand_tolerance(model) == 48 and
+           Bridge.selection_snapshot() and
+           Bridge.selection_snapshot().count == 256,
+           "Reabertura não recuperou preferência e máscara")
+    model.active_tool = "magic_wand"
+    assert(wand(3, 3).count == 3,
+           "Varinha ignorou tolerância restaurada da obra")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t999"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_tolerance(model) == 0 and
+           model.active_layer_id == 1,
+           "Tolerância inválida não retornou ao zero")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_tolerance(model) == 0,
+           "document.tsv legado de duas colunas deixou de funcionar")
+    -- Undo raster ainda desfaz traços após os ajustes de preferência.
+    assert(Bridge.undo() and Bridge.redo(),
+           "Ajustes de tolerância corromperam histórico raster")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Combinação booleana pura de máscaras arbitrárias.
 local function test_selection_boolean(E)
     local Selection = require("lua_selection")
@@ -2520,6 +2718,8 @@ function love.load()
     test_feather_transform(E)
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
+    checkpoint("magic wand RGBA tolerance and connectivity")
+    test_magic_wand_tolerance(E)
     checkpoint("selection boolean algebra and PNG")
     test_selection_boolean(E)
     checkpoint("selection full canvas and inverse")
@@ -2683,6 +2883,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("bridge magic wand tolerance shortcuts and persistence")
+    test_magic_wand_tolerance_bridge(Bridge, gallery)
     checkpoint("bridge boolean gestures rectangle lasso wand")
     test_selection_boolean_bridge(Bridge, gallery)
     checkpoint("bridge select all and invert shortcuts")
@@ -2704,6 +2906,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: persistent selection-only history + raster + feather + GPU")
+    print("PASS: wand RGBA tolerance + selection history + feather + GPU")
     love.event.quit(0)
 end

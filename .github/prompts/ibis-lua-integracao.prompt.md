@@ -29,6 +29,20 @@ bloqueadas/Alpha Lock. Resultado vazio significa desmarcar, sem erro.
 No primeiro gesto, somar equivale a selecionar; subtrair e intersectar
 sem seleção resultam em máscara vazia. A seleção combinada segue
 sendo salva em `selection.png`, sem criar novo formato.
+A Varinha Mágica tem **tolerância RGBA por obra** de 0 a 255, em
+unidades de canal 8-bit: `Selection.magic_wand(layer,w,h,x,y,tolerance)`.
+A comparação é por distância absoluta INDEPENDENTE em R/G/B/A à
+cor do seed, com margem 1/510 para quantização. Somente conexões
+ortogonais de quatro vizinhos; nunca espalhar por ilhas desconectadas.
+Sem argumento, tolerância 0 reproduz seleções antigas. **Ctrl+Alt+Right**
+aumenta em 16; **Ctrl+Alt+Left** reduz em 16; **Ctrl+Alt+0** zera.
+Faixa sempre 0..255 e mostrar `notice` existente. Preferência não cria
+undo/redo nem dirty raster, mas é persistida por obra na terceira
+coluna de `document.tsv`; arquivos legados de 2 colunas ou valor
+inválido restauram zero. Preservar combinação Ctrl+Shift/Alt no
+clique, seleção PNG e histórico independente. Não criar slider na UI.
+Testar 0, 16, 48, 64 e 255, alfa, conectividade, atalhos, reabertura
+e rejeição de parâmetros inválidos.
 Expansão/contração de máscara binária: `Selection.morph(s,"expand")`
 e `Selection.morph(s,"contract")` usam vizinhança 8-conexa quadrada
 de 3×3, sem alterar a máscara original. **Ctrl+Alt+Up** expande

@@ -136,6 +136,7 @@ function Bridge.create(model, id, gallery)
     gallery_ref = gallery
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
+    project.wand_tolerance = 0
     Engine.sync(project, model)
     counter = counter + 1
     local key = string.format("art_%d_%d", os.time(), counter)
@@ -188,6 +189,15 @@ local function saved_layers(model, path, p)
     if metadata then
         local active_id, background =
             metadata:match("^(%d+)\t([%a_]+)")
+        local stored_tolerance = metadata:match(
+            "^%d+\t[%a_]+\t(%d+)%s*$")
+        local numeric_tolerance = tonumber(stored_tolerance)
+        -- Arquivos legados com duas colunas continuam válidos.
+        -- Terceira coluna inválida volta a zero sem afetar a obra.
+        p.wand_tolerance = numeric_tolerance and
+            numeric_tolerance >= 0 and numeric_tolerance <= 255 and
+            numeric_tolerance == math.floor(numeric_tolerance)
+            and numeric_tolerance or 0
         active_id = tonumber(active_id)
         if active_id then
             for _, info in ipairs(layers) do
@@ -208,6 +218,7 @@ function Bridge.open(model, id)
     local record = records[id]
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
+    project.wand_tolerance = 0
     if record then saved_layers(model, project_path(record.key), project) end
     Engine.sync(project, model)
     if record then
@@ -269,7 +280,8 @@ function Bridge.save()
     assert(love.filesystem.write(path .. "/layers.tsv", table.concat(lines, "\n")))
     assert(love.filesystem.write(path .. "/document.tsv",
         table.concat({tostring(project.model.active_layer_id or 0),
-            safe(project.model.background_mode or "white")}, "\t")))
+            safe(project.model.background_mode or "white"),
+            tostring(project.wand_tolerance or 0)}, "\t")))
     -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
     -- retrocompatível e evita que a seleção contamine qualquer camada.
     local mask_path = path .. "/selection.png"
@@ -428,7 +440,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         local info = model:active_layer()
         local layer = info and p.layers[info.id]
         if not layer then return true end
-        local mask, reason = Selection.magic_wand(layer, p.w, p.h, px, py)
+        local mask, reason = Selection.magic_wand(
+            layer, p.w, p.h, px, py, p.wand_tolerance or 0)
         if mask then
             local combined, err = Selection.combine(selection, mask,
                                           selection_merge_mode(), p.w, p.h)
@@ -794,6 +807,26 @@ function Bridge.selection_command(model, command, notice)
     return false
 end
 
+-- Tolerância de varinha, por obra, em unidades de cor RGBA 8 bits.
+-- Preferência de ferramenta: não marca pixels dirty nem cria histórico
+-- de máscara/raster, e é persistida na terceira coluna de document.tsv.
+function Bridge.wand_tolerance(model)
+    local p = ensure(model)
+    return p and (p.wand_tolerance or 0) or nil
+end
+
+function Bridge.adjust_wand_tolerance(model, delta, notice)
+    local p = ensure(model)
+    if not p or type(delta) ~= "number" or
+       delta ~= math.floor(delta) then return false end
+    local value = math.max(0, math.min(255, (p.wand_tolerance or 0) + delta))
+    p.wand_tolerance = value
+    if notice then
+        notice(string.format("Varinha Mágica: tolerância %d/255", value))
+    end
+    return true
+end
+
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" and selection then
@@ -812,7 +845,15 @@ function Bridge.keypressed(key, model, notice)
         return true
     end
     if alt and not shift then
-        if key == "f" then
+        if key == "right" then
+            return Bridge.adjust_wand_tolerance(model, 16, notice)
+        elseif key == "left" then
+            return Bridge.adjust_wand_tolerance(model, -16, notice)
+        elseif key == "0" then
+            local current = Bridge.wand_tolerance(model)
+            return current ~= nil and
+                Bridge.adjust_wand_tolerance(model, -current, notice)
+        elseif key == "f" then
             Bridge.selection_command(model, "feather_selection", notice)
             return true
         elseif key == "up" then
