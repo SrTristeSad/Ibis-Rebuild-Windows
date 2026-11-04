@@ -104,9 +104,10 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser, alpha_lock, se
     for py = ymin, ymax do
         for px = xmin, xmax do
             local dx, dy = px + 0.5 - x, py + 0.5 - y
-            if dx * dx + dy * dy <= rr and
-                (not selection or Selection.contains(selection, px, py)) then
+            local effective_alpha = alpha * Selection.coverage(selection, px, py)
+            if dx * dx + dy * dy <= rr and effective_alpha > 0 then
                 local dr, dg, db, da = data:getPixel(px, py)
+                local alpha = effective_alpha
                 if alpha_lock then
                     -- Alpha Lock changes RGB only where alpha already exists.
                     -- The alpha channel is preserved exactly; erasing is a no-op.
@@ -414,21 +415,22 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection)
         return false
     end
     alpha = math.max(0, math.min(1, alpha))
-    if alpha <= 0 then return false end
+    local seed_alpha = alpha * Selection.coverage(selection, x, y)
+    if seed_alpha <= 0 then return false end
     local layer = assert(project.layers[id], "Camada inexistente")
     local data = layer.pixels
     local tr, tg, tb, ta = data:getPixel(x, y)
     if alpha_lock and ta <= 0 then return false end
-    local na = alpha_lock and ta or alpha + ta * (1 - alpha)
+    local na = alpha_lock and ta or seed_alpha + ta * (1 - seed_alpha)
     local nr, ng, nb
     if alpha_lock then
-        nr, ng, nb = tr * (1 - alpha) + rgb[1] * alpha,
-            tg * (1 - alpha) + rgb[2] * alpha,
-            tb * (1 - alpha) + rgb[3] * alpha
+        nr, ng, nb = tr * (1 - seed_alpha) + rgb[1] * seed_alpha,
+            tg * (1 - seed_alpha) + rgb[2] * seed_alpha,
+            tb * (1 - seed_alpha) + rgb[3] * seed_alpha
     else
-        nr = (rgb[1] * alpha + tr * ta * (1 - alpha)) / na
-        ng = (rgb[2] * alpha + tg * ta * (1 - alpha)) / na
-        nb = (rgb[3] * alpha + tb * ta * (1 - alpha)) / na
+        nr = (rgb[1] * seed_alpha + tr * ta * (1 - seed_alpha)) / na
+        ng = (rgb[2] * seed_alpha + tg * ta * (1 - seed_alpha)) / na
+        nb = (rgb[3] * seed_alpha + tb * ta * (1 - seed_alpha)) / na
     end
     local epsilon = 0.5 / 255
     if math.abs(nr - tr) < epsilon and math.abs(ng - tg) < epsilon
@@ -449,6 +451,8 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection)
            and math.abs(b - tb) <= tolerance and math.abs(a - ta) <= tolerance
     end
     local function paint(px, py)
+        local alpha = alpha * Selection.coverage(selection, px, py)
+        if alpha <= 0 then return end
         local dr, dg, db, da = data:getPixel(px, py)
         if alpha_lock then
             data:setPixel(px, py,
@@ -553,7 +557,10 @@ function Engine.move_selection(project, id, selected, dx, dy)
     for y = selected.min_y, selected.max_y do
         for x = selected.min_x, selected.max_x do
             if Selection.contains(selected, x, y) then
-                data:setPixel(x, y, 0, 0, 0, 0)
+                local r, g, b, a = snapshot:getPixel(x, y)
+                local remaining = a * (1 - Selection.coverage(selected, x, y))
+                if remaining <= 0 then data:setPixel(x, y, 0, 0, 0, 0)
+                else data:setPixel(x, y, r, g, b, remaining) end
             end
         end
     end
@@ -561,6 +568,7 @@ function Engine.move_selection(project, id, selected, dx, dy)
         for x = selected.min_x, selected.max_x do
             if Selection.contains(selected, x, y) then
                 local sr, sg, sb, sa = snapshot:getPixel(x, y)
+                sa = sa * Selection.coverage(selected, x, y)
                 if sa > 0 then
                     local tx, ty = x + dx, y + dy
                     local dr, dg, db, da = data:getPixel(tx, ty)
@@ -601,8 +609,9 @@ function Engine.copy_selection(project, id, selected)
             if Selection.contains(selected, x, y) then
                 local u, v = x - x0, y - y0
                 local r, g, b, a = layer.pixels:getPixel(x, y)
-                pixels:setPixel(u, v, r, g, b, a)
-                mask[v * width + u] = true
+                local coverage = Selection.coverage(selected, x, y)
+                pixels:setPixel(u, v, r, g, b, a * coverage)
+                mask[v * width + u] = coverage
             end
         end
     end
@@ -635,7 +644,7 @@ function Engine.paste_selection(project, id, clip, x, y, selected)
     local newmask = {}
     for key in pairs(clip.mask) do
         local u, v = key % clip.w, math.floor(key / clip.w)
-        newmask[(y + v) * project.w + x + u] = true
+        newmask[(y + v) * project.w + x + u] = clip.mask[key]
     end
     local next_selection = assert(Selection.from_mask(project.w, project.h,
         newmask, "paste"))
@@ -668,7 +677,13 @@ function Engine.cut_selection(project, id, selected)
     for y = selected.min_y, selected.max_y do
         for x = selected.min_x, selected.max_x do
             if Selection.contains(selected, x, y) then
-                layer.pixels:setPixel(x, y, 0, 0, 0, 0)
+                local r, g, b, a = layer.pixels:getPixel(x, y)
+                local remaining = a * (1 - Selection.coverage(selected, x, y))
+                if remaining <= 0 then
+                    layer.pixels:setPixel(x, y, 0, 0, 0, 0)
+                else
+                    layer.pixels:setPixel(x, y, r, g, b, remaining)
+                end
             end
         end
     end
@@ -732,9 +747,10 @@ function Engine.reshape_selection(project, id, selected, operation)
             end
             if Selection.contains(selected, x0 + su, y0 + sv) then
                 local tx, ty = x0 + u, y0 + v
-                newmask[ty * project.w + tx] = true
+                local coverage = Selection.coverage(selected, x0 + su, y0 + sv)
+                newmask[ty * project.w + tx] = coverage
                 local sr, sg, sb, sa = snapshot:getPixel(x0 + su, y0 + sv)
-                output[#output + 1] = {tx, ty, sr, sg, sb, sa}
+                output[#output + 1] = {tx, ty, sr, sg, sb, sa * coverage}
             end
         end
     end
@@ -753,7 +769,13 @@ function Engine.reshape_selection(project, id, selected, operation)
     for y = selected.min_y, selected.max_y do
         for x = selected.min_x, selected.max_x do
             if Selection.contains(selected, x, y) then
-                layer.pixels:setPixel(x, y, 0, 0, 0, 0)
+                local r, g, b, a = snapshot:getPixel(x, y)
+                local remaining = a * (1 - Selection.coverage(selected, x, y))
+                if remaining <= 0 then
+                    layer.pixels:setPixel(x, y, 0, 0, 0, 0)
+                else
+                    layer.pixels:setPixel(x, y, r, g, b, remaining)
+                end
             end
         end
     end
@@ -841,7 +863,8 @@ local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
             local src_x, src_y = source_at(x, y)
             if Selection.contains(selected, math.floor(src_x),
                                   math.floor(src_y)) then
-                next_mask[y * project.w + x] = true
+                next_mask[y * project.w + x] = Selection.coverage(selected,
+                        math.floor(src_x), math.floor(src_y))
             end
         end
     end
@@ -855,13 +878,18 @@ local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
     for y = selected.min_y, selected.max_y do
         for x = selected.min_x, selected.max_x do
             if Selection.contains(selected, x, y) then
-                output:setPixel(x, y, 0, 0, 0, 0)
+                local r, g, b, a = output:getPixel(x, y)
+                local remaining = a * (1 - Selection.coverage(selected, x, y))
+                if remaining <= 0 then output:setPixel(x, y, 0, 0, 0, 0)
+                else output:setPixel(x, y, r, g, b, remaining) end
             end
         end
     end
     local function filtered_pixel(src_x, src_y)
         if filter ~= "bilinear" then
-            return layer.pixels:getPixel(math.floor(src_x), math.floor(src_y))
+            local ix, iy = math.floor(src_x), math.floor(src_y)
+            local r, g, b, a = layer.pixels:getPixel(ix, iy)
+            return r, g, b, a * Selection.coverage(selected, ix, iy)
         end
         -- Interpolação em RGB pré-multiplicado: evita halos RGB nas bordas.
         -- Vizinhos não selecionados contribuem como transparentes.
@@ -875,7 +903,8 @@ local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
                 if Selection.contains(selected, px, py) then
                     local r, g, b, a = layer.pixels:getPixel(px, py)
                     local weight = (i == 0 and 1 - dx or dx) *
-                                   (j == 0 and 1 - dy or dy) * a
+                                   (j == 0 and 1 - dy or dy) * a *
+                                   Selection.coverage(selected, px, py)
                     rp, gp, bp = rp + r * weight, gp + g * weight,
                                  bp + b * weight
                     alpha = alpha + weight
@@ -941,14 +970,15 @@ local function moving_shader()
                         vec2 textureCoords, vec2 screenCoords) {
                 vec4 original = Texel(texture, textureCoords);
                 float erased = Texel(selectionMask, textureCoords).a;
-                vec4 destination = erased > 0.5
-                    ? vec4(0.0) : original;
+                vec4 destination = vec4(original.rgb,
+                                         original.a * (1.0 - erased));
                 vec2 sourceCoords = textureCoords - displacement;
                 vec4 source = vec4(0.0);
                 if (sourceCoords.x >= 0.0 && sourceCoords.x < 1.0 &&
                     sourceCoords.y >= 0.0 && sourceCoords.y < 1.0 &&
-                    Texel(selectionMask, sourceCoords).a > 0.5) {
+                    Texel(selectionMask, sourceCoords).a > 0.0) {
                     source = Texel(texture, sourceCoords);
+                    source.a *= Texel(selectionMask, sourceCoords).a;
                 }
                 float a = source.a + destination.a * (1.0 - source.a);
                 vec3 rgb = vec3(0.0);
@@ -972,7 +1002,7 @@ function Engine.begin_move_preview(project, id, selected)
     local mask_data = love.image.newImageData(project.w, project.h)
     for key in pairs(selected.mask) do
         mask_data:setPixel(key % project.w, math.floor(key / project.w),
-                           1, 1, 1, 1)
+                           1, 1, 1, selected.weights and selected.weights[key] or 1)
     end
     local mask_image = love.graphics.newImage(mask_data)
     mask_image:setFilter("nearest", "nearest")
@@ -1036,8 +1066,8 @@ local function affine_shader()
                         vec2 textureCoords, vec2 screenCoords) {
                 vec2 destination = textureCoords * dimensions;
                 vec4 original = Texel(texture, textureCoords);
-                vec4 base = membership(destination) > 0.5
-                    ? vec4(0.0) : original;
+                vec4 base = vec4(original.rgb,
+                                 original.a * (1.0 - membership(destination)));
 
                 vec2 delta = destination - pivot;
                 float c = rotationTrig.x;
@@ -1046,7 +1076,7 @@ local function affine_shader()
                                 -s * delta.x + c * delta.y);
                 src = src * inverseScale + pivot;
                 // Máscara transformada usa nearest, igual ao CPU.
-                if (membership(src) <= 0.5) return base;
+                if (membership(src) <= 0.0) return base;
 
                 // Bilinear com RGBA premultiplicado, sem vazamento
                 // de pixels vizinhos fora da seleção.
@@ -1058,14 +1088,15 @@ local function affine_shader()
                 for (int j = 0; j < 2; ++j) {
                     for (int i = 0; i < 2; ++i) {
                         vec2 samplePixel = p0 + vec2(float(i), float(j));
-                        if (membership(samplePixel) > 0.5) {
+                        if (membership(samplePixel) > 0.0) {
                             float weight = (i == 0 ? 1.0 - fraction.x :
                                                        fraction.x) *
                                            (j == 0 ? 1.0 - fraction.y :
                                                        fraction.y);
                             vec4 sampleColor = Texel(texture,
                                  (samplePixel + vec2(0.5)) / dimensions);
-                            float contribution = weight * sampleColor.a;
+                            float contribution = weight * sampleColor.a *
+                                                 membership(samplePixel);
                             premul += sampleColor.rgb * contribution;
                             accumulatedAlpha += contribution;
                         }
@@ -1097,7 +1128,7 @@ function Engine.begin_affine_gpu_preview(project, id, selected)
     local mask_data = love.image.newImageData(project.w, project.h)
     for key in pairs(selected.mask) do
         mask_data:setPixel(key % project.w, math.floor(key / project.w),
-                           1, 1, 1, 1)
+                           1, 1, 1, selected.weights and selected.weights[key] or 1)
     end
     local mask_image = love.graphics.newImage(mask_data)
     mask_image:setFilter("nearest", "nearest")

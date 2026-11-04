@@ -66,7 +66,23 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   São modificações apenas da máscara, sem pintar, criar undo raster ou
   exigir desbloqueio da camada. Pressionar repetidamente aumenta
   ou diminui a seleção em passos de 1 pixel. O resultado é salvo em
-  `selection.png`; não há feather nem alfa fracionário nesta etapa.
+  `selection.png`. A máscara agora também pode ser suavizada com feather
+  sem remover as operações morfológicas binárias anteriores.
+- **Ctrl+Alt+F: feather da seleção com raio 2 px** (sem novos controles).
+  `Selection.feather(selection, radius)` aceita raio inteiro de 1 a 8.
+  Usa filtro box blur separável, exterior do canvas transparente e alfa
+  de cobertura quantizado em 8 bits, compatível com `selection.png`.
+  As máscaras antigas continuam binárias e são carregadas sem alteração.
+  O feather altera só a seleção, não o documento nem o histórico raster.
+  Pincel, borracha e balde multiplicam a intensidade por essa cobertura;
+  Alpha Lock preserva o alfa original. Move/cut/copy/paste, espelhamento
+  e transformações preservam o peso e dividem alfa entre origem e destino
+  sem apagar totalmente a borda. As prévias GPU de movimento/giro/escala
+  também usam o canal alfa real da máscara, não um teste binário.
+  Undo/redo dos passos de edição mantém a geometria e os pesos associados.
+  Selecionar tudo novamente restaura máscara opaca, mesmo após feather.
+  As operações combinadas e morfológicas preservam coberturas parciais.
+  **Feather aqui não é blur gaussiano nem antialiasing nativo do ibisPaint**.
 - Seleções limitam a pintura e o balde à máscara ativa. O contorno da
   seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
   **Ctrl+A seleciona todo o canvas**; **Ctrl+Shift+I inverte a máscara**
@@ -135,6 +151,7 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Os arquivos ficam na pasta de dados do LÖVE, em lua-artworks/, como PNG por camada,
   index.tsv, layers.tsv e document.tsv. As obras salvas são listadas ao reiniciar.
   Uma seleção ativa também é salva em `selection.png` como máscara binária
+  ou de cobertura alfa fracionária
   separada dos pixels da pintura; é restaurada automaticamente ao reabrir a
   obra e removida do disco no próximo salvamento após Ctrl+D ou Esc.
   Projetos antigos sem `selection.png` continuam abrindo normalmente.
@@ -146,7 +163,7 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - **Não** há paridade com os algoritmos do ibisPaint oficial.
 - Pincel circular, borracha, balde, conta-gotas, Alpha Lock, recorte básico por
   Clipping e os nove modos de mesclagem visíveis têm implementação independente.
-  Filtros, feather (seleção suave com alfa parcial),
+  Filtros, feather gaussiano ou parametrizável na interface original,
   seleção por tolerância ajustável, interpolação bicúbica,
   prévia bilinear do movimento de pixels (o movimento raster inteiro usa
   shader nearest), formas, estabilização, pressão, máscaras adicionais,
@@ -228,7 +245,11 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O CI também cobre flips H/V de máscaras irregulares, sobreposição
   semitransparente, proteção de pixels externos, histórico gravado/reaberto,
   atalhos Ctrl+Shift+H/V e bloqueio por Layer Lock/Alpha Lock.
-  A suíte cobre expansão/contração 8-conexa, cantos e bordas do canvas,
+  A suíte agora cobre feather de raio 1/2, pesos de alfa por pixel,
+  compatibilidade PNG, pincel/balde/borracha/Alpha Lock, recorte e colagem,
+  movimento, espelhamento, transformação livre e prévia GPU/CPU com
+  transparência parcial, inclusive atalhos Ctrl+Alt+F e reabertura.
+  Também cobre expansão/contração 8-conexa, cantos e bordas do canvas,
   ilhas desconectadas, buracos internos, contração até vazio e máscaras
   persistidas, além de atalhos Ctrl+Alt+↑/↓ com camada bloqueada.
   Também cobre união, diferença e interseção de máscaras

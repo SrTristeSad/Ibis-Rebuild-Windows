@@ -46,14 +46,26 @@
   Sem pintar, dirty ou histórico raster, inclusive Layer Lock/Alpha Lock;
   persistência continua em selection.png. Testar cantos, buracos,
   ilhas, atalhos, reabertura e rejeição sem seleção.
-  Não declarar feather/suavização alfa como implementados.
+  Feather está implementado (box blur separável com raio 1..8),
+  Ctrl+Alt+F aplica raio 2 px sem alterar a UI. Não declarar feather
+  gaussiano nem slider como implementados. A seleção tem `s.weights`
+  opcional com cobertura 0..1, acesso por `Selection.coverage` e
+  `Selection.is_soft`. Máscaras binárias legadas seguem equivalentes a
+  cobertura 1. Pincel, balde, borracha, Alpha Lock, move, clipboard,
+  reshape e affine usam a cobertura parcial em RGBA. GPU de prévia deve
+  corresponder à CPU também com máscara semitransparente, source-over
+  e origem residual preservada. Salvar/reabrir pesos no canal alfa do
+  `selection.png` e PNG de histórico, sem modificar TSV ou submódulo UI.
+  Clones independentes de `weights`; testar feather, undo/redo e
+  compatibilidade com seleções e projetos legados.
 - Histórico raster persiste em `history.tsv` e PNGs versionados por geração
   para documentos de até 1.048.576 pixels, com até 8 snapshots em cada
   pilha (undo e redo). Os arquivos de snapshot devem ser validados em
   conjunto: um item corrompido invalida todo o histórico, mas nunca
   impede reabrir os PNGs da obra. Descarte históricos de camadas removidas
   sem bloquear o salvamento. Teste reabertura com duas camadas e seleção.
-- Seleção ativa persiste em `selection.png` por obra (máscara binária),
+- Seleção ativa persiste em `selection.png` por obra (máscara binária
+  ou com alfa fracionário),
   sem mudar os PNGs das camadas; arquivo ausente, corrompido ou com dimensões
   incorretas não pode impedir a abertura do projeto. Desmarcar e salvar remove
   o arquivo anterior. Operações isoladas de seleção não criam histórico raster;

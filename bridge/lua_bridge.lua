@@ -610,21 +610,27 @@ function Bridge.selection_command(model, command, notice)
     -- São mudanças de máscara, NÃO operações raster: permitidas inclusive
     -- em camadas bloqueadas / Alpha Lock e sem adicionar passos ao histórico.
     if command == "select_all" or command == "invert_selection" or
-       command == "expand_selection" or command == "contract_selection" then
-        if (command == "expand_selection" or command == "contract_selection")
-           and not selection then
-            if notice then notice("Selecione uma área antes de expandir ou contrair.") end
+       command == "expand_selection" or command == "contract_selection" or
+       command == "feather_selection" then
+        if (command == "expand_selection" or command == "contract_selection" or
+            command == "feather_selection") and not selection then
+            if notice then notice("Selecione uma área antes de expandir, contrair ou suavizar.") end
             return false
         end
         discard_preview(gesture)
         gesture = nil
         if command == "select_all" and selection and
-           selection.count == p.w * p.h then return true end
+           selection.count == p.w * p.h and
+           not Selection.is_soft(selection) then return true end
         local next_mask, reason
         if command == "select_all" then
             next_mask, reason = Selection.all(p.w, p.h)
         elseif command == "invert_selection" then
             next_mask, reason = Selection.invert(selection, p.w, p.h)
+        elseif command == "feather_selection" then
+            -- Raio fixo conservador: o painel original não tem slider
+            -- de feather. A API Selection.feather aceita 1..8.
+            next_mask, reason = Selection.feather(selection, 2)
         else
             next_mask, reason = Selection.morph(selection,
                    command == "expand_selection" and "expand" or "contract")
@@ -690,7 +696,10 @@ function Bridge.keypressed(key, model, notice)
     local shift = love.keyboard.isDown("lshift", "rshift")
     local alt = love.keyboard.isDown("lalt", "ralt")
     if alt and not shift then
-        if key == "up" then
+        if key == "f" then
+            Bridge.selection_command(model, "feather_selection", notice)
+            return true
+        elseif key == "up" then
             Bridge.selection_command(model, "expand_selection", notice)
             return true
         elseif key == "down" then

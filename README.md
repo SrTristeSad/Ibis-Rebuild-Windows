@@ -44,7 +44,12 @@ pintura e persistem no `selection.png`.
 **Ctrl+Alt+↑** expande a seleção em 1 pixel e **Ctrl+Alt+↓**
 contrai em 1 pixel (máscara binária, vizinhança de 8 pixels).
 Essas operações preservam a pintura e são salvas como seleção PNG;
-não implementam feather/suavização de alfa.
+o feather opcional mantém os pesos destas operações.
+**Ctrl+Alt+F** aplica feather de 2 px na máscara, com bordas de
+alfa fracionário em pincel, borracha, balde e transformações;
+a seleção suavizada é persistida no canal alfa de `selection.png`.
+A API Lua também aceita raios de 1 a 8 px; não há slider de feather
+nem implementação de blur gaussiano.
 O arraste normal do Transformar também exibe uma prévia GPU do deslocamento inteiro,
 com máscara/cache reutilizados sem recalcular todos os pixels em Lua
 a cada movimento subpixel. O visual e os
