@@ -53,6 +53,15 @@ Arquivos anteriores continuam no modo contíguo por padrão.
 Essa preferência é independente da seleção global, da tolerância e da
 fonte de amostragem. É salva na sexta coluna opcional de `document.tsv`;
 arquivos anteriores preservam a conectividade de quatro vizinhos.
+**Ctrl+Alt+R** alterna a comparação entre **RGBA** (padrão, incluindo
+a transparência) e **somente RGB** (desconsidera diferenças de alfa).
+Funciona com seleção contígua/global, conectividade 4/8 e a fonte de cor
+da camada ativa ou da composição. A transparência dos pixels **não é
+modificada** por essa opção: apenas a máscara selecionada muda.
+O sinalizador é salvo na sétima coluna opcional de `document.tsv`,
+e obras antigas começam usando RGBA como antes. Em pixels completamente
+transparentes, os canais RGB armazenados também podem ser comparados,
+mesmo que não estejam visíveis no canvas.
 **Ctrl+Alt+T** alterna independentemente a fonte de cor: **camada ativa**
 (padrão) ou **composição visível de todas as camadas**. A amostra composta
 respeita visibilidade, opacidade, modos de mesclagem, clipping e o fundo

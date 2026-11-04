@@ -87,6 +87,22 @@ colunas ou valor inválido usam 4-vizinhos sem alterar as preferências
 já gravadas. Não modificar o Ibis-Lua original nem criar UI extra.
 Testar pontes em diagonal, bordas, tolerância/alfa, ilhas, modos
 global/contíguo, shortcut Ctrl+Alt+8, reabertura e undo.
+**Comparação RGB-only opcional da Varinha**: Ctrl+Alt+R alterna
+`project.wand_rgb_only`. Com false/nil (padrão) a comparação considera
+R/G/B/A com tolerância independente 0..255 em cada canal. Com true,
+`Selection.magic_wand(layer,w,h,x,y,tolerance,global_mode,diagonal_mode,rgb_only)`
+considera só diferenças em R/G/B; o canal alfa não participa do teste
+de semelhança, mas NÃO é alterado no raster. RGB armazenado sob alfa zero
+também é comparado: não inventar cor de fundo quando a origem é a camada
+ativa. Fonte composta e fundo branco continuam usando sua matemática
+existente. A flag é independente de contiguidade 4/8, global, fonte,
+tolerância e combinações booleanas. Salvar 0/1 na sétima coluna opcional
+de `document.tsv`; arquivos 2–6 colunas ou flag inválida usam false
+sem perder as demais preferências. Toggle só altera preferência por
+obra, mostra notice e não toca na máscara, dirty, histórico ou pixels.
+Testar alfa zero/fracionário, tolerância, global, contiguidade,
+composição visível, reabertura, corrupção de flag, undo e RGB salvo.
+Não criar novos elementos na interface Ibis-Lua.
 Expansão/contração de máscara binária: `Selection.morph(s,"expand")`
 e `Selection.morph(s,"contract")` usam vizinhança 8-conexa quadrada
 de 3×3, sem alterar a máscara original. **Ctrl+Alt+Up** expande

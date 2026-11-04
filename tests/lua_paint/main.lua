@@ -813,6 +813,86 @@ local function test_selection_morph_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Comparação opcional RGB: transparência diferente não separa cores.
+-- Por padrão, RGBA exato continua preservado em todos os algoritmos.
+local function test_magic_wand_rgb_only(E)
+    local Selection = require("lua_selection")
+    local p = E.new(12, 12)
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    E.sync(p, model)
+    local data = p.layers[1].pixels
+    data:setPixel(2, 3, .4, .2, .3, 1)
+    data:setPixel(3, 3, .4, .2, .3, .5)
+    data:setPixel(4, 3, .4, .2, .3, 0)
+    data:setPixel(5, 3, .4 + 12 / 255, .2, .3, .7)
+    data:setPixel(6, 3, .4 + 39 / 255, .2, .3, .7)
+    data:setPixel(1, 2, .4, .2, .3, .25)
+    data:setPixel(8, 8, .4, .2, .3, .5)
+    p.layers[1].image:replacePixels(data)
+    p.dirty = false
+    local legacy = assert(Selection.magic_wand(p.layers[1], 12, 12, 2, 3))
+    local rgba = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 3, 0, false, false, false))
+    local rgb = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 3, 0, false, false, true))
+    assert(legacy.count == 1 and rgba.count == 1 and rgb.count == 3
+           and Selection.contains(rgb, 4, 3)
+           and not Selection.contains(rgba, 3, 3),
+           "RGB-only não incluiu alfa variável, inclusive zero")
+    local diagonal = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 3, 0, false, true, true))
+    assert(diagonal.count == 4 and Selection.contains(diagonal, 1, 2),
+           "RGB-only não respeitou conexidade de oito vizinhos")
+    local global = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 3, 0, true, false, true))
+    assert(global.count == 5 and Selection.contains(global, 8, 8)
+           and not Selection.contains(rgb, 8, 8),
+           "RGB-only global não incluiu ilha com alfa diferente")
+    local ranged = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 3, 16, false, false, true))
+    assert(ranged.count == 4 and Selection.contains(ranged, 5, 3)
+           and not Selection.contains(ranged, 6, 3),
+           "RGB-only não preservou tolerância por canal")
+    local wide = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 3, 48, false, false, true))
+    assert(wide.count == 5 and Selection.contains(wide, 6, 3),
+           "RGB-only com tolerância 48 perdeu vizinho")
+    local all = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 3, 255, true, true, true))
+    assert(all.count == 144,
+           "RGB-only não preservou tolerância máxima")
+    for _, value in ipairs({1, "yes", {}, 0}) do
+        local invalid, reason = Selection.magic_wand(
+            p.layers[1], 12, 12, 2, 3, 0, false, false, value)
+        assert(not invalid and reason, "RGB-only aceitou sinalizador inválido")
+    end
+    local invalid, error_message = Selection.magic_wand(
+        p.layers[1], 1025, 1025, 2, 3, 0, false, false, true)
+    assert(not invalid and error_message, "RGB-only ignorou limite de 1 Mi")
+    assert(not p.dirty and #p.undo == 0 and #p.redo == 0
+           and rgba.count == 1 and rgb.count == 3
+           and close(select(4, data:getPixel(4, 3)), 0),
+           "Comparação RGB-only alterou alfa original ou histórico")
+
+    -- A opção também funciona com a mesma composição do conta-gotas.
+    local composite_model = {background_mode = "transparent_dark", layers = {
+        {id = 1, visible = true, opacity = 100, blending = "Normal"},
+        {id = 2, visible = true, opacity = 100, blending = "Normal"}
+    }}
+    local composed = E.new(8, 8)
+    E.sync(composed, composite_model)
+    composed.layers[1].pixels:setPixel(2, 2, .4, .2, .3, 1)
+    composed.layers[2].pixels:setPixel(3, 2, .4, .2, .3, .4)
+    local source = E.composite_pixel_source(composed, composite_model, false)
+    local strict = assert(Selection.magic_wand(
+        source, 8, 8, 2, 2, 0, true, false, false))
+    local matched = assert(Selection.magic_wand(
+        source, 8, 8, 2, 2, 0, true, false, true))
+    assert(strict.count == 1 and matched.count == 2
+           and Selection.contains(matched, 3, 2),
+           "Fonte composta RGB-only não ignorou alfa das camadas")
+end
+
 -- Contiguidade opcional de oito vizinhos: diagonais não viram ilhas
 -- globais e a equivalência RGBA continua sendo por canal.
 local function test_magic_wand_diagonal(E)
@@ -880,6 +960,161 @@ local function test_magic_wand_diagonal(E)
            and Selection.contains(border_eight, 3, 2)
            and not Selection.contains(border_eight, 5, 5),
            "Oito vizinhos ultrapassaram limites ou perderam cantos")
+end
+
+-- Ponte: atalho, independência de modos, persistência e compatibilidade.
+local function test_magic_wand_rgb_only_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "RGB only", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Wand RGB only")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, color, opacity)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+                 view, prefs, color, 1, opacity or 100, nil))
+        Bridge.mousereleased()
+    end
+    press(3, 3, {100, 50, 75}, 100)
+    press(4, 3, {100, 50, 75}, 50)
+    press(5, 3, {100, 50, 75}, 25)
+    press(6, 3, {112, 50, 75}, 50)
+    press(10, 10, {100, 50, 75}, 50)
+    model.active_tool = "magic_wand"
+    local notices = {}
+    local function notify(message) notices[#notices + 1] = message end
+    local function shortcut(key, shift)
+        local original = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" or k == "lalt" then return true end
+                if shift and k == "lshift" then return true end
+            end
+            return false
+        end
+        local handled = Bridge.keypressed(key, model, notify)
+        love.keyboard.isDown = original
+        return handled
+    end
+    local function wand(x, y)
+        press(x, y, {255, 0, 0}, 100)
+        return assert(Bridge.selection_snapshot())
+    end
+    assert(Bridge.wand_rgb_only(model) == false and
+           Bridge.wand_global(model) == false and
+           Bridge.wand_tolerance(model) == 0,
+           "Nova obra não iniciou comparação RGBA")
+    assert(wand(3, 3).count == 1,
+           "Padrão RGBA selecionou alfa diferente")
+    local history_before = Bridge.selection_history_snapshot().undo
+    assert(shortcut("r") and Bridge.wand_rgb_only(model) and
+           Bridge.selection_history_snapshot().undo == history_before
+           and Bridge.selection_snapshot().count == 1
+           and notices[#notices]:find("apenas RGB", 1, true),
+           "Ctrl+Alt+R não preservou máscara ou histórico")
+    local rgb = wand(3, 3)
+    assert(rgb.count == 3 and Selection.contains(rgb, 5, 3),
+           "Varinha RGB-only não selecionou faixa com transparência diferente")
+    assert(shortcut("g") and Bridge.wand_global(model))
+    rgb = wand(3, 3)
+    assert(rgb.count == 4 and Selection.contains(rgb, 10, 10),
+           "RGB-only não funcionou no modo global")
+    assert(shortcut("right") and Bridge.wand_tolerance(model) == 16)
+    rgb = wand(3, 3)
+    assert(rgb.count == 5 and Selection.contains(rgb, 6, 3),
+           "RGB-only não respeitou ajuste de tolerância")
+    assert(shortcut("r") and not Bridge.wand_rgb_only(model))
+    local strict = wand(3, 3)
+    assert(strict.count == 1 and Selection.contains(strict, 3, 3)
+           and not Selection.contains(strict, 4, 3),
+           "Desligar RGB-only não restaurou comparação RGBA")
+    assert(shortcut("r") and Bridge.wand_rgb_only(model))
+    assert(wand(3, 3).count == 5)
+    assert(Bridge.save(), "Não foi possível salvar preferência RGB")
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Wand RGB only", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Diretório da obra RGB-only não encontrado")
+    local path = "lua-artworks/" .. key
+    local saved = assert(love.filesystem.read(path .. "/document.tsv"))
+    assert(saved:match("\t16\t1\t0\t0\t1$"),
+           "document.tsv não gravou sétima coluna RGB-only")
+    local image = love.image.newImageData(path .. "/layer_1.png")
+    local _, _, _, alpha = image:getPixel(5, 3)
+    -- Um clique de pincel sobreposto pode aplicar mais de um dab; o
+    -- importante é que a seleção não transformou alfa parcial em opaco.
+    assert(alpha > .25 and alpha < .75,
+           "RGB-only modificou transparência da pintura")
+    local other = gallery:add_artwork(16, 16, "RGB other artwork")
+    Bridge.create(model, other, gallery)
+    assert(not Bridge.wand_rgb_only(model), "RGB-only vazou para outra obra")
+    Bridge.open(model, id)
+    assert(Bridge.wand_rgb_only(model) and Bridge.wand_global(model)
+           and Bridge.wand_tolerance(model) == 16
+           and Bridge.selection_snapshot().count == 5,
+           "Reabertura não restaurou comparação RGB ou máscara")
+    assert(wand(3, 3).count == 5, "Varinha não aplicou preferência restaurada")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\ttransparent_dark\t16\t1\t0\t1"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_rgb_only(model) and
+           Bridge.wand_diagonal(model) and Bridge.wand_global(model),
+           "Arquivo legado de seis colunas perdeu conectividade")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\ttransparent_dark\t16\t1\t1"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_rgb_only(model) and
+           Bridge.wand_sample_all(model) and not Bridge.wand_diagonal(model),
+           "Arquivo legado de cinco colunas perdeu fonte")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\ttransparent_dark\t16\t1"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_rgb_only(model) and Bridge.wand_global(model),
+           "Arquivo legado de quatro colunas não abriu")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\ttransparent_dark\t16"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_rgb_only(model) and Bridge.wand_tolerance(model) == 16,
+           "Arquivo legado de três colunas não abriu")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\ttransparent_dark"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_rgb_only(model) and Bridge.wand_tolerance(model) == 0,
+           "Arquivo legado de duas colunas não abriu")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\ttransparent_dark\t16\t1\t0\t1\tmalformed"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_rgb_only(model) and Bridge.wand_diagonal(model)
+           and Bridge.wand_global(model) and not Bridge.wand_sample_all(model),
+           "Sinalizador RGB inválido corrompeu outras preferências")
+    assert(Bridge.wand_rgb_only({screen = "gallery"}) == nil
+           and not Bridge.toggle_wand_rgb_only({screen = "gallery"}),
+           "Atalho RGB-only operou fora do editor")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Alterar comparação RGB-only corrompeu histórico raster")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
 end
 
 -- Persistência independente da conectividade e atalhos na ponte real.
@@ -972,7 +1207,7 @@ local function test_magic_wand_diagonal_bridge(Bridge, gallery)
     assert(key, "Pasta do teste diagonal ausente")
     local path = "lua-artworks/" .. key
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t16\t0\t0\t1$"),
+    assert(saved:match("\t16\t0\t0\t1\t0$"),
            "Documento não salvou sexta coluna de conectividade")
     local other = gallery:add_artwork(16, 16, "Wand another diagonal")
     Bridge.create(model, other, gallery)
@@ -1263,7 +1498,7 @@ local function test_magic_wand_sample_all_bridge(Bridge, gallery)
     assert(key, "Não encontrou pasta da amostragem composta")
     local path = "lua-artworks/" .. key
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t1\t1\t0$"),
+    assert(metadata:match("\t0\t1\t1\t0\t0$"),
            "Preferência global e amostragem composta não persistiram")
     local layer1 = love.image.newImageData(path .. "/layer_1.png")
     local layer2 = love.image.newImageData(path .. "/layer_2.png")
@@ -1435,7 +1670,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
     assert(key, "Obra temporária do modo global não foi localizada")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t32\t1\t0\t0$"),
+    assert(meta:match("\t32\t1\t0\t0\t0$"),
            "document.tsv não registrou modo global e tolerância")
     local other = gallery:add_artwork(16, 16, "Wand other mode")
     Bridge.create(model, other, gallery)
@@ -1459,7 +1694,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
            not Selection.contains(Bridge.selection_snapshot(), 2, 2),
            "Modo contíguo deixou escapar pixels de regiões separadas")
     assert(Bridge.save())
-    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0$"))
+    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0\t0$"))
     assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32"))
     Bridge.open(model, id)
     assert(Bridge.wand_tolerance(model) == 32 and
@@ -1651,7 +1886,7 @@ local function test_magic_wand_tolerance_bridge(Bridge, gallery)
     assert(key, "Não encontrou diretório da varinha")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t48\t0\t0\t0$"),
+    assert(meta:match("\t48\t0\t0\t0\t0$"),
            "document.tsv não persistiu tolerância nem modo contíguo")
     -- Abrir outra obra não pode herdar a tolerância desta.
     local id2 = gallery:add_artwork(16, 16, "Temporary wand")
@@ -3394,6 +3629,7 @@ function love.load()
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
     checkpoint("magic wand global color across disconnected regions")
+    test_magic_wand_rgb_only(E)
     test_magic_wand_diagonal(E)
     test_magic_wand_composite_source(E)
     test_magic_wand_global(E)
@@ -3563,6 +3799,7 @@ function love.load()
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge magic wand global mode and persistence")
+    test_magic_wand_rgb_only_bridge(Bridge, gallery)
     test_magic_wand_diagonal_bridge(Bridge, gallery)
     test_magic_wand_sample_all_bridge(Bridge, gallery)
     test_magic_wand_global_bridge(Bridge, gallery)
