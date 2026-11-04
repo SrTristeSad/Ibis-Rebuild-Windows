@@ -7,7 +7,13 @@ function love.errorhandler(message)
 end
 
 local function close(a, b, epsilon) return math.abs(a - b) <= (epsilon or 0.02) end
+local function checkpoint(name)
+    io.stdout:write("LUA_STAGE ", name, "\n")
+    io.stdout:flush()
+end
+
 function love.load()
+    checkpoint("begin")
     local E = require("lua_engine")
     assert(E.supports(32, 32))
     assert(not E.supports(6000, 1))
@@ -280,6 +286,7 @@ function love.load()
            select(1, move.layers[1].pixels:getPixel(5, 2)) > 0.99,
            "Redo de movimento inconsistente")
 
+    checkpoint("before clipboard")
     -- Transformações ortogonais e clipboard INTERNO em Lua.
     local copy_project = E.new(16, 16)
     E.sync(copy_project, {layers = {{id = 1, visible = true, opacity = 100}}})
@@ -295,6 +302,7 @@ function love.load()
     local frozen_red, _, _, frozen_a = copied.pixels:getPixel(0, 0)
     assert(frozen_red > 0.99 and close(frozen_a, 0.5),
         "Copy não congelou os pixels da máscara")
+    checkpoint("before cut")
     local cut_ok, cut_clip = E.cut_selection(copy_project, 1, copied_mask)
     assert(cut_ok and cut_clip, "Cut da seleção não retornou clipboard")
     local _, _, _, cut_alpha = copy_layer.pixels:getPixel(3, 3)
@@ -303,6 +311,7 @@ function love.load()
     local _, restored_green = copy_layer.pixels:getPixel(3, 3)
     assert(restored_green > 0.99, "Undo do Cut não restaurou pixels")
     assert(E.redo(copy_project, copied_mask), "Cut não pôde ser refeito")
+    checkpoint("before paste")
     local paste_ok, pasted = E.paste_selection(copy_project, 1, copied, 8, 8, copied_mask)
     assert(paste_ok and pasted == copied_mask, "Paste não preservou objeto seleção")
     assert(Selection.contains(copied_mask, 8, 8) and
@@ -327,6 +336,7 @@ function love.load()
     local after_reject = select(1, copy_layer.pixels:getPixel(8, 8))
     assert(after_reject > 0.4, "Paste inválido modificou imagem")
 
+    checkpoint("before rotate")
     local rotate_project = E.new(16, 16)
     E.sync(rotate_project, {layers = {{id = 1, visible = true, opacity = 100}}})
     local rotated_layer = rotate_project.layers[1]
@@ -355,6 +365,7 @@ function love.load()
            select(1, rotated_layer.pixels:getPixel(2, 2)) > 0.99,
            "Rotação inversa não restaurou o desenho")
 
+    checkpoint("before double")
     assert(E.reshape_selection(rotate_project, 1, shape, "scale_double"),
         "Escala 200% falhou")
     assert(shape.max_x == 5 and shape.max_y == 7,
@@ -379,6 +390,7 @@ function love.load()
            shape.max_x == selection_snapshot.max_x,
            "Snapshot de seleção não restaurou posição")
 
+    checkpoint("before persistence")
     -- Prova de persistência da obra pela ponte usada pelo Ibis-Lua.
     local Bridge = require("lua_bridge")
     local model2 = {
@@ -497,6 +509,7 @@ function love.load()
         view, prefs, {0, 0, 0}, 3, 100, colors))
     assert(model4.color[1] > 240 and model4.color[2] < 10,
         "Transformar da UI não moveu pixels para nova posição")
+    checkpoint("before bridge clipboard")
     assert(Bridge.selection_command(model4, "copy"), "Ctrl+C da ponte falhou")
     assert(Bridge.selection_command(model4, "paste"), "Ctrl+V da ponte falhou")
     assert(Bridge.undo(), "Colagem pela ponte sem undo")
@@ -515,6 +528,7 @@ function love.load()
     love.filesystem.remove(path)
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
+    checkpoint("complete")
     print("PASS: Lua copy/cut/paste/rotation/scale + selection + blend/persist")
     love.event.quit(0)
 end
