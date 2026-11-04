@@ -54,12 +54,16 @@
   (composição com outras camadas preservada), sem alterar buffers reais
   ou histórico durante o arraste. Aplicar ao soltar com o mesmo filtro,
   liberar o recurso gráfico da prévia ao encerrar/cancelar.
-  O movimento sem modificadores permanece como antes.
+  O movimento normal mantém deslocamento inteiro, com prévia GPU
+  source-over que não modifica a camada original. O motor reaproveita
+  Canvas e máscara por gesto e redesenha só se o deslocamento
+  quantizado mudar; o mesmo clamp/rounding controla preview e commit.
+  No fim/cancelamento, liberar as texturas e validar com testes GPU/CPU.
   A bilinear deve interpolar RGB premultiplicado por alfa e não
   misturar pixels fora da seleção. Rejeitar parâmetros NaN/infinito,
   fator fora de 0,1..8 e retângulo fora do canvas SEM alterar pixels,
   máscara ou histórico. Preservar testes de undo/redo e RGBA.
-- Não alegue prévia do movimento simples, interpolação bicúbica,
+- Não alegue movimento bilinear, interpolação bicúbica,
   transformação vetorial ou clipboard do SO como concluídos.
 - Não alegue paridade visual ou técnica 1:1 com ibisPaint Windows 14.1.4 sem medições verificáveis.
 

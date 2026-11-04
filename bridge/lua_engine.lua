@@ -506,6 +506,19 @@ function Engine.thumbnail(project, model)
 end
 
 
+-- Usa o MESMO arredondamento/clamp no caminho CPU e na prévia GPU.
+function Engine.move_delta(project, selected, dx, dy)
+    if not selected or selected.count == 0 then return 0, 0 end
+    local function round_int(value)
+        if value >= 0 then return math.floor(value + 0.5) end
+        return math.ceil(value - 0.5)
+    end
+    dx, dy = round_int(dx), round_int(dy)
+    dx = math.max(-selected.min_x, math.min(project.w - 1 - selected.max_x, dx))
+    dy = math.max(-selected.min_y, math.min(project.h - 1 - selected.max_y, dy))
+    return dx, dy
+end
+
 -- Move apenas os pixels selecionados da camada ativa, sem modificar outras
 -- camadas e sem mudar a seleção por fora do canvas. É um único passo de undo.
 function Engine.move_selection(project, id, selected, dx, dy)
@@ -514,14 +527,7 @@ function Engine.move_selection(project, id, selected, dx, dy)
         "Transformação Lua limitada a documentos de até 1.048.576 pixels."
     if not ok then return false, reason end
     local layer = assert(project.layers[id], "Camada inexistente")
-    local function round_int(value)
-        if value >= 0 then return math.floor(value + 0.5) end
-        return math.ceil(value - 0.5)
-    end
-    dx, dy = round_int(dx), round_int(dy)
-    -- Clamping evita recortes de seleção irreversíveis na borda.
-    dx = math.max(-selected.min_x, math.min(project.w - 1 - selected.max_x, dx))
-    dy = math.max(-selected.min_y, math.min(project.h - 1 - selected.max_y, dy))
+    dx, dy = Engine.move_delta(project, selected, dx, dy)
     if dx == 0 and dy == 0 then return false end
     local snapshot = clone_pixels(project, layer)
     local data = layer.pixels
@@ -893,5 +899,90 @@ function Engine.affine_selection(project, id, selected, degrees, sx, sy, filter)
     return true
 end
 
+
+
+-- Pré-visualização de MOVIMENTO é feita na GPU, não via cópia de pixels a
+-- cada mousemoved. Máscara e Canvas são alocados somente uma vez por gesto.
+-- O shader calcula: pixel original menos a máscara + seleção transladada
+-- em RGBA source-over, sem modificar a camada usada pelo projeto.
+local move_preview_shader
+
+local function moving_shader()
+    if not move_preview_shader then
+        move_preview_shader = love.graphics.newShader([[
+            extern Image selectionMask;
+            extern vec2 displacement;
+            vec4 effect(vec4 vertexColor, Image texture,
+                        vec2 textureCoords, vec2 screenCoords) {
+                vec4 original = Texel(texture, textureCoords);
+                float erased = Texel(selectionMask, textureCoords).a;
+                vec4 destination = erased > 0.5
+                    ? vec4(0.0) : original;
+                vec2 sourceCoords = textureCoords - displacement;
+                vec4 source = vec4(0.0);
+                if (sourceCoords.x >= 0.0 && sourceCoords.x < 1.0 &&
+                    sourceCoords.y >= 0.0 && sourceCoords.y < 1.0 &&
+                    Texel(selectionMask, sourceCoords).a > 0.5) {
+                    source = Texel(texture, sourceCoords);
+                }
+                float a = source.a + destination.a * (1.0 - source.a);
+                vec3 rgb = vec3(0.0);
+                if (a > 0.0) {
+                    rgb = (source.rgb * source.a +
+                        destination.rgb * destination.a * (1.0 - source.a)) / a;
+                }
+                return vec4(rgb, a);
+            }
+        ]])
+    end
+    return move_preview_shader
+end
+
+function Engine.begin_move_preview(project, id, selected)
+    if not selected or selected.count == 0 or
+       project.w * project.h > MAX_TRANSFORM_PIXELS then
+        return nil, LIMIT_MESSAGE
+    end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local mask_data = love.image.newImageData(project.w, project.h)
+    for key in pairs(selected.mask) do
+        mask_data:setPixel(key % project.w, math.floor(key / project.w),
+                           1, 1, 1, 1)
+    end
+    local mask_image = love.graphics.newImage(mask_data)
+    mask_image:setFilter("nearest", "nearest")
+    local canvas = love.graphics.newCanvas(project.w, project.h)
+    canvas:setFilter("nearest", "nearest")
+    return {kind = "move", image = canvas, mask_image = mask_image,
+            source_image = layer.image, dx = 0, dy = 0,
+            active = false, renders = 0}
+end
+
+function Engine.update_move_preview(project, selected, preview, dx, dy)
+    assert(preview and preview.kind == "move", "Prévia incompatível.")
+    dx, dy = Engine.move_delta(project, selected, dx, dy)
+    if preview.dx == dx and preview.dy == dy then return true end
+    preview.dx, preview.dy = dx, dy
+    if dx == 0 and dy == 0 then
+        preview.active = false
+        return true
+    end
+    local shader = moving_shader()
+    love.graphics.push("all")
+    love.graphics.origin()
+    love.graphics.setCanvas(preview.image)
+    -- Canvas intermediário deve guardar canais RGB straight.
+    love.graphics.setBlendMode("replace", "premultiplied")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setShader(shader)
+    shader:send("selectionMask", preview.mask_image)
+    shader:send("displacement", {dx / project.w, dy / project.h})
+    preview.source_image:setFilter("nearest", "nearest")
+    love.graphics.draw(preview.source_image, 0, 0)
+    love.graphics.pop()
+    preview.active = true
+    preview.renders = preview.renders + 1
+    return true
+end
 
 return Engine

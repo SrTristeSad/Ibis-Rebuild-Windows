@@ -463,6 +463,165 @@ local function test_bilinear_preview(E)
     assert(not unknown, "Filtro desconhecido foi aceito")
 end
 
+-- Prévia de deslocamento usa GPU + máscara criada só uma vez por gesto.
+local function test_move_preview_engine(E)
+    local Selection = require("lua_selection")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local p = E.new(16, 16)
+    E.sync(p, model)
+    local layer = p.layers[1]
+    layer.pixels:setPixel(4, 4, 1, 0, 0, 0.5)
+    layer.pixels:setPixel(5, 4, 0, 0, 1, 1)
+    layer.pixels:setPixel(6, 4, 0, 1, 0, 1)
+    layer.image:replacePixels(layer.pixels)
+    p.dirty = false
+    local mask = assert(Selection.rectangle(16, 16, 4, 4, 5, 5))
+    local original = Selection.clone(mask)
+    local preview = assert(E.begin_move_preview(p, 1, mask))
+    assert(preview.image and preview.mask_image and preview.renders == 0
+        and not preview.active and not p.dirty and #p.undo == 0)
+    assert(E.update_move_preview(p, mask, preview, 2, 0))
+    assert(preview.active and preview.dx == 2 and preview.dy == 0 and
+           preview.renders == 1, "Prévia GPU não renderizou movimento")
+    local gpu_first = preview.image:newImageData()
+    local red, green, blue, alpha = gpu_first:getPixel(6, 4)
+    assert(close(red, 0.5, 0.025) and close(green, 0.5, 0.025) and
+           close(blue, 0, 0.025) and close(alpha, 1, 0.025),
+           "Prévia RGBA source-over não corresponde ao destino")
+    local _, _, _, src_a = gpu_first:getPixel(4, 4)
+    assert(src_a < 0.01, "Prévia não limpou a origem selecionada")
+    assert(not p.dirty and #p.undo == 0 and
+           Selection.contains(mask, 4, 4) and
+           select(1, layer.pixels:getPixel(4, 4)) > 0.9,
+           "Prévia alterou a seleção, a camada ou o histórico")
+
+    local old_image, old_mask = preview.image, preview.mask_image
+    assert(E.update_move_preview(p, mask, preview, 2.2, 0.1))
+    assert(preview.renders == 1 and preview.image == old_image and
+           preview.mask_image == old_mask,
+           "Delta fracionário não deveria recriar textura nem renderizar")
+    assert(E.update_move_preview(p, mask, preview, 3, 0))
+    assert(preview.renders == 2 and preview.image == old_image and
+           preview.mask_image == old_mask,
+           "Prévias sucessivas devem reutilizar máscara e Canvas")
+    assert(E.update_move_preview(p, mask, preview, 2, 0))
+    assert(preview.renders == 3 and preview.dx == 2)
+    local gpu_final = preview.image:newImageData()
+    assert(E.move_selection(p, 1, mask, 2, 0),
+           "Movimento CPU não confirmou a posição da prévia")
+    for y = 0, 15 do
+        for x = 0, 15 do
+            local ar, ag, ab, aa = layer.pixels:getPixel(x, y)
+            local er, eg, eb, ea = gpu_final:getPixel(x, y)
+            if aa > 0.01 or ea > 0.01 then
+                assert(close(ar, er, 0.025) and close(ag, eg, 0.025) and
+                       close(ab, eb, 0.025) and close(aa, ea, 0.025),
+                       "Preview GPU e commit CPU divergiram")
+            else
+                assert(aa < 0.01 and ea < 0.01)
+            end
+        end
+    end
+    assert(mask.min_x == original.min_x + 2 and #p.undo == 1,
+           "Movimento não gerou um único passo de histórico")
+    assert(E.undo(p, mask) and mask.min_x == original.min_x,
+           "Undo da prévia confirmada falhou")
+    assert(E.redo(p, mask) and mask.min_x == original.min_x + 2,
+           "Redo da prévia confirmada falhou")
+
+    assert(E.update_move_preview(p, original, preview, 0, 0))
+    assert(not preview.active and preview.renders == 3,
+           "Retorno à posição original deve desativar preview sem render")
+    preview.image:release()
+    preview.mask_image:release()
+end
+
+-- Integra ponte real de mouse, tela, máscara e composição sem mutação.
+local function test_move_preview_bridge(Bridge, gallery)
+    local model = {
+        screen = "editor", document = {width = 64, height = 64},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Paint"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    function model:set_color(r, g, b) self.color = {r, g, b} end
+    local art = gallery:add_artwork(64, 64, "Move preview")
+    Bridge.create(model, art, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local colors = {set_rgb = function() end}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + 0.5 - 32) * 11,
+            62 + (768 - 160) / 2 + (y + 0.5 - 32) * 11
+    end
+    local function press(x, y, color, size)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, art, mx, my, 1024, 768,
+            view, prefs, color or {255, 0, 0}, size or 3, 100, colors))
+    end
+    local function release(x, y)
+        local mx, my = screen(x, y)
+        return Bridge.mousereleased(model, mx, my, 1)
+    end
+    press(30, 32)
+    Bridge.mousereleased()
+    model.active_tool = "transform"
+    press(26, 26)
+    assert(release(34, 38), "Seleção da ponte não foi criada")
+    local original = assert(Bridge.selection_snapshot())
+    press(30, 32)
+    local sx, sy = screen(33, 34)
+    assert(Bridge.mousemoved(model, sx, sy, 1),
+           "Mousemoved da prévia não foi consumido")
+    local draft = assert(Bridge.preview_snapshot(),
+        "Arraste comum não criou prévia de movimento")
+    assert(draft.kind == "move" and draft.active and draft.dx == 3
+        and draft.dy == 2 and draft.renders == 1,
+        "Prévia de arraste não guarda posição inteira")
+    assert(draft.selection.min_x == original.min_x + 3 and
+           draft.selection.min_y == original.min_y + 2 and
+           Bridge.selection_snapshot().min_x == original.min_x,
+        "Prévia moveu a máscara real antes da confirmação")
+
+    local target = love.graphics.newCanvas(64, 64)
+    love.graphics.push("all")
+    love.graphics.setCanvas(target)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.translate(32, 32)
+    Bridge.draw(model, {interpolation = "pixelated"})
+    love.graphics.pop()
+    local seen = target:newImageData()
+    assert(select(1, seen:getPixel(33, 34)) > 0.9,
+           "Renderer da ponte não mostra pintura no destino durante o arraste")
+    local again_x, again_y = screen(33.05, 34.05)
+    assert(Bridge.mousemoved(model, again_x, again_y, 1))
+    local same = assert(Bridge.preview_snapshot())
+    assert(same.renders == 1 and same.image == draft.image and
+           same.mask_image == draft.mask_image,
+           "Mouse em subpixel não deveria refazer Canvas/mascara")
+    assert(release(33, 34), "Arraste simples não confirmou movimento")
+    assert(not Bridge.preview_snapshot(), "Canvas de prévia não foi liberado")
+    local moved = assert(Bridge.selection_snapshot())
+    assert(moved.min_x == original.min_x + 3 and
+           moved.min_y == original.min_y + 2)
+    assert(Bridge.undo() and
+           Bridge.selection_snapshot().min_x == original.min_x,
+           "Undo do movimento não restaurou a seleção")
+    assert(Bridge.redo() and
+           Bridge.selection_snapshot().min_x == original.min_x + 3,
+           "Redo do movimento não restaurou a seleção")
+    -- Cancelar outra prévia (Ctrl+D/Esc) não pode aplicar movimento.
+    press(33, 34)
+    local new_x, new_y = screen(35, 35)
+    Bridge.mousemoved(model, new_x, new_y, 1)
+    assert(Bridge.preview_snapshot(), "Segunda prévia não surgiu")
+    Bridge.clear_selection()
+    assert(not Bridge.preview_snapshot() and not Bridge.selection_snapshot(),
+           "Cancelamento não descartou máscara e recursos temporários")
+end
+
 -- Testa os gestos modificados no Bridge sem mexer nos botões existentes.
 local function test_affine_bridge(Bridge, gallery)
     local model = {
@@ -842,6 +1001,8 @@ function love.load()
     test_clipboard_transform(E)
     checkpoint("affine rotation and nonuniform scaling")
     test_affine_transforms(E)
+    checkpoint("GPU move preview vs CPU commit")
+    test_move_preview_engine(E)
     checkpoint("bilinear preview and commit")
     test_bilinear_preview(E)
     checkpoint("history PNG roundtrip")
@@ -987,6 +1148,8 @@ function love.load()
     test_selection_roundtrip(Bridge, model4, art4)
     checkpoint("bridge affine gestures")
     test_affine_bridge(Bridge, gallery)
+    checkpoint("bridge move preview and cancel")
+    test_move_preview_bridge(Bridge, gallery)
 
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
     require("lua_history").cleanup(path)
@@ -997,6 +1160,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: bilinear preview/commit RGBA + affine + history + layers")
+    print("PASS: GPU move preview/commit + bilinear + history + layers")
     love.event.quit(0)
 end

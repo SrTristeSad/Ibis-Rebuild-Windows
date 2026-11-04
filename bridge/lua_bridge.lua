@@ -9,6 +9,7 @@ local selection, gesture, clipboard = nil, nil, nil
 local function discard_preview(d)
     if d and d.preview then
         if d.preview.image then d.preview.image:release() end
+        if d.preview.mask_image then d.preview.mask_image:release() end
         d.preview = nil
     end
 end
@@ -231,7 +232,9 @@ function Bridge.draw(model, visual)
     local p = ensure(model)
     if not p then return end
     local d = gesture
-    if d and d.preview and d.layer and p.layers[d.layer] then
+    if d and d.preview and
+       (d.preview.kind ~= "move" or d.preview.active) and
+       d.layer and p.layers[d.layer] then
         -- Projeta uma camada alternativa em memória, sem tocar em p.layers,
         -- nas pilhas undo/redo, em dirty ou nas miniaturas persistidas.
         local temporary = {w = p.w, h = p.h, layers = {},
@@ -242,7 +245,16 @@ function Bridge.draw(model, visual)
         if not p.compose_canvases then
             p.compose_canvases = temporary.compose_canvases
         end
-        Selection.draw(d.preview.selection)
+        if d.preview.kind == "move" then
+            -- O contorno acompanha o arraste com uma translação gráfica;
+            -- não reconstrói a máscara de até 1 Mi de pixels por frame.
+            love.graphics.push()
+            love.graphics.translate(d.preview.dx, d.preview.dy)
+            Selection.draw(selection)
+            love.graphics.pop()
+        else
+            Selection.draw(d.preview.selection)
+        end
     else
         Engine.draw(p, model, visual and visual.interpolation)
         Selection.draw(selection)
@@ -421,6 +433,17 @@ function Bridge.mousemoved(model, rx, ry, scale)
         if px then
             local changed = math.abs(px - d.end_x) + math.abs(py - d.end_y) > 0.005
             d.end_x, d.end_y = px, py
+            if d.kind == "move" and selection and d.layer then
+                local dx, dy = Engine.move_delta(project, selection,
+                                                  d.end_x - d.x, d.end_y - d.y)
+                if (dx ~= 0 or dy ~= 0) and not d.preview then
+                    d.preview = Engine.begin_move_preview(project, d.layer, selection)
+                end
+                if d.preview then
+                    Engine.update_move_preview(project, selection, d.preview,
+                                               d.end_x - d.x, d.end_y - d.y)
+                end
+            end
             if changed and (d.kind == "rotate_free" or
                             d.kind == "scale_free") then
                 discard_preview(d)
@@ -457,6 +480,8 @@ function Bridge.mousereleased(model, rx, ry, scale)
                                  d.w, d.h, d.view, d.preferences)
         if x then d.end_x, d.end_y = x, y end
     end
+    -- Prévia é apenas uma textura de trabalho, liberada no fim do gesto.
+    discard_preview(d)
     local mask, reason
     if d.kind == "rectangle" then
         mask, reason = Selection.rectangle(project.w, project.h,
@@ -476,7 +501,6 @@ function Bridge.mousereleased(model, rx, ry, scale)
     elseif (d.kind == "rotate_free" or d.kind == "scale_free")
            and selection and d.layer then
         local degrees, sx, sy = affine_gesture_args(d)
-        discard_preview(d)
         if not degrees then return false end
         return Engine.affine_selection(project, d.layer, selection,
                                        degrees, sx, sy, "bilinear")
@@ -499,8 +523,19 @@ end
 function Bridge.preview_snapshot()
     local d = gesture
     if not d or not d.preview then return nil end
+    if d.preview.kind == "move" then
+        local mask = Selection.clone(selection)
+        if d.preview.active then
+            Selection.translate(mask, d.preview.dx, d.preview.dy)
+        end
+        return {
+            kind = "move", selection = mask, image = d.preview.image,
+            active = d.preview.active, dx = d.preview.dx, dy = d.preview.dy,
+            renders = d.preview.renders, mask_image = d.preview.mask_image
+        }
+    end
     return {
-        selection = Selection.clone(d.preview.selection),
+        kind = "affine", selection = Selection.clone(d.preview.selection),
         pixels = d.preview.pixels
     }
 end

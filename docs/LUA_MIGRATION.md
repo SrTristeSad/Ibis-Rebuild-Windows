@@ -48,6 +48,14 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   ao arrastar dentro da seleção. Não foram criados controles visuais.
 - Seleções limitam a pintura e o balde à máscara ativa. O contorno da
   seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
+  **Arrastar sem modificadores dentro da seleção também mostra uma prévia
+  do deslocamento** em tempo real. O motor prepara uma textura-máscara
+  uma única vez por gesto e usa um shader LÖVE para desenhar a origem
+  apagada e os pixels movidos com RGBA source-over. A posição e o contorno
+  são atualizados apenas quando o deslocamento inteiro muda, evitando
+  copiar e reconstruir até um milhão de pixels em Lua em cada mousemoved.
+  O canvas virtual nunca altera a camada, dirty ou histórico antes de
+  soltar; a confirmação usa o mesmo clamp/arredondamento do movimento CPU.
   Mover pixels da camada ativa é um único passo reversível no histórico
   (undo/redo também restaura a posição da máscara enquanto ela estiver ativa).
 - **Copiar/Recortar/Colar** funcionam na camada ativa e apenas dentro da
@@ -102,8 +110,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - Pincel circular, borracha, balde, conta-gotas, Alpha Lock, recorte básico por
   Clipping e os nove modos de mesclagem visíveis têm implementação independente.
   Filtros, seleção por tolerância ajustável, interpolação bicúbica,
-  pré-visualização do arraste simples de deslocamento, formas,
-  estabilização, pressão, máscaras adicionais, efeitos,
+  prévia bilinear do movimento de pixels (o movimento raster inteiro usa
+  shader nearest), formas, estabilização, pressão, máscaras adicionais,
+  efeitos,
   texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
@@ -135,7 +144,12 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   atualizado em tempo real para Alt/Shift, sem filtros bicúbicos ou
   alças vetoriais. Operações cuja nova área exceda as bordas da tela
   falham sem cortar pixels.
-  O movimento é deslocamento inteiro, limitado para manter a máscara no canvas.
+  O movimento é deslocamento inteiro, limitado para manter a máscara no
+  canvas. Sua prévia GPU usa uma máscara e um Canvas do tamanho do
+  documento por gesto, com uso adicional de VRAM, principalmente em
+  seleções grandes. A máscara é preparada no início do movimento útil;
+  deslocamentos subpixel que arredondam para a mesma posição não
+  repetem a renderização. A prévia não substitui o caminho CPU do commit.
   O contorno visual tem teto de 10.000 segmentos para não sobrecarregar
   a renderização, sem afetar o resultado da máscara raster.
 - O formato atual é PNG + metadados TSV, **não RBD2 nem IPV**.
@@ -173,7 +187,10 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   A suíte também verifica que a prévia bilinear não toca no documento,
   produz mistura real de cores sem halos de RGB transparente, corresponde
   ao commit pixel a pixel, exibe o canvas antes de soltar e é descartada
-  depois do gesto.
+  depois do gesto. A prévia de movimento GPU é comparada ao commit
+  raster CPU, inclusive em sobreposições com transparência, e testa
+  reutilização da máscara/Canvas, deslocamento quantizado, renderização
+  e cancelamento no Bridge.
   O CI também verifica roundtrip PNG da máscara, desmarcação com remoção
   do arquivo e rejeição de PNG truncado ou com dimensões incompatíveis.
   O histórico persistente tem testes de undo/redo após reabertura,

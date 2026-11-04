@@ -30,7 +30,10 @@ Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
 da seleção aplica rotação livre; Shift+arrastar aplica escala X/Y
 independente. Alt/Shift mostram a prévia durante o arraste com
 interpolação **bilinear RGBA**, sem alterar os pixels até soltar o
-mouse; os atalhos antigos mantêm nearest-neighbour. O visual e os
+mouse; os atalhos antigos mantêm nearest-neighbour. O arraste normal
+do Transformar também exibe uma prévia GPU do deslocamento inteiro,
+com máscara/cache reutilizados sem recalcular todos os pixels em Lua
+a cada movimento subpixel. O visual e os
 controles originais do Ibis-Lua não foram alterados. Outros controles
 do Ibis-Lua podem continuar simulados; consulte [limitações](docs/LUA_MIGRATION.md).
 
