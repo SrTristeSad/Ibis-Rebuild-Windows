@@ -47,15 +47,20 @@
   Preserve undo/redo de pixels e geometria, compatibilidade com a máscara
   de seleção e testes da transformação.
 - Rotação livre e escala X/Y independente usam `Engine.affine_selection`
-  com mapeamento inverso nearest-neighbour. Em Transformar:
+  com mapeamento inverso e filtro opcional (`nearest` por padrão). Em Transformar:
   Alt+arrastar gira relativamente ao centro da seleção, Shift+arrastar
   redimensiona nos dois eixos, sem alterar o layout/controles visuais.
-  Os gestos aplicam pixels apenas ao soltar; o movimento sem
-  modificadores permanece como antes. Rejeitar parâmetros NaN/infinito,
+  Os gestos Alt/Shift mostram prévia bilinear sobre uma camada virtual
+  (composição com outras camadas preservada), sem alterar buffers reais
+  ou histórico durante o arraste. Aplicar ao soltar com o mesmo filtro,
+  liberar o recurso gráfico da prévia ao encerrar/cancelar.
+  O movimento sem modificadores permanece como antes.
+  A bilinear deve interpolar RGB premultiplicado por alfa e não
+  misturar pixels fora da seleção. Rejeitar parâmetros NaN/infinito,
   fator fora de 0,1..8 e retângulo fora do canvas SEM alterar pixels,
   máscara ou histórico. Preservar testes de undo/redo e RGBA.
-- Não alegue interpolação bilinear, preview em tempo real ou
-  clipboard do SO como concluídos.
+- Não alegue prévia do movimento simples, interpolação bicúbica,
+  transformação vetorial ou clipboard do SO como concluídos.
 - Não alegue paridade visual ou técnica 1:1 com ibisPaint Windows 14.1.4 sem medições verificáveis.
 
 ## Critérios de mudança

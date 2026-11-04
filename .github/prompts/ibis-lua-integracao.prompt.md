@@ -23,10 +23,15 @@ colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 No instrumento Transformar, **Alt+arrastar dentro da seleção** ativa
 rotação contínua pelo ângulo relativo ao centro da máscara; **Shift+
 arrastar dentro da seleção** ativa escala independente X/Y pelo
-deslocamento do ponteiro. A função `Engine.affine_selection`
-transforma por mapeamento inverso nearest-neighbour, valida o retângulo
-de destino antes de escrever e registra um único passo de undo/redo.
-Ainda não há pré-visualização da geometria durante o arraste.
+deslocamento do ponteiro. A função `Engine.affine_selection` aceita filtro opcional: por padrão
+usa nearest-neighbour (compatibilidade), e os gestos Alt/Shift fornecem
+"bilinear". O processamento bilinear amostra RGB pré-multiplicado e
+trata pixels não selecionados como transparentes para impedir halos.
+`Engine.preview_affine` produz um buffer temporário e `Bridge.draw`
+exibe este buffer com composição das camadas e máscara de prévia,
+sem mudar pixels, dirty ou pilhas de undo/redo. O buffer é descartado
+na liberação/cancelamento do gesto. Prévia e commit precisam usar a
+mesma matemática e verificar o retângulo de destino previamente.
 Histórico reversível deve incluir tanto pixels quanto a geometria da seleção.
 O clipboard não acessa o clipboard do Windows.
 O histórico de undo/redo agora persiste em `history.tsv` e PNGs por passo
@@ -62,9 +67,12 @@ A seleção é persistente como máscara por obra; o histórico dos passos de
 edição raster e da geometria associada também é salvo para obras pequenas.
 A rotação contínua e a escala independente estão implementadas por
 gestos modificados; teste o motor e a ponte em LÖVE e preserve o
-arraste comum de deslocamento. Não declare interpolação bilinear,
-pré-visualização ao vivo, transformação vetorial nem clipboard Windows
-como concluídos. Preserve testes de PNG roundtrip, arquivo inválido,
+arraste comum de deslocamento. A prévia bilinear em tempo real está implementada apenas para Alt/Shift
+com a ferramenta Transformar; não declare prévia do movimento comum,
+interpolação bicúbica, transformação vetorial nem clipboard Windows
+como concluídos. Testes incluem prévia sem mutação, paridade de pixels
+com commit, transparência sem halo, desfazer/refazer e renderização da
+ponte Lua com a camada virtual de prévia. Preserve testes de PNG roundtrip, arquivo inválido,
 desmarcação e compatibilidade com projetos sem seleção.
 
 Prioridade:

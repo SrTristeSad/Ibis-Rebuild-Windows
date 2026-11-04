@@ -753,12 +753,14 @@ end
 -- A origem é o centro geométrico da seleção e ângulos são em graus.
 -- Prepara a máscara completa antes de apagar qualquer pixel; falhas de
 -- parâmetro/limite não modificam documento, histórico ou seleção.
-function Engine.affine_selection(project, id, selected, degrees, sx, sy)
+-- Preparação pura: pixels e máscara são calculados em buffers temporários.
+-- Nenhuma operação de pré-visualização altera camadas, dirty ou undo/redo.
+local function prepare_affine(project, id, selected, degrees, sx, sy, filter)
     if not selected or selected.count == 0 then
-        return false, "Selecione uma área antes de transformar."
+        return nil, "Selecione uma área antes de transformar."
     end
     if project.w * project.h > MAX_TRANSFORM_PIXELS then
-        return false, LIMIT_MESSAGE
+        return nil, LIMIT_MESSAGE
     end
     local function finite(x)
         return type(x) == "number" and x == x and
@@ -766,18 +768,18 @@ function Engine.affine_selection(project, id, selected, degrees, sx, sy)
     end
     if not finite(degrees) or math.abs(degrees) > 3600 or
        not finite(sx) or not finite(sy) or
-       sx < 0.1 or sx > 8 or sy < 0.1 or sy > 8 then
-        return false, "Ângulo ou escala fora dos limites da transformação."
+       sx < 0.1 or sx > 8 or sy < 0.1 or sy > 8 or
+       (filter ~= nil and filter ~= "nearest" and filter ~= "bilinear") then
+        return nil, "Ângulo, escala ou interpolação inválidos."
     end
     local angle = math.rad(degrees % 360)
     if math.abs(angle) < 1e-10 and sx == 1 and sy == 1 then
-        return false, "A transformação não altera a seleção."
+        return nil, "A transformação não altera a seleção."
     end
     local layer = assert(project.layers[id], "Camada inexistente")
     local cx = (selected.min_x + selected.max_x + 1) / 2
     local cy = (selected.min_y + selected.max_y + 1) / 2
     local co, si = math.cos(angle), math.sin(angle)
-
     local left, top = math.huge, math.huge
     local right, bottom = -math.huge, -math.huge
     for _, corner in ipairs({
@@ -795,54 +797,101 @@ function Engine.affine_selection(project, id, selected, degrees, sx, sy)
     local xmin, xmax = math.floor(left + 1e-8), math.ceil(right - 1e-8) - 1
     local ymin, ymax = math.floor(top + 1e-8), math.ceil(bottom - 1e-8) - 1
     if xmin < 0 or ymin < 0 or xmax >= project.w or ymax >= project.h then
-        return false, "Transformação ultrapassaria os limites do canvas."
+        return nil, "Transformação ultrapassaria os limites do canvas."
     end
-
     local function source_at(x, y)
         local dx, dy = x + 0.5 - cx, y + 0.5 - cy
-        local ix = (co * dx + si * dy) / sx + cx
-        local iy = (-si * dx + co * dy) / sy + cy
-        return math.floor(ix), math.floor(iy)
+        return (co * dx + si * dy) / sx + cx,
+            (-si * dx + co * dy) / sy + cy
     end
     local next_mask = {}
     for y = ymin, ymax do
         for x = xmin, xmax do
-            local source_x, source_y = source_at(x, y)
-            if Selection.contains(selected, source_x, source_y) then
+            local src_x, src_y = source_at(x, y)
+            if Selection.contains(selected, math.floor(src_x),
+                                  math.floor(src_y)) then
                 next_mask[y * project.w + x] = true
             end
         end
     end
-    local replacement = Selection.from_mask(project.w, project.h, next_mask,
-                                             "affine")
+    local replacement = Selection.from_mask(project.w, project.h,
+                                            next_mask, "affine")
     if not replacement then
-        return false, "A transformação eliminaria todos os pixels da seleção."
+        return nil, "A transformação eliminaria todos os pixels da seleção."
     end
 
-    local snapshot = clone_pixels(project, layer)
+    local output = clone_pixels(project, layer)
+    for y = selected.min_y, selected.max_y do
+        for x = selected.min_x, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                output:setPixel(x, y, 0, 0, 0, 0)
+            end
+        end
+    end
+    local function filtered_pixel(src_x, src_y)
+        if filter ~= "bilinear" then
+            return layer.pixels:getPixel(math.floor(src_x), math.floor(src_y))
+        end
+        -- Interpolação em RGB pré-multiplicado: evita halos RGB nas bordas.
+        -- Vizinhos não selecionados contribuem como transparentes.
+        local fx, fy = src_x - 0.5, src_y - 0.5
+        local x0, y0 = math.floor(fx), math.floor(fy)
+        local dx, dy = fx - x0, fy - y0
+        local rp, gp, bp, alpha = 0, 0, 0, 0
+        for j = 0, 1 do
+            for i = 0, 1 do
+                local px, py = x0 + i, y0 + j
+                if Selection.contains(selected, px, py) then
+                    local r, g, b, a = layer.pixels:getPixel(px, py)
+                    local weight = (i == 0 and 1 - dx or dx) *
+                                   (j == 0 and 1 - dy or dy) * a
+                    rp, gp, bp = rp + r * weight, gp + g * weight,
+                                 bp + b * weight
+                    alpha = alpha + weight
+                end
+            end
+        end
+        if alpha <= 1e-12 then return 0, 0, 0, 0 end
+        return rp / alpha, gp / alpha, bp / alpha, alpha
+    end
+    for key in pairs(next_mask) do
+        local x, y = key % project.w, math.floor(key / project.w)
+        local source_x, source_y = source_at(x, y)
+        local r, g, b, a = filtered_pixel(source_x, source_y)
+        over_pixel(output, x, y, r, g, b, a)
+    end
+    return {pixels = output, selection = replacement}
+end
+
+-- A prévia usa uma imagem LÖVE própria; o chamador deve liberá-la ao
+-- substituir/cancelar a prévia. Não grava nenhum pixel no documento real.
+function Engine.preview_affine(project, id, selected, degrees, sx, sy, filter)
+    local preview, reason = prepare_affine(project, id, selected,
+        degrees, sx, sy, filter or "bilinear")
+    if not preview then return nil, reason end
+    preview.image = love.graphics.newImage(preview.pixels)
+    return preview
+end
+
+-- A assinatura anterior continua válida: nearest por padrão para chamadas
+-- legadas; os gestos novos usam "bilinear" explicitamente.
+function Engine.affine_selection(project, id, selected, degrees, sx, sy, filter)
+    local computed, reason = prepare_affine(project, id, selected,
+                                             degrees, sx, sy, filter)
+    if not computed then return false, reason end
     Engine.begin_stroke(project, id)
     local entry = project.undo[#project.undo]
     if entry then
         entry.selection_ref = selected
         entry.selection_state = Selection.clone(selected)
     end
-    for y = selected.min_y, selected.max_y do
-        for x = selected.min_x, selected.max_x do
-            if Selection.contains(selected, x, y) then
-                layer.pixels:setPixel(x, y, 0, 0, 0, 0)
-            end
-        end
-    end
-    for key in pairs(next_mask) do
-        local x, y = key % project.w, math.floor(key / project.w)
-        local source_x, source_y = source_at(x, y)
-        local r, g, b, a = snapshot:getPixel(source_x, source_y)
-        over_pixel(layer.pixels, x, y, r, g, b, a)
-    end
-    layer.image:replacePixels(layer.pixels)
-    Selection.restore(selected, replacement)
+    local layer = assert(project.layers[id], "Camada inexistente")
+    layer.pixels = computed.pixels
+    layer.image:replacePixels(computed.pixels)
+    Selection.restore(selected, computed.selection)
     project.dirty = true
     return true
 end
+
 
 return Engine

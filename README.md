@@ -28,9 +28,10 @@ Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
 (Ctrl+C/X/V), rotação de 90° (Ctrl+Shift+R/L) e escala 50%/200%
 (Ctrl+Shift+Down/Up). Com Transformar selecionado, Alt+arrastar dentro
 da seleção aplica rotação livre; Shift+arrastar aplica escala X/Y
-independente. A rasterização usa nearest-neighbour e confirma a
-transformação ao soltar o mouse, sem alterar os controles visuais
-do Ibis-Lua. Outros controles
+independente. Alt/Shift mostram a prévia durante o arraste com
+interpolação **bilinear RGBA**, sem alterar os pixels até soltar o
+mouse; os atalhos antigos mantêm nearest-neighbour. O visual e os
+controles originais do Ibis-Lua não foram alterados. Outros controles
 do Ibis-Lua podem continuar simulados; consulte [limitações](docs/LUA_MIGRATION.md).
 
 Para montar, execute `git submodule update --init` e depois
