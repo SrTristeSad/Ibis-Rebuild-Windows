@@ -372,7 +372,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         if mode == "replace" then selection = nil end
         gesture = {kind = "lasso", w = w, h = h, view = view,
                    preferences = preferences, points = {{px, py}},
-                   mode = mode, x = px, y = py}
+                   mode = mode, x = px, y = py,
+                   end_x = px, end_y = py}
         return true
     end
     if tool == "transform" then
