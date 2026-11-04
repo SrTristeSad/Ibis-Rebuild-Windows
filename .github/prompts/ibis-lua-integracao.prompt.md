@@ -32,6 +32,16 @@ exibe este buffer com composição das camadas e máscara de prévia,
 sem mudar pixels, dirty ou pilhas de undo/redo. O buffer é descartado
 na liberação/cancelamento do gesto. Prévia e commit precisam usar a
 mesma matemática e verificar o retângulo de destino previamente.
+O gesto normal de mover seleção também possui prévia na GPU:
+`Engine.begin_move_preview` monta máscara RGBA e Canvas UMA vez
+por gesto; `Engine.update_move_preview` usa shader de source-over
+com origem mascarada e offset inteiro, reaproveitando texturas e
+ignorando diferenças subpixel que mantenham o deslocamento
+quantizado. `Engine.move_delta` compartilha rounding/clamp
+entre preview e commit CPU. A prévia não deve modificar pixels,
+seleção original, histórico, dirty nem miniaturas persistidas.
+No desenho, transladar o contorno visual sem recriar a máscara
+raster. Liberar mask_image e Canvas ao confirmar ou cancelar.
 Histórico reversível deve incluir tanto pixels quanto a geometria da seleção.
 O clipboard não acessa o clipboard do Windows.
 O histórico de undo/redo agora persiste em `history.tsv` e PNGs por passo
@@ -67,10 +77,12 @@ A seleção é persistente como máscara por obra; o histórico dos passos de
 edição raster e da geometria associada também é salvo para obras pequenas.
 A rotação contínua e a escala independente estão implementadas por
 gestos modificados; teste o motor e a ponte em LÖVE e preserve o
-arraste comum de deslocamento. A prévia bilinear em tempo real está implementada apenas para Alt/Shift
-com a ferramenta Transformar; não declare prévia do movimento comum,
-interpolação bicúbica, transformação vetorial nem clipboard Windows
-como concluídos. Testes incluem prévia sem mutação, paridade de pixels
+arraste comum de deslocamento. A prévia bilinear está disponível nos gestos Alt/Shift e a prévia
+GPU nearest está disponível no movimento comum do Transformar.
+Não declare movimento bilinear, interpolação bicúbica, transformação
+vetorial nem clipboard Windows como concluídos. Teste comparando
+pixels GPU/CPU do movimento com RGBA, verifique cache reutilizado
+quando o delta inteiro não mudar e retorno ao início sem commit. Testes incluem prévia sem mutação, paridade de pixels
 com commit, transparência sem halo, desfazer/refazer e renderização da
 ponte Lua com a camada virtual de prévia. Preserve testes de PNG roundtrip, arquivo inválido,
 desmarcação e compatibilidade com projetos sem seleção.
