@@ -14,6 +14,65 @@ local function discard_preview(d)
     end
 end
 
+-- Histórico EXCLUSIVO de máscaras. Não ocupa os snapshots raster do
+-- Engine e não é persistido: ao reabrir, a seleção salva é o novo início.
+-- O teto por pilha é 8 estados / 1 Mi de pixels selecionados ao todo.
+local mask_undo, mask_redo = {}, {}
+local MASK_HISTORY_STEPS = 8
+local MASK_HISTORY_PIXELS = 1024 * 1024
+
+local function clear_mask_history()
+    mask_undo, mask_redo = {}, {}
+end
+
+local function push_mask_state(stack, mask)
+    stack[#stack + 1] = {mask = Selection.clone(mask)}
+    local used = 0
+    for _, entry in ipairs(stack) do
+        if entry.mask then used = used + entry.mask.count end
+    end
+    while #stack > MASK_HISTORY_STEPS or
+          (used > MASK_HISTORY_PIXELS and #stack > 1) do
+        local old = table.remove(stack, 1)
+        if old.mask then used = used - old.mask.count end
+    end
+end
+
+local function same_mask(a, b)
+    if a == b then return true end
+    if not a or not b or a.w ~= b.w or a.h ~= b.h or
+       a.count ~= b.count then return false end
+    for key in pairs(a.mask) do
+        if not b.mask[key] then return false end
+        local wa = a.weights and a.weights[key] or 1
+        local wb = b.weights and b.weights[key] or 1
+        if math.abs(wa - wb) > 1e-8 then return false end
+    end
+    return true
+end
+
+-- previous_is_explicit permite usar nil como estado anterior a um
+-- arraste que criou uma seleção (ou que limpou a anterior no mousepress).
+local function set_mask(next_mask, previous, previous_is_explicit)
+    local before = selection
+    if previous_is_explicit then before = previous end
+    if not same_mask(before, next_mask) then
+        push_mask_state(mask_undo, before)
+        mask_redo = {}
+    end
+    selection = next_mask
+end
+
+local function mask_history_step(from, to)
+    if #from == 0 then return false end
+    discard_preview(gesture)
+    gesture = nil
+    local entry = table.remove(from)
+    push_mask_state(to, selection)
+    selection = entry.mask
+    return true
+end
+
 -- A mesma matemática orienta a prévia e o resultado final.
 local function affine_gesture_args(d)
     if not selection or not d then return nil end
@@ -72,6 +131,7 @@ function Bridge.supports(w, h) return Engine.supports(w, h) end
 function Bridge.create(model, id, gallery)
     discard_preview(gesture)
     selection, gesture, drawing = nil, nil, nil
+    clear_mask_history()
     gallery_ref = gallery
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
@@ -143,6 +203,7 @@ end
 function Bridge.open(model, id)
     discard_preview(gesture)
     selection, gesture, drawing = nil, nil, nil
+    clear_mask_history()
     local record = records[id]
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
@@ -361,7 +422,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         if mask then
             local combined, err = Selection.combine(selection, mask,
                                           selection_merge_mode(), p.w, p.h)
-            if not err then selection = combined end
+            if not err then set_mask(combined) end
             if err and notice then notice(err) end
         elseif reason and notice then notice(reason) end
         return true
@@ -369,17 +430,19 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     if tool == "lasso" then
         discard_preview(gesture)
         local mode = selection_merge_mode()
+        local before = Selection.clone(selection)
         if mode == "replace" then selection = nil end
         gesture = {kind = "lasso", w = w, h = h, view = view,
                    preferences = preferences, points = {{px, py}},
-                   mode = mode, x = px, y = py,
-                   end_x = px, end_y = py}
+                   mode = mode, before_selection = before,
+                   x = px, y = py, end_x = px, end_y = py}
         return true
     end
     if tool == "transform" then
         discard_preview(gesture)
         local info = model:active_layer()
         local mode = selection_merge_mode()
+        local before = Selection.clone(selection)
         -- Com Ctrl+Shift/Alt, inicia um novo retângulo inclusive dentro
         -- da área já marcada; não desloca nem transforma pixels.
         local moving = mode == "replace" and selection and
@@ -403,7 +466,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         gesture = {
             kind = action, x = px, y = py, w = w, h = h, view = view,
             preferences = preferences, layer = info and info.id,
-            mode = mode, end_x = px, end_y = py
+            mode = mode, before_selection = before,
+            end_x = px, end_y = py
         }
         if not moving and mode == "replace" then selection = nil end
         return true
@@ -531,22 +595,31 @@ function Bridge.mousereleased(model, rx, ry, scale)
         end
         mask, reason = Selection.lasso(project.w, project.h, d.points)
     elseif d.kind == "move" and selection and d.layer then
-        return Engine.move_selection(project, d.layer, selection,
+        local ok, reason = Engine.move_selection(project, d.layer, selection,
             d.end_x - d.x, d.end_y - d.y)
+        if ok then clear_mask_history() end
+        return ok, reason
     elseif (d.kind == "rotate_free" or d.kind == "scale_free")
            and selection and d.layer then
         local degrees, sx, sy = affine_gesture_args(d)
         if not degrees then return false end
-        return Engine.affine_selection(project, d.layer, selection,
+        local ok, reason = Engine.affine_selection(project, d.layer, selection,
                                        degrees, sx, sy, "bilinear")
+        if ok then clear_mask_history() end
+        return ok, reason
     end
     if mask then
         local combined, err = Selection.combine(selection, mask,
                                         d.mode or "replace",
                                         project.w, project.h)
         if err then return false, err end
-        selection = combined
+        set_mask(combined, d.before_selection, true)
         return true
+    end
+    -- Um gesto inválido não deve consumir a seleção anterior nem
+    -- criar um item de histórico pela limpeza inicial de replace.
+    if d.kind == "rectangle" or d.kind == "lasso" then
+        selection = d.before_selection
     end
     return false, reason
 end
@@ -557,8 +630,25 @@ function Bridge.selection_snapshot()
 end
 
 function Bridge.clear_selection()
+    local before = selection
+    if gesture and gesture.before_selection then
+        before = gesture.before_selection
+    end
     discard_preview(gesture)
-    selection, gesture = nil, nil
+    gesture = nil
+    set_mask(nil, before, true)
+end
+
+function Bridge.selection_history_snapshot()
+    return {undo = #mask_undo, redo = #mask_redo}
+end
+
+function Bridge.selection_undo()
+    return mask_history_step(mask_undo, mask_redo)
+end
+
+function Bridge.selection_redo()
+    return mask_history_step(mask_redo, mask_undo)
 end
 
 -- Estado de prévia somente leitura para testes de integração.
@@ -592,12 +682,18 @@ function Bridge.preview_snapshot()
 end
 
 function Bridge.undo()
-    if project then return Engine.undo(project, selection) end
-    return false
+    if not project then return false end
+    local before = Selection.clone(selection)
+    local ok = Engine.undo(project, selection)
+    if ok and not same_mask(before, selection) then clear_mask_history() end
+    return ok
 end
 function Bridge.redo()
-    if project then return Engine.redo(project, selection) end
-    return false
+    if not project then return false end
+    local before = Selection.clone(selection)
+    local ok = Engine.redo(project, selection)
+    if ok and not same_mask(before, selection) then clear_mask_history() end
+    return ok
 end
 
 -- Comandos de edição sobre a máscara atual, sem mudar o frontend.
@@ -640,7 +736,7 @@ function Bridge.selection_command(model, command, notice)
             return false
         end
         -- Máscara nula válida: inversão integral ou contração até desaparecer.
-        selection = next_mask
+        set_mask(next_mask)
         return true
     end
 
@@ -671,7 +767,9 @@ function Bridge.selection_command(model, command, notice)
     elseif command == "paste" then
         local ok, result = Engine.paste_selection(p, info.id, clipboard,
                                                  nil, nil, selection)
-        if ok then selection = result
+        if ok then
+            selection = result
+            clear_mask_history()
         elseif notice and result then notice(result) end
         return ok
     elseif command == "rotate_cw" or command == "rotate_ccw" or
@@ -679,6 +777,7 @@ function Bridge.selection_command(model, command, notice)
            command == "flip_horizontal" or command == "flip_vertical" then
         if not selection then return false end
         local ok, reason = Engine.reshape_selection(p, info.id, selection, command)
+        if ok then clear_mask_history() end
         if not ok and notice and reason then notice(reason) end
         return ok
     end
@@ -695,6 +794,13 @@ function Bridge.keypressed(key, model, notice)
     if key == "d" then Bridge.clear_selection(); return true end
     local shift = love.keyboard.isDown("lshift", "rshift")
     local alt = love.keyboard.isDown("lalt", "ralt")
+    if alt and (key == "z" or key == "y") then
+        -- Capturar também com pilha vazia: nunca deixar Ctrl+Alt+Z/Y
+        -- cair nos atalhos de histórico raster da interface original.
+        if key == "z" then Bridge.selection_undo()
+        else Bridge.selection_redo() end
+        return true
+    end
     if alt and not shift then
         if key == "f" then
             Bridge.selection_command(model, "feather_selection", notice)

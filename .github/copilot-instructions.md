@@ -58,6 +58,16 @@
   `selection.png` e PNG de histórico, sem modificar TSV ou submódulo UI.
   Clones independentes de `weights`; testar feather, undo/redo e
   compatibilidade com seleções e projetos legados.
+- Histórico isolado de seleção: Ctrl+Alt+Z/Y na ponte, com 8 passos e
+  orçamento de 1.048.576 pixels marcados por pilha. Registrar Ctrl+A,
+  inverter, expandir, contrair, feather, Ctrl+D/Esc, laço, retângulo,
+  varinha e booleanas; clonar pesos e permitir snapshots nil. Não registrar
+  no-ops; nova ação após undo limpa redo. Ctrl+Z/Y seguem EXCLUSIVAMENTE
+  raster. Transformar pixels e geometria reseta a timeline só de seleção;
+  undo/redo raster que restaura geometria também reseta. Ao reabrir uma
+  obra, a máscara atual é carregada de selection.png, mas o histórico
+  isolado é apenas em memória e começa vazio. Não persistir em history.tsv.
+  Testar independência do raster, recusa e limite de pilha.
 - Histórico raster persiste em `history.tsv` e PNGs versionados por geração
   para documentos de até 1.048.576 pixels, com até 8 snapshots em cada
   pilha (undo e redo). Os arquivos de snapshot devem ser validados em
