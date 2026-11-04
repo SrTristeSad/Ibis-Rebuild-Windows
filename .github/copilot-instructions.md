@@ -17,8 +17,14 @@
   Preserve testes que comparam a amostra CPU com o resultado de shader GPU.
 - Formato de persistência: PNGs, layers.tsv com oito colunas (legado de quatro
   colunas aceito) e document.tsv com camada ativa/fundo. Preserve compatibilidade.
-- Os modos de mesclagem diferentes de Normal **não** estão implementados no motor;
-  a seleção na interface não comprova renderização efetiva. Não invente equivalência.
+- Os nove modos do seletor existente (Normal, Multiply, Screen, Overlay,
+  Darken, Lighten, Color Burn, Color Dodge, Soft Light) foram implementados
+  como composição independente em Lua e no shader LÖVE: preserve a mesma
+  fórmula no conta-gotas, miniaturas e canvas. Não alegue equivalência
+  exata com o ibisPaint proprietário nem adicione novos controles de blend.
+- Um modo diferente de Normal ou Clipping usa renderização em dois canvases
+  alternados com estado de textura e transformações isoladas. Não regredir
+  o caminho direto Normal nem os testes de semitransparência.
 - Não alegue paridade visual ou técnica 1:1 com ibisPaint Windows 14.1.4 sem medições verificáveis.
 
 ## Critérios de mudança

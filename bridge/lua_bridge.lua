@@ -260,10 +260,6 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     local info = model:active_layer()
     if not info or info.locked or not info.visible then return false end
     -- Evitar prometer efeitos que o motor Lua ainda não suporta.
-    if info.blending ~= "Normal" then
-        if notice then notice("Pintura com esse modo de mesclagem ainda não implementada.") end
-        return true
-    end
     if info.alpha_lock and tool == "eraser" then
         -- Alpha Lock não permite remover nem criar transparência.
         if notice then notice("Borracha desativada enquanto Alpha Lock está ativo.") end

@@ -9,14 +9,16 @@ O motor de edição ativo deve ser implementado em **Lua/LuaJIT + LÖVE 11.5**, 
 
 Estado funcional conhecido: motor Lua com pincel circular, borracha,
 preenchimento contíguo, conta-gotas, camadas normais, Alpha Lock,
-Clipping com shader do LÖVE, snapshots limitados, miniaturas dos pixels reais
+Clipping com shader do LÖVE, blend RGBA CPU/GPU para os nove modos
+já presentes no seletor (Normal, Multiply, Screen, Overlay, Darken, Lighten,
+Color Burn, Color Dodge, Soft Light), snapshots limitados, miniaturas dos pixels reais
 e arquivos PNG por camada. layers.tsv com oito colunas deve ler o formato
 legado de quatro colunas; document.tsv mantém camada ativa/fundo. Mantenha estas operações
 regredindo **nunca** e avance conectando exclusivamente os controles existentes.
-Alpha Lock e Clipping já possuem implementações independentes e testes: preserve
-a composição da máscara entre CPU e shader GPU, sem alterar o alfa original da
-camada clipada. **Blending diferente de Normal não é executado**, apesar de a
-interface disponibilizar o seletor; preserve essa distinção.
+Alpha Lock, Clipping e os nove modos de blend já possuem implementações
+independentes e testes: preserve igualdade entre composição CPU e shader GPU,
+inclusive para alfa parcial, sem alterar o alfa original da camada clipada.
+Não invente novos modos nem reivindique equivalência exata com o aplicativo oficial.
 
 Prioridade:
 1. Conectar com fidelidade os eventos e estados dos controles existentes do Ibis-Lua a funcionalidades reais.

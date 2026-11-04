@@ -139,51 +139,196 @@ local function clip_base(model, index)
     return nil
 end
 
-local clipping_shader
-local function shader_for_clipping()
-    if not clipping_shader then
-        clipping_shader = love.graphics.newShader([[
+-- Nomes do seletor original do Ibis-Lua. Não inventar modos de UI.
+local blend_ids = {
+    Normal = 0, Multiply = 1, Screen = 2, Overlay = 3, Darken = 4,
+    Lighten = 5, ["Color Burn"] = 6, ["Color Dodge"] = 7,
+    ["Soft Light"] = 8
+}
+Engine.blend_ids = blend_ids
+
+local function clamp01(x) return math.max(0, math.min(1, x)) end
+
+local function blend_channel(mode, base, top)
+    if mode == 1 then return base * top end
+    if mode == 2 then return base + top - base * top end
+    if mode == 3 then
+        return base <= 0.5 and 2 * base * top or
+            1 - 2 * (1 - base) * (1 - top)
+    end
+    if mode == 4 then return math.min(base, top) end
+    if mode == 5 then return math.max(base, top) end
+    if mode == 6 then
+        if top <= 0 then return 0 end
+        return math.max(0, 1 - (1 - base) / top)
+    end
+    if mode == 7 then
+        if top >= 1 then return 1 end
+        return math.min(1, base / (1 - top))
+    end
+    if mode == 8 then
+        if top <= 0.5 then
+            return base - (1 - 2 * top) * base * (1 - base)
+        end
+        local d = base <= 0.25 and ((16 * base - 12) * base + 4) * base
+            or math.sqrt(base)
+        return base + (2 * top - 1) * (d - base)
+    end
+    return top
+end
+
+-- Composição de blend com alfa straight, segundo a fórmula source-over
+-- separável. Compartilhada entre o conta-gotas/preview CPU e shader GPU.
+local function compose_channel(base, top, base_alpha, top_alpha, mode, out_alpha)
+    if out_alpha <= 0 then return 0 end
+    local mixed = blend_channel(mode, base, top)
+    return clamp01((
+        top_alpha * (1 - base_alpha) * top +
+        base_alpha * (1 - top_alpha) * base +
+        top_alpha * base_alpha * mixed
+    ) / out_alpha)
+end
+
+local blending_shader
+local function shader_for_layers()
+    if not blending_shader then
+        blending_shader = love.graphics.newShader([[
+            extern Image backdropImage;
             extern Image clipImage;
+            extern number sourceOpacity;
             extern number clipOpacity;
-            vec4 effect(vec4 color, Image texture, vec2 texcoords, vec2 screencoords) {
-                vec4 result = Texel(texture, texcoords) * color;
-                result.a *= Texel(clipImage, texcoords).a * clipOpacity;
-                return result;
+            extern number clipEnabled;
+            extern number blendMode;
+
+            float blendComponent(float b, float t, float mode) {
+                if (mode < 0.5) return t;
+                if (mode < 1.5) return b * t;
+                if (mode < 2.5) return b + t - b * t;
+                if (mode < 3.5) return b <= 0.5 ? 2.0 * b * t
+                    : 1.0 - 2.0 * (1.0 - b) * (1.0 - t);
+                if (mode < 4.5) return min(b, t);
+                if (mode < 5.5) return max(b, t);
+                if (mode < 6.5) return t <= 0.0 ? 0.0
+                    : max(0.0, 1.0 - (1.0 - b) / t);
+                if (mode < 7.5) return t >= 1.0 ? 1.0
+                    : min(1.0, b / (1.0 - t));
+                float d = b <= 0.25 ? ((16.0 * b - 12.0) * b + 4.0) * b
+                    : sqrt(b);
+                return t <= 0.5 ? b - (1.0 - 2.0 * t) * b * (1.0 - b)
+                    : b + (2.0 * t - 1.0) * (d - b);
+            }
+
+            vec4 effect(vec4 color, Image sourceImage,
+                        vec2 uv, vec2 pixelCoords) {
+                vec4 base = Texel(backdropImage, uv);
+                vec4 top = Texel(sourceImage, uv) * color;
+                float ta = top.a * sourceOpacity;
+                if (clipEnabled > 0.5) {
+                    ta *= Texel(clipImage, uv).a * clipOpacity;
+                }
+                float ba = base.a;
+                float outAlpha = ta + ba * (1.0 - ta);
+                if (outAlpha <= 0.0) return vec4(0.0);
+                vec3 mixed;
+                for (int i = 0; i < 3; i++) {
+                    float blendValue = blendComponent(base[i], top[i], blendMode);
+                    mixed[i] = (
+                        ta * (1.0 - ba) * top[i] +
+                        ba * (1.0 - ta) * base[i] +
+                        ta * ba * blendValue
+                    ) / outAlpha;
+                }
+                return vec4(clamp(mixed, 0.0, 1.0), outAlpha);
             }
         ]])
     end
-    return clipping_shader
+    return blending_shader
+end
+
+local function composite_canvases(project)
+    if not project.compose_canvases then
+        project.compose_canvases = {
+            love.graphics.newCanvas(project.w, project.h),
+            love.graphics.newCanvas(project.w, project.h)
+        }
+    end
+    return project.compose_canvases
 end
 
 function Engine.draw(project, model, interpolation)
+    local destination = love.graphics.getCanvas()
     love.graphics.push("all")
-    love.graphics.setBlendMode("alpha", "alphamultiply")
+    love.graphics.setShader()
     local filter = interpolation == "pixelated" and "nearest" or "linear"
-    for index, info in ipairs(model.layers) do
-        if info.visible then
-            local layer = project.layers[info.id]
-            local mask_info = clip_base(model, index)
-            local mask = mask_info and project.layers[mask_info.id] or nil
-            local enabled = not info.clipping or
-                (mask_info and mask_info.visible and mask ~= nil)
-            if layer and enabled then
-                layer.image:setFilter(filter)
-                if mask then
-                    mask.image:setFilter(filter)
-                    local shader = shader_for_clipping()
-                    shader:send("clipImage", mask.image)
-                    shader:send("clipOpacity",
-                        math.max(0, math.min(100, mask_info.opacity or 100)) / 100)
-                    love.graphics.setShader(shader)
-                else
-                    love.graphics.setShader()
-                end
-                local opacity = math.max(0, math.min(100, info.opacity or 100)) / 100
-                love.graphics.setColor(1, 1, 1, opacity)
-                love.graphics.draw(layer.image, -project.w / 2, -project.h / 2)
-            end
+    local needs_compositing = false
+    for _, info in ipairs(model.layers) do
+        if info.visible and (info.clipping or
+           (info.blending or "Normal") ~= "Normal") then
+            needs_compositing = true
+            break
         end
     end
+
+    if not needs_compositing then
+        -- Preserva o caminho rápido das camadas normais já testado.
+        love.graphics.setBlendMode("alpha", "alphamultiply")
+        for _, info in ipairs(model.layers) do
+            if info.visible then
+                local layer = project.layers[info.id]
+                if layer then
+                    local opacity = clamp01((info.opacity or 100) / 100)
+                    layer.image:setFilter(filter)
+                    love.graphics.setColor(1, 1, 1, opacity)
+                    love.graphics.draw(layer.image,
+                        -project.w / 2, -project.h / 2)
+                end
+            end
+        end
+        love.graphics.pop()
+        return
+    end
+
+    local canvases = composite_canvases(project)
+    -- A UI do Ibis-Lua aplica zoom, rotação e pan ao canvas principal.
+    -- Renderizar as camadas offscreen requer coordenadas locais não transformadas.
+    love.graphics.push()
+    love.graphics.origin()
+    local front, back = canvases[1], canvases[2]
+    love.graphics.setCanvas(front)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setBlendMode("replace")
+    local shader = shader_for_layers()
+
+    for index, info in ipairs(model.layers) do
+        local layer = project.layers[info.id]
+        local base = clip_base(model, index)
+        local mask = base and project.layers[base.id] or nil
+        if info.visible and layer and
+           (not info.clipping or (mask and base.visible)) then
+            layer.image:setFilter(filter)
+            front:setFilter(filter)
+            if mask then mask.image:setFilter(filter) end
+            love.graphics.setCanvas(back)
+            love.graphics.setShader(shader)
+            shader:send("backdropImage", front)
+            shader:send("clipImage", mask and mask.image or layer.image)
+            shader:send("clipEnabled", mask and 1 or 0)
+            shader:send("clipOpacity", mask and
+                clamp01((base.opacity or 100) / 100) or 1)
+            shader:send("sourceOpacity", clamp01((info.opacity or 100) / 100))
+            shader:send("blendMode", assert(blend_ids[info.blending or "Normal"],
+                "Modo de mesclagem não suportado"))
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.draw(layer.image, 0, 0)
+            front, back = back, front
+        end
+    end
+    love.graphics.setShader()
+    love.graphics.pop()
+    love.graphics.setCanvas(destination)
+    love.graphics.setBlendMode("alpha", "alphamultiply")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(front, -project.w / 2, -project.h / 2)
     love.graphics.pop()
 end
 
@@ -208,23 +353,24 @@ function Engine.sample(project, model, x, y)
         local layer = project.layers[info.id]
         if layer and info.visible then
             local sr, sg, sb, sa = layer.pixels:getPixel(x, y)
-            sa = sa * math.max(0, math.min(100, info.opacity or 100)) / 100
+            sa = sa * clamp01((info.opacity or 100) / 100)
             if info.clipping then
                 local base = clip_base(model, index)
                 local mask = base and project.layers[base.id] or nil
                 if mask and base.visible then
                     local _, _, _, base_a = mask.pixels:getPixel(x, y)
-                    sa = sa * base_a *
-                        math.max(0, math.min(100, base.opacity or 100)) / 100
+                    sa = sa * base_a * clamp01((base.opacity or 100) / 100)
                 else
                     sa = 0
                 end
             end
             if sa > 0 then
                 local next_a = sa + a * (1 - sa)
-                r = (sr * sa + r * a * (1 - sa)) / next_a
-                g = (sg * sa + g * a * (1 - sa)) / next_a
-                b = (sb * sa + b * a * (1 - sa)) / next_a
+                local mode = assert(blend_ids[info.blending or "Normal"],
+                    "Modo de mesclagem não suportado")
+                r = compose_channel(r, sr, a, sa, mode, next_a)
+                g = compose_channel(g, sg, a, sa, mode, next_a)
+                b = compose_channel(b, sb, a, sa, mode, next_a)
                 a = next_a
             end
         end
