@@ -142,8 +142,9 @@ end
 -- quantização); valor 255 inclui todas as cores/transparências.
 -- Por padrão mantém flood-fill 4-conexo; diagonal_mode=true permite
 -- conexões de oito vizinhos sem afetar a varredura global.
+-- rgb_only=true compara os três canais de cor, ignorando diferenças de alfa.
 function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode,
-                              diagonal_mode)
+                              diagonal_mode, rgb_only)
     local ok, err = allowed(w, h)
     if not ok then return nil, err end
     if tolerance == nil then tolerance = 0 end
@@ -157,6 +158,9 @@ function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode,
     if diagonal_mode ~= nil and type(diagonal_mode) ~= "boolean" then
         return nil, "Conectividade diagonal da varinha deve ser booleana."
     end
+    if rgb_only ~= nil and type(rgb_only) ~= "boolean" then
+        return nil, "Comparação somente RGB da varinha deve ser booleana."
+    end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= w or y >= h then return nil end
     local data = layer.pixels
@@ -165,6 +169,7 @@ function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode,
     local s = empty(w, h, global_mode and "magic_wand_global" or "magic_wand")
     -- No modo global cada pixel é lido uma única vez: não alocar a
     -- tabela visited do flood-fill, que poderia ocupar 1 Mi entradas.
+    -- RGB-only afeta apenas a comparação, nunca a transparência pintada.
     local visited = not global_mode and {} or nil
     local function matches(px, py)
         if px < 0 or py < 0 or px >= w or py >= h then return false end
@@ -173,7 +178,8 @@ function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode,
         local r, g, b, a = data:getPixel(px, py)
         local same = math.abs(r - tr) <= threshold and
             math.abs(g - tg) <= threshold and
-            math.abs(b - tb) <= threshold and math.abs(a - ta) <= threshold
+            math.abs(b - tb) <= threshold and
+            (rgb_only or math.abs(a - ta) <= threshold)
         if not same and visited then visited[key] = true end
         return same
     end
