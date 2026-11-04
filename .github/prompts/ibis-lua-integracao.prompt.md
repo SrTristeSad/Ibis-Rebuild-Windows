@@ -121,6 +121,23 @@ com modo contíguo para arquivos anteriores 2–8 colunas e valor inválido,
 preservando as configurações já armazenadas. Testar ilhas, diagonais,
 tolerância, alfa, seleção, Alpha Lock, no-op, atalho, persistência e undo.
 Não modificar Ibis-Lua nem introduzir elementos gráficos.
+**Comparação RGB-only opcional do Balde**: Ctrl+Alt+M alterna
+`project.bucket_rgb_only` false/true por obra. O último argumento
+opcional de `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode,rgb_only)`
+aceita nil/false (padrão RGBA) ou true (compara só R/G/B,
+ignorando alfa para correspondência de cor). Deve funcionar
+nos modos contíguo e global, com tolerância RGBA anterior de 0..255
+por canal (alfa desconsiderado no RGB-only); não deve afetar
+`wand_rgb_only`, `bucket_global` ou o histórico ao alternar.
+Pixels com alfa zero podem conter RGB armazenado e ser selecionados.
+Ao pintar, permanecer usando as regras source-over existentes:
+a tinta pode mudar o alfa; Alpha Lock bloqueia alfa e pixels vazios.
+Persistir a preferência como décima coluna opcional de
+`document.tsv`; legados 2–9 colunas ou valor inválido retornam a
+RGBA preservando todos os campos anteriores. Sem controles novos,
+sem DLL própria. Testar alfas diferentes, global/contíguo,
+tolerância, no-op, Undo/Redo, Alpha Lock, seleção, dados inválidos,
+atalho Ctrl+Alt+M, reabertura e isolation por obra.
 **Comparação RGB-only opcional da Varinha**: Ctrl+Alt+R alterna
 `project.wand_rgb_only`. Com false/nil (padrão) a comparação considera
 R/G/B/A com tolerância independente 0..255 em cada canal. Com true,

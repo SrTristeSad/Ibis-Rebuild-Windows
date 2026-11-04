@@ -434,13 +434,13 @@ function Engine.sample(project, model, x, y)
     return Engine.composite_pixel_source(project, model, false).pixels:getPixel(x, y)
 end
 
--- Balde por cor: tolerância RGBA por canal em 8-bit (0..255).
+-- Balde por cor: tolerância de 0..255 em RGBA (padrão) ou apenas RGB.
 -- Contíguo 4-conexo por padrão; global_mode=true inclui ilhas sem conexão.
 -- Descobre a região usando APENAS o raster original antes de pintá-lo.
 -- Isso impede revisitas e loops quando a cor aplicada está na tolerância.
 -- Não modifica a máscara de seleção, pixels fora dela ou histórico em no-op.
 function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
-                     tolerance, global_mode)
+                     tolerance, global_mode, rgb_only)
     if project.w * project.h > 1024 * 1024 then
         return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
     end
@@ -451,6 +451,9 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
     end
     if global_mode ~= nil and type(global_mode) ~= "boolean" then
         return false, "Modo global do balde deve ser booleano."
+    end
+    if rgb_only ~= nil and type(rgb_only) ~= "boolean" then
+        return false, "Comparação RGB do balde deve ser booleana."
     end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= project.w or y >= project.h or
@@ -479,7 +482,7 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
         return math.abs(r - tr) <= threshold and
                math.abs(g - tg) <= threshold and
                math.abs(b - tb) <= threshold and
-               math.abs(a - ta) <= threshold
+               (rgb_only or math.abs(a - ta) <= threshold)
     end
 
     if global_mode then

@@ -71,6 +71,16 @@ e não afetam a Varinha. Alternar a configuração não pinta nem cria
 histórico; o modo é salvo na **nona coluna opcional** de `document.tsv`.
 Obras antigas iniciam no modo contíguo. O Ibis-Lua não ganhou
 controles novos.
+**Ctrl+Alt+M** alterna a comparação do Balde entre **RGBA**
+(padrão, considera o alfa) e **somente RGB** (ignora diferenças
+de transparência ao identificar pixels semelhantes). Funciona com
+preenchimento contíguo ou global e com a tolerância independente do
+Balde. A preferência é salva por obra na **décima coluna opcional**
+de `document.tsv`; arquivos anteriores usam RGBA. A opção muda
+**apenas a comparação**: pintar ainda usa a opacidade normal, podendo
+alterar o alfa dos pixels atingidos, salvo quando Alpha Lock está ativo.
+Cores RGB armazenadas sob alfa zero também entram na comparação
+RGB-only, embora não sejam visíveis na tela.
 Nenhum controle visual da interface original foi adicionado.
 **Ctrl+Alt+R** alterna a comparação entre **RGBA** (padrão, incluindo
 a transparência) e **somente RGB** (desconsidera diferenças de alfa).
