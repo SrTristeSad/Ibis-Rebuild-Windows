@@ -23,6 +23,21 @@
   (+16/−16/zero) por obra, independente da tolerância da Varinha.
   Salvar na oitava coluna de `document.tsv`, com zero padrão para
   documentos antigos de 2–7 colunas e flags inválidas. Não criar UI.
+- Balde global opcional via Ctrl+Alt+B:
+  `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode)`
+  recebe booleano final opcional. Nil/false mantém flood-fill
+  **4-conexo** antigo; true varre TODOS os pixels da camada ativa
+  com o mesmo critério RGBA por canal, sem depender de conectividade
+  e sem alocar uma fila de varredura. A lista de pixels selecionados
+  é montada antes de modificar o raster. Preservar máscara, Alpha Lock,
+  feather, tolerância 0..255, opacidade e um só undo/redo por
+  operação; no-op não cria histórico nem marca dirty. O estado
+  `project.bucket_global` (false por padrão) é independente da
+  Varinha Mágica e da tolerância. Persistir na nona coluna opcional
+  de `document.tsv`, padrão false para 2–8 colunas ou flags
+  inválidas, sem apagar os campos anteriores. Não modificar o submódulo
+  nem adicionar controles visuais. Testar regiões desconectadas,
+  diagonais, transparência, histórico, Ctrl+Alt+B e retrocompatibilidade.
 - Alpha Lock preserva o alfa dos pixels; Clipping usa a máscara da camada-base
   na composição Lua/LÖVE, sem modificar os pixels salvos da camada clipada.
   Preserve testes que comparam a amostra CPU com o resultado de shader GPU.
