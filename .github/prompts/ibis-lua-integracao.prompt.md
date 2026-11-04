@@ -72,6 +72,21 @@ na camada ativa, sem quebrar tolerância/modo global legados. Usar notice
 existente e não alterar o submódulo de interface. Testar sobreposição,
 ocultas, opacidade, Multiply, clipping, fundo branco/transparente,
 combinação independente dos modos, isolamento por obra e undo.
+**Conectividade diagonal opcional da Varinha**: Ctrl+Alt+8 alterna
+`project.wand_diagonal` entre false (4-vizinhos padrão) e true
+(8-vizinhos, incluindo diagonais) no modo contíguo. O argumento
+opcional `diagonal_mode` de
+`Selection.magic_wand(layer,w,h,x,y,tolerance,global_mode,diagonal_mode)`
+é booleano, default false. Preservar o scanline 4-conexo existente
+inalterado. O modo global é independente desse argumento e da
+conectividade; limites 1 Mi, RGBA por canal, tolerância, combinações,
+histórico de máscaras e fonte da cor seguem idênticos. O toggle não
+altera seleção ativa, pixels, dirty nem histórico. Persistir como
+sexta coluna opcional em `document.tsv` (0/1); legados com 2–5
+colunas ou valor inválido usam 4-vizinhos sem alterar as preferências
+já gravadas. Não modificar o Ibis-Lua original nem criar UI extra.
+Testar pontes em diagonal, bordas, tolerância/alfa, ilhas, modos
+global/contíguo, shortcut Ctrl+Alt+8, reabertura e undo.
 Expansão/contração de máscara binária: `Selection.morph(s,"expand")`
 e `Selection.morph(s,"contract")` usam vizinhança 8-conexa quadrada
 de 3×3, sem alterar a máscara original. **Ctrl+Alt+Up** expande
