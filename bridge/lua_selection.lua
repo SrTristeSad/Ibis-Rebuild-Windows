@@ -140,9 +140,10 @@ end
 -- Varinha usa tolerância por CANAL RGBA, em unidades inteiras 8-bit.
 -- Zero mantém equivalência à seleção exata antiga (margem de
 -- quantização); valor 255 inclui todas as cores/transparências.
--- Por padrão mantém flood-fill 4-conexo; global_mode=true compara todos
--- os pixels da camada ativa, inclusive ilhas desconectadas.
-function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode)
+-- Por padrão mantém flood-fill 4-conexo; diagonal_mode=true permite
+-- conexões de oito vizinhos sem afetar a varredura global.
+function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode,
+                              diagonal_mode)
     local ok, err = allowed(w, h)
     if not ok then return nil, err end
     if tolerance == nil then tolerance = 0 end
@@ -152,6 +153,9 @@ function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode)
     end
     if global_mode ~= nil and type(global_mode) ~= "boolean" then
         return nil, "Modo global da varinha deve ser booleano."
+    end
+    if diagonal_mode ~= nil and type(diagonal_mode) ~= "boolean" then
+        return nil, "Conectividade diagonal da varinha deve ser booleana."
     end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= w or y >= h then return nil end
@@ -179,6 +183,39 @@ function Selection.magic_wand(layer, w, h, x, y, tolerance, global_mode)
         for py = 0, h - 1 do
             for px = 0, w - 1 do
                 if matches(px, py) then add(s, px, py) end
+            end
+        end
+        return finalize(s)
+    end
+    if diagonal_mode then
+        -- Scanline 8-conexo: cada linha coberta estende a procura por
+        -- UM pixel nas linhas acima/abaixo, incluindo diagonais.
+        -- Não altera o flood-fill 4-conexo anterior.
+        local stack = {{x, y}}
+        while #stack > 0 do
+            local point = table.remove(stack)
+            local px, py = point[1], point[2]
+            if matches(px, py) then
+                while matches(px - 1, py) do px = px - 1 end
+                local left = px
+                while matches(px, py) do
+                    add(s, px, py)
+                    px = px + 1
+                end
+                local right = px - 1
+                for _, next_y in ipairs({py - 1, py + 1}) do
+                    local in_run = false
+                    for next_x = left - 1, right + 1 do
+                        if matches(next_x, next_y) then
+                            if not in_run then
+                                stack[#stack + 1] = {next_x, next_y}
+                            end
+                            in_run = true
+                        else
+                            in_run = false
+                        end
+                    end
+                end
             end
         end
         return finalize(s)
