@@ -1274,7 +1274,7 @@ local function test_bucket_global_bridge(Bridge, gallery)
     assert(shortcut("b") and Bridge.bucket_global(model))
     assert(Bridge.save())
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t16\t1\t0\t0\t0\t16\t1$"),
+    assert(metadata:match("\t0\t1\t0\t0\t0\t16\t1$"),
            "Documento não gravou nona coluna global do Balde")
     local other = gallery:add_artwork(16, 16, "Other global bucket")
     Bridge.create(model, other, gallery)
