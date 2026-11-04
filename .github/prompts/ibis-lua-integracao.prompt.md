@@ -22,6 +22,15 @@ colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+Up/Down) estão integradas sem novos componentes visuais.
 Histórico reversível deve incluir tanto pixels quanto a geometria da seleção.
 O clipboard não acessa o clipboard do Windows.
+O histórico de undo/redo agora persiste em `history.tsv` e PNGs por passo
+(gerações com manifesto gravado por último) para obras de até 1.048.576
+pixels. Em memória permanecem até 8 passos por pilha e snapshots limitados
+a 32 MiB por camada. Ao reabrir, valide integralmente manifesto,
+identidade de camadas, tamanho dos PNGs e máscaras de seleção antes
+de adotar as pilhas; arquivos inválidos não devem bloquear a obra.
+Não persista histórico de alterações estruturais de camadas.
+Mantenha os testes de reabertura, duas camadas, undo/redo com contorno,
+corrupção e limpeza de arquivos antigos.
 A seleção ativa agora é salva em `selection.png` por obra, como máscara
 binária independente das camadas. Reabertura valida assinatura PNG,
 dimensões e limite de bytes; arquivo ausente ou inválido não deve impedir
@@ -42,7 +51,8 @@ pixels da camada ativa; a Varinha e o Laço possuem gestos de seleção
 independentes. Rotação ortogonal, escala 50%/200% e copiar/colar de pixels da camada ativa
 possuem implementação Lua; preserve os testes de giro, amostragem,
 limites do canvas, source-over e histórico com contorno.
-A seleção é persistente apenas como máscara por obra (sem histórico salvo).
+A seleção é persistente como máscara por obra; o histórico dos passos de
+edição raster e da geometria associada também é salvo para obras pequenas.
 Não declare rotação livre, escala arbitrária ou clipboard Windows
 como concluídos. Preserve testes de PNG roundtrip, arquivo inválido,
 desmarcação e compatibilidade com projetos sem seleção.

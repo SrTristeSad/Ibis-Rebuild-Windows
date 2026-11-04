@@ -1,6 +1,6 @@
 -- Verifica sintaxe no LuaJIT real, antes de carregar testes gráficos.
 local names = {"paint_main.lua", "lua_engine.lua", "lua_bridge.lua",
-               "lua_selection.lua"}
+               "lua_selection.lua", "lua_history.lua"}
 function love.load()
     for _, name in ipairs(names) do
         local contents, read_error = love.filesystem.read(name)

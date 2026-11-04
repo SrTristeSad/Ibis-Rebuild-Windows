@@ -29,6 +29,12 @@
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam
   a seleção. Testar pixels não selecionados, histórico e bordas.
+- Histórico raster persiste em `history.tsv` e PNGs versionados por geração
+  para documentos de até 1.048.576 pixels, com até 8 snapshots em cada
+  pilha (undo e redo). Os arquivos de snapshot devem ser validados em
+  conjunto: um item corrompido invalida todo o histórico, mas nunca
+  impede reabrir os PNGs da obra. Descarte históricos de camadas removidas
+  sem bloquear o salvamento. Teste reabertura com duas camadas e seleção.
 - Seleção ativa persiste em `selection.png` por obra (máscara binária),
   sem mudar os PNGs das camadas; arquivo ausente, corrompido ou com dimensões
   incorretas não pode impedir a abertura do projeto. Desmarcar e salvar remove

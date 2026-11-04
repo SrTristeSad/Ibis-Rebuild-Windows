@@ -176,10 +176,119 @@ local function test_selection_roundtrip(Bridge, model, id)
     assert(not oversized and oversized_reason,
         "Seleção excedente não respeitou limite raster")
     assert(love.filesystem.remove(file))
+    require("lua_history").cleanup(path)
     for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv",
                                "document.tsv"}) do
         assert(love.filesystem.remove(path .. "/" .. filename))
     end
+    assert(love.filesystem.remove(path))
+end
+
+-- Histórico separado dos pixels salvos: undo/redo, duas camadas,
+-- geometria da seleção e rejeição de manifesto/snapshot corrompidos.
+local function test_history_roundtrip(E)
+    local History = require("lua_history")
+    local Selection = require("lua_selection")
+    local path = "lua-history-tests"
+    assert(love.filesystem.createDirectory(path))
+    local model = {layers = {
+        {id = 1, visible = true, opacity = 100},
+        {id = 2, visible = true, opacity = 100}
+    }}
+    local p = E.new(16, 16)
+    E.sync(p, model)
+    E.begin_stroke(p, 1)
+    p.layers[1].pixels:setPixel(2, 2, 1, 0, 0, 1)
+    p.layers[1].image:replacePixels(p.layers[1].pixels)
+    E.begin_stroke(p, 2)
+    p.layers[2].pixels:setPixel(6, 6, 0, 0, 1, 1)
+    p.layers[2].image:replacePixels(p.layers[2].pixels)
+    local selection = assert(Selection.rectangle(16, 16, 2, 2, 3, 3))
+    assert(E.move_selection(p, 1, selection, 3, 0))
+    assert(E.undo(p, selection), "Move não criou redo")
+    assert(#p.undo == 2 and #p.redo == 1,
+        "Pré-condições de histórico multicamada inválidas")
+    for id = 1, 2 do
+        p.layers[id].pixels:encode("png", path .. "/layer_" .. id .. ".png")
+    end
+    assert(Selection.save(selection, path .. "/selection.png"))
+    local saved, count = History.save(p, path, selection)
+    assert(saved and count == 3 and love.filesystem.getInfo(path .. "/history.tsv"),
+        "Falha ao criar histórico separado com 3 snapshots")
+
+    local reopened = E.new(16, 16)
+    E.sync(reopened, model)
+    for id = 1, 2 do
+        assert(E.load_layer(reopened, id, path .. "/layer_" .. id .. ".png"))
+    end
+    local reopened_selection = assert(Selection.load(path .. "/selection.png", 16, 16))
+    local loaded, restored = History.load(reopened, path, reopened_selection)
+    assert(loaded and restored == 3 and #reopened.undo == 2 and
+           #reopened.redo == 1, "Histórico não restaurou duas pilhas")
+    assert(E.redo(reopened, reopened_selection),
+        "Redo após reabrir não moveu pixels")
+    assert(Selection.contains(reopened_selection, 5, 2) and
+           select(1, reopened.layers[1].pixels:getPixel(5, 2)) > 0.99,
+        "Redo da transformação não restaurou máscara e pixels")
+    assert(E.undo(reopened, reopened_selection),
+        "Undo após reabrir não voltou os pixels")
+    assert(Selection.contains(reopened_selection, 2, 2) and
+           select(1, reopened.layers[1].pixels:getPixel(2, 2)) > 0.99,
+        "Undo após reabrir não restaurou contorno")
+    assert(E.undo(reopened, reopened_selection),
+        "Undo da segunda camada após reabrir falhou")
+    local _, _, _, empty_blue = reopened.layers[2].pixels:getPixel(6, 6)
+    assert(empty_blue == 0, "Histórico da outra camada não foi aplicado")
+    assert(E.redo(reopened, reopened_selection))
+    assert(select(3, reopened.layers[2].pixels:getPixel(6, 6)) > 0.99,
+        "Redo da segunda camada falhou")
+
+    -- Sem histórico, obras antigas abrem com pilhas vazias.
+    local missing = E.new(16, 16)
+    E.sync(missing, model)
+    local untrusted = love.filesystem.read(path .. "/history.tsv")
+    assert(untrusted and #untrusted > 20)
+    assert(love.filesystem.remove(path .. "/history.tsv"))
+    assert(not History.load(missing, path, reopened_selection)
+       and #missing.undo == 0 and #missing.redo == 0,
+       "Projeto sem histórico não deveria gerar passos")
+    assert(love.filesystem.write(path .. "/history.tsv", "corrupt\nmanifest"))
+    assert(not History.load(missing, path, reopened_selection)
+       and #missing.undo == 0 and #missing.redo == 0,
+       "Manifesto corrompido deveria ser ignorado")
+    assert(love.filesystem.write(path .. "/history.tsv", untrusted))
+    local gen = assert(untrusted:match("^IBIS_LUA_HISTORY_V1\t16\t16\t(%d+_%d+)"))
+    local png = path .. "/history_" .. gen .. "_redo_1.png"
+    assert(love.filesystem.getInfo(png))
+    assert(love.filesystem.remove(png))
+    assert(not History.load(missing, path, reopened_selection)
+       and #missing.undo == 0 and #missing.redo == 0,
+       "Snapshot ausente não deve permitir histórico parcial")
+    assert(History.save(p, path, selection))
+    local bad = "IBIS_LUA_HISTORY_V1\t16\t16\t../../outside\nundo\t1\t1\t0"
+    assert(love.filesystem.write(path .. "/history.tsv", bad))
+    assert(not History.load(missing, path, reopened_selection),
+        "Manifesto com caminho malicioso não foi rejeitado")
+
+    -- Remover uma camada não pode bloquear salvamento de outros passos.
+    p.layers[2] = nil
+    assert(History.save(p, path, selection))
+    local filtered = E.new(16, 16)
+    E.sync(filtered, {layers = {model.layers[1]}})
+    assert(History.load(filtered, path, selection),
+        "Histórico com camada removida não foi filtrado")
+
+    -- Ausência de passos deve apagar o histórico anterior do disco.
+    local empty = E.new(16, 16)
+    E.sync(empty, model)
+    assert(History.save(empty, path, nil))
+    assert(not love.filesystem.getInfo(path .. "/history.tsv"),
+        "Histórico antigo reapareceria em obra sem snapshots")
+    History.cleanup(path)
+    for id = 1, 2 do
+        assert(love.filesystem.remove(path .. "/layer_" .. id .. ".png"))
+    end
+    assert(love.filesystem.remove(path .. "/selection.png"))
     assert(love.filesystem.remove(path))
 end
 
@@ -458,6 +567,8 @@ function love.load()
            "Redo de movimento inconsistente")
 
     test_clipboard_transform(E)
+    checkpoint("history PNG roundtrip")
+    test_history_roundtrip(E)
 
     checkpoint("before persistence")
     -- Prova de persistência da obra pela ponte usada pelo Ibis-Lua.
@@ -521,6 +632,12 @@ function love.load()
     function model3:active_layer() return self.layers[1] end
     function model3:set_color(red, green_, blue_) self.color = {red, green_, blue_} end
     Bridge.open(model3, id)
+    assert(love.filesystem.getInfo(path .. "/history.tsv"),
+        "Ponte não salvou histórico da pintura")
+    assert(Bridge.undo(), "Ponte não restaurou undo do histórico")
+    local _, _, _, gone = love.image.newImageData(path .. "/layer_1.png"):getPixel(8, 8)
+    assert(gone > 0.9, "Undo não deveria modificar PNG já persistido")
+    assert(Bridge.redo(), "Ponte não restaurou redo do histórico")
     assert(model3.layers[1].name == "Layer One", "Metadados da camada não reabertos")
     assert(model3.layers[1].alpha_lock and model3.layers[1].locked
            and model3.layers[1].blending == "Multiply",
@@ -593,6 +710,7 @@ function love.load()
     test_selection_roundtrip(Bridge, model4, art4)
 
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
+    require("lua_history").cleanup(path)
     for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv", "document.tsv"}) do
         love.filesystem.remove(path .. "/" .. filename)
     end
@@ -600,6 +718,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: Lua selection PNG roundtrip/corrupt/clear + transforms + layers")
+    print("PASS: Lua history persisted undo/redo + selection/layers + corrupt recovery")
     love.event.quit(0)
 end
