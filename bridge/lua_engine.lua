@@ -434,12 +434,13 @@ function Engine.sample(project, model, x, y)
     return Engine.composite_pixel_source(project, model, false).pixels:getPixel(x, y)
 end
 
--- Balde contíguo: tolerância RGBA por canal em 8-bit (0..255).
+-- Balde por cor: tolerância RGBA por canal em 8-bit (0..255).
+-- Contíguo 4-conexo por padrão; global_mode=true inclui ilhas sem conexão.
 -- Descobre a região usando APENAS o raster original antes de pintá-lo.
 -- Isso impede revisitas e loops quando a cor aplicada está na tolerância.
 -- Não modifica a máscara de seleção, pixels fora dela ou histórico em no-op.
 function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
-                     tolerance)
+                     tolerance, global_mode)
     if project.w * project.h > 1024 * 1024 then
         return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
     end
@@ -447,6 +448,9 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
     if type(tolerance) ~= "number" or tolerance ~= math.floor(tolerance) or
        tolerance < 0 or tolerance > 255 then
         return false, "Tolerância do balde deve ser um inteiro de 0 a 255."
+    end
+    if global_mode ~= nil and type(global_mode) ~= "boolean" then
+        return false, "Modo global do balde deve ser booleano."
     end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= project.w or y >= project.h or
@@ -478,28 +482,41 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
                math.abs(a - ta) <= threshold
     end
 
-    -- Scanline 4-conexo; a fila registra somente sementes de segmentos.
-    -- O conjunto visited substitui a mutação como controle de progresso.
-    local stack = {{x, y}}
-    while #stack > 0 do
-        local point = table.remove(stack)
-        local sx, sy = point[1], point[2]
-        if matches(sx, sy) then
-            while matches(sx - 1, sy) do sx = sx - 1 end
-            local above, below = false, false
-            while matches(sx, sy) do
-                local key = sy * w + sx
-                visited[key] = true
-                points[#points + 1] = key
-                if matches(sx, sy - 1) then
-                    if not above then stack[#stack + 1] = {sx, sy - 1} end
-                    above = true
-                else above = false end
-                if matches(sx, sy + 1) then
-                    if not below then stack[#stack + 1] = {sx, sy + 1} end
-                    below = true
-                else below = false end
-                sx = sx + 1
+    if global_mode then
+        -- Varredura única de toda a camada ativa: cada célula é
+        -- examinada antes de pintar e não se aloca pilha de busca.
+        -- Máscara e Alpha Lock continuam restringindo a amostragem.
+        for py = 0, h - 1 do
+            for px = 0, w - 1 do
+                if matches(px, py) then
+                    points[#points + 1] = py * w + px
+                end
+            end
+        end
+    else
+        -- Scanline 4-conexo histórico; a fila registra sementes de
+        -- segmentos. Visited evita revisitas e mantém o percurso finito.
+        local stack = {{x, y}}
+        while #stack > 0 do
+            local point = table.remove(stack)
+            local sx, sy = point[1], point[2]
+            if matches(sx, sy) then
+                while matches(sx - 1, sy) do sx = sx - 1 end
+                local above, below = false, false
+                while matches(sx, sy) do
+                    local key = sy * w + sx
+                    visited[key] = true
+                    points[#points + 1] = key
+                    if matches(sx, sy - 1) then
+                        if not above then stack[#stack + 1] = {sx, sy - 1} end
+                        above = true
+                    else above = false end
+                    if matches(sx, sy + 1) then
+                        if not below then stack[#stack + 1] = {sx, sy + 1} end
+                        below = true
+                    else below = false end
+                    sx = sx + 1
+                end
             end
         end
     end
