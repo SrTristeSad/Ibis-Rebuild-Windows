@@ -67,6 +67,13 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Ctrl+Shift+L (anti-horária). **Escala nearest-neighbour**:
   Ctrl+Shift+↑ duplica as dimensões, Ctrl+Shift+↓ reduz a 50%.
   O canto superior esquerdo da seleção ancora a transformação.
+  **Espelhar a seleção horizontalmente**: Ctrl+Shift+H.
+  **Espelhar verticalmente**: Ctrl+Shift+V. O espelhamento reflete
+  tanto os pixels quanto a máscara irregular dentro de seus limites,
+  preserva os pixels fora da seleção e compõe sobreposição RGBA
+  source-over. É uma operação nearest-neighbour de um único passo
+  de undo/redo, incluindo geometria da seleção e histórico persistente.
+  Camadas bloqueadas ou com Alpha Lock não podem ser transformadas.
   Os atalhos são específicos desta integração Lua, sem novos controles
   visuais na interface Ibis-Lua. Undo/redo restaura pixels e geometria
   enquanto a mesma seleção permanecer ativa.
@@ -190,6 +197,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Testes adicionais cobrem ângulos livres, escalas X/Y independentes,
   pixels RGBA preservados, parâmetros inválidos, operações nas bordas
   e gestos Alt/Shift reais na ponte com undo/redo.
+  O CI também cobre flips H/V de máscaras irregulares, sobreposição
+  semitransparente, proteção de pixels externos, histórico gravado/reaberto,
+  atalhos Ctrl+Shift+H/V e bloqueio por Layer Lock/Alpha Lock.
   A suíte verifica que a API de prévia bilinear CPU não altera a obra
   e coincide com o commit pixel a pixel. A prévia GPU de rotação/escala
   compara RGBA pré-multiplicado com o commit CPU (tolerância GLSL),

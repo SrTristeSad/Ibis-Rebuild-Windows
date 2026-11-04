@@ -32,8 +32,10 @@ independente. Alt/Shift mostram uma prévia **GPU bilinear RGBA**
 com máscara e Canvas reutilizados por gesto, sem recalcular pixels
 em Lua a cada mousemoved. O contorno é transformado graficamente
 e a CPU só grava o resultado ao soltar, preservando undo/redo.
-Os atalhos antigos mantêm nearest-neighbour. O arraste normal
-do Transformar também exibe uma prévia GPU do deslocamento inteiro,
+Os atalhos antigos mantêm nearest-neighbour. Espelhamento da
+seleção **horizontal (Ctrl+Shift+H)** e **vertical (Ctrl+Shift+V)**
+reflete pixels e máscara irregular com undo/redo.
+O arraste normal do Transformar também exibe uma prévia GPU do deslocamento inteiro,
 com máscara/cache reutilizados sem recalcular todos os pixels em Lua
 a cada movimento subpixel. O visual e os
 controles originais do Ibis-Lua não foram alterados. Outros controles

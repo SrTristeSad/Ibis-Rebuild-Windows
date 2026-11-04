@@ -46,6 +46,13 @@
   (giro horário/anti-horário), Ctrl+Shift+Up/Down (200%/50%).
   Preserve undo/redo de pixels e geometria, compatibilidade com a máscara
   de seleção e testes da transformação.
+- Espelhamento de seleção H/V: Ctrl+Shift+H / Ctrl+Shift+V pela ponte;
+  `Engine.reshape_selection` reflete pixels e máscara irregular nos
+  limites locais da seleção, não o canvas inteiro. Deve preservar alfa
+  RGBA source-over, pixels externos, Layer Lock e Alpha Lock, desfazer/
+  refazer e histórico persistente. Não criar botões ou alterar Ibis-Lua.
+  Testar lacunas na máscara, mistura com pixels externos, atalhos e
+  recusa de flip sem deslocamento em largura/altura de um pixel.
 - Rotação livre e escala X/Y independente usam `Engine.affine_selection`
   com mapeamento inverso e filtro opcional (`nearest` por padrão). Em Transformar:
   Alt+arrastar gira relativamente ao centro da seleção, Shift+arrastar

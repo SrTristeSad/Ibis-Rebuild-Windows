@@ -20,6 +20,14 @@ Copiar/Recortar/Colar são internos à aplicação (Ctrl+C, Ctrl+X, Ctrl+V);
 colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+R, Ctrl+Shift+L) e escala nearest-neighbour 200%/50%
 (Ctrl+Shift+Up/Down) estão integradas sem novos componentes visuais.
+Espelhamento horizontal e vertical da seleção usam **Ctrl+Shift+H**
+e **Ctrl+Shift+V**; `Engine.reshape_selection` aceita
+`"flip_horizontal"` e `"flip_vertical"`. Espelhar a máscara irregular
+e os pixels correspondentes com nearest-neighbour dentro dos mesmos
+limites, sem tocar em pixels não selecionados, e preservar source-over,
+undo/redo de pixels e geometria, persistência do histórico e restrições
+de camada bloqueada / Alpha Lock. Se largura/altura relevante tiver
+um único pixel, recusar o no-op sem gravar histórico.
 No instrumento Transformar, **Alt+arrastar dentro da seleção** ativa
 rotação contínua pelo ângulo relativo ao centro da máscara; **Shift+
 arrastar dentro da seleção** ativa escala independente X/Y pelo
@@ -76,8 +84,9 @@ Não invente novos modos nem reivindique equivalência exata com o aplicativo of
 Preserve os eventos do Ibis-Lua: selecionar a ferramenta Transformar permite
 arrastar para criar seleção retangular e arrastar dentro dela para mover os
 pixels da camada ativa; a Varinha e o Laço possuem gestos de seleção
-independentes. Rotação ortogonal, escala 50%/200% e copiar/colar de pixels da camada ativa
-possuem implementação Lua; preserve os testes de giro, amostragem,
+independentes. Rotação ortogonal, escala 50%/200%, espelhamento H/V
+e copiar/colar de pixels da camada ativa possuem implementação Lua;
+preserve os testes de giro, flip de máscara irregular, amostragem,
 limites do canvas, source-over e histórico com contorno.
 A seleção é persistente como máscara por obra; o histórico dos passos de
 edição raster e da geometria associada também é salvo para obras pequenas.
