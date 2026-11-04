@@ -44,10 +44,15 @@ a ferramenta seleciona apenas pixels conectados ao ponto clicado.
 O ajuste é salvo em `document.tsv` e não modifica a pintura.
 **Ctrl+Alt+G** alterna a Varinha entre **contígua** (padrão) e
 **global por cor**: neste último modo, seleciona todas as regiões RGBA
-semelhantes da camada ativa, mesmo ilhas separadas e diagonais.
+semelhantes da fonte de cor escolhida, mesmo ilhas separadas e diagonais.
 A preferência de modo é salva por obra na quarta coluna opcional de
 `document.tsv`, sem modificar pixels, seleção nem histórico.
 Arquivos anteriores continuam no modo contíguo por padrão.
+**Ctrl+Alt+8** alterna a conectividade do modo contíguo entre **4 vizinhos**
+(padrão, apenas lados) e **8 vizinhos** (inclui encontros pelos cantos).
+Essa preferência é independente da seleção global, da tolerância e da
+fonte de amostragem. É salva na sexta coluna opcional de `document.tsv`;
+arquivos anteriores preservam a conectividade de quatro vizinhos.
 **Ctrl+Alt+T** alterna independentemente a fonte de cor: **camada ativa**
 (padrão) ou **composição visível de todas as camadas**. A amostra composta
 respeita visibilidade, opacidade, modos de mesclagem, clipping e o fundo
