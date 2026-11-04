@@ -390,6 +390,79 @@ local function test_affine_transforms(E)
            "Transformação identidade não deveria gerar histórico")
 end
 
+-- Interpolação bilinear em RGB pré-multiplicado e paridade preview/commit.
+local function test_bilinear_preview(E)
+    local Selection = require("lua_selection")
+    local p = E.new(32, 32)
+    E.sync(p, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local layer = p.layers[1]
+    layer.pixels:setPixel(12, 12, 1, 0, 0, 1)
+    layer.pixels:setPixel(13, 12, 0, 0, 1, 1)
+    -- RGB de pixels transparentes fora da máscara não pode criar halo.
+    layer.pixels:setPixel(11, 12, 0, 1, 0, 0)
+    layer.image:replacePixels(layer.pixels)
+    p.dirty = false
+    local area = assert(Selection.rectangle(32, 32, 12, 12, 15, 15))
+    local initial = Selection.clone(area)
+    local preview = assert(E.preview_affine(p, 1, area,
+                                           15, 1.5, 1.2, "bilinear"))
+    assert(preview.image and preview.selection.count > 0 and
+           preview.pixels ~= layer.pixels, "Prévia não criou imagem independente")
+    assert(#p.undo == 0 and #p.redo == 0 and p.dirty == false and
+           Selection.contains(area, 12, 12),
+           "Prévia modificou histórico, dirty ou seleção original")
+    assert(select(1, layer.pixels:getPixel(12, 12)) > 0.99 and
+           select(4, layer.pixels:getPixel(11, 12)) == 0,
+           "Prévia modificou os pixels da camada original")
+
+    local mixed = false
+    for y = preview.selection.min_y, preview.selection.max_y do
+        for x = preview.selection.min_x, preview.selection.max_x do
+            if Selection.contains(preview.selection, x, y) then
+                local red, green, blue, alpha = preview.pixels:getPixel(x, y)
+                assert(green < 0.01, "Bilinear vazou RGB transparente não selecionado")
+                if red > 0.1 and blue > 0.1 and alpha > 0.1 then
+                    mixed = true
+                end
+            end
+        end
+    end
+    assert(mixed, "Bilinear não interpolou cores adjacentes")
+
+    local expected = preview.pixels
+    local saved_mask = Selection.clone(preview.selection)
+    assert(E.affine_selection(p, 1, area, 15, 1.5, 1.2, "bilinear"),
+        "Commit bilinear recusou parâmetros válidos")
+    for y = 0, 31 do
+        for x = 0, 31 do
+            local ar, ag, ab, aa = layer.pixels:getPixel(x, y)
+            local er, eg, eb, ea = expected:getPixel(x, y)
+            assert(close(ar, er, 1 / 255) and close(ag, eg, 1 / 255) and
+                   close(ab, eb, 1 / 255) and close(aa, ea, 1 / 255),
+                   "Prévia e pixels finais divergiram")
+        end
+    end
+    assert(area.count == saved_mask.count and
+           area.min_x == saved_mask.min_x and area.max_y == saved_mask.max_y,
+           "Prévia e seleção final divergiram")
+    assert(#p.undo == 1 and p.dirty and E.undo(p, area),
+           "Commit bilinear não gerou exatamente um passo de histórico")
+    assert(area.count == initial.count and
+           layer.pixels:getPixel(12, 12) > 0.99,
+           "Undo bilinear não restaurou imagem e seleção")
+    assert(E.redo(p, area) and area.count == saved_mask.count,
+           "Redo bilinear não restaurou geometria")
+    preview.image:release()
+
+    local edge = assert(Selection.rectangle(32, 32, 30, 30, 31, 31))
+    local before = #p.undo
+    local invalid, err = E.preview_affine(p, 1, edge, 45, 2, 2, "bilinear")
+    assert(not invalid and err and #p.undo == before,
+           "Prévia fora do canvas deveria ser recusada sem alterar histórico")
+    local unknown = E.preview_affine(p, 1, edge, 0, 1.5, 1.5, "cubic")
+    assert(not unknown, "Filtro desconhecido foi aceito")
+end
+
 -- Testa os gestos modificados no Bridge sem mexer nos botões existentes.
 local function test_affine_bridge(Bridge, gallery)
     local model = {
@@ -437,7 +510,24 @@ local function test_affine_bridge(Bridge, gallery)
     end
     press(33, 32)
     love.keyboard.isDown = native_is_down
+    local rx, ry = screen(30, 37)
+    assert(Bridge.mousemoved(model, rx, ry, 1), "Prévia da rotação não consumiu gesto")
+    local rotating_preview = assert(Bridge.preview_snapshot(),
+        "Alt+arrastar não criou prévia antes de soltar")
+    assert(rotating_preview.selection.count > 0 and
+           Bridge.selection_snapshot().min_x == selection.min_x,
+           "Prévia mudou prematuramente a máscara ativa")
+    local preview_image = love.graphics.newCanvas(64, 64)
+    love.graphics.push("all")
+    love.graphics.setCanvas(preview_image)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.translate(32, 32)
+    Bridge.draw(model, {interpolation = "pixelated"})
+    love.graphics.pop()
+    assert(Bridge.selection_snapshot().min_x == selection.min_x,
+           "Renderização da prévia alterou a seleção real")
     assert(release(30, 37), "Alt+arrastar não aplicou rotação")
+    assert(not Bridge.preview_snapshot(), "Prévia não foi liberada ao soltar")
     local rotated = assert(Bridge.selection_snapshot())
     assert(rotated.min_x ~= selection.min_x and rotated.count > 0,
         "Alt+arrastar não rotacionou a geometria da seleção")
@@ -456,8 +546,16 @@ local function test_affine_bridge(Bridge, gallery)
     end
     press(33, 32)
     love.keyboard.isDown = native_is_down
+    local sx, sy = screen(35, 34)
+    assert(Bridge.mousemoved(model, sx, sy, 1), "Prévia da escala não consumiu gesto")
+    local scaling_preview = assert(Bridge.preview_snapshot(),
+        "Shift+arrastar não criou prévia antes de soltar")
+    assert(Bridge.selection_snapshot().count == rotated.count,
+           "Prévia da escala modificou a máscara antes de soltar")
     assert(release(35, 34), "Shift+arrastar não aplicou escala independente")
     local scaled = assert(Bridge.selection_snapshot())
+    assert(scaled.count == scaling_preview.selection.count and
+           not Bridge.preview_snapshot(), "Prévia da escala divergiu ou não foi liberada")
     assert(scaled.count > rotated.count, "Escala livre não expandiu a seleção")
     assert(Bridge.undo(), "Gesto de escala não gerou undo")
     local restored = assert(Bridge.selection_snapshot())
@@ -744,6 +842,8 @@ function love.load()
     test_clipboard_transform(E)
     checkpoint("affine rotation and nonuniform scaling")
     test_affine_transforms(E)
+    checkpoint("bilinear preview and commit")
+    test_bilinear_preview(E)
     checkpoint("history PNG roundtrip")
     test_history_roundtrip(E)
 
@@ -897,6 +997,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: Lua affine rotation/scale + history + selected pixels")
+    print("PASS: bilinear preview/commit RGBA + affine + history + layers")
     love.event.quit(0)
 end

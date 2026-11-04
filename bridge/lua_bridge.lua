@@ -6,6 +6,34 @@ local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
 local selection, gesture, clipboard = nil, nil, nil
+local function discard_preview(d)
+    if d and d.preview then
+        if d.preview.image then d.preview.image:release() end
+        d.preview = nil
+    end
+end
+
+-- A mesma matemática orienta a prévia e o resultado final.
+local function affine_gesture_args(d)
+    if not selection or not d then return nil end
+    if d.kind == "rotate_free" then
+        local cx = (selection.min_x + selection.max_x + 1) / 2
+        local cy = (selection.min_y + selection.max_y + 1) / 2
+        local begin_x, begin_y = d.x - cx, d.y - cy
+        local end_x, end_y = d.end_x - cx, d.end_y - cy
+        if begin_x * begin_x + begin_y * begin_y < 0.25 or
+           end_x * end_x + end_y * end_y < 0.25 then return nil end
+        return math.deg(math.atan2(end_y, end_x) -
+                        math.atan2(begin_y, begin_x)), 1, 1
+    elseif d.kind == "scale_free" then
+        local sw = selection.max_x - selection.min_x + 1
+        local sh = selection.max_y - selection.min_y + 1
+        return 0, math.max(0.1, math.min(8, 1 + (d.end_x - d.x) / sw)),
+                  math.max(0.1, math.min(8, 1 + (d.end_y - d.y) / sh))
+    end
+    return nil
+end
+
 local gallery_images = {}
 local counter = 0
 
@@ -29,6 +57,7 @@ end
 function Bridge.supports(w, h) return Engine.supports(w, h) end
 
 function Bridge.create(model, id, gallery)
+    discard_preview(gesture)
     selection, gesture, drawing = nil, nil, nil
     gallery_ref = gallery
     project = Engine.new(model.document.width, model.document.height)
@@ -99,6 +128,7 @@ local function saved_layers(model, path, p)
 end
 
 function Bridge.open(model, id)
+    discard_preview(gesture)
     selection, gesture, drawing = nil, nil, nil
     local record = records[id]
     project = Engine.new(model.document.width, model.document.height)
@@ -199,7 +229,21 @@ end
 
 function Bridge.draw(model, visual)
     local p = ensure(model)
-    if p then
+    if not p then return end
+    local d = gesture
+    if d and d.preview and d.layer and p.layers[d.layer] then
+        -- Projeta uma camada alternativa em memória, sem tocar em p.layers,
+        -- nas pilhas undo/redo, em dirty ou nas miniaturas persistidas.
+        local temporary = {w = p.w, h = p.h, layers = {},
+                           compose_canvases = p.compose_canvases}
+        for id, layer in pairs(p.layers) do temporary.layers[id] = layer end
+        temporary.layers[d.layer] = d.preview
+        Engine.draw(temporary, model, visual and visual.interpolation)
+        if not p.compose_canvases then
+            p.compose_canvases = temporary.compose_canvases
+        end
+        Selection.draw(d.preview.selection)
+    else
         Engine.draw(p, model, visual and visual.interpolation)
         Selection.draw(selection)
     end
@@ -277,6 +321,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     if not px then return false end
 
     if tool == "magic_wand" then
+        discard_preview(gesture)
+        gesture = nil
         local info = model:active_layer()
         local layer = info and p.layers[info.id]
         if not layer then return true end
@@ -286,6 +332,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         return true
     end
     if tool == "lasso" then
+        discard_preview(gesture)
         selection = nil
         gesture = {kind = "lasso", w = w, h = h, view = view,
                    preferences = preferences, points = {{px, py}},
@@ -293,6 +340,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         return true
     end
     if tool == "transform" then
+        discard_preview(gesture)
         local info = model:active_layer()
         local moving = selection and
             Selection.contains(selection, math.floor(px), math.floor(py))
@@ -371,7 +419,17 @@ function Bridge.mousemoved(model, rx, ry, scale)
         local px, py = canvas_point(model, rx / scale, ry / scale,
                                     d.w, d.h, d.view, d.preferences)
         if px then
+            local changed = math.abs(px - d.end_x) + math.abs(py - d.end_y) > 0.005
             d.end_x, d.end_y = px, py
+            if changed and (d.kind == "rotate_free" or
+                            d.kind == "scale_free") then
+                discard_preview(d)
+                local degrees, sx, sy = affine_gesture_args(d)
+                if degrees then
+                    d.preview = Engine.preview_affine(project, d.layer,
+                                    selection, degrees, sx, sy, "bilinear")
+                end
+            end
             if d.kind == "lasso" then
                 local last = d.points[#d.points]
                 if (px - last[1]) ^ 2 + (py - last[2]) ^ 2 >= 2.25 then
@@ -415,26 +473,13 @@ function Bridge.mousereleased(model, rx, ry, scale)
     elseif d.kind == "move" and selection and d.layer then
         return Engine.move_selection(project, d.layer, selection,
             d.end_x - d.x, d.end_y - d.y)
-    elseif d.kind == "rotate_free" and selection and d.layer then
-        -- Alt+arrastar dentro da seleção: ângulo contínuo em torno do centro.
-        local cx = (selection.min_x + selection.max_x + 1) / 2
-        local cy = (selection.min_y + selection.max_y + 1) / 2
-        local begin_x, begin_y = d.x - cx, d.y - cy
-        local end_x, end_y = d.end_x - cx, d.end_y - cy
-        if begin_x * begin_x + begin_y * begin_y < 0.25 or
-           end_x * end_x + end_y * end_y < 0.25 then return false end
-        local degrees = math.deg(math.atan2(end_y, end_x) -
-                                 math.atan2(begin_y, begin_x))
+    elseif (d.kind == "rotate_free" or d.kind == "scale_free")
+           and selection and d.layer then
+        local degrees, sx, sy = affine_gesture_args(d)
+        discard_preview(d)
+        if not degrees then return false end
         return Engine.affine_selection(project, d.layer, selection,
-                                       degrees, 1, 1)
-    elseif d.kind == "scale_free" and selection and d.layer then
-        -- Shift+arrastar: escalas horizontal/vertical independentes.
-        local sw = selection.max_x - selection.min_x + 1
-        local sh = selection.max_y - selection.min_y + 1
-        local sx = math.max(0.1, math.min(8, 1 + (d.end_x - d.x) / sw))
-        local sy = math.max(0.1, math.min(8, 1 + (d.end_y - d.y) / sh))
-        return Engine.affine_selection(project, d.layer, selection,
-                                       0, sx, sy)
+                                       degrees, sx, sy, "bilinear")
     end
     if mask then selection = mask end
     return mask ~= nil, reason
@@ -446,7 +491,18 @@ function Bridge.selection_snapshot()
 end
 
 function Bridge.clear_selection()
+    discard_preview(gesture)
     selection, gesture = nil, nil
+end
+
+-- Estado de prévia somente leitura para testes de integração.
+function Bridge.preview_snapshot()
+    local d = gesture
+    if not d or not d.preview then return nil end
+    return {
+        selection = Selection.clone(d.preview.selection),
+        pixels = d.preview.pixels
+    }
 end
 
 function Bridge.undo()
