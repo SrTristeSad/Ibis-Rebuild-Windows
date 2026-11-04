@@ -35,6 +35,8 @@ e a CPU só grava o resultado ao soltar, preservando undo/redo.
 Os atalhos antigos mantêm nearest-neighbour. Espelhamento da
 seleção **horizontal (Ctrl+Shift+H)** e **vertical (Ctrl+Shift+V)**
 reflete pixels e máscara irregular com undo/redo.
+**Ctrl+A** seleciona todo o canvas e **Ctrl+Shift+I** inverte a
+máscara, sem alterar pixels ou histórico raster.
 O arraste normal do Transformar também exibe uma prévia GPU do deslocamento inteiro,
 com máscara/cache reutilizados sem recalcular todos os pixels em Lua
 a cada movimento subpixel. O visual e os

@@ -12,6 +12,160 @@ local function checkpoint(name)
     io.stdout:flush()
 end
 
+-- Operações puras de máscara: selecionar tudo e inverter pixels selecionados.
+local function test_selection_all_invert(E)
+    local Selection = require("lua_selection")
+    local p = E.new(16, 16)
+    E.sync(p, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local original = p.layers[1].pixels
+    original:setPixel(2, 3, 1, 0, 0, 0.6)
+    original:setPixel(8, 8, 0, 0, 1, 1)
+    p.layers[1].image:replacePixels(original)
+    p.dirty = false
+
+    local full = assert(Selection.all(16, 16))
+    assert(full.count == 256 and full.kind == "all" and
+           full.min_x == 0 and full.min_y == 0 and
+           full.max_x == 15 and full.max_y == 15 and
+           Selection.contains(full, 0, 0) and
+           Selection.contains(full, 15, 15),
+           "Select all deve abranger todo o canvas, inclusive as bordas")
+    local blank, blank_error = Selection.invert(full, 16, 16)
+    assert(not blank and not blank_error,
+           "Inverter seleção total deveria desmarcar sem erro")
+    local from_empty = assert(Selection.invert(nil, 16, 16))
+    assert(from_empty.count == 256 and
+           Selection.contains(from_empty, 15, 15),
+           "Inverter seleção ausente deve selecionar todo o documento")
+
+    local nonrect = assert(Selection.from_mask(16, 16, {
+        [0] = true, [2 + 3 * 16] = true, [5 + 4 * 16] = true,
+        [15 + 15 * 16] = true
+    }, "lasso"))
+    local count = nonrect.count
+    local inverted = assert(Selection.invert(nonrect, 16, 16))
+    assert(inverted.kind == "inverted" and inverted.count == 256 - count and
+           not Selection.contains(inverted, 0, 0) and
+           not Selection.contains(inverted, 2, 3) and
+           not Selection.contains(inverted, 15, 15) and
+           Selection.contains(inverted, 1, 0) and
+           Selection.contains(inverted, 14, 15),
+           "Inversão deve contemplar TODO o documento, não o bounding box")
+    assert(Selection.contains(nonrect, 2, 3) and nonrect.count == count,
+           "Inverter modificou indevidamente a máscara anterior")
+    local twice = assert(Selection.invert(inverted, 16, 16))
+    assert(twice.count == count, "Inverter duas vezes alterou a quantidade")
+    for y = 0, 15 do
+        for x = 0, 15 do
+            assert(Selection.contains(twice, x, y) ==
+                   Selection.contains(nonrect, x, y),
+                   "Dupla inversão não restaurou os pixels exatos")
+        end
+    end
+    assert(#p.undo == 0 and #p.redo == 0 and not p.dirty and
+           select(1, original:getPixel(2, 3)) > 0.9 and
+           select(3, original:getPixel(8, 8)) > 0.9,
+           "Operações de máscara não podem pintar nem criar histórico raster")
+    local invalid, dimension_error = Selection.invert(nonrect, 15, 16)
+    assert(not invalid and dimension_error and nonrect.count == count,
+           "Inverter com dimensões incompatíveis deve ser rejeitado")
+    local too_large, err = Selection.all(1025, 1025)
+    assert(not too_large and err and
+           not Selection.invert(nil, 1025, 1025),
+           "Select all/invert ultrapassou o limite de 1 Mi pixels")
+
+    local path = "lua-inverted-selection-tests"
+    assert(love.filesystem.createDirectory(path))
+    assert(Selection.save(inverted, path .. "/selection.png"))
+    local restored = assert(Selection.load(path .. "/selection.png", 16, 16))
+    assert(restored.count == inverted.count and
+           not Selection.contains(restored, 2, 3) and
+           Selection.contains(restored, 14, 15),
+           "PNG da seleção invertida não preservou a máscara")
+    assert(love.filesystem.remove(path .. "/selection.png"))
+    assert(love.filesystem.remove(path))
+end
+
+-- Atalhos reais, Layer Lock/Alpha Lock e ausência de undo para máscaras.
+local function test_selection_all_invert_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Selection"}},
+        active_layer_id = 1, active_tool = "transform",
+        background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Select all + invert")
+    Bridge.create(model, id, gallery)
+    local function shortcut(key, shift)
+        local native = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" then return true end
+                if shift and k == "lshift" then return true end
+            end
+            return false
+        end
+        local consumed = Bridge.keypressed(key, model)
+        love.keyboard.isDown = native
+        return consumed
+    end
+
+    model.layers[1].locked = true
+    model.layers[1].alpha_lock = true
+    assert(shortcut("a", false), "Ctrl+A não selecionou tudo")
+    local all = assert(Bridge.selection_snapshot())
+    assert(all.count == 256 and Selection.contains(all, 0, 0) and
+           Selection.contains(all, 15, 15),
+           "Ctrl+A não incluiu as bordas, mesmo com camada bloqueada")
+    assert(shortcut("i", true) and not Bridge.selection_snapshot(),
+           "Ctrl+Shift+I não desmarcou uma seleção completa")
+    assert(shortcut("i", true), "Inversão sem seleção deveria ser permitida")
+    assert(Bridge.selection_snapshot().count == 256,
+           "Ctrl+Shift+I sem seleção deveria marcar o canvas inteiro")
+    assert(Bridge.undo() == false, "Seleção pura criou histórico raster")
+    model.layers[1].locked, model.layers[1].alpha_lock = false, false
+
+    Bridge.clear_selection()
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + 0.5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + 0.5 - 8) * 11
+    end
+    local x0, y0 = screen(3, 3)
+    local x1, y1 = screen(5, 6)
+    assert(Bridge.mousepressed(model, id, x0, y0, 1024, 768,
+        view, prefs, {255, 0, 0}, 3, 100, nil))
+    assert(Bridge.mousereleased(model, x1, y1, 1))
+    local rect = assert(Bridge.selection_snapshot())
+    assert(rect.count == 12 and Selection.contains(rect, 3, 3),
+           "Ponte não criou seleção parcial retangular")
+    assert(shortcut("i", true))
+    local opposite = assert(Bridge.selection_snapshot())
+    assert(opposite.count == 244 and
+           not Selection.contains(opposite, 3, 3) and
+           Selection.contains(opposite, 0, 0),
+           "Ctrl+Shift+I não inverteu seleção parcial")
+    assert(shortcut("i", true))
+    local returned = assert(Bridge.selection_snapshot())
+    assert(returned.count == rect.count and
+           Selection.contains(returned, 3, 3) and
+           not Selection.contains(returned, 0, 0),
+           "Dupla inversão não restaurou a seleção original")
+    assert(shortcut("a", false) and Bridge.selection_snapshot().count == 256)
+    assert(shortcut("d", false) and not Bridge.selection_snapshot(),
+           "Ctrl+D não removeu a seleção inteira")
+    assert(shortcut("a", false) and Bridge.keypressed("escape", model),
+           "Esc deveria continuar desmarcando")
+    assert(not Bridge.selection_snapshot())
+    assert(not Bridge.selection_command({screen = "gallery"}, "select_all"),
+           "Seleção do canvas não pode atuar fora do editor")
+end
+
 -- Espelhamento de máscaras irregulares, alfa, histórico e persistência.
 local function test_selection_flip(E)
     local Selection = require("lua_selection")
@@ -1329,6 +1483,8 @@ function love.load()
            "Redo de movimento inconsistente")
 
     test_clipboard_transform(E)
+    checkpoint("selection full canvas and inverse")
+    test_selection_all_invert(E)
     checkpoint("selection horizontal and vertical mirror")
     test_selection_flip(E)
     checkpoint("affine rotation and nonuniform scaling")
@@ -1480,6 +1636,8 @@ function love.load()
         "A escala da ponte não manteve o histórico")
     checkpoint("selection PNG roundtrip")
     test_selection_roundtrip(Bridge, model4, art4)
+    checkpoint("bridge select all and invert shortcuts")
+    test_selection_all_invert_bridge(Bridge, gallery)
     checkpoint("bridge selection flip shortcuts")
     test_flip_bridge(Bridge, gallery)
     checkpoint("bridge affine gestures")
@@ -1496,6 +1654,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: selection flip H/V + GPU previews + history + layers")
+    print("PASS: select all/invert + flip H/V + GPU previews + history")
     love.event.quit(0)
 end

@@ -1,5 +1,5 @@
 -- Seleção raster independente em Lua. Não altera a interface do Ibis-Lua.
--- As máscaras são voláteis; os pixels editados continuam no PNG por camada.
+-- A máscara ativa pode ser persistida em PNG; nunca altera pixels por si só.
 local Selection = {}
 local MAX_PIXELS = 1024 * 1024
 local MAX_OUTLINE_SEGMENTS = 10000
@@ -191,6 +191,36 @@ function Selection.from_mask(w, h, mask, kind)
         end
     end
     return finalize(s)
+end
+
+-- Selecionar todo o canvas não depende do estado da camada ativa.
+-- Limite explícito evita construir tabelas de milhões de entradas.
+function Selection.all(w, h)
+    local result, err = Selection.rectangle(w, h, 0, 0, w - 1, h - 1)
+    if result then result.kind = "all" end
+    return result, err
+end
+
+-- Inverter a máscara INTEIRA do documento, não apenas seu bounding box.
+-- A seleção original não é modificada: isso impede que uma edição de
+-- geometria reaplique silenciosamente snapshots antigos de undo raster.
+-- Inverter sem seleção equivale a selecionar tudo; inverter a tela toda
+-- equivale a desmarcar (nil sem erro).
+function Selection.invert(s, w, h)
+    local ok, reason = allowed(w, h)
+    if not ok then return nil, reason end
+    if not s then return Selection.all(w, h) end
+    if s.w ~= w or s.h ~= h then
+        return nil, "Máscara incompatível com as dimensões do documento."
+    end
+    if s.count == w * h then return nil end
+    local inverse = empty(w, h, "inverted")
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            if not s.mask[index(w, x, y)] then add(inverse, x, y) end
+        end
+    end
+    return finalize(inverse)
 end
 
 -- Snapshot independente para restaurar contorno e posição junto com pixels.

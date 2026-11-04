@@ -48,6 +48,12 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   ao arrastar dentro da seleção. Não foram criados controles visuais.
 - Seleções limitam a pintura e o balde à máscara ativa. O contorno da
   seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
+  **Ctrl+A seleciona todo o canvas**; **Ctrl+Shift+I inverte a máscara**
+  no documento inteiro, inclusive regiões fora do retângulo da seleção.
+  Sem seleção, inverter seleciona tudo; inverter uma seleção completa
+  desmarca. A operação preserva pixels, transparência, camadas e histórico
+  raster, inclusive com Layer Lock ou Alpha Lock ativos. A nova máscara
+  segue sendo salva em `selection.png`, sem alterar PNGs de camadas.
   **Arrastar sem modificadores dentro da seleção também mostra uma prévia
   do deslocamento** em tempo real. O motor prepara uma textura-máscara
   uma única vez por gesto e usa um shader LÖVE para desenhar a origem
@@ -200,6 +206,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O CI também cobre flips H/V de máscaras irregulares, sobreposição
   semitransparente, proteção de pixels externos, histórico gravado/reaberto,
   atalhos Ctrl+Shift+H/V e bloqueio por Layer Lock/Alpha Lock.
+  Selecionar tudo e inverter também são testados com máscaras irregulares,
+  dupla inversão, limite de tamanho, camada bloqueada, atalhos Ctrl+A /
+  Ctrl+Shift+I, ausência de undo raster e persistência da seleção PNG.
   A suíte verifica que a API de prévia bilinear CPU não altera a obra
   e coincide com o commit pixel a pixel. A prévia GPU de rotação/escala
   compara RGBA pré-multiplicado com o commit CPU (tolerância GLSL),

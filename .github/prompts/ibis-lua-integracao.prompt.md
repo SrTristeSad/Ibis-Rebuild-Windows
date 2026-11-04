@@ -74,6 +74,17 @@ a abertura de desenhos antigos. Ctrl+D/Esc seguido de salvamento remove
 a máscara antiga. O clipboard interno não é persistido.
 A seleção tem limite de 1.048.576 pixels, com contorno
 visual limitado a 10.000 segmentos. Não criar botões nem painéis novos.
+Operações de máscara (não raster): **Ctrl+A seleciona tudo** via
+`Selection.all(w,h)`; **Ctrl+Shift+I inverte a seleção** via
+`Selection.invert(mask,w,h)`. Inverter sem seleção marca todo o canvas;
+inverter uma seleção total desmarca, com resultado nil sem erro. Inverter
+deve calcular o complemento em TODA a tela, não no bounding box, e
+não pode modificar a máscara de entrada, pixels da obra, dirty ou
+histórico de desfazer/refazer raster. As operações são permitidas com
+Layer Lock e Alpha Lock, mas rejeitadas em tela diferente do editor.
+Persistir resultado em `selection.png` pelo Bridge.save existente.
+Manter testes de máscara irregular, dupla inversão, limite 1 Mi,
+atalhos de teclado, estado raster inalterado e reabertura PNG.
 layers.tsv com oito colunas deve ler o formato
 legado de quatro colunas; document.tsv mantém camada ativa/fundo. Mantenha estas operações
 regredindo **nunca** e avance conectando exclusivamente os controles existentes.
