@@ -46,6 +46,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   **Laço** seleciona pixels dentro do contorno livre arrastado; **Transformar**
   cria uma seleção retangular ao arrastar sem seleção e move pixels selecionados
   ao arrastar dentro da seleção. Não foram criados controles visuais.
+  **Combinar áreas** com retângulo (Transformar), Laço e Varinha Mágica:
+  **Ctrl+Shift+arrastar/clicar** soma à seleção existente;
+  **Ctrl+Alt+arrastar/clicar** subtrai; **Ctrl+Shift+Alt+arrastar/clicar**
+  intersecta. Sem os modificadores, os gestos anteriores permanecem:
+  substituir seleção, mover pixels, Alt+arrastar para girar e
+  Shift+arrastar para redimensionar. A operação é definida ao iniciar
+  o gesto; uma interseção vazia desmarca a seleção. Na ausência de
+  seleção prévia, somar cria uma seleção, enquanto subtrair/intersectar
+  mantêm a máscara vazia. Combinações alteram só geometria, não pixels
+  nem histórico raster, e funcionam em camadas bloqueadas. A máscara
+  combinada continua persistida em `selection.png`.
 - Seleções limitam a pintura e o balde à máscara ativa. O contorno da
   seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
   **Ctrl+A seleciona todo o canvas**; **Ctrl+Shift+I inverte a máscara**
@@ -206,6 +217,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O CI também cobre flips H/V de máscaras irregulares, sobreposição
   semitransparente, proteção de pixels externos, histórico gravado/reaberto,
   atalhos Ctrl+Shift+H/V e bloqueio por Layer Lock/Alpha Lock.
+  A suíte cobre também união, diferença e interseção de máscaras
+  irregulares, gestos reais de retângulo/laço/varinha, no-op/vazio,
+  persistência e histórico raster intacto em camadas bloqueadas.
   Selecionar tudo e inverter também são testados com máscaras irregulares,
   dupla inversão, limite de tamanho, camada bloqueada, atalhos Ctrl+A /
   Ctrl+Shift+I, ausência de undo raster e persistência da seleção PNG.

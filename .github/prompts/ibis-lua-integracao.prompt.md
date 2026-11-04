@@ -16,6 +16,19 @@ e arquivos PNG por camada. Ferramentas já ligadas à máscara raster Lua:
 Varinha Mágica (RGBA contíguo), Laço (contorno livre), Transformar
 (seleção retangular pelo arraste e movimento inteiro de pixels),
 restrição do pincel e balde à seleção e undo/redo da movimentação.
+União, subtração e interseção binária de máscaras são implementadas
+em `Selection.combine(base,incoming,mode,w,h)`. Nos instrumentos
+Transformar (retângulo), Laço e Varinha Mágica, capturar o modo no
+**início** do gesto: Ctrl+Shift soma, Ctrl+Alt subtrai e
+Ctrl+Shift+Alt intersecta. Ctrl+modificadores forçam um novo retângulo
+até mesmo dentro da seleção; Shift/Alt sem Ctrl continuam sendo
+redimensionar/girar na ferramenta Transformar. Sem modificadores,
+substituir normalmente. Operações só de máscara NÃO tocam pixels,
+dirty, histórico ou as máscaras de entrada; são permitidas em camadas
+bloqueadas/Alpha Lock. Resultado vazio significa desmarcar, sem erro.
+No primeiro gesto, somar equivale a selecionar; subtrair e intersectar
+sem seleção resultam em máscara vazia. A seleção combinada segue
+sendo salva em `selection.png`, sem criar novo formato.
 Copiar/Recortar/Colar são internos à aplicação (Ctrl+C, Ctrl+X, Ctrl+V);
 colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+R, Ctrl+Shift+L) e escala nearest-neighbour 200%/50%
