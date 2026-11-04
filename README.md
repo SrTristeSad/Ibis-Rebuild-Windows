@@ -14,8 +14,9 @@ A interface é o [Ibis-Lua](ui/Ibis-Lua), incorporado por submódulo Git sem
 alterações visuais. O motor de edição ativo fica em [bridge/](bridge),
 sem DLL C++ do projeto. Possui pintura circular, borracha, balde contíguo,
 conta-gotas de cor visível, Alpha Lock para preservar transparência, Clipping
-por máscara alfa no shader do LÖVE, camadas em modo Normal, histórico raster
-limitado, miniaturas de pixels reais e persistência PNG por camada com
+por máscara alfa no shader do LÖVE, os nove modos de blend existentes no painel
+(com fórmulas Lua e shader GPU), histórico raster limitado,
+miniaturas de pixels reais e persistência PNG por camada com
 metadados compatíveis com o formato antigo. Outros controles
 do Ibis-Lua podem continuar simulados; consulte [limitações](docs/LUA_MIGRATION.md).
 

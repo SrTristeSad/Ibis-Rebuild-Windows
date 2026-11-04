@@ -149,6 +149,76 @@ function love.load()
     local _, _, _, faded = E.sample(clip_project, clip_model, 4, 4)
     assert(close(faded, 0.4375), "Clipping não respeitou opacidade da base")
 
+    -- Modos existentes no Ibis-Lua: blend RGB CPU e GPU equivalentes.
+    -- A base e o topo opacos tornam a verificação do canal vermelho exata.
+    local blend_project = E.new(32, 32)
+    local blend_model = {layers = {
+        {id = 1, visible = true, opacity = 100, blending = "Normal"},
+        {id = 2, visible = true, opacity = 100, blending = "Normal"}
+    }}
+    E.sync(blend_project, blend_model)
+    blend_project.layers[1].pixels:setPixel(8, 8, 0.2, 0.4, 0.6, 1)
+    blend_project.layers[2].pixels:setPixel(8, 8, 0.7, 0.3, 0.1, 1)
+    for _, info in ipairs(blend_model.layers) do
+        local entry = blend_project.layers[info.id]
+        entry.image:replacePixels(entry.pixels)
+    end
+    local expected = {
+        Normal = 0.7, Multiply = 0.14, Screen = 0.76,
+        Overlay = 0.28, Darken = 0.2, Lighten = 0.7,
+        ["Color Burn"] = 0, ["Color Dodge"] = 2 / 3,
+        ["Soft Light"] = 0.2992
+    }
+    local checked = 0
+    for mode, expected_red in pairs(expected) do
+        blend_model.layers[2].blending = mode
+        local cpu_r, _, _, cpu_a = E.sample(blend_project, blend_model, 8, 8)
+        assert(close(cpu_r, expected_red, 0.025) and close(cpu_a, 1),
+            "Fórmula Lua incorreta para " .. mode .. ": " .. tostring(cpu_r))
+        local target = love.graphics.newCanvas(32, 32)
+        love.graphics.push("all")
+        love.graphics.setCanvas(target)
+        love.graphics.clear(0, 0, 0, 0)
+        love.graphics.translate(16, 16)
+        E.draw(blend_project, blend_model, "pixelated")
+        love.graphics.pop()
+        local screen = target:newImageData()
+        local gpu_r, _, _, gpu_a = screen:getPixel(8, 8)
+        assert(close(gpu_r, cpu_r, 0.04) and close(gpu_a, cpu_a, 0.04),
+            string.format("%s: shader e amostra Lua diferem: GPU %.3f / CPU %.3f",
+                mode, gpu_r, cpu_r))
+        checked = checked + 1
+    end
+    assert(checked == 9, "Nem todos os modos selecionáveis foram testados")
+
+    -- Semitransparência nas duas camadas e clipping com blend não podem
+    -- converter cores straight em premultiplicadas incorretamente.
+    blend_project.layers[1].pixels:setPixel(12, 12, 0.2, 0.4, 0.6, 0.65)
+    blend_project.layers[2].pixels:setPixel(12, 12, 0.7, 0.3, 0.1, 0.8)
+    for _, info in ipairs(blend_model.layers) do
+        local entry = blend_project.layers[info.id]
+        entry.image:replacePixels(entry.pixels)
+    end
+    blend_model.layers[2].blending = "Overlay"
+    blend_model.layers[2].clipping = true
+    blend_model.layers[2].opacity = 70
+    local cpu_r, cpu_g, cpu_b, cpu_a =
+        E.sample(blend_project, blend_model, 12, 12)
+    local target = love.graphics.newCanvas(32, 32)
+    love.graphics.push("all")
+    love.graphics.setCanvas(target)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.translate(16, 16)
+    E.draw(blend_project, blend_model, "pixelated")
+    love.graphics.pop()
+    local gpu_r, gpu_g, gpu_b, gpu_a = target:newImageData():getPixel(12, 12)
+    -- O framebuffer destino usa RGB pré-multiplicado pelo alpha.
+    assert(close(gpu_a, cpu_a, 0.04) and
+           close(gpu_r / gpu_a, cpu_r, 0.04) and
+           close(gpu_g / gpu_a, cpu_g, 0.04) and
+           close(gpu_b / gpu_a, cpu_b, 0.04),
+           "Composição com clipping + overlay e alfa parcial divergiu")
+
     -- Prova de persistência da obra pela ponte usada pelo Ibis-Lua.
     local Bridge = require("lua_bridge")
     local model2 = {
@@ -182,6 +252,7 @@ function love.load()
         view, prefs, {255, 0, 0}, 5, 100, colors))
     Bridge.mousereleased()
     model2.layers[1].alpha_lock = true
+    model2.layers[1].blending = "Multiply"
     model2.layers[1].locked = true
     model2.background_mode = "transparent_dark"
     assert(Bridge.save(), "Falha no salvamento da obra em camadas")
@@ -193,8 +264,8 @@ function love.load()
     assert(love.filesystem.getInfo(path .. "/preview.png"))
     assert(love.filesystem.getInfo(path .. "/document.tsv"))
     local layer_metadata = assert(love.filesystem.read(path .. "/layers.tsv"))
-    assert(layer_metadata:match("\tNormal\t0\t1\t1"),
-        "Alpha Lock e Lock não foram persistidos")
+    assert(layer_metadata:match("\tMultiply\t0\t1\t1"),
+        "Modo de mesclagem, Alpha Lock e Lock não foram persistidos")
     local saved = love.image.newImageData(path .. "/layer_1.png")
     local sr, _, _, sa = saved:getPixel(8, 8)
     assert(sr > 0.9 and sa > 0.9, "PNG da camada não reteve pintura")
@@ -210,8 +281,9 @@ function love.load()
     function model3:set_color(red, green_, blue_) self.color = {red, green_, blue_} end
     Bridge.open(model3, id)
     assert(model3.layers[1].name == "Layer One", "Metadados da camada não reabertos")
-    assert(model3.layers[1].alpha_lock and model3.layers[1].locked,
-           "Propriedades da camada não foram reabertas")
+    assert(model3.layers[1].alpha_lock and model3.layers[1].locked
+           and model3.layers[1].blending == "Multiply",
+           "Propriedades da camada e modo de mesclagem não foram reabertos")
     assert(model3.background_mode == "transparent_dark",
            "Cor do fundo não foi restaurada")
     assert(Bridge.mousepressed(model3, id, x, y, 1024, 768,
@@ -237,6 +309,6 @@ function love.load()
     love.filesystem.remove(path)
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
-    print("PASS: Lua Alpha Lock/Clipping/metadata legacy/PNG roundtrip")
+    print("PASS: Lua nine blend modes CPU/GPU, Alpha Lock/Clipping/PNG")
     love.event.quit(0)
 end

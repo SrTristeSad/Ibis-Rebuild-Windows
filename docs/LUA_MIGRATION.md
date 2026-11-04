@@ -28,7 +28,12 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   opacidade e fundo branco, e atualiza o seletor de cores existente.
 - Miniaturas reais em PNG na galeria para obras salvas e pixels reais
   nas miniaturas das camadas, sem redesenhar os controles da interface.
-- Composição visível em ordem de camadas com visibilidade e opacidade no modo Normal.
+- Composição visível em ordem de camadas com visibilidade e opacidade.
+  Os nove modos do seletor existente — Normal, Multiply, Screen, Overlay,
+  Darken, Lighten, Color Burn, Color Dodge e Soft Light — têm composição
+  separável RGBA source-over em Lua e shader LÖVE. O conta-gotas e as
+  miniaturas aplicam a mesma fórmula que o canvas.
+  Não há equivalência garantida aos resultados do ibisPaint proprietário.
 - **Alpha Lock** agora atua na pintura e no balde: modifica somente a cor dos
   pixels existentes e preserva o valor de alfa; a borracha não opera enquanto
   Alpha Lock está ativo.
@@ -47,9 +52,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 
 ## Limitações explícitas
 - **Não** há paridade com os algoritmos do ibisPaint oficial.
-- Pincel circular, borracha, balde, conta-gotas, Alpha Lock e recorte básico por
-  Clipping têm implementação independente. Filtros, modos de mesclagem avançados,
-  seleções, formas, estabilização, pressão, máscaras adicionais, efeitos,
+- Pincel circular, borracha, balde, conta-gotas, Alpha Lock, recorte básico por
+  Clipping e os nove modos de mesclagem visíveis têm implementação independente.
+  Filtros, seleções, formas, estabilização, pressão, máscaras adicionais, efeitos,
   texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
@@ -63,9 +68,13 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - As miniaturas da galeria agora mostram pixels reais somente para obras
   persistidas; a miniatura das camadas exibe o buffer da camada durante a edição.
   Itens demonstrativos e obras ainda não salvas podem continuar sem prévia.
-- **Modos de Blending diferentes de Normal** continuam apenas como estado de UI,
-  sem renderização especial; enquanto a camada ativa usa um desses modos,
-  novas pinceladas/preenchimentos são bloqueados com aviso.
+- Todos os nove modos atualmente presentes no painel de camadas alteram
+  a composição real. A equação de cores usa alfa straight; o shader
+  compõe em canvases alternados do LÖVE sem C++ da aplicação.
+- Modos diferentes de Normal ou uso de Clipping exigem duas texturas
+  temporárias da resolução integral da tela; em desenhos grandes isso
+  pode consumir muita VRAM. Sem esses efeitos, o renderer mantém o
+  caminho direto anterior. Não há equivalência de precisão com o ibisPaint.
 - Alpha Lock é aplicado apenas à pintura RGB: não há borracha com redução
   de transparência nessa condição. O Clipping é aplicado à visualização,
   sem alterar os pixels originais nem agrupar camadas.
@@ -75,7 +84,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O balde compara a cor RGBA da camada ativa com tolerância mínima de quantização,
   sem controlar tolerância por slider. Não equivale ao balde do ibisPaint.
 - A suíte de pixels usa o LÖVE real para verificar tinta, borracha, balde,
-  Alpha Lock, Clipping na CPU e na GPU, leitura de cores, composição, miniatura,
+  Alpha Lock, Clipping e os nove modos de blend na CPU e GPU,
+  leitura de cores, composição semitransparente, miniatura,
   abertura de arquivos de quatro colunas e ciclo salvar/abrir PNG.
 - Os testes Windows precisam passar no GitHub Actions antes de declarar a
   distribuição verificada.
