@@ -50,7 +50,7 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn("rotate_free", bridge)
         self.assertIn("scale_free", bridge)
         self.assertIn("Bridge.preview_snapshot", bridge)
-        self.assertIn("Engine.preview_affine(", bridge)
+        self.assertNotIn("Engine.preview_affine(", bridge)
         self.assertIn("Engine.begin_move_preview(", bridge)
         self.assertIn("Engine.update_move_preview(", bridge)
         self.assertIn("Engine.begin_affine_gpu_preview(", bridge)
