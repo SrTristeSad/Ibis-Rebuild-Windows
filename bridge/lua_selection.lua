@@ -217,6 +217,73 @@ function Selection.restore(destination, saved)
     for k, v in pairs(state) do destination[k] = v end
 end
 
+-- Persistência da máscara binária em PNG, separada dos PNGs das camadas.
+-- O canal alfa representa participação na seleção (0 ou 1).
+-- A máscara não altera diretamente os pixels da obra.
+local PNG_SIGNATURE = "\137PNG\r\n\26\n"
+local MAX_PNG_BYTES = 16 * 1024 * 1024
+
+local function png_dimensions(file)
+    local header = love.filesystem.read(file, 24)
+    if not header or #header ~= 24 or header:sub(1, 8) ~= PNG_SIGNATURE
+       or header:sub(13, 16) ~= "IHDR" then
+        return nil
+    end
+    local function u32(offset)
+        local a, b, c, d = header:byte(offset, offset + 3)
+        return ((a * 256 + b) * 256 + c) * 256 + d
+    end
+    return u32(17), u32(21)
+end
+
+function Selection.save(s, file)
+    if not s or s.count == 0 then return false, "Não há seleção ativa." end
+    local ok, err = allowed(s.w, s.h)
+    if not ok then return false, err end
+    local pixels = love.image.newImageData(s.w, s.h)
+    for key, marked in pairs(s.mask) do
+        if marked then
+            pixels:setPixel(key % s.w, math.floor(key / s.w), 1, 1, 1, 1)
+        end
+    end
+    local success, result = pcall(function()
+        return pixels:encode("png", file)
+    end)
+    if not success then return false, tostring(result) end
+    if not love.filesystem.getInfo(file, "file") then
+        return false, "Não foi possível salvar a máscara de seleção."
+    end
+    return true
+end
+
+-- Nunca confia nas dimensões ou na decodificação de arquivos persistidos.
+-- A seleção inválida é ignorada sem prejudicar a abertura das camadas.
+function Selection.load(file, w, h)
+    local info = love.filesystem.getInfo(file, "file")
+    if not info then return nil end -- Compatível com projetos anteriores.
+    local ok, err = allowed(w, h)
+    if not ok then return nil, err end
+    if info.size > MAX_PNG_BYTES then
+        return nil, "Arquivo de seleção maior que o limite de segurança."
+    end
+    local sw, sh = png_dimensions(file)
+    if sw ~= w or sh ~= h then
+        return nil, "Dimensões da máscara de seleção incompatíveis."
+    end
+    local decoded, pixels = pcall(love.image.newImageData, file)
+    if not decoded then
+        return nil, "PNG da seleção inválido."
+    end
+    local s = empty(w, h, "restored")
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            local _, _, _, a = pixels:getPixel(x, y)
+            if a >= 0.5 then add(s, x, y) end
+        end
+    end
+    return finalize(s)
+end
+
 function Selection.draw(s)
     if not s or not s.outline then return end
     love.graphics.push("all")

@@ -120,6 +120,69 @@ local function test_clipboard_transform(E)
 
 end
 
+-- Roundtrip real: máscara criada pela UI, salva em PNG, reaberta e removida.
+local function test_selection_roundtrip(Bridge, model, id)
+    local Selection = require("lua_selection")
+    local before = assert(Bridge.selection_snapshot(),
+        "A ponte perdeu a seleção antes do salvamento")
+    assert(before.count > 0 and Bridge.save(),
+        "Seleção ativa não pôde ser salva")
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key = assert(index:match("(art_%d+_%d+)\t16\t16\tSelection test"),
+        "Obra de teste de seleção não entrou no índice")
+    local path = "lua-artworks/" .. key
+    local file = path .. "/selection.png"
+    assert(love.filesystem.getInfo(file), "Máscara PNG não foi criada")
+    local direct = assert(Selection.load(file, 16, 16))
+    assert(direct.count == before.count, "PNG alterou a área selecionada")
+    for k in pairs(before.mask) do
+        assert(direct.mask[k], "PNG não preservou um pixel da seleção")
+    end
+
+    Bridge.open(model, id)
+    local after = assert(Bridge.selection_snapshot(),
+        "Seleção não voltou ao reabrir a obra")
+    assert(after.count == before.count, "Contagem da seleção restaurada divergiu")
+    for k in pairs(before.mask) do
+        assert(after.mask[k], "Reabertura não restaurou geometria da seleção")
+    end
+
+    Bridge.clear_selection()
+    assert(Bridge.save(), "Não foi possível salvar após desmarcar")
+    assert(not love.filesystem.getInfo(file),
+        "Seleção desmarcada deixou máscara PNG obsoleta")
+    Bridge.open(model, id)
+    assert(not Bridge.selection_snapshot(),
+        "Seleção desmarcada reapareceu ao reabrir")
+
+    -- Arquivo inválido ou de outro tamanho não bloqueia a abertura das camadas.
+    assert(love.filesystem.write(file, "broken selection png"))
+    local invalid, reason = Selection.load(file, 16, 16)
+    assert(not invalid and reason, "Arquivo inválido não foi rejeitado")
+    Bridge.open(model, id)
+    assert(not Bridge.selection_snapshot(),
+        "PNG inválido gerou uma seleção falsa")
+    local wrong = love.image.newImageData(2, 2)
+    wrong:setPixel(0, 0, 1, 1, 1, 1)
+    wrong:encode("png", file)
+    local mismatch, mismatch_reason = Selection.load(file, 16, 16)
+    assert(not mismatch and mismatch_reason,
+        "Seleção com dimensões erradas não foi rejeitada")
+    Bridge.open(model, id)
+    assert(not Bridge.selection_snapshot(),
+        "Máscara de dimensões erradas foi importada")
+    local oversized, oversized_reason =
+        Selection.from_mask(1025, 1025, {[0] = true}, "oversized")
+    assert(not oversized and oversized_reason,
+        "Seleção excedente não respeitou limite raster")
+    assert(love.filesystem.remove(file))
+    for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv",
+                               "document.tsv"}) do
+        assert(love.filesystem.remove(path .. "/" .. filename))
+    end
+    assert(love.filesystem.remove(path))
+end
+
 function love.load()
     checkpoint("begin")
     local E = require("lua_engine")
@@ -526,6 +589,8 @@ function love.load()
         "Redução pela ponte falhou")
     assert(Bridge.undo() and Bridge.redo(),
         "A escala da ponte não manteve o histórico")
+    checkpoint("selection PNG roundtrip")
+    test_selection_roundtrip(Bridge, model4, art4)
 
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
     for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv", "document.tsv"}) do
@@ -535,6 +600,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: Lua copy/cut/paste/rotation/scale + selection + blend/persist")
+    print("PASS: Lua selection PNG roundtrip/corrupt/clear + transforms + layers")
     love.event.quit(0)
 end
