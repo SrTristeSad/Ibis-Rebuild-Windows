@@ -67,6 +67,19 @@
   usam false; preferências anteriores não se perdem.
   Toggle não modifica máscara/pixels/dirty/histórico. Testar
   diagonais, bordas, tolerância, alfa, limites, atalhos e undo.
+- Comparação opcional RGB-only da Varinha via Ctrl+Alt+R:
+  `Selection.magic_wand(layer,w,h,x,y,tolerance,global_mode,diagonal_mode,rgb_only)`
+  aceita booleano opcional no último parâmetro. Nil/false mantém
+  comparação RGBA por canal, incluindo alfa; true compara somente
+  R/G/B, ainda na mesma tolerância 0..255. Pixels de alfa zero
+  podem armazenar RGB não visível; a comparação não os converte
+  automaticamente em branco ou preto. O novo `project.wand_rgb_only`
+  é false por padrão e persiste na sétima coluna de `document.tsv`.
+  Arquivos de 2–6 colunas e valor inválido adotam false sem perder
+  tolerância, modo global, fonte ou conectividade anteriores.
+  Mudar a opção não altera máscaras ativas, raster, dirty ou undo/redo.
+  O próximo clique reaproveita Selection.combine e o histórico de máscaras.
+  Não alterar Ibis-Lua nem introduzir novos controles gráficos.
 - Seleção raster ativa fica em bridge/lua_selection.lua: Varinha Mágica,
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam
