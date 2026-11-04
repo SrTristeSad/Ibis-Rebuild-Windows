@@ -4,7 +4,7 @@ local Selection = require("lua_selection")
 local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
-local selection, gesture = nil, nil
+local selection, gesture, clipboard = nil, nil, nil
 local gallery_images = {}
 local counter = 0
 
@@ -396,11 +396,79 @@ function Bridge.redo()
     return false
 end
 
-function Bridge.keypressed(key, model)
+-- Comandos de edição sobre a máscara atual, sem mudar o frontend.
+-- Clipboard interno: não afirma integração com a área de transferência Windows.
+function Bridge.selection_command(model, command, notice)
     if model.screen ~= "editor" then return false end
-    if key == "escape" and selection then selection = nil; gesture = nil; return true end
+    local p = ensure(model)
+    if not p then return false end
+    local info = model:active_layer()
+    if not info then return false end
+
+    if command == "copy" then
+        if not selection then
+            if notice then notice("Selecione uma área antes de copiar.") end
+            return false
+        end
+        local copied, reason = Engine.copy_selection(p, info.id, selection)
+        if copied then clipboard = copied end
+        if reason and notice then notice(reason) end
+        return copied ~= nil
+    end
+
+    if info.locked or info.alpha_lock then
+        if notice then notice("Desbloqueie a camada e desative Alpha Lock para editar a seleção.") end
+        return false
+    end
+    if command == "cut" then
+        if not selection then return false end
+        local ok, result = Engine.cut_selection(p, info.id, selection)
+        if ok then clipboard = result
+        elseif notice and result then notice(result) end
+        return ok
+    elseif command == "paste" then
+        local ok, result = Engine.paste_selection(p, info.id, clipboard,
+                                                 nil, nil, selection)
+        if ok then selection = result
+        elseif notice and result then notice(result) end
+        return ok
+    elseif command == "rotate_cw" or command == "rotate_ccw" or
+           command == "scale_half" or command == "scale_double" then
+        if not selection then return false end
+        local ok, reason = Engine.reshape_selection(p, info.id, selection, command)
+        if not ok and notice and reason then notice(reason) end
+        return ok
+    end
+    return false
+end
+
+function Bridge.keypressed(key, model, notice)
+    if model.screen ~= "editor" then return false end
+    if key == "escape" and selection then
+        selection, gesture = nil, nil
+        return true
+    end
     if not love.keyboard.isDown("lctrl", "rctrl") then return false end
-    if key == "d" then selection = nil; gesture = nil; return true end
+    if key == "d" then selection, gesture = nil, nil; return true end
+    local shift = love.keyboard.isDown("lshift", "rshift")
+    if shift then
+        if key == "r" then
+            Bridge.selection_command(model, "rotate_cw", notice)
+            return true
+        elseif key == "l" then
+            Bridge.selection_command(model, "rotate_ccw", notice)
+            return true
+        elseif key == "up" then
+            Bridge.selection_command(model, "scale_double", notice)
+            return true
+        elseif key == "down" then
+            Bridge.selection_command(model, "scale_half", notice)
+            return true
+        end
+    end
+    if key == "c" then Bridge.selection_command(model, "copy", notice); return true end
+    if key == "x" then Bridge.selection_command(model, "cut", notice); return true end
+    if key == "v" then Bridge.selection_command(model, "paste", notice); return true end
     if key == "z" then return Bridge.undo()
     elseif key == "y" then return Bridge.redo()
     elseif key == "s" then Bridge.save(); return true end

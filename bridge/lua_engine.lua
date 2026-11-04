@@ -58,32 +58,39 @@ function Engine.begin_stroke(project, id)
     project.redo = {}
 end
 
-local function restore(project, from, to, selection, direction)
+local function restore(project, from, to, selection)
     local entry = table.remove(from)
     if not entry then return false end
     local layer = project.layers[entry.id]
     if not layer then return false end
-    to[#to + 1] = {
-        id = entry.id, pixels = clone_pixels(project, layer),
-        selection_delta = entry.selection_delta, selection_ref = entry.selection_ref
-    }
+    local current = {id = entry.id, pixels = clone_pixels(project, layer)}
+    if entry.selection_ref and entry.selection_state then
+        current.selection_ref = entry.selection_ref
+        -- Captura a geometria presente ANTES da restauração, para redo.
+        if selection == entry.selection_ref then
+            current.selection_state = Selection.clone(selection)
+        else
+            -- A seleção atual pode ter sido desmarcada ou substituída.
+            -- Nesse caso só os pixels do documento são revertidos.
+            current.selection_state = entry.selection_state
+        end
+    end
+    to[#to + 1] = current
     if #to > HISTORY_STEPS then table.remove(to, 1) end
     layer.pixels = entry.pixels
     layer.image:replacePixels(entry.pixels)
-    if selection and selection == entry.selection_ref and entry.selection_delta then
-        Selection.translate(selection,
-            entry.selection_delta[1] * direction,
-            entry.selection_delta[2] * direction)
+    if selection and selection == entry.selection_ref and entry.selection_state then
+        Selection.restore(selection, entry.selection_state)
     end
     project.dirty = true
     return true
 end
 
 function Engine.undo(project, selection)
-    return restore(project, project.undo, project.redo, selection, -1)
+    return restore(project, project.undo, project.redo, selection)
 end
 function Engine.redo(project, selection)
-    return restore(project, project.redo, project.undo, selection, 1)
+    return restore(project, project.redo, project.undo, selection)
 end
 
 -- Composição source-over com RGB não pré-multiplicado, em canais 0..1.
@@ -533,7 +540,7 @@ function Engine.move_selection(project, id, selected, dx, dy)
         Engine.begin_stroke(project, id)
         local entry = project.undo[#project.undo]
         if entry then
-            entry.selection_delta = {dx, dy}
+            entry.selection_state = Selection.clone(selected)
             entry.selection_ref = selected
         end
     end
@@ -563,6 +570,181 @@ function Engine.move_selection(project, id, selected, dx, dy)
     layer.image:replacePixels(data)
     Selection.translate(selected, dx, dy)
     if visible then project.dirty = true end
+    return true
+end
+
+
+local MAX_TRANSFORM_PIXELS = 1024 * 1024
+local LIMIT_MESSAGE = "Transformações Lua limitadas a documentos de até 1.048.576 pixels."
+
+-- Área selecionada copiada para o clipboard INTERNO (não para a área de
+-- transferência do sistema operacional). Preserva a máscara e o alfa.
+function Engine.copy_selection(project, id, selected)
+    if not selected or selected.count == 0 then return nil end
+    if project.w * project.h > MAX_TRANSFORM_PIXELS then
+        return nil, LIMIT_MESSAGE
+    end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local x0, y0 = selected.min_x, selected.min_y
+    local width = selected.max_x - x0 + 1
+    local height = selected.max_y - y0 + 1
+    local pixels = love.image.newImageData(width, height)
+    local mask = {}
+    for y = y0, selected.max_y do
+        for x = x0, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                local u, v = x - x0, y - y0
+                local r, g, b, a = layer.pixels:getPixel(x, y)
+                pixels:setPixel(u, v, r, g, b, a)
+                mask[v * width + u] = true
+            end
+        end
+    end
+    return {pixels = pixels, mask = mask, w = width, h = height,
+            x = x0, y = y0}
+end
+
+-- Fórmula source-over usada na colagem e nas transformações.
+local function over_pixel(data, x, y, sr, sg, sb, sa)
+    if sa <= 0 then return end
+    local dr, dg, db, da = data:getPixel(x, y)
+    local out_a = sa + da * (1 - sa)
+    data:setPixel(x, y,
+        (sr * sa + dr * da * (1 - sa)) / out_a,
+        (sg * sa + dg * da * (1 - sa)) / out_a,
+        (sb * sa + db * da * (1 - sa)) / out_a, out_a)
+end
+
+function Engine.paste_selection(project, id, clip, x, y, selected)
+    if not clip then return false, "Não existe uma seleção copiada." end
+    if project.w * project.h > MAX_TRANSFORM_PIXELS then
+        return false, LIMIT_MESSAGE
+    end
+    x, y = math.floor(x or clip.x), math.floor(y or clip.y)
+    if x < 0 or y < 0 or x + clip.w > project.w or
+       y + clip.h > project.h then
+        return false, "Cole dentro dos limites da tela."
+    end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local newmask = {}
+    for key in pairs(clip.mask) do
+        local u, v = key % clip.w, math.floor(key / clip.w)
+        newmask[(y + v) * project.w + x + u] = true
+    end
+    local next_selection = assert(Selection.from_mask(project.w, project.h,
+        newmask, "paste"))
+    Engine.begin_stroke(project, id)
+    local entry = project.undo[#project.undo]
+    if entry and selected then
+        entry.selection_ref = selected
+        entry.selection_state = Selection.clone(selected)
+    end
+    for key in pairs(clip.mask) do
+        local u, v = key % clip.w, math.floor(key / clip.w)
+        local sr, sg, sb, sa = clip.pixels:getPixel(u, v)
+        over_pixel(layer.pixels, x + u, y + v, sr, sg, sb, sa)
+    end
+    layer.image:replacePixels(layer.pixels)
+    if selected then
+        Selection.restore(selected, next_selection)
+        next_selection = selected
+    end
+    project.dirty = true
+    return true, next_selection
+end
+
+-- Corte de pixels: Ctrl+X copia primeiro, depois remove apenas a máscara.
+function Engine.cut_selection(project, id, selected)
+    local clip, reason = Engine.copy_selection(project, id, selected)
+    if not clip then return false, reason end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    Engine.begin_stroke(project, id)
+    for y = selected.min_y, selected.max_y do
+        for x = selected.min_x, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                layer.pixels:setPixel(x, y, 0, 0, 0, 0)
+            end
+        end
+    end
+    layer.image:replacePixels(layer.pixels)
+    project.dirty = true
+    return true, clip
+end
+
+-- Rotações ortogonais e escalas simples por amostragem nearest-neighbour.
+-- O retângulo de destino fica ancorado no canto superior esquerdo da seleção;
+-- se ultrapassar o canvas, a operação falha sem tocar no documento.
+function Engine.reshape_selection(project, id, selected, operation)
+    if not selected or selected.count == 0 then return false, "Selecione uma área." end
+    if project.w * project.h > MAX_TRANSFORM_PIXELS then
+        return false, LIMIT_MESSAGE
+    end
+    if operation ~= "rotate_cw" and operation ~= "rotate_ccw" and
+       operation ~= "scale_half" and operation ~= "scale_double" then
+        return false, "Transformação desconhecida."
+    end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local x0, y0 = selected.min_x, selected.min_y
+    local sw = selected.max_x - x0 + 1
+    local sh = selected.max_y - y0 + 1
+    local tw, th
+    if operation == "rotate_cw" or operation == "rotate_ccw" then
+        tw, th = sh, sw
+    else
+        local factor = operation == "scale_half" and 0.5 or 2
+        tw = math.max(1, math.floor(sw * factor + 0.5))
+        th = math.max(1, math.floor(sh * factor + 0.5))
+    end
+    if x0 + tw > project.w or y0 + th > project.h then
+        return false, "A seleção transformada ultrapassaria a tela."
+    end
+    local snapshot = clone_pixels(project, layer)
+    local output = {}
+    local newmask = {}
+    for v = 0, th - 1 do
+        for u = 0, tw - 1 do
+            local su, sv
+            if operation == "rotate_cw" then
+                su, sv = v, sh - 1 - u
+            elseif operation == "rotate_ccw" then
+                su, sv = sw - 1 - v, u
+            else
+                su = math.min(sw - 1, math.floor(u * sw / tw))
+                sv = math.min(sh - 1, math.floor(v * sh / th))
+            end
+            if Selection.contains(selected, x0 + su, y0 + sv) then
+                local tx, ty = x0 + u, y0 + v
+                newmask[ty * project.w + tx] = true
+                local sr, sg, sb, sa = snapshot:getPixel(x0 + su, y0 + sv)
+                output[#output + 1] = {tx, ty, sr, sg, sb, sa}
+            end
+        end
+    end
+    local replacement = Selection.from_mask(project.w, project.h,
+        newmask, operation)
+    if not replacement then
+        return false, "A redução não preservou pixels selecionados."
+    end
+
+    Engine.begin_stroke(project, id)
+    local entry = project.undo[#project.undo]
+    if entry then
+        entry.selection_ref = selected
+        entry.selection_state = Selection.clone(selected)
+    end
+    for y = selected.min_y, selected.max_y do
+        for x = selected.min_x, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                layer.pixels:setPixel(x, y, 0, 0, 0, 0)
+            end
+        end
+    end
+    for _, p in ipairs(output) do
+        over_pixel(layer.pixels, p[1], p[2], p[3], p[4], p[5], p[6])
+    end
+    layer.image:replacePixels(layer.pixels)
+    Selection.restore(selected, replacement)
+    project.dirty = true
     return true
 end
 

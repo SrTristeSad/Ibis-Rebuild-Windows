@@ -29,8 +29,15 @@
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam
   a seleção. Testar pixels não selecionados, histórico e bordas.
-- A seleção não persiste, não tem rotação/escala/cópia/cola e fica
-  limitada a 1.048.576 pixels. Não apresentar essas funções como prontas.
+- A seleção não persiste e fica limitada a 1.048.576 pixels. Copiar/recortar/
+  colar operam em clipboard INTERNO do Lua, não na área de transferência do
+  Windows. Rotação 90° e escala 50%/200% são raster nearest-neighbour,
+  ancoradas no canto superior esquerdo e devem rejeitar saída fora do canvas.
+- Atalhos sem novos controles: Ctrl+C/X/V (clipboard), Ctrl+Shift+R/L
+  (giro horário/anti-horário), Ctrl+Shift+Up/Down (200%/50%).
+  Preserve undo/redo de pixels e geometria, compatibilidade com a máscara
+  de seleção e testes da transformação. Não afirme rotação livre ou
+  clipboard do SO como concluídos.
 - Não alegue paridade visual ou técnica 1:1 com ibisPaint Windows 14.1.4 sem medições verificáveis.
 
 ## Critérios de mudança

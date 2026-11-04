@@ -71,7 +71,7 @@ def assemble() -> Path:
          '    Bridge.mousereleased(state,rx,ry,scale)\n'),
         ('function love.keypressed(key)\n',
          'function love.keypressed(key)\n'
-         '    if Bridge.keypressed(key,state) then return end\n'),
+         '    if Bridge.keypressed(key,state,notice) then return end\n'),
         ('    IconPack.load()\n',
          '    IconPack.load()\n'
          '    if not (smoke or e2e or settings_e2e or gallery_e2e or color_e2e) then\n'

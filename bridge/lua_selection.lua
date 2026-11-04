@@ -177,6 +177,46 @@ function Selection.translate(s, dx, dy)
     return s
 end
 
+
+-- Constrói uma seleção a partir dos pixels escolhidos após uma transformação.
+-- As chaves são índices 0-based (y * largura + x).
+function Selection.from_mask(w, h, mask, kind)
+    local ok, err = allowed(w, h)
+    if not ok then return nil, err end
+    local s = empty(w, h, kind or "transformed")
+    for k, marked in pairs(mask) do
+        if marked and type(k) == "number" and k == math.floor(k) and
+           k >= 0 and k < w * h then
+            add(s, k % w, math.floor(k / w))
+        end
+    end
+    return finalize(s)
+end
+
+-- Snapshot independente para restaurar contorno e posição junto com pixels.
+function Selection.clone(s)
+    if not s then return nil end
+    local copy = {}
+    for k, v in pairs(s) do
+        if k ~= "mask" and k ~= "outline" then copy[k] = v end
+    end
+    copy.mask = {}
+    for k, v in pairs(s.mask) do copy.mask[k] = v end
+    copy.outline = {}
+    for i, segment in ipairs(s.outline or {}) do
+        copy.outline[i] = {segment[1], segment[2], segment[3], segment[4]}
+    end
+    return copy
+end
+
+function Selection.restore(destination, saved)
+    assert(destination and saved and destination.w == saved.w and
+        destination.h == saved.h, "Máscara incompatível")
+    local state = Selection.clone(saved)
+    for k in pairs(destination) do destination[k] = nil end
+    for k, v in pairs(state) do destination[k] = v end
+end
+
 function Selection.draw(s)
     if not s or not s.outline then return end
     love.graphics.push("all")

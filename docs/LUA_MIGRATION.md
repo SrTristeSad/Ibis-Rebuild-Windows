@@ -50,6 +50,18 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
   Mover pixels da camada ativa é um único passo reversível no histórico
   (undo/redo também restaura a posição da máscara enquanto ela estiver ativa).
+- **Copiar/Recortar/Colar** funcionam na camada ativa e apenas dentro da
+  máscara: Ctrl+C copia, Ctrl+X recorta e Ctrl+V cola na posição original.
+  A colagem é RGBA source-over; sua área passa a ser a seleção atual.
+  A área de transferência é **interna ao aplicativo**, não é o clipboard
+  do Windows. A colagem pode ser movida pela ferramenta Transformar.
+- **Rotação de 90°** da seleção e seu conteúdo: Ctrl+Shift+R (horária) e
+  Ctrl+Shift+L (anti-horária). **Escala nearest-neighbour**:
+  Ctrl+Shift+↑ duplica as dimensões, Ctrl+Shift+↓ reduz a 50%.
+  O canto superior esquerdo da seleção ancora a transformação.
+  Os atalhos são específicos desta integração Lua, sem novos controles
+  visuais na interface Ibis-Lua. Undo/redo restaura pixels e geometria
+  enquanto a mesma seleção permanecer ativa.
 - Undo/redo do raster por traço pelos botões existentes, Ctrl+Z / Ctrl+Y.
 - Salvamento automático ao voltar do editor para a galeria, ou Ctrl+S.
   Os arquivos ficam na pasta de dados do LÖVE, em lua-artworks/, como PNG por camada,
@@ -71,11 +83,14 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - Histórico mantém até 8 snapshots de camada para telas até 32 MiB por
   snapshot; não persiste ao encerrar. Operações estruturais de camadas
   ainda não entram no histórico raster.
-- A seleção atual é **temporária**, não persiste ao salvar nem possui
-  copiar/colar, redimensionar ou rotacionar. Os recortes de seleção e a
-  transformação estão limitados a 1.048.576 pixels por documento; a
-  varinha compara RGBA com tolerância mínima de quantização. O movimento
-  é deslocamento inteiro, limitado para manter a máscara dentro do canvas.
+- A seleção atual é **temporária**, não persiste ao salvar; o clipboard
+  também não persiste e não comunica com o Windows. Copiar/colar só manipula
+  pixels da camada ativa, sem novos objetos ou camadas. Recortes de seleção,
+  movimento, rotação e escala estão limitados a 1.048.576 pixels por documento;
+  a varinha compara RGBA com tolerância mínima de quantização. A rotação
+  é apenas ortogonal (90°) e a escala apenas 50%/200% (nearest-neighbour).
+  Operações cuja nova área exceda as bordas da tela falham sem cortar pixels.
+  O movimento é deslocamento inteiro, limitado para manter a máscara no canvas.
   O contorno visual tem teto de 10.000 segmentos para não sobrecarregar
   a renderização, sem afetar o resultado da máscara raster.
 - O formato atual é PNG + metadados TSV, **não RBD2 nem IPV**.
@@ -104,7 +119,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   leitura de cores, composição semitransparente, miniatura,
   abertura de arquivos de quatro colunas e ciclo salvar/abrir PNG.
   Os testes também validam seleção por laço, varinha e retângulo,
-  restrição de pintura à seleção, mover pixels e desfazer/refazer.
+  restrição de pintura à seleção, mover pixels, clipboard interno
+  congelado, cut/paste source-over, giros 90°, escala 50%/200%,
+  limites de tela e desfazer/refazer com geometria da seleção.
 - Os testes Windows precisam passar no GitHub Actions antes de declarar a
   distribuição verificada.
 

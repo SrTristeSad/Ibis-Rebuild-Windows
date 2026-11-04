@@ -35,6 +35,12 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn("love.image.newImageData", engine)
         self.assertTrue((stage / "lua_selection.lua").is_file())
         self.assertIn("lua_selection", engine)
+        bridge = (stage / "lua_bridge.lua").read_text(encoding="utf-8")
+        self.assertIn("Bridge.selection_command(", bridge)
+        self.assertIn("rotate_cw", bridge)
+        self.assertIn("scale_half", bridge)
+        self.assertIn("clipboard", bridge)
+
 
 
 if __name__ == "__main__":
