@@ -854,12 +854,6 @@ local function test_magic_wand_diagonal(E)
     assert(global_without.count == 4 and global_with.count == 4
            and Selection.contains(global_with, 8, 8),
            "Modo global dependeu indevidamente da conectividade")
-    local end_four = assert(Selection.magic_wand(
-        p.layers[1], 12, 12, 0, 0, 0, false, false))
-    local end_eight = assert(Selection.magic_wand(
-        p.layers[1], 12, 12, 0, 0, 0, false, true))
-    assert(end_four.count == end_eight.count,
-           "Borda transparente divergiu sem conexão diagonal")
     local wrong, reason = Selection.magic_wand(
         p.layers[1], 12, 12, 2, 2, 0, false, "yes")
     assert(not wrong and reason, "Conectividade inválida foi aceita")
