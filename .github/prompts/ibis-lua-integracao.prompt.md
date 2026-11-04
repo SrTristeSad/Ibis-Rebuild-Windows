@@ -54,7 +54,7 @@ espelhamento, escala e prévias GPU devem preservar pesos, separar
 o alfa residual na origem e compor source-over no destino. Testar
 GPU/CPU com máscara fracionária e undo/redo de edição raster.
 Operações só de máscara não criam histórico raster. Existe agora um
-**histórico SEPARADO de máscara somente na sessão**, por
+**histórico SEPARADO e PERSISTENTE de máscara**, por
 `Bridge.selection_undo()`, `Bridge.selection_redo()` e
 `Bridge.selection_history_snapshot()`. **Ctrl+Alt+Z/Y** desfaz/refaz
 máscara; Ctrl+Z/Y continuam exclusivamente raster.
@@ -66,8 +66,17 @@ e 1.048.576 pixels marcados por pilha (descartar os estados antigos).
 Transformações raster que movem pixels+seleção limpam a timeline
 independente para evitar geometria dessincronizada. Undo raster que
 realmente modifica a máscara também limpa a timeline só de seleção.
-Ao reabrir, a seleção atual persiste em PNG, mas a timeline de seleção
-recomeça vazia; o histórico raster continua persistido em history.tsv.
+Ao salvar, `SelectionHistory.save` publica uma geração nova de PNGs
+e o manifesto `selection_history.tsv` DEPOIS dos snapshots. Ao reabrir,
+`SelectionHistory.load` valida dimensões, ordem de pilhas, limites,
+PNG e assinatura determinística da máscara atual e de cada snapshot;
+só então adota todas as entradas. Uma seleção de estado nil é codificada
+explicitamente no manifesto. Se inválido/ausente, mantém a seleção
+corrente e inicia pilhas vazias, sem bloquear a obra nem o histórico
+raster. Limpar apenas `selection_history_*.png` e o manifesto próprio
+quando pilhas vazias ou gerações antigas: nunca tocar nos PNGs de
+camadas, `selection.png` ou `history.tsv`. A timeline de máscara agora
+persiste; o histórico raster permanece independente em history.tsv.
 Não declarar feather gaussiano, slider visual ou paridade ibisPaint.
 Copiar/Recortar/Colar são internos à aplicação (Ctrl+C, Ctrl+X, Ctrl+V);
 colagens preservam RGBA e não criam nova camada. Rotação ortogonal

@@ -64,10 +64,17 @@
   varinha e booleanas; clonar pesos e permitir snapshots nil. Não registrar
   no-ops; nova ação após undo limpa redo. Ctrl+Z/Y seguem EXCLUSIVAMENTE
   raster. Transformar pixels e geometria reseta a timeline só de seleção;
-  undo/redo raster que restaura geometria também reseta. Ao reabrir uma
-  obra, a máscara atual é carregada de selection.png, mas o histórico
-  isolado é apenas em memória e começa vazio. Não persistir em history.tsv.
-  Testar independência do raster, recusa e limite de pilha.
+  undo/redo raster que restaura geometria também reseta. Persistir
+  as pilhas de máscara SEPARADAS em `selection_history.tsv` e PNGs por
+  geração via `lua_selection_history.lua`. Publicar manifesto por último,
+  validar integralmente ordem, dimensões, pesos, assinatura da máscara
+  atual e de snapshots antes de carregar; máscaras nil no manifesto.
+  Arquivos corrompidos ou legados não impedem abrir pintura e máscara
+  atual. Limpar gerações antigas e pilhas vazias, mas NUNCA tocar em
+  `history.tsv`, `selection.png` ou PNGs das camadas. O raster usa o
+  manifesto existente de forma independente. Testar corrupção,
+  sobrescrita, reabertura, orçamento e compatibilidade com documentos
+  antigos.
 - Histórico raster persiste em `history.tsv` e PNGs versionados por geração
   para documentos de até 1.048.576 pixels, com até 8 snapshots em cada
   pilha (undo e redo). Os arquivos de snapshot devem ser validados em
