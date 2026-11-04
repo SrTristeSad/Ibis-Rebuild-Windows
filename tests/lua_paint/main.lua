@@ -813,6 +813,221 @@ local function test_selection_morph_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Contiguidade opcional de oito vizinhos: diagonais não viram ilhas
+-- globais e a equivalência RGBA continua sendo por canal.
+local function test_magic_wand_diagonal(E)
+    local Selection = require("lua_selection")
+    local p = E.new(12, 12)
+    E.sync(p, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local data = p.layers[1].pixels
+    data:setPixel(2, 2, .4, .2, .3, 1)
+    data:setPixel(3, 3, .4, .2, .3, 1)
+    data:setPixel(4, 4, .4, .2, .3, 1)
+    data:setPixel(4, 5, .4 + 12 / 255, .2, .3, 1)
+    data:setPixel(5, 5, .4, .2, .3, .75)
+    data:setPixel(8, 8, .4, .2, .3, 1)
+    p.layers[1].image:replacePixels(data)
+    p.dirty = false
+    local four = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 2, 0, false, false))
+    local legacy = assert(Selection.magic_wand(p.layers[1], 12, 12, 2, 2, 0))
+    local eight = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 2, 0, false, true))
+    assert(four.count == 1 and legacy.count == 1 and eight.count == 3
+           and Selection.contains(eight, 3, 3)
+           and Selection.contains(eight, 4, 4)
+           and not Selection.contains(eight, 8, 8),
+           "Conectividade 8 não atravessou diagonais exatas")
+    local tolerance = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 2, 16, false, true))
+    assert(tolerance.count == 4 and Selection.contains(tolerance, 4, 5)
+           and not Selection.contains(tolerance, 5, 5),
+           "Modo 8-conexo não respeitou diferenças em RGB e alfa")
+    local alpha = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 2, 64, false, true))
+    assert(alpha.count == 5 and Selection.contains(alpha, 5, 5),
+           "Alfa próximo não entrou pela conexão diagonal")
+    local global_without = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 2, 0, true, false))
+    local global_with = assert(Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 2, 0, true, true))
+    assert(global_without.count == 4 and global_with.count == 4
+           and Selection.contains(global_with, 8, 8),
+           "Modo global dependeu indevidamente da conectividade")
+    local wrong, reason = Selection.magic_wand(
+        p.layers[1], 12, 12, 2, 2, 0, false, "yes")
+    assert(not wrong and reason, "Conectividade inválida foi aceita")
+    local huge, error_message = Selection.magic_wand(
+        p.layers[1], 1025, 1025, 2, 2, 0, false, true)
+    assert(not huge and error_message, "Limite 1 Mi ignorado no modo 8")
+    assert(not p.dirty and #p.undo == 0 and #p.redo == 0 and
+           four.count == 1 and eight.count == 3,
+           "Varinha 8-conexa modificou pintura ou máscaras anteriores")
+
+    local border = E.new(6, 6)
+    E.sync(border, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local pixels = border.layers[1].pixels
+    pixels:setPixel(0, 0, 1, 0, 0, 1)
+    pixels:setPixel(1, 1, 1, 0, 0, 1)
+    pixels:setPixel(2, 2, 1, 0, 0, 1)
+    pixels:setPixel(3, 2, 1, 0, 0, 1)
+    pixels:setPixel(5, 5, 1, 0, 0, 1)
+    local border_four = assert(Selection.magic_wand(
+        border.layers[1], 6, 6, 0, 0, 0, false, false))
+    local border_eight = assert(Selection.magic_wand(
+        border.layers[1], 6, 6, 0, 0, 0, false, true))
+    assert(border_four.count == 1 and border_eight.count == 4
+           and Selection.contains(border_eight, 3, 2)
+           and not Selection.contains(border_eight, 5, 5),
+           "Oito vizinhos ultrapassaram limites ou perderam cantos")
+end
+
+-- Persistência independente da conectividade e atalhos na ponte real.
+local function test_magic_wand_diagonal_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Diagonal pixels", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Wand diagonal")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, color)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+                                   view, prefs, color, 1, 100, nil))
+        Bridge.mousereleased()
+    end
+    press(3, 3, {100, 50, 75})
+    press(4, 4, {100, 50, 75})
+    press(5, 5, {100, 50, 75})
+    press(5, 6, {112, 50, 75})
+    press(11, 11, {100, 50, 75})
+    model.active_tool = "magic_wand"
+    local notices = {}
+    local function notify(message) notices[#notices + 1] = message end
+    local function shortcut(key)
+        local original = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                if select(i, ...) == "lctrl" or
+                   select(i, ...) == "lalt" then return true end
+            end
+            return false
+        end
+        local handled = Bridge.keypressed(key, model, notify)
+        love.keyboard.isDown = original
+        return handled
+    end
+    local function wand(x, y)
+        press(x, y, {0, 255, 0})
+        return assert(Bridge.selection_snapshot())
+    end
+    assert(Bridge.wand_diagonal(model) == false and
+           Bridge.wand_tolerance(model) == 0,
+           "Modo diagonal não iniciou em quatro vizinhos")
+    assert(wand(3, 3).count == 1,
+           "Padrão contíguo 4-conexo incluiu cantos")
+    local old_history = Bridge.selection_history_snapshot().undo
+    assert(shortcut("8") and Bridge.wand_diagonal(model) and
+           Bridge.selection_history_snapshot().undo == old_history and
+           notices[#notices]:find("8 vizinhos", 1, true),
+           "Ctrl+Alt+8 modificou seleção/histórico ou não exibiu aviso")
+    local eight = wand(3, 3)
+    assert(eight.count == 3 and Selection.contains(eight, 4, 4)
+           and Selection.contains(eight, 5, 5)
+           and not Selection.contains(eight, 11, 11),
+           "Ponte 8-conexa falhou em cantos isolados")
+    assert(shortcut("right") and Bridge.wand_tolerance(model) == 16)
+    assert(wand(3, 3).count == 4,
+           "Ponte diagonal não combinou tolerância RGBA")
+    assert(shortcut("g") and Bridge.wand_global(model))
+    assert(wand(3, 3).count == 5,
+           "Modo global não selecionou ilha distante")
+    assert(shortcut("8") and not Bridge.wand_diagonal(model) and
+           wand(3, 3).count == 5,
+           "Conectividade alterou indevidamente o modo global")
+    assert(shortcut("g") and not Bridge.wand_global(model) and
+           wand(3, 3).count == 1,
+           "Voltar ao 4-conexo perdeu comportamento anterior")
+    assert(shortcut("8") and Bridge.wand_diagonal(model))
+    assert(wand(3, 3).count == 4)
+    assert(Bridge.save())
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Wand diagonal", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Pasta do teste diagonal ausente")
+    local path = "lua-artworks/" .. key
+    local saved = assert(love.filesystem.read(path .. "/document.tsv"))
+    assert(saved:match("\t16\t0\t0\t1$"),
+           "Documento não salvou sexta coluna de conectividade")
+    local other = gallery:add_artwork(16, 16, "Wand another diagonal")
+    Bridge.create(model, other, gallery)
+    assert(not Bridge.wand_diagonal(model),
+           "Conectividade vazou para outra obra")
+    Bridge.open(model, id)
+    assert(Bridge.wand_diagonal(model) and
+           Bridge.wand_tolerance(model) == 16 and
+           Bridge.selection_snapshot().count == 4,
+           "Reabertura perdeu conectividade ou máscara")
+    assert(wand(3, 3).count == 4,
+           "Reabertura não aplicou conectividade salva")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\twhite\t16\t1\t1"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_diagonal(model) and
+           Bridge.wand_global(model) and Bridge.wand_sample_all(model),
+           "Legado com cinco colunas alterou opções existentes")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\twhite\t16\t1"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_diagonal(model) and
+           Bridge.wand_global(model) and not Bridge.wand_sample_all(model),
+           "Legado de quatro colunas não foi aceito")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\twhite\t16"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_diagonal(model) and
+           not Bridge.wand_global(model) and
+           Bridge.wand_tolerance(model) == 16,
+           "Legado de três colunas não foi aceito")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_diagonal(model) and
+           Bridge.wand_tolerance(model) == 0,
+           "Legado de duas colunas não foi aceito")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\twhite\t16\t1\t1\tbad"))
+    Bridge.open(model, id)
+    assert(not Bridge.wand_diagonal(model) and
+           Bridge.wand_global(model) and Bridge.wand_sample_all(model),
+           "Conectividade inválida perdeu outras preferências")
+    assert(Bridge.wand_diagonal({screen = "gallery"}) == nil and
+           not Bridge.toggle_wand_diagonal({screen = "gallery"}),
+           "Modo diagonal operou fora da obra")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Conectividade corrompeu histórico de pixels")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Amostragem composta usa as mesmas cores do conta-gotas e respeita
 -- visibilidade, mesclagem, clipping, opacidade e fundo transparente.
 local function test_magic_wand_composite_source(E)
@@ -1048,7 +1263,7 @@ local function test_magic_wand_sample_all_bridge(Bridge, gallery)
     assert(key, "Não encontrou pasta da amostragem composta")
     local path = "lua-artworks/" .. key
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t1\t1$"),
+    assert(metadata:match("\t0\t1\t1\t0$"),
            "Preferência global e amostragem composta não persistiram")
     local layer1 = love.image.newImageData(path .. "/layer_1.png")
     local layer2 = love.image.newImageData(path .. "/layer_2.png")
@@ -1220,7 +1435,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
     assert(key, "Obra temporária do modo global não foi localizada")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t32\t1\t0$"),
+    assert(meta:match("\t32\t1\t0\t0$"),
            "document.tsv não registrou modo global e tolerância")
     local other = gallery:add_artwork(16, 16, "Wand other mode")
     Bridge.create(model, other, gallery)
@@ -1244,7 +1459,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
            not Selection.contains(Bridge.selection_snapshot(), 2, 2),
            "Modo contíguo deixou escapar pixels de regiões separadas")
     assert(Bridge.save())
-    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0$"))
+    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0$"))
     assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32"))
     Bridge.open(model, id)
     assert(Bridge.wand_tolerance(model) == 32 and
@@ -1436,7 +1651,7 @@ local function test_magic_wand_tolerance_bridge(Bridge, gallery)
     assert(key, "Não encontrou diretório da varinha")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t48\t0\t0$"),
+    assert(meta:match("\t48\t0\t0\t0$"),
            "document.tsv não persistiu tolerância nem modo contíguo")
     -- Abrir outra obra não pode herdar a tolerância desta.
     local id2 = gallery:add_artwork(16, 16, "Temporary wand")
@@ -3179,6 +3394,7 @@ function love.load()
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
     checkpoint("magic wand global color across disconnected regions")
+    test_magic_wand_diagonal(E)
     test_magic_wand_composite_source(E)
     test_magic_wand_global(E)
     checkpoint("magic wand RGBA tolerance and connectivity")
@@ -3347,6 +3563,7 @@ function love.load()
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge magic wand global mode and persistence")
+    test_magic_wand_diagonal_bridge(Bridge, gallery)
     test_magic_wand_sample_all_bridge(Bridge, gallery)
     test_magic_wand_global_bridge(Bridge, gallery)
     checkpoint("bridge magic wand tolerance shortcuts and persistence")

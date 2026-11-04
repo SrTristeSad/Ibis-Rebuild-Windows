@@ -55,6 +55,18 @@
   (0/1) e retrocede para false em arquivos anteriores/valores inválidos.
   Alternar a fonte não marca dirty nem cria histórico; Ctrl+Alt+G
   continua alternando contiguidade de forma independente.
+- Conectividade opcional da Varinha contígua via Ctrl+Alt+8:
+  `Selection.magic_wand(layer,w,h,x,y,tolerance,global_mode,diagonal_mode)`
+  recebe booleano opcional no último argumento. `nil/false` preserva
+  exatamente o flood-fill 4-conexo anterior; `true` usa 8 vizinhos,
+  alcançando também pixels que se tocam apenas nos cantos.
+  No modo global essa flag não muda o resultado. O estado
+  `project.wand_diagonal` é independente de modo global, tolerância e
+  fonte RGBA; padrão false, persistido na sexta coluna de
+  `document.tsv`. Arquivos de 2–5 colunas e valores inválidos
+  usam false; preferências anteriores não se perdem.
+  Toggle não modifica máscara/pixels/dirty/histórico. Testar
+  diagonais, bordas, tolerância, alfa, limites, atalhos e undo.
 - Seleção raster ativa fica em bridge/lua_selection.lua: Varinha Mágica,
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam

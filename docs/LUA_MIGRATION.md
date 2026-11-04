@@ -74,6 +74,15 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   `document.tsv` armazena 0=camada ativa, 1=composição; duas, três ou
   quatro colunas e campos inválidos retornam à camada ativa. A alteração
   não marca dirty, não gera histórico nem cria controles visuais.
+  **Ctrl+Alt+8** alterna a conectividade da Varinha no modo contíguo:
+  **4 vizinhos** (padrão/algoritmo anterior) ou **8 vizinhos**
+  (lados e diagonais). Mantém a tolerância RGBA por canal, o limite de
+  1.048.576 pixels e as combinações de máscara. O modo global ignora
+  essa configuração, pois já percorre todos os pixels semelhantes.
+  A preferência `wand_diagonal` é salva por obra na sexta coluna de
+  `document.tsv` (0=4, 1=8); arquivos de duas a cinco colunas e valores
+  inválidos preservam quatro vizinhos. Alternar a conectividade não
+  altera a seleção atual, pixels, dirty ou histórico.
   **Laço** seleciona pixels dentro do contorno livre arrastado; **Transformar**
   cria uma seleção retangular ao arrastar sem seleção e move pixels selecionados
   ao arrastar dentro da seleção. Não foram criados controles visuais.
@@ -308,6 +317,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Testes adicionais cobrem Ctrl+Alt+T, fonte de todas as camadas visíveis,
   clipping, visibilidade, Multiply, opacidade, transparência/fundo branco,
   edição restrita à camada ativa e compatibilidade de metadados 2–5 colunas.
+  A nova suíte de conectividade 8-conexa cobre pontes diagonais, bordas,
+  canal alfa/tolerância, independência do modo global, Ctrl+Alt+8,
+  persistência por obra, arquivos 2–6 colunas e histórico raster.
   Também cobre a varinha com tolerância RGBA ajustável, conectividade de
   quatro vizinhos, limites 0/255, canal alfa, combinações preservadas,
   atalhos Ctrl+Alt+←/→/0, ausência de histórico ao mudar configuração
