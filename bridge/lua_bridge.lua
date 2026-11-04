@@ -104,6 +104,12 @@ function Bridge.open(model, id)
     project.model, project.document, project.id = model, model.document, id
     if record then saved_layers(model, project_path(record.key), project) end
     Engine.sync(project, model)
+    if record then
+        -- Arquivos antigos não possuem selection.png e seguem abrindo.
+        -- Máscaras inválidas são ignoradas sem comprometer a obra.
+        selection = Selection.load(project_path(record.key) .. "/selection.png",
+                                   project.w, project.h)
+    end
     project.dirty = false
 end
 
@@ -148,6 +154,17 @@ function Bridge.save()
     assert(love.filesystem.write(path .. "/document.tsv",
         table.concat({tostring(project.model.active_layer_id or 0),
             safe(project.model.background_mode or "white")}, "\t")))
+    -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
+    -- retrocompatível e evita que a seleção contamine qualquer camada.
+    local mask_path = path .. "/selection.png"
+    if selection and selection.count > 0 and
+       selection.w == project.w and selection.h == project.h then
+        local ok, reason = Selection.save(selection, mask_path)
+        assert(ok, reason)
+    elseif love.filesystem.getInfo(mask_path) then
+        assert(love.filesystem.remove(mask_path),
+            "Não foi possível limpar seleção anterior.")
+    end
     local item = gallery_ref and gallery_ref:get(project.id)
     if item then record.name = item.name end
     record.saved = true
@@ -387,6 +404,15 @@ function Bridge.mousereleased(model, rx, ry, scale)
     return mask ~= nil, reason
 end
 
+-- API de leitura para testes e extensões futuras; nunca expõe a máscara mutável.
+function Bridge.selection_snapshot()
+    return Selection.clone(selection)
+end
+
+function Bridge.clear_selection()
+    selection, gesture = nil, nil
+end
+
 function Bridge.undo()
     if project then return Engine.undo(project, selection) end
     return false
@@ -445,11 +471,11 @@ end
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" and selection then
-        selection, gesture = nil, nil
+        Bridge.clear_selection()
         return true
     end
     if not love.keyboard.isDown("lctrl", "rctrl") then return false end
-    if key == "d" then selection, gesture = nil, nil; return true end
+    if key == "d" then Bridge.clear_selection(); return true end
     local shift = love.keyboard.isDown("lshift", "rshift")
     if shift then
         if key == "r" then

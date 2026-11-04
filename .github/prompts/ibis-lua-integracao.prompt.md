@@ -22,7 +22,12 @@ colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+Up/Down) estão integradas sem novos componentes visuais.
 Histórico reversível deve incluir tanto pixels quanto a geometria da seleção.
 O clipboard não acessa o clipboard do Windows.
-A seleção não é persistida e tem limite de 1.048.576 pixels, com contorno
+A seleção ativa agora é salva em `selection.png` por obra, como máscara
+binária independente das camadas. Reabertura valida assinatura PNG,
+dimensões e limite de bytes; arquivo ausente ou inválido não deve impedir
+a abertura de desenhos antigos. Ctrl+D/Esc seguido de salvamento remove
+a máscara antiga. O clipboard interno não é persistido.
+A seleção tem limite de 1.048.576 pixels, com contorno
 visual limitado a 10.000 segmentos. Não criar botões nem painéis novos.
 layers.tsv com oito colunas deve ler o formato
 legado de quatro colunas; document.tsv mantém camada ativa/fundo. Mantenha estas operações
@@ -37,8 +42,10 @@ pixels da camada ativa; a Varinha e o Laço possuem gestos de seleção
 independentes. Rotação ortogonal, escala 50%/200% e copiar/colar de pixels da camada ativa
 possuem implementação Lua; preserve os testes de giro, amostragem,
 limites do canvas, source-over e histórico com contorno.
-Não declare rotação livre, escala arbitrária, seleção persistente ou
-clipboard Windows como concluídos.
+A seleção é persistente apenas como máscara por obra (sem histórico salvo).
+Não declare rotação livre, escala arbitrária ou clipboard Windows
+como concluídos. Preserve testes de PNG roundtrip, arquivo inválido,
+desmarcação e compatibilidade com projetos sem seleção.
 
 Prioridade:
 1. Conectar com fidelidade os eventos e estados dos controles existentes do Ibis-Lua a funcionalidades reais.

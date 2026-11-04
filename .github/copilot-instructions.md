@@ -29,9 +29,12 @@
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam
   a seleção. Testar pixels não selecionados, histórico e bordas.
-- A seleção não persiste e fica limitada a 1.048.576 pixels. Copiar/recortar/
-  colar operam em clipboard INTERNO do Lua, não na área de transferência do
-  Windows. Rotação 90° e escala 50%/200% são raster nearest-neighbour,
+- Seleção ativa persiste em `selection.png` por obra (máscara binária),
+  sem mudar os PNGs das camadas; arquivo ausente, corrompido ou com dimensões
+  incorretas não pode impedir a abertura do projeto. Desmarcar e salvar remove
+  o arquivo anterior. O histórico de seleção não persiste e a seleção fica
+  limitada a 1.048.576 pixels. Copiar/recortar/colar operam em clipboard
+  INTERNO do Lua, não na área de transferência do Windows. Rotação 90° e escala 50%/200% são raster nearest-neighbour,
   ancoradas no canto superior esquerdo e devem rejeitar saída fora do canvas.
 - Atalhos sem novos controles: Ctrl+C/X/V (clipboard), Ctrl+Shift+R/L
   (giro horário/anti-horário), Ctrl+Shift+Up/Down (200%/50%).

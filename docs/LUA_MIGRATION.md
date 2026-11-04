@@ -66,6 +66,10 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - Salvamento automático ao voltar do editor para a galeria, ou Ctrl+S.
   Os arquivos ficam na pasta de dados do LÖVE, em lua-artworks/, como PNG por camada,
   index.tsv, layers.tsv e document.tsv. As obras salvas são listadas ao reiniciar.
+  Uma seleção ativa também é salva em `selection.png` como máscara binária
+  separada dos pixels da pintura; é restaurada automaticamente ao reabrir a
+  obra e removida do disco no próximo salvamento após Ctrl+D ou Esc.
+  Projetos antigos sem `selection.png` continuam abrindo normalmente.
   O novo layers.tsv preserva nome, visibilidade, opacidade, blending selecionado,
   Clipping, Alpha Lock e bloqueio; arquivos antigos de quatro campos ainda abrem.
   document.tsv guarda a camada ativa e o modo de fundo.
@@ -74,8 +78,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - **Não** há paridade com os algoritmos do ibisPaint oficial.
 - Pincel circular, borracha, balde, conta-gotas, Alpha Lock, recorte básico por
   Clipping e os nove modos de mesclagem visíveis têm implementação independente.
-  Filtros, seleção por tolerância ajustável, rotação e escala da
-  seleção, formas, estabilização, pressão, máscaras adicionais, efeitos,
+  Filtros, seleção por tolerância ajustável, rotação livre e escala
+  arbitrária, formas, estabilização, pressão, máscaras adicionais, efeitos,
   texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
@@ -83,8 +87,11 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - Histórico mantém até 8 snapshots de camada para telas até 32 MiB por
   snapshot; não persiste ao encerrar. Operações estruturais de camadas
   ainda não entram no histórico raster.
-- A seleção atual é **temporária**, não persiste ao salvar; o clipboard
-  também não persiste e não comunica com o Windows. Copiar/colar só manipula
+- A seleção ativa persiste como máscara `selection.png` na pasta da obra,
+  e é validada por assinatura PNG, dimensões e limite de tamanho ao reabrir.
+  Seleções inválidas são ignoradas sem afetar o conteúdo das camadas.
+  A máscara não grava alterações sobre os pixels da pintura.
+  O clipboard **não persiste** e não comunica com o Windows. Copiar/colar só manipula
   pixels da camada ativa, sem novos objetos ou camadas. Recortes de seleção,
   movimento, rotação e escala estão limitados a 1.048.576 pixels por documento;
   a varinha compara RGBA com tolerância mínima de quantização. A rotação
@@ -122,6 +129,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   restrição de pintura à seleção, mover pixels, clipboard interno
   congelado, cut/paste source-over, giros 90°, escala 50%/200%,
   limites de tela e desfazer/refazer com geometria da seleção.
+  O CI também verifica roundtrip PNG da máscara, desmarcação com remoção
+  do arquivo e rejeição de PNG truncado ou com dimensões incompatíveis.
 - Os testes Windows precisam passar no GitHub Actions antes de declarar a
   distribuição verificada.
 

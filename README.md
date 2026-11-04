@@ -17,7 +17,9 @@ conta-gotas de cor visível, Alpha Lock para preservar transparência, Clipping
 por máscara alfa no shader do LÖVE, os nove modos de blend existentes no painel
 (com fórmulas Lua e shader GPU), histórico raster limitado,
 miniaturas de pixels reais e persistência PNG por camada com
-metadados compatíveis com o formato antigo. Varinha Mágica, Laço e
+metadados compatíveis com o formato antigo. Seleções ativas são
+persistidas em `selection.png` por obra, separado dos pixels das camadas,
+sem impedir a abertura de projetos antigos. Varinha Mágica, Laço e
 Transformar conectam gestos existentes a seleções raster temporárias em Lua,
 com movimento de pixels e histórico reversível (limitados a 1 Mi de pixels).
 Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
