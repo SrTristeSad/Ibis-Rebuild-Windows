@@ -57,6 +57,21 @@ máscara e deve respeitar combinações Ctrl+Shift/Alt, limites e histórico
 persistente da seleção. Não adicionar slider/painel ou alterar submódulo.
 Testar diferença contígua/global, diagonais, ilhas separadas, alfa,
 tolerância RGBA 0/16/48/64/255, modos combinados, persistência e undo.
+**Amostragem de todas as camadas visíveis (opcional)**: Ctrl+Alt+T
+alterna `project.wand_sample_all` sem alterar máscaras, dirty nem
+histórico. Padrão false: pixel RGBA vem da camada ativa, exatamente
+como antes. True: `Engine.composite_pixel_source(project,model,true)`
+fornece `pixels:getPixel(x,y)` com o mesmo cálculo do conta-gotas para
+camadas visíveis, opacidade, modos de mesclagem e clipping. O fundo branco
+é RGBA opaco; fundos transparentes mantêm alfa composto. Não gerar textura
+composta nem alterar raster/seleção durante amostragem. A seleção resultante
+continua editando somente a camada ativa, respeita contígua/global,
+tolerância, booleanas e limite 1 Mi. Persistir 0/1 na quinta coluna de
+`document.tsv`; arquivos de 2–4 colunas e valores inválidos iniciam
+na camada ativa, sem quebrar tolerância/modo global legados. Usar notice
+existente e não alterar o submódulo de interface. Testar sobreposição,
+ocultas, opacidade, Multiply, clipping, fundo branco/transparente,
+combinação independente dos modos, isolamento por obra e undo.
 Expansão/contração de máscara binária: `Selection.morph(s,"expand")`
 e `Selection.morph(s,"contract")` usam vizinhança 8-conexa quadrada
 de 3×3, sem alterar a máscara original. **Ctrl+Alt+Up** expande
