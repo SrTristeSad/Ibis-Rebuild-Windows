@@ -1,6 +1,6 @@
 # Ibis Rebuild Windows
 
-> **Arquitetura Lua/LÖVE em migração (branch feat/ibis-lua-engine).**
+> **Arquitetura ativa Lua/LÖVE — migração progressiva.**
 > A interface ativa vem do repositório [Ibis-Lua](https://github.com/SrTristeSad/Ibis-Lua),
 > fixado como submódulo. O motor ativo usa Lua e APIs do LÖVE, sem
 > rebuild_core.dll. Veja [a integração e suas limitações](docs/LUA_MIGRATION.md).
