@@ -34,6 +34,18 @@
   Gravar valor na terceira coluna opcional de `document.tsv` e ler zero
   em obras antigas (2 colunas) ou dados inválidos. Não alterar UI.
   Testar canal alfa, regiões isoladas, histórico e persistência.
+- Varinha também possui modo GLOBAL de seleção por cor, alternado via
+  Ctrl+Alt+G. `Selection.magic_wand(..., tolerance, global_mode)` recebe
+  booleano opcional: nil/false mantém região 4-conexa; true percorre
+  todos os pixels da camada ativa, sem conexidade, comparando os mesmos
+  quatro canais RGBA e a mesma tolerância. Não confundir com composição
+  de todas as camadas. `project.wand_global` persiste na quarta coluna
+  de `document.tsv` (1/0), é false por padrão em obras legadas com
+  duas/três colunas ou valores inválidos. Toggle usa notice existente,
+  não cria histórico nem modifica pixels/máscara; clique posterior
+  respeita Ctrl+Shift/Alt (soma/subtração/interseção), PNG, undo/redo de
+  seleção e limite 1 Mi pixels. Cobrir ilhas, diagonal, alfa, tolerância,
+  arquivo legado e isolamento por obra. Nunca modificar a UI Ibis-Lua.
 - Seleção raster ativa fica em bridge/lua_selection.lua: Varinha Mágica,
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam

@@ -42,6 +42,12 @@ aumenta 16 níveis, **Ctrl+Alt+←** diminui 16 e **Ctrl+Alt+0**
 restaura a seleção exata. A faixa é 0–255 por canal RGBA;
 a ferramenta seleciona apenas pixels conectados ao ponto clicado.
 O ajuste é salvo em `document.tsv` e não modifica a pintura.
+**Ctrl+Alt+G** alterna a Varinha entre **contígua** (padrão) e
+**global por cor**: neste último modo, seleciona todas as regiões RGBA
+semelhantes da camada ativa, mesmo ilhas separadas e diagonais.
+A preferência de modo é salva por obra na quarta coluna opcional de
+`document.tsv`, sem modificar pixels, seleção nem histórico.
+Arquivos anteriores continuam no modo contíguo por padrão.
 Com **Transformar (retângulo), Laço e Varinha**, os modificadores
 **Ctrl+Shift** somam áreas, **Ctrl+Alt** subtraem e
 **Ctrl+Shift+Alt** intersectam; essas operações não modificam a

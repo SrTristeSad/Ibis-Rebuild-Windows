@@ -137,6 +137,7 @@ function Bridge.create(model, id, gallery)
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
     project.wand_tolerance = 0
+    project.wand_global = false
     Engine.sync(project, model)
     counter = counter + 1
     local key = string.format("art_%d_%d", os.time(), counter)
@@ -189,15 +190,19 @@ local function saved_layers(model, path, p)
     if metadata then
         local active_id, background =
             metadata:match("^(%d+)\t([%a_]+)")
-        local stored_tolerance = metadata:match(
-            "^%d+\t[%a_]+\t(%d+)%s*$")
+        local stored_tolerance, stored_global = metadata:match(
+            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)%s*$")
+        if not stored_tolerance then
+            stored_tolerance = metadata:match("^%d+\t[%a_]+\t(%d+)%s*$")
+        end
         local numeric_tolerance = tonumber(stored_tolerance)
-        -- Arquivos legados com duas colunas continuam válidos.
-        -- Terceira coluna inválida volta a zero sem afetar a obra.
+        -- Arquivos legados com duas ou três colunas continuam válidos.
+        -- Campos inválidos usam zero/contíguo sem afetar a pintura.
         p.wand_tolerance = numeric_tolerance and
             numeric_tolerance >= 0 and numeric_tolerance <= 255 and
             numeric_tolerance == math.floor(numeric_tolerance)
             and numeric_tolerance or 0
+        p.wand_global = stored_global == "1"
         active_id = tonumber(active_id)
         if active_id then
             for _, info in ipairs(layers) do
@@ -219,6 +224,7 @@ function Bridge.open(model, id)
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
     project.wand_tolerance = 0
+    project.wand_global = false
     if record then saved_layers(model, project_path(record.key), project) end
     Engine.sync(project, model)
     if record then
@@ -281,7 +287,8 @@ function Bridge.save()
     assert(love.filesystem.write(path .. "/document.tsv",
         table.concat({tostring(project.model.active_layer_id or 0),
             safe(project.model.background_mode or "white"),
-            tostring(project.wand_tolerance or 0)}, "\t")))
+            tostring(project.wand_tolerance or 0),
+            project.wand_global and "1" or "0"}, "\t")))
     -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
     -- retrocompatível e evita que a seleção contamine qualquer camada.
     local mask_path = path .. "/selection.png"
@@ -441,7 +448,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         local layer = info and p.layers[info.id]
         if not layer then return true end
         local mask, reason = Selection.magic_wand(
-            layer, p.w, p.h, px, py, p.wand_tolerance or 0)
+            layer, p.w, p.h, px, py, p.wand_tolerance or 0,
+            p.wand_global or false)
         if mask then
             local combined, err = Selection.combine(selection, mask,
                                           selection_merge_mode(), p.w, p.h)
@@ -827,6 +835,27 @@ function Bridge.adjust_wand_tolerance(model, delta, notice)
     return true
 end
 
+-- A Varinha Mágica pode selecionar apenas a ilha contígua ou todas as
+-- regiões semelhantes da camada. É preferência por obra, não uma
+-- modificação de pixels/máscara: não cria histórico nem marca dirty.
+function Bridge.wand_global(model)
+    local p = ensure(model)
+    if not p then return nil end
+    return p.wand_global == true
+end
+
+function Bridge.toggle_wand_global(model, notice)
+    local p = ensure(model)
+    if not p then return false end
+    p.wand_global = not p.wand_global
+    if notice then
+        notice(p.wand_global and
+            "Varinha Mágica: todas as regiões da camada" or
+            "Varinha Mágica: somente região contígua")
+    end
+    return true
+end
+
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" and selection then
@@ -845,7 +874,9 @@ function Bridge.keypressed(key, model, notice)
         return true
     end
     if alt and not shift then
-        if key == "right" then
+        if key == "g" then
+            return Bridge.toggle_wand_global(model, notice)
+        elseif key == "right" then
             return Bridge.adjust_wand_tolerance(model, 16, notice)
         elseif key == "left" then
             return Bridge.adjust_wand_tolerance(model, -16, notice)

@@ -813,6 +813,237 @@ local function test_selection_morph_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Seleção por cor global: mesmos canais e tolerância, mas sem conexão.
+local function test_magic_wand_global(E)
+    local Selection = require("lua_selection")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local p = E.new(12, 12)
+    E.sync(p, model)
+    local layer = p.layers[1]
+    local data = layer.pixels
+    data:setPixel(2, 3, .4, .2, .3, 1)
+    data:setPixel(3, 3, .4 + 12 / 255, .2, .3, 1)
+    data:setPixel(3, 4, .4, .2 + 16 / 255, .3, 1)
+    data:setPixel(4, 3, .4 + 39 / 255, .2, .3, 1)
+    data:setPixel(5, 3, .4, .2, .3, .75)
+    data:setPixel(1, 2, .4, .2, .3, 1) -- somente diagonal
+    data:setPixel(8, 8, .4, .2, .3, 1) -- ilha isolada
+    layer.image:replacePixels(data)
+    p.dirty = false
+    local connected = assert(Selection.magic_wand(layer, 12, 12, 2, 3))
+    local explicit = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 0, false))
+    local global = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 0, true))
+    assert(connected.count == 1 and explicit.count == 1 and
+           global.kind == "magic_wand_global" and global.count == 3 and
+           Selection.contains(global, 1, 2) and
+           Selection.contains(global, 8, 8) and
+           not Selection.contains(global, 3, 3),
+           "Varinha global exata não selecionou ilhas/diagonais independentes")
+    local omitted_tolerance = assert(
+        Selection.magic_wand(layer, 12, 12, 2, 3, nil, true))
+    assert(omitted_tolerance.count == 3,
+           "Tolerância omitida não preservou o modo global")
+    local small = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 16, true))
+    assert(small.count == 5 and Selection.contains(small, 3, 4) and
+           not Selection.contains(small, 4, 3),
+           "Varinha global não compartilhou o critério RGBA de tolerância 16")
+    local mid = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 48, true))
+    assert(mid.count == 6 and Selection.contains(mid, 4, 3) and
+           not Selection.contains(mid, 5, 3),
+           "Varinha global com tolerância 48 incluiu pixel indevido")
+    local alpha = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 64, true))
+    assert(alpha.count == 7 and Selection.contains(alpha, 5, 3),
+           "Modo global ignorou diferença RGBA no canal alfa")
+    local all = assert(Selection.magic_wand(layer, 12, 12, 2, 3, 255, true))
+    assert(all.count == 144 and Selection.contains(all, 0, 0) and
+           Selection.contains(all, 11, 11),
+           "Tolerância máxima global deveria selecionar o canvas inteiro")
+    for _, bad in ipairs({"global", 1, 0, {}}) do
+        local invalid, reason = Selection.magic_wand(
+            layer, 12, 12, 2, 3, 0, bad)
+        assert(not invalid and reason,
+               "Flag de modo global inválida foi aceita")
+    end
+    assert(not Selection.magic_wand(layer, 12, 12, -1, 3, 0, true),
+           "Clique global fora do documento foi aceito")
+    local huge, limit = Selection.magic_wand(
+        layer, 1025, 1025, 2, 3, 0, true)
+    assert(not huge and limit, "Modo global não respeitou limite de 1 Mi")
+    assert(connected.count == 1 and global.count == 3 and
+           #p.undo == 0 and #p.redo == 0 and not p.dirty and
+           close(select(1, data:getPixel(2, 3)), .4, .005),
+           "Modo global modificou a camada ou máscaras já criadas")
+end
+
+-- Ponte: modo por obra, atalho, combinação, undo e metadados legados.
+local function test_magic_wand_global_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Global colors"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Wand global mode")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, color)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+                                   view, prefs, color, 1, 100, nil))
+        Bridge.mousereleased()
+    end
+    press(3, 3, {100, 50, 75})
+    press(2, 2, {100, 50, 75}) -- só diagonal
+    press(10, 10, {100, 50, 75}) -- ilha distante
+    press(11, 10, {120, 50, 75}) -- cor próxima, mas diferente
+    local notices = {}
+    local function notify(message)
+        notices[#notices + 1] = message
+    end
+    local function shortcut(key)
+        local saved = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" or k == "lalt" then return true end
+            end
+            return false
+        end
+        local ok = Bridge.keypressed(key, model, notify)
+        love.keyboard.isDown = saved
+        return ok
+    end
+    local function wand(x, y, shift, alt)
+        local mx, my = screen(x, y)
+        local original = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if (shift or alt) and k == "lctrl" then return true end
+                if shift and k == "lshift" then return true end
+                if alt and k == "lalt" then return true end
+            end
+            return false
+        end
+        local accepted = Bridge.mousepressed(
+            model, id, mx, my, 1024, 768, view, prefs,
+            {255, 0, 0}, 1, 100, nil)
+        love.keyboard.isDown = original
+        assert(accepted, "Clique global da varinha não foi consumido")
+        return Bridge.selection_snapshot()
+    end
+    assert(Bridge.wand_global(model) == false and
+           Bridge.wand_tolerance(model) == 0,
+           "Obra nova não iniciou no modo contíguo, tolerância zero")
+    model.active_tool = "magic_wand"
+    assert(wand(3, 3).count == 1,
+           "Modo contíguo incluiu regiões separadas")
+    local before = Bridge.selection_history_snapshot().undo
+    assert(shortcut("g") and Bridge.wand_global(model) and
+           Bridge.selection_history_snapshot().undo == before and
+           notices[#notices]:find("todas as regiões", 1, true),
+           "Ctrl+Alt+G não alternou modo sem alterar histórico")
+    local all = assert(wand(3, 3))
+    assert(all.count == 3 and
+           Selection.contains(all, 10, 10) and
+           Selection.contains(all, 2, 2) and
+           not Selection.contains(all, 11, 10),
+           "Modo global não incluiu ilhas isoladas da mesma cor")
+    assert(shortcut("right") and shortcut("right") and
+           Bridge.wand_tolerance(model) == 32)
+    all = assert(wand(3, 3))
+    assert(all.count == 4 and Selection.contains(all, 11, 10),
+           "Modo global não respeitou a tolerância ajustada da varinha")
+    assert(shortcut("0") and Bridge.wand_tolerance(model) == 0)
+    local current_history = Bridge.selection_history_snapshot().undo
+    assert(wand(11, 10, false, true).count == 3 and
+           Bridge.selection_history_snapshot().undo == current_history + 1,
+           "Ctrl+Alt clique não subtraiu a cor da seleção global")
+    assert(wand(11, 10, true, false).count == 4,
+           "Ctrl+Shift clique não somou a cor à seleção global")
+    local intersection = assert(wand(11, 10, true, true))
+    assert(intersection.count == 1 and
+           Selection.contains(intersection, 11, 10),
+           "Ctrl+Shift+Alt não intersectou a máscara global")
+    assert(Bridge.selection_undo() and
+           Bridge.selection_snapshot().count == 4 and
+           Bridge.selection_redo() and
+           Bridge.selection_snapshot().count == 1,
+           "Histórico de seleção não preservou operações globais")
+    assert(shortcut("right") and shortcut("right") and
+           Bridge.wand_tolerance(model) == 32,
+           "Modo global não restaurou a tolerância após combinação")
+    assert(Bridge.save(), "Não salvou seleção e modo global")
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local key
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Wand global mode", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Obra temporária do modo global não foi localizada")
+    local path = "lua-artworks/" .. key
+    local meta = assert(love.filesystem.read(path .. "/document.tsv"))
+    assert(meta:match("\t32\t1$"),
+           "document.tsv não registrou modo global e tolerância")
+    local other = gallery:add_artwork(16, 16, "Wand other mode")
+    Bridge.create(model, other, gallery)
+    assert(Bridge.wand_global(model) == false and
+           Bridge.wand_tolerance(model) == 0,
+           "Modo global vazou para outra obra")
+    Bridge.open(model, id)
+    assert(Bridge.wand_global(model) == true and
+           Bridge.wand_tolerance(model) == 32 and
+           Bridge.selection_snapshot().count == 1,
+           "Abertura não restaurou seleção e modo da varinha")
+    model.active_tool = "magic_wand"
+    assert(wand(3, 3).count == 4,
+           "Modo global salvo não foi aplicado após reabertura")
+    assert(shortcut("g") and Bridge.wand_global(model) == false and
+           wand(3, 3).count == 1,
+           "Alternar para contíguo não preservou o comportamento original")
+    -- O modo contíguo com tol 32 mantém somente o seed: 2,2 é
+    -- diagonal, enquanto 10,10/11,10 formam outra região distante.
+    assert(not Selection.contains(Bridge.selection_snapshot(), 10, 10) and
+           not Selection.contains(Bridge.selection_snapshot(), 2, 2),
+           "Modo contíguo deixou escapar pixels de regiões separadas")
+    assert(Bridge.save())
+    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0$"))
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_tolerance(model) == 32 and
+           Bridge.wand_global(model) == false,
+           "Arquivo legado com três colunas perdeu tol ou modo padrão")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_tolerance(model) == 0 and
+           Bridge.wand_global(model) == false,
+           "Arquivo legado de duas colunas não iniciou modo contíguo")
+    assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32\tinvalido"))
+    Bridge.open(model, id)
+    assert(Bridge.wand_global(model) == false,
+           "Modo inválido da varinha não foi rejeitado")
+    assert(Bridge.wand_global({screen = "gallery"}) == nil and
+           not Bridge.toggle_wand_global({screen = "gallery"}),
+           "Preferência da varinha atuou fora do editor")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Modo global de seleção corrompeu histórico raster")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Varinha contígua compara TODOS os canais RGBA com tolerância 8-bit.
 local function test_magic_wand_tolerance(E)
     local Selection = require("lua_selection")
@@ -977,7 +1208,8 @@ local function test_magic_wand_tolerance_bridge(Bridge, gallery)
     assert(key, "Não encontrou diretório da varinha")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t48$"), "document.tsv não persistiu tolerância")
+    assert(meta:match("\t48\t0$"),
+           "document.tsv não persistiu tolerância nem modo contíguo")
     -- Abrir outra obra não pode herdar a tolerância desta.
     local id2 = gallery:add_artwork(16, 16, "Temporary wand")
     Bridge.create(model, id2, gallery)
@@ -2718,6 +2950,8 @@ function love.load()
     test_feather_transform(E)
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
+    checkpoint("magic wand global color across disconnected regions")
+    test_magic_wand_global(E)
     checkpoint("magic wand RGBA tolerance and connectivity")
     test_magic_wand_tolerance(E)
     checkpoint("selection boolean algebra and PNG")
@@ -2883,6 +3117,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("bridge magic wand global mode and persistence")
+    test_magic_wand_global_bridge(Bridge, gallery)
     checkpoint("bridge magic wand tolerance shortcuts and persistence")
     test_magic_wand_tolerance_bridge(Bridge, gallery)
     checkpoint("bridge boolean gestures rectangle lasso wand")
@@ -2906,6 +3142,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: wand RGBA tolerance + selection history + feather + GPU")
+    print("PASS: wand global RGBA + tolerance + persistent history + GPU")
     love.event.quit(0)
 end
