@@ -35,6 +35,18 @@ local function affine_gesture_args(d)
     return nil
 end
 
+-- Ctrl+Shift soma, Ctrl+Alt subtrai, ambos intersectam.
+-- Shift/Alt sozinhos continuam reservados ao redimensionamento e giro.
+local function selection_merge_mode()
+    if not love.keyboard.isDown("lctrl", "rctrl") then return "replace" end
+    local shift = love.keyboard.isDown("lshift", "rshift")
+    local alt = love.keyboard.isDown("lalt", "ralt")
+    if shift and alt then return "intersect" end
+    if shift then return "add" end
+    if alt then return "subtract" end
+    return "replace"
+end
+
 local gallery_images = {}
 local counter = 0
 
@@ -346,22 +358,31 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         local layer = info and p.layers[info.id]
         if not layer then return true end
         local mask, reason = Selection.magic_wand(layer, p.w, p.h, px, py)
-        if mask then selection = mask
+        if mask then
+            local combined, err = Selection.combine(selection, mask,
+                                          selection_merge_mode(), p.w, p.h)
+            if not err then selection = combined end
+            if err and notice then notice(err) end
         elseif reason and notice then notice(reason) end
         return true
     end
     if tool == "lasso" then
         discard_preview(gesture)
-        selection = nil
+        local mode = selection_merge_mode()
+        if mode == "replace" then selection = nil end
         gesture = {kind = "lasso", w = w, h = h, view = view,
                    preferences = preferences, points = {{px, py}},
-                   x = px, y = py}
+                   mode = mode, x = px, y = py,
+                   end_x = px, end_y = py}
         return true
     end
     if tool == "transform" then
         discard_preview(gesture)
         local info = model:active_layer()
-        local moving = selection and
+        local mode = selection_merge_mode()
+        -- Com Ctrl+Shift/Alt, inicia um novo retângulo inclusive dentro
+        -- da área já marcada; não desloca nem transforma pixels.
+        local moving = mode == "replace" and selection and
             Selection.contains(selection, math.floor(px), math.floor(py))
         if moving and info and (info.locked or info.alpha_lock) then
             if notice then
@@ -382,9 +403,9 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         gesture = {
             kind = action, x = px, y = py, w = w, h = h, view = view,
             preferences = preferences, layer = info and info.id,
-            end_x = px, end_y = py
+            mode = mode, end_x = px, end_y = py
         }
-        if not moving then selection = nil end
+        if not moving and mode == "replace" then selection = nil end
         return true
     end
 
@@ -519,8 +540,15 @@ function Bridge.mousereleased(model, rx, ry, scale)
         return Engine.affine_selection(project, d.layer, selection,
                                        degrees, sx, sy, "bilinear")
     end
-    if mask then selection = mask end
-    return mask ~= nil, reason
+    if mask then
+        local combined, err = Selection.combine(selection, mask,
+                                        d.mode or "replace",
+                                        project.w, project.h)
+        if err then return false, err end
+        selection = combined
+        return true
+    end
+    return false, reason
 end
 
 -- API de leitura para testes e extensões futuras; nunca expõe a máscara mutável.

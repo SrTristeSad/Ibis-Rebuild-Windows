@@ -37,6 +37,10 @@ seleção **horizontal (Ctrl+Shift+H)** e **vertical (Ctrl+Shift+V)**
 reflete pixels e máscara irregular com undo/redo.
 **Ctrl+A** seleciona todo o canvas e **Ctrl+Shift+I** inverte a
 máscara, sem alterar pixels ou histórico raster.
+Com **Transformar (retângulo), Laço e Varinha**, os modificadores
+**Ctrl+Shift** somam áreas, **Ctrl+Alt** subtraem e
+**Ctrl+Shift+Alt** intersectam; essas operações não modificam a
+pintura e persistem no `selection.png`.
 O arraste normal do Transformar também exibe uma prévia GPU do deslocamento inteiro,
 com máscara/cache reutilizados sem recalcular todos os pixels em Lua
 a cada movimento subpixel. O visual e os

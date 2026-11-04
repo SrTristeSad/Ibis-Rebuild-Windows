@@ -29,6 +29,14 @@
   Laço e seleção retangular via Transformar. Transformar move apenas pixels
   selecionados da camada ativa com undo/redo; pincel e balde respeitam
   a seleção. Testar pixels não selecionados, histórico e bordas.
+  Álgebra de máscaras `Selection.combine` (replace/add/subtract/
+  intersect) não pode alterar máscaras de entrada ou pixels. Retângulo,
+  laço e varinha: Ctrl+Shift soma, Ctrl+Alt subtrai e Ctrl+Shift+Alt
+  intersecta, com modo capturado no mousepressed. Sem Ctrl, Alt/Shift
+  do Transformar preservam giro/escala. Modificadores com Ctrl criam
+  novo retângulo até dentro da seleção anterior. Resultado vazio
+  desmarca; nenhum passo de undo raster é criado, nem em Layer Lock/
+  Alpha Lock. Testar PNG e gestos mistos sem regressão.
 - Histórico raster persiste em `history.tsv` e PNGs versionados por geração
   para documentos de até 1.048.576 pixels, com até 8 snapshots em cada
   pilha (undo e redo). Os arquivos de snapshot devem ser validados em

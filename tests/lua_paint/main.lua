@@ -12,6 +12,235 @@ local function checkpoint(name)
     io.stdout:flush()
 end
 
+-- Combinação booleana pura de máscaras arbitrárias.
+local function test_selection_boolean(E)
+    local Selection = require("lua_selection")
+    local contains = Selection.contains
+    local project = E.new(16, 16)
+    E.sync(project, {layers = {{id = 1, visible = true, opacity = 100}}})
+    project.layers[1].pixels:setPixel(8, 8, 1, 0.3, 0.2, 0.65)
+    project.layers[1].image:replacePixels(project.layers[1].pixels)
+    project.dirty = false
+    local first = assert(Selection.rectangle(16, 16, 2, 2, 4, 4))
+    local second = assert(Selection.rectangle(16, 16, 4, 2, 6, 4))
+    local union = assert(Selection.combine(first, second, "add", 16, 16))
+    local difference = assert(Selection.combine(first, second, "subtract", 16, 16))
+    local intersection = assert(Selection.combine(first, second, "intersect", 16, 16))
+    assert(first.count == 9 and second.count == 9 and
+           union.count == 15 and difference.count == 6 and
+           intersection.count == 3 and union.kind == "combined_add",
+           "Operações booleanas não obedeceram à álgebra de máscaras")
+    assert(contains(union, 2, 2) and contains(union, 6, 4) and
+           not contains(difference, 4, 3) and
+           contains(intersection, 4, 3) and
+           not contains(intersection, 3, 3),
+           "Combinação não respeitou coordenadas reais dos pixels")
+    assert(first.count == 9 and contains(first, 4, 3) and
+           second.count == 9 and contains(second, 4, 3),
+           "Combinação modificou as máscaras originais")
+
+    local sparse = assert(Selection.from_mask(16, 16, {
+        [1 + 1 * 16] = true, [8 + 6 * 16] = true,
+        [15 + 15 * 16] = true
+    }, "lasso"))
+    local partial = assert(Selection.combine(union, sparse, "add", 16, 16))
+    assert(partial.count == 18 and contains(partial, 15, 15) and
+           not contains(union, 15, 15),
+           "União não integrou ilhas não retangulares")
+    local empty, empty_reason = Selection.combine(first, sparse,
+                                                   "intersect", 16, 16)
+    assert(not empty and not empty_reason,
+           "Interseção sem pixels em comum deve desmarcar sem erro")
+    local from_nil = assert(Selection.combine(nil, sparse, "add", 16, 16))
+    assert(from_nil.count == sparse.count and from_nil ~= sparse,
+           "União sem seleção não clonou a nova área")
+    assert(not Selection.combine(nil, sparse, "subtract", 16, 16) and
+           not Selection.combine(nil, sparse, "intersect", 16, 16),
+           "Subtrair/intersectar sem seleção deve resultar em máscara vazia")
+    assert(not Selection.combine(sparse, sparse, "subtract", 16, 16),
+           "Subtrair a própria seleção deveria desmarcar")
+    local replaced = assert(Selection.combine(first, sparse,
+                                               "replace", 16, 16))
+    assert(replaced.count == sparse.count and replaced ~= sparse,
+           "Substituição deve manter máscara original independente")
+    local invalid, err = Selection.combine(first, sparse,
+                                            "xor", 16, 16)
+    assert(not invalid and err, "Operação desconhecida foi aceita")
+    local wrong, mismatch = Selection.combine(first, sparse,
+                                               "add", 15, 16)
+    assert(not wrong and mismatch, "Máscaras de dimensões erradas foram aceitas")
+    local large, limit = Selection.combine(first, second,
+                                            "add", 1025, 1025)
+    assert(not large and limit, "Operações não respeitaram limite de 1 Mi")
+    assert(#project.undo == 0 and #project.redo == 0 and
+           not project.dirty and
+           select(1, project.layers[1].pixels:getPixel(8, 8)) > 0.9,
+           "Álgebra de máscaras alterou pixels ou histórico")
+
+    local path = "lua-boolean-selection-tests"
+    assert(love.filesystem.createDirectory(path))
+    assert(Selection.save(partial, path .. "/selection.png"))
+    local loaded = assert(Selection.load(path .. "/selection.png", 16, 16))
+    assert(loaded.count == partial.count and
+           contains(loaded, 1, 1) and contains(loaded, 15, 15) and
+           not contains(loaded, 0, 0),
+           "PNG da seleção combinada perdeu ilhas da máscara")
+    assert(love.filesystem.remove(path .. "/selection.png"))
+    assert(love.filesystem.remove(path))
+end
+
+-- Gestos reais: Ctrl+Shift soma, Ctrl+Alt subtrai, os três intersectam.
+local function test_selection_boolean_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 32, height = 32},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Boolean masks"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    local art = gallery:add_artwork(32, 32, "Boolean gestures")
+    Bridge.create(model, art, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + 0.5 - 16) * 11,
+            62 + (768 - 160) / 2 + (y + 0.5 - 16) * 11
+    end
+    local function with_keys(shift, alt, fn)
+        local native = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local key = select(i, ...)
+                if key == "lctrl" then return true end
+                if shift and key == "lshift" then return true end
+                if alt and key == "lalt" then return true end
+            end
+            return false
+        end
+        local result = fn()
+        love.keyboard.isDown = native
+        return result
+    end
+    local function press(x, y, shift, alt)
+        local mx, my = screen(x, y)
+        return with_keys(shift, alt, function()
+            return Bridge.mousepressed(model, art, mx, my, 1024, 768,
+                view, prefs, {255, 0, 0}, 1, 100, nil)
+        end)
+    end
+    local function release(x, y)
+        local mx, my = screen(x, y)
+        return Bridge.mousereleased(model, mx, my, 1)
+    end
+    local function shape()
+        return Bridge.selection_snapshot()
+    end
+
+    -- Dois pontos isolados para varinha de tolerância RGBA.
+    assert(press(22, 22, false, false))
+    Bridge.mousereleased()
+    assert(press(26, 26, false, false))
+    Bridge.mousereleased()
+    model.active_tool = "transform"
+
+    assert(press(3, 3, false, false) and release(6, 6))
+    assert(shape().count == 16, "Retângulo inicial incorreto")
+    -- Em região parcialmente sobreposta, Ctrl+Shift substitui o move por união.
+    assert(press(5, 5, true, false))
+    assert(release(8, 8))
+    assert(shape().count == 28 and
+           Selection.contains(shape(), 8, 8),
+           "Ctrl+Shift não somou um retângulo sobreposto")
+    assert(press(5, 5, false, true) and release(6, 6))
+    assert(shape().count == 24 and
+           not Selection.contains(shape(), 5, 5),
+           "Ctrl+Alt não subtraiu retângulo dentro da seleção")
+    assert(press(4, 4, true, true) and release(7, 7))
+    local common = assert(shape())
+    assert(Selection.contains(common, 4, 4) and
+           Selection.contains(common, 7, 7) and
+           not Selection.contains(common, 3, 3) and
+           not Selection.contains(common, 5, 5),
+           "Ctrl+Shift+Alt não intersectou as regiões")
+
+    model.active_tool = "lasso"
+    assert(press(12, 12, true, false))
+    local mx, my = screen(19, 12)
+    assert(Bridge.mousemoved(model, mx, my, 1))
+    mx, my = screen(12, 19)
+    assert(Bridge.mousemoved(model, mx, my, 1))
+    assert(release(12, 12))
+    assert(Selection.contains(shape(), 13, 13) and
+           Selection.contains(shape(), 7, 7),
+           "Ctrl+Shift não somou a área criada pelo laço")
+    local after_lasso = assert(shape())
+    assert(after_lasso.count > common.count,
+           "Laço combinado não acrescentou pixels")
+
+    model.active_tool = "magic_wand"
+    assert(press(22, 22, true, false))
+    assert(Selection.contains(shape(), 22, 22),
+           "Varinha com Ctrl+Shift não somou região pintada")
+    local with_wand = assert(shape())
+    assert(press(22, 22, false, true))
+    assert(not Selection.contains(shape(), 22, 22) and
+           shape().count < with_wand.count,
+           "Varinha com Ctrl+Alt não subtraiu a região")
+    assert(Bridge.selection_command(model, "select_all"))
+    assert(press(26, 26, true, true))
+    local wand_intersection = assert(shape())
+    assert(Selection.contains(wand_intersection, 26, 26) and
+           not Selection.contains(wand_intersection, 3, 3),
+           "Varinha Ctrl+Shift+Alt não intersectou com o canvas inteiro")
+    assert(press(3, 3, false, true))
+    -- Subtrair outra ilha não deve apagar a seleção atual.
+    assert(shape().count == wand_intersection.count,
+           "Subtração de máscara disjunta deveria ser no-op")
+
+    -- Interseção realmente vazia remove a seleção, mas não a camada.
+    model.active_tool = "transform"
+    assert(press(1, 1, true, true) and release(2, 2))
+    assert(not shape(), "Interseção vazia deveria desmarcar")
+    -- Exatamente dois históricos raster dos dois pontos pintados antes
+    -- das combinações; nenhuma operação de máscara criou passo adicional.
+    assert(Bridge.undo() and Bridge.undo() and not Bridge.undo() and
+           Bridge.redo() and Bridge.redo(),
+           "Combinações de máscara alteraram o histórico raster")
+    model.layers[1].locked = true
+    model.layers[1].alpha_lock = true
+    assert(press(10, 10, true, false) and release(11, 11))
+    assert(shape().count == 4,
+           "Combinação em Layer Lock/Alpha Lock deveria operar apenas máscara")
+    model.layers[1].locked = false
+    model.layers[1].alpha_lock = false
+    assert(Bridge.save(), "Salvamento após combinação falhou")
+    local persisted_count = shape().count
+    Bridge.open(model, art)
+    assert(shape() and shape().count == persisted_count,
+           "Reabertura não restaurou seleção combinada")
+    assert(Bridge.undo() and Bridge.undo() and not Bridge.undo() and
+           Bridge.redo() and Bridge.redo(),
+           "Reabertura criou histórico raster para mudanças de máscara")
+
+    -- Limpar a obra de teste e snapshots sem afetar os demais testes.
+    local index = love.filesystem.read("lua-artworks/index.tsv") or ""
+    local key
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Boolean gestures", 1, true) then
+            key = line:match("^(art_%d+_%d+)\t")
+        end
+    end
+    assert(key, "Não localizou obra temporária da combinação")
+    local path = "lua-artworks/" .. key
+    require("lua_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path), "Falha ao remover obra de teste")
+end
+
 -- Operações puras de máscara: selecionar tudo e inverter pixels selecionados.
 local function test_selection_all_invert(E)
     local Selection = require("lua_selection")
@@ -1483,6 +1712,8 @@ function love.load()
            "Redo de movimento inconsistente")
 
     test_clipboard_transform(E)
+    checkpoint("selection boolean algebra and PNG")
+    test_selection_boolean(E)
     checkpoint("selection full canvas and inverse")
     test_selection_all_invert(E)
     checkpoint("selection horizontal and vertical mirror")
@@ -1636,6 +1867,8 @@ function love.load()
         "A escala da ponte não manteve o histórico")
     checkpoint("selection PNG roundtrip")
     test_selection_roundtrip(Bridge, model4, art4)
+    checkpoint("bridge boolean gestures rectangle lasso wand")
+    test_selection_boolean_bridge(Bridge, gallery)
     checkpoint("bridge select all and invert shortcuts")
     test_selection_all_invert_bridge(Bridge, gallery)
     checkpoint("bridge selection flip shortcuts")
@@ -1654,6 +1887,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: select all/invert + flip H/V + GPU previews + history")
+    print("PASS: selection union/subtract/intersect + PNG + GPU + history")
     love.event.quit(0)
 end

@@ -223,6 +223,38 @@ function Selection.invert(s, w, h)
     return finalize(inverse)
 end
 
+-- Álgebra booleana de máscaras em TODO o documento.
+-- Retorna nil sem erro quando a combinação resulta em seleção vazia.
+-- As duas entradas permanecem intactas, inclusive seus contornos.
+function Selection.combine(base, incoming, mode, w, h)
+    local ok, reason = allowed(w, h)
+    if not ok then return nil, reason end
+    if mode ~= "replace" and mode ~= "add" and
+       mode ~= "subtract" and mode ~= "intersect" then
+        return nil, "Modo de combinação desconhecido."
+    end
+    if (base and (base.w ~= w or base.h ~= h)) or
+       (incoming and (incoming.w ~= w or incoming.h ~= h)) then
+        return nil, "Máscara incompatível com as dimensões do documento."
+    end
+    if mode == "replace" then return Selection.clone(incoming) end
+    local next_mask = {}
+    if (mode == "add" or mode == "subtract" or mode == "intersect") and base then
+        for k in pairs(base.mask) do
+            if mode == "add" or
+               (mode == "subtract" and
+                (not incoming or not incoming.mask[k])) or
+               (mode == "intersect" and incoming and incoming.mask[k]) then
+                next_mask[k] = true
+            end
+        end
+    end
+    if mode == "add" and incoming then
+        for k in pairs(incoming.mask) do next_mask[k] = true end
+    end
+    return Selection.from_mask(w, h, next_mask, "combined_" .. mode)
+end
+
 -- Snapshot independente para restaurar contorno e posição junto com pixels.
 function Selection.clone(s)
     if not s then return nil end
