@@ -131,9 +131,15 @@ function love.load()
     local actual = buffer:newImageData()
     local gpu_r, _, gpu_b, gpu_a = actual:getPixel(4, 4)
     local _, _, _, gpu_out = actual:getPixel(12, 12)
-    assert(close(gpu_r, cl_r, 0.04) and close(gpu_b, cl_b, 0.04)
+    -- newCanvas:newImageData devolve RGB premultiplicado pelo alfa:
+    -- o sample Lua devolve RGB straight. Compare no mesmo espaço.
+    local straight_r = gpu_a > 0 and gpu_r / gpu_a or 0
+    local straight_b = gpu_a > 0 and gpu_b / gpu_a or 0
+    assert(close(straight_r, cl_r, 0.04)
+       and close(straight_b, cl_b, 0.04)
        and close(gpu_a, cl_a, 0.04),
-       "A máscara GLSL desenhada diverge da composição Lua")
+       string.format("Máscara GLSL/Lua divergente: GPU %.3f %.3f %.3f; CPU %.3f %.3f %.3f",
+           straight_r, straight_b, gpu_a, cl_r, cl_b, cl_a))
     assert(gpu_out < 0.01, "Clipping do renderer exibiu pixels fora da máscara")
     clip_model.layers[1].visible = false
     local _, _, _, hidden = E.sample(clip_project, clip_model, 4, 4)
