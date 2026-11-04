@@ -147,4 +147,112 @@ function Engine.load_layer(project, id, filename)
     return true
 end
 
+
+-- Amostragem da composição visível em modo Normal, com opacidade por camada.
+-- RGB retornado é não pré-multiplicado; não altera nenhum pixel do projeto.
+function Engine.sample(project, model, x, y)
+    x, y = math.floor(x), math.floor(y)
+    if x < 0 or y < 0 or x >= project.w or y >= project.h then return nil end
+    local r, g, b, a = 0, 0, 0, 0
+    for _, info in ipairs(model.layers) do
+        local layer = project.layers[info.id]
+        if layer and info.visible then
+            local sr, sg, sb, sa = layer.pixels:getPixel(x, y)
+            sa = sa * math.max(0, math.min(100, info.opacity or 100)) / 100
+            if sa > 0 then
+                local next_a = sa + a * (1 - sa)
+                r = (sr * sa + r * a * (1 - sa)) / next_a
+                g = (sg * sa + g * a * (1 - sa)) / next_a
+                b = (sb * sa + b * a * (1 - sa)) / next_a
+                a = next_a
+            end
+        end
+    end
+    return r, g, b, a
+end
+
+-- Balde contíguo, cor RGBA exata (tolerância de 1/510 por canal).
+-- Algoritmo scanline sem recursão; não extrapola os limites do buffer.
+-- Impõe teto conservador de pixels para evitar travamentos da UI Lua.
+function Engine.fill(project, id, x, y, rgb, alpha)
+    if project.w * project.h > 1024 * 1024 then
+        return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
+    end
+    x, y = math.floor(x), math.floor(y)
+    if x < 0 or y < 0 or x >= project.w or y >= project.h then
+        return false
+    end
+    alpha = math.max(0, math.min(1, alpha))
+    if alpha <= 0 then return false end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local data = layer.pixels
+    local tr, tg, tb, ta = data:getPixel(x, y)
+    local na = alpha + ta * (1 - alpha)
+    local nr = (rgb[1] * alpha + tr * ta * (1 - alpha)) / na
+    local ng = (rgb[2] * alpha + tg * ta * (1 - alpha)) / na
+    local nb = (rgb[3] * alpha + tb * ta * (1 - alpha)) / na
+    local epsilon = 0.5 / 255
+    if math.abs(nr - tr) < epsilon and math.abs(ng - tg) < epsilon
+       and math.abs(nb - tb) < epsilon and math.abs(na - ta) < epsilon then
+        return false
+    end
+
+    local w, h = project.w, project.h
+    local function matches(px, py)
+        if px < 0 or py < 0 or px >= w or py >= h then return false end
+        local r, g, b, a = data:getPixel(px, py)
+        local tolerance = 1 / 510
+        return math.abs(r - tr) <= tolerance and math.abs(g - tg) <= tolerance
+           and math.abs(b - tb) <= tolerance and math.abs(a - ta) <= tolerance
+    end
+    local function paint(px, py)
+        local dr, dg, db, da = data:getPixel(px, py)
+        local out_a = alpha + da * (1 - alpha)
+        data:setPixel(px, py,
+            (rgb[1] * alpha + dr * da * (1 - alpha)) / out_a,
+            (rgb[2] * alpha + dg * da * (1 - alpha)) / out_a,
+            (rgb[3] * alpha + db * da * (1 - alpha)) / out_a, out_a)
+    end
+    Engine.begin_stroke(project, id)
+    local stack = {{x, y}}
+    while #stack > 0 do
+        local point = table.remove(stack)
+        local sx, sy = point[1], point[2]
+        if matches(sx, sy) then
+            while matches(sx - 1, sy) do sx = sx - 1 end
+            local above, below = false, false
+            while matches(sx, sy) do
+                paint(sx, sy)
+                if matches(sx, sy - 1) then
+                    if not above then stack[#stack + 1] = {sx, sy - 1} end
+                    above = true
+                else above = false end
+                if matches(sx, sy + 1) then
+                    if not below then stack[#stack + 1] = {sx, sy + 1} end
+                    below = true
+                else below = false end
+                sx = sx + 1
+            end
+        end
+    end
+    layer.image:replacePixels(data)
+    project.dirty = true
+    return true
+end
+
+-- Miniatura RGBA composta somente com pixels Lua, sem alterar a obra.
+function Engine.thumbnail(project, model)
+    local tw, th = math.min(128, project.w), math.min(128, project.h)
+    local pixels = love.image.newImageData(tw, th)
+    for py = 0, th - 1 do
+        for px = 0, tw - 1 do
+            local sx = math.min(project.w - 1, math.floor((px + 0.5) * project.w / tw))
+            local sy = math.min(project.h - 1, math.floor((py + 0.5) * project.h / th))
+            local r, g, b, a = Engine.sample(project, model, sx, sy)
+            pixels:setPixel(px, py, r, g, b, a)
+        end
+    end
+    return pixels
+end
+
 return Engine

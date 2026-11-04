@@ -3,6 +3,7 @@ local Engine = require("lua_engine")
 local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
+local gallery_images = {}
 local counter = 0
 
 local function safe(text)
@@ -99,6 +100,9 @@ function Bridge.save()
                 tostring(info.opacity or 100)}, "\t")
         end
     end
+    local preview = Engine.thumbnail(project, project.model)
+    preview:encode("png", path .. "/preview.png")
+    gallery_images[project.id] = nil
     assert(love.filesystem.write(path .. "/layers.tsv", table.concat(lines, "\n")))
     local item = gallery_ref and gallery_ref:get(project.id)
     if item then record.name = item.name end
@@ -130,6 +134,42 @@ function Bridge.draw(model, visual)
     if p then Engine.draw(p, model, visual and visual.interpolation) end
 end
 
+-- Desenha os pixels REAIS na área da miniatura já presente na interface.
+function Bridge.draw_layer_thumbnail(model, id, x, y, w, h)
+    local p = ensure(model)
+    local layer = p and p.layers[id]
+    if not layer then return false end
+    local ratio = math.min(w / p.w, h / p.h)
+    love.graphics.push("all")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(layer.image,
+        x + (w - p.w * ratio) / 2, y + (h - p.h * ratio) / 2,
+        0, ratio, ratio)
+    love.graphics.pop()
+    return true
+end
+
+function Bridge.draw_gallery_thumbnail(id, x, y, w, h)
+    local record = records[id]
+    if not record then return false end
+    local cached = gallery_images[id]
+    if cached == nil then
+        local file = project_path(record.key) .. "/preview.png"
+        if love.filesystem.getInfo(file) then
+            local ok, image = pcall(love.graphics.newImage, file)
+            cached = ok and image or false
+        else cached = false end
+        gallery_images[id] = cached
+    end
+    if not cached then return false end
+    love.graphics.push("all")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(cached, x, y, 0,
+        w / cached:getWidth(), h / cached:getHeight())
+    love.graphics.pop()
+    return true
+end
+
 local function canvas_point(model, x, y, w, h, view, preferences)
     local dw, dh = model.document.width, model.document.height
     local left = preferences.tool_position == "left" and 62 or 0
@@ -152,24 +192,53 @@ local function paint(p, d, x, y)
     d.x, d.y = x, y
 end
 
-function Bridge.mousepressed(model, id, x, y, w, h, view, preferences, color, size, opacity)
-    if model.screen ~= "editor" or
-        (model.active_tool ~= "brush" and model.active_tool ~= "eraser") or
-        love.keyboard.isDown("space") then return false end
+function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
+                             color, size, opacity, colors, notice)
+    if model.screen ~= "editor" or love.keyboard.isDown("space") then return false end
+    local tool = model.active_tool
+    if tool ~= "brush" and tool ~= "eraser" and
+       tool ~= "bucket" and tool ~= "eyedropper" then return false end
     local p = ensure(model)
     if not p then return false end
     local px, py = canvas_point(model, x, y, w, h, view, preferences)
     if not px then return false end
+
+    if tool == "eyedropper" then
+        local r, g, b, a = Engine.sample(p, model, px, py)
+        if not r then return true end
+        if model.background_mode == "white" then
+            r, g, b = r * a + (1 - a), g * a + (1 - a), b * a + (1 - a)
+        elseif a == 0 then return true end
+        local red = math.floor(r * 255 + 0.5)
+        local green = math.floor(g * 255 + 0.5)
+        local blue = math.floor(b * 255 + 0.5)
+        colors:set_rgb(red, green, blue)
+        model:set_color(red, green, blue)
+        return true
+    end
+
     local info = model:active_layer()
     if not info or info.locked or not info.visible then return false end
-    Engine.begin_stroke(p, info.id)
+    -- Evitar prometer efeitos que o motor Lua ainda não suporta.
+    if info.alpha_lock or info.clipping or info.blending ~= "Normal" then
+        if notice then notice("Pintura com Alpha Lock, Clipping ou Blending ainda não implementada.") end
+        return true
+    end
     local rgb = {0, 0, 0}
     for i = 1, 3 do rgb[i] = math.max(0, math.min(1, (color[i] or 0) / 255)) end
+    local normalized_opacity = math.max(0, math.min(100, opacity)) / 100
+
+    if tool == "bucket" then
+        local _, reason = Engine.fill(p, info.id, px, py, rgb, normalized_opacity)
+        if reason and notice then notice(reason) end
+        return true
+    end
+
+    Engine.begin_stroke(p, info.id)
     drawing = {layer = info.id, x = px, y = py, w = w, h = h,
                view = view, preferences = preferences,
-               color = rgb, size = size,
-               opacity = math.max(0, math.min(100, opacity)) / 100,
-               eraser = model.active_tool == "eraser"}
+               color = rgb, size = size, opacity = normalized_opacity,
+               eraser = tool == "eraser"}
     paint(p, drawing, px, py)
     return true
 end

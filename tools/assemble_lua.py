@@ -48,12 +48,20 @@ def assemble() -> Path:
         ('                active_artwork_id=id\n                view:reset()\n',
          '                active_artwork_id=id\n                Bridge.open(state,id)\n'
          '                view:reset()\n'),
+        ('        rectangle(px,py,cw,ch,C.white,1,4)\n'
+         '        stroke(px,py,cw,ch,C.card_border,0.95)\n',
+         '        rectangle(px,py,cw,ch,C.white,1,4)\n'
+         '        Bridge.draw_gallery_thumbnail(item.id,px,py,cw,ch)\n'
+         '        stroke(px,py,cw,ch,C.card_border,0.95)\n'),
+        ('            stroke(bx+4,yy+5,40,40,C.soft,0.7)\n',
+         '            Bridge.draw_layer_thumbnail(state,layer.id,bx+4,yy+5,40,40)\n'
+         '            stroke(bx+4,yy+5,40,40,C.soft,0.7)\n'),
         ('    draw_view_guides(dw,dh,actual_scale)\n',
          '    Bridge.draw(state,visual)\n    draw_view_guides(dw,dh,actual_scale)\n'),
         ('    if state.screen=="editor" and not panel and love.keyboard.isDown("space") then\n',
          '    if state.screen=="editor" and not panel and\n'
          '       Bridge.mousepressed(state,active_artwork_id,x,y,W,H,view,preferences,\n'
-         '           colors.current,state.brush_size,opacity) then return end\n'
+         '           colors.current,state.brush_size,opacity,colors,notice) then return end\n'
          '    if state.screen=="editor" and not panel and love.keyboard.isDown("space") then\n'),
         ('function love.mousemoved(rx,ry,dx,dy)\n',
          'function love.mousemoved(rx,ry,dx,dy)\n'

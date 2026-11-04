@@ -8,6 +8,22 @@
 > não deve ser confundido com a funcionalidade do novo motor Lua.
 
 
+## Implementação ativa em Lua/LÖVE
+
+A interface é o [Ibis-Lua](ui/Ibis-Lua), incorporado por submódulo Git sem
+alterações visuais. O motor de edição ativo fica em [bridge/](bridge),
+sem DLL C++ do projeto. Possui pintura circular, borracha, balde contíguo,
+conta-gotas de cor visível, camadas em modo Normal, histórico raster limitado,
+miniaturas dos pixels reais e persistência PNG por camada. Outros controles
+do Ibis-Lua podem continuar simulados; consulte [limitações](docs/LUA_MIGRATION.md).
+
+Para montar, execute `git submodule update --init` e depois
+`python tools/assemble_lua.py`. Use `run.ps1` com LÖVE 11.5 instalado;
+`build.ps1` empacota o aplicativo Lua em um arquivo .love.
+O workflow Windows atual valida o motor e os cliques na interface existente.
+
+## Histórico da implementação anterior em C++ (não faz parte do build Lua)
+
 Reconstrução **independente e progressiva** dos fluxos do ibisPaint Android 14.1.2 para **Windows x64**, usando LuaJIT/LÖVE 11.5 na interface e C++ no processamento. **Sem WebView, sem Inkora e sem redistribuição de código ou binários Android.** Não existe paridade completa com o aplicativo de referência.
 
 ## Estado executável comprovado
