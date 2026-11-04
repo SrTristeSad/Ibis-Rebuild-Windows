@@ -42,6 +42,14 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   O desenho original da camada clipada permanece intacto. A renderização usa
   shader de composição do LÖVE; o conta-gotas e a miniatura usam a mesma regra
   na CPU. Não há equivalência 1:1 com o clipping proprietário do ibisPaint.
+- **Varinha Mágica** seleciona uma região contígua por RGBA da camada ativa;
+  **Laço** seleciona pixels dentro do contorno livre arrastado; **Transformar**
+  cria uma seleção retangular ao arrastar sem seleção e move pixels selecionados
+  ao arrastar dentro da seleção. Não foram criados controles visuais.
+- Seleções limitam a pintura e o balde à máscara ativa. O contorno da
+  seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
+  Mover pixels da camada ativa é um único passo reversível no histórico
+  (undo/redo também restaura a posição da máscara enquanto ela estiver ativa).
 - Undo/redo do raster por traço pelos botões existentes, Ctrl+Z / Ctrl+Y.
 - Salvamento automático ao voltar do editor para a galeria, ou Ctrl+S.
   Os arquivos ficam na pasta de dados do LÖVE, em lua-artworks/, como PNG por camada,
@@ -54,7 +62,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - **Não** há paridade com os algoritmos do ibisPaint oficial.
 - Pincel circular, borracha, balde, conta-gotas, Alpha Lock, recorte básico por
   Clipping e os nove modos de mesclagem visíveis têm implementação independente.
-  Filtros, seleções, formas, estabilização, pressão, máscaras adicionais, efeitos,
+  Filtros, seleção por tolerância ajustável, rotação e escala da
+  seleção, formas, estabilização, pressão, máscaras adicionais, efeitos,
   texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
@@ -62,6 +71,13 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - Histórico mantém até 8 snapshots de camada para telas até 32 MiB por
   snapshot; não persiste ao encerrar. Operações estruturais de camadas
   ainda não entram no histórico raster.
+- A seleção atual é **temporária**, não persiste ao salvar nem possui
+  copiar/colar, redimensionar ou rotacionar. Os recortes de seleção e a
+  transformação estão limitados a 1.048.576 pixels por documento; a
+  varinha compara RGBA com tolerância mínima de quantização. O movimento
+  é deslocamento inteiro, limitado para manter a máscara dentro do canvas.
+  O contorno visual tem teto de 10.000 segmentos para não sobrecarregar
+  a renderização, sem afetar o resultado da máscara raster.
 - O formato atual é PNG + metadados TSV, **não RBD2 nem IPV**.
 - O catálogo reconstituído contém obras salvas; pastas e suas mudanças,
   seleção múltipla e outras ações da galeria ainda não são persistidas.
@@ -87,6 +103,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Alpha Lock, Clipping e os nove modos de blend na CPU e GPU,
   leitura de cores, composição semitransparente, miniatura,
   abertura de arquivos de quatro colunas e ciclo salvar/abrir PNG.
+  Os testes também validam seleção por laço, varinha e retângulo,
+  restrição de pintura à seleção, mover pixels e desfazer/refazer.
 - Os testes Windows precisam passar no GitHub Actions antes de declarar a
   distribuição verificada.
 

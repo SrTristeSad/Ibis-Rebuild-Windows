@@ -1,8 +1,10 @@
 -- Liga o Ibis-Lua (interface intacta) ao motor Lua/LÖVE.
 local Engine = require("lua_engine")
+local Selection = require("lua_selection")
 local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
+local selection, gesture = nil, nil
 local gallery_images = {}
 local counter = 0
 
@@ -26,6 +28,7 @@ end
 function Bridge.supports(w, h) return Engine.supports(w, h) end
 
 function Bridge.create(model, id, gallery)
+    selection, gesture, drawing = nil, nil, nil
     gallery_ref = gallery
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
@@ -95,6 +98,7 @@ local function saved_layers(model, path, p)
 end
 
 function Bridge.open(model, id)
+    selection, gesture, drawing = nil, nil, nil
     local record = records[id]
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
@@ -171,7 +175,10 @@ end
 
 function Bridge.draw(model, visual)
     local p = ensure(model)
-    if p then Engine.draw(p, model, visual and visual.interpolation) end
+    if p then
+        Engine.draw(p, model, visual and visual.interpolation)
+        Selection.draw(selection)
+    end
 end
 
 -- Desenha os pixels REAIS na área da miniatura já presente na interface.
@@ -228,7 +235,7 @@ end
 
 local function paint(p, d, x, y)
     Engine.stroke(p, d.layer, d.x, d.y, x, y, d.size, d.color,
-                  d.opacity, d.eraser, d.alpha_lock)
+                  d.opacity, d.eraser, d.alpha_lock, selection)
     d.x, d.y = x, y
 end
 
@@ -237,11 +244,49 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     if model.screen ~= "editor" or love.keyboard.isDown("space") then return false end
     local tool = model.active_tool
     if tool ~= "brush" and tool ~= "eraser" and
-       tool ~= "bucket" and tool ~= "eyedropper" then return false end
+       tool ~= "bucket" and tool ~= "eyedropper" and
+       tool ~= "transform" and tool ~= "lasso" and
+       tool ~= "magic_wand" then return false end
     local p = ensure(model)
     if not p then return false end
     local px, py = canvas_point(model, x, y, w, h, view, preferences)
     if not px then return false end
+
+    if tool == "magic_wand" then
+        local info = model:active_layer()
+        local layer = info and p.layers[info.id]
+        if not layer then return true end
+        local mask, reason = Selection.magic_wand(layer, p.w, p.h, px, py)
+        if mask then selection = mask
+        elseif reason and notice then notice(reason) end
+        return true
+    end
+    if tool == "lasso" then
+        selection = nil
+        gesture = {kind = "lasso", w = w, h = h, view = view,
+                   preferences = preferences, points = {{px, py}},
+                   x = px, y = py}
+        return true
+    end
+    if tool == "transform" then
+        local info = model:active_layer()
+        local moving = selection and
+            Selection.contains(selection, math.floor(px), math.floor(py))
+        if moving and info and (info.locked or info.alpha_lock) then
+            if notice then
+                notice("Desbloqueie a camada e desative Alpha Lock para mover pixels.")
+            end
+            return true
+        end
+        gesture = {
+            kind = moving and "move" or "rectangle",
+            x = px, y = py, w = w, h = h, view = view,
+            preferences = preferences,
+            layer = info and info.id, end_x = px, end_y = py
+        }
+        if not moving then selection = nil end
+        return true
+    end
 
     if tool == "eyedropper" then
         local r, g, b, a = Engine.sample(p, model, px, py)
@@ -259,6 +304,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
 
     local info = model:active_layer()
     if not info or info.locked or not info.visible then return false end
+    if selection and not Selection.contains(selection,
+            math.floor(px), math.floor(py)) then return true end
     -- Evitar prometer efeitos que o motor Lua ainda não suporta.
     if info.alpha_lock and tool == "eraser" then
         -- Alpha Lock não permite remover nem criar transparência.
@@ -271,7 +318,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
 
     if tool == "bucket" then
         local _, reason = Engine.fill(p, info.id, px, py, rgb,
-            normalized_opacity, info.alpha_lock)
+            normalized_opacity, info.alpha_lock, selection)
         if reason and notice then notice(reason) end
         return true
     end
@@ -286,6 +333,21 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
 end
 
 function Bridge.mousemoved(model, rx, ry, scale)
+    if gesture and project and project.model == model then
+        local d = gesture
+        local px, py = canvas_point(model, rx / scale, ry / scale,
+                                    d.w, d.h, d.view, d.preferences)
+        if px then
+            d.end_x, d.end_y = px, py
+            if d.kind == "lasso" then
+                local last = d.points[#d.points]
+                if (px - last[1]) ^ 2 + (py - last[2]) ^ 2 >= 2.25 then
+                    d.points[#d.points + 1] = {px, py}
+                end
+            end
+        end
+        return true
+    end
     if not drawing or not project or project.model ~= model then return false end
     local d = drawing
     local px, py = canvas_point(model, rx / scale, ry / scale,
@@ -294,13 +356,51 @@ function Bridge.mousemoved(model, rx, ry, scale)
     return true
 end
 
-function Bridge.mousereleased() drawing = nil end
-function Bridge.undo() if project then return Engine.undo(project) end return false end
-function Bridge.redo() if project then return Engine.redo(project) end return false end
+function Bridge.mousereleased(model, rx, ry, scale)
+    drawing = nil
+    local d = gesture
+    gesture = nil
+    if not d or not project or project.model ~= model then return end
+    if rx and ry and scale then
+        local x, y = canvas_point(model, rx / scale, ry / scale,
+                                 d.w, d.h, d.view, d.preferences)
+        if x then d.end_x, d.end_y = x, y end
+    end
+    local mask, reason
+    if d.kind == "rectangle" then
+        mask, reason = Selection.rectangle(project.w, project.h,
+                            d.x, d.y, d.end_x, d.end_y)
+    elseif d.kind == "lasso" then
+        if d.end_x then
+            local last = d.points[#d.points]
+            if not last or (d.end_x - last[1]) ^ 2 +
+                    (d.end_y - last[2]) ^ 2 >= 2.25 then
+                d.points[#d.points + 1] = {d.end_x, d.end_y}
+            end
+        end
+        mask, reason = Selection.lasso(project.w, project.h, d.points)
+    elseif d.kind == "move" and selection and d.layer then
+        return Engine.move_selection(project, d.layer, selection,
+            d.end_x - d.x, d.end_y - d.y)
+    end
+    if mask then selection = mask end
+    return mask ~= nil, reason
+end
+
+function Bridge.undo()
+    if project then return Engine.undo(project, selection) end
+    return false
+end
+function Bridge.redo()
+    if project then return Engine.redo(project, selection) end
+    return false
+end
 
 function Bridge.keypressed(key, model)
-    if model.screen ~= "editor" or
-       not love.keyboard.isDown("lctrl", "rctrl") then return false end
+    if model.screen ~= "editor" then return false end
+    if key == "escape" and selection then selection = nil; gesture = nil; return true end
+    if not love.keyboard.isDown("lctrl", "rctrl") then return false end
+    if key == "d" then selection = nil; gesture = nil; return true end
     if key == "z" then return Bridge.undo()
     elseif key == "y" then return Bridge.redo()
     elseif key == "s" then Bridge.save(); return true end

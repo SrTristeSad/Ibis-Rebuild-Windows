@@ -68,7 +68,7 @@ def assemble() -> Path:
          '    if Bridge.mousemoved(state,rx,ry,scale) then return end\n'),
         ('function love.mousereleased(rx,ry,button)\n    if button~=1 then return end\n',
          'function love.mousereleased(rx,ry,button)\n    if button~=1 then return end\n'
-         '    Bridge.mousereleased()\n'),
+         '    Bridge.mousereleased(state,rx,ry,scale)\n'),
         ('function love.keypressed(key)\n',
          'function love.keypressed(key)\n'
          '    if Bridge.keypressed(key,state) then return end\n'),
