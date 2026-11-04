@@ -87,6 +87,23 @@ colunas ou valor inválido usam 4-vizinhos sem alterar as preferências
 já gravadas. Não modificar o Ibis-Lua original nem criar UI extra.
 Testar pontes em diagonal, bordas, tolerância/alfa, ilhas, modos
 global/contíguo, shortcut Ctrl+Alt+8, reabertura e undo.
+**Balde de Tinta com tolerância RGBA por obra**:
+`Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance)`
+aceita tolerância 0..255 (inteiro opcional, nil=0), por canal RGBA.
+O flood-fill mantém conectividade ortogonal e limite 1 Mi px;
+0 mantém o comportamento exato. Descobrir região completa dos
+pixels originais antes de escrever, marcando visited para nunca
+revisitar células já descobertas mesmo que a tinta tenha cor similar.
+Aplicar máscara, pesos feather, Alpha Lock, opacidade e registrar no
+máximo um snapshot raster, sem histórico nem dirty quando nenhum pixel
+muda. A tolerância da varinha NÃO afeta o balde. Preferência própria
+`project.bucket_tolerance`: Ctrl+Alt+PageUp +16,
+Ctrl+Alt+PageDown −16, Ctrl+Alt+Home 0; clamp 0..255 e notice
+existente. Persistir na oitava coluna de `document.tsv`; arquivos
+de 2–7 colunas ou valor inválido assumem 0, preservando preferências
+da Varinha. Não alterar Ibis-Lua nem adicionar componentes gráficos.
+Testar tolerância 0/16/48/64/255, fronteiras, ilhas, Alpha Lock,
+seleção e feather, opacidade baixa, loops, no-op/undo e compatibilidade.
 **Comparação RGB-only opcional da Varinha**: Ctrl+Alt+R alterna
 `project.wand_rgb_only`. Com false/nil (padrão) a comparação considera
 R/G/B/A com tolerância independente 0..255 em cada canal. Com true,
