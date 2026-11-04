@@ -824,6 +824,7 @@ local function test_magic_wand_composite_source(E)
     }}
     local p = E.new(12, 12)
     E.sync(p, model)
+    p.dirty = false
     local bottom = p.layers[1].pixels
     local top = p.layers[2].pixels
     local hidden = p.layers[3].pixels
