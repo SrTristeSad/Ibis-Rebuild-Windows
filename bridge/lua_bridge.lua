@@ -1,6 +1,7 @@
 -- Liga o Ibis-Lua (interface intacta) ao motor Lua/LÖVE.
 local Engine = require("lua_engine")
 local Selection = require("lua_selection")
+local History = require("lua_history")
 local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
@@ -107,8 +108,12 @@ function Bridge.open(model, id)
     if record then
         -- Arquivos antigos não possuem selection.png e seguem abrindo.
         -- Máscaras inválidas são ignoradas sem comprometer a obra.
-        selection = Selection.load(project_path(record.key) .. "/selection.png",
+        local path = project_path(record.key)
+        selection = Selection.load(path .. "/selection.png",
                                    project.w, project.h)
+        -- O histórico é opcional e só é aplicado após validar TODOS
+        -- os PNGs: um arquivo inválido nunca impede abrir a pintura.
+        History.load(project, path, selection)
     end
     project.dirty = false
 end
@@ -165,6 +170,8 @@ function Bridge.save()
         assert(love.filesystem.remove(mask_path),
             "Não foi possível limpar seleção anterior.")
     end
+    local history_ok, history_error = History.save(project, path, selection)
+    assert(history_ok, history_error)
     local item = gallery_ref and gallery_ref:get(project.id)
     if item then record.name = item.name end
     record.saved = true

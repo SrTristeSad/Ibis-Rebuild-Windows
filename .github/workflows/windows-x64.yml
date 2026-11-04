@@ -81,10 +81,12 @@ jobs:
           Copy-Item bridge/lua_engine.lua tests/lua_paint/lua_engine.lua -Force
           Copy-Item bridge/lua_bridge.lua tests/lua_paint/lua_bridge.lua -Force
           Copy-Item bridge/lua_selection.lua tests/lua_paint/lua_selection.lua -Force
+          Copy-Item bridge/lua_history.lua tests/lua_paint/lua_history.lua -Force
           Copy-Item tests/lua_paint/main.lua tests/lua_syntax/paint_main.lua -Force
           Copy-Item bridge/lua_engine.lua tests/lua_syntax/lua_engine.lua -Force
           Copy-Item bridge/lua_bridge.lua tests/lua_syntax/lua_bridge.lua -Force
           Copy-Item bridge/lua_selection.lua tests/lua_syntax/lua_selection.lua -Force
+          Copy-Item bridge/lua_history.lua tests/lua_syntax/lua_history.lua -Force
           $syntaxOut = Join-Path $env:RUNNER_TEMP 'lua-syntax-stdout.log'
           $syntaxErr = Join-Path $env:RUNNER_TEMP 'lua-syntax-stderr.log'
           $syntax = Start-Process -FilePath "$env:LOVE_RUNTIME/lovec.exe" `

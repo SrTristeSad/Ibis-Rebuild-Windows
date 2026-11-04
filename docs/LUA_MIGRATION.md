@@ -63,6 +63,12 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   visuais na interface Ibis-Lua. Undo/redo restaura pixels e geometria
   enquanto a mesma seleção permanecer ativa.
 - Undo/redo do raster por traço pelos botões existentes, Ctrl+Z / Ctrl+Y.
+  O histórico raster agora persiste por obra em `history.tsv` e PNGs de
+  snapshots com geração identificada. Ao reabrir, recupera as pilhas de
+  desfazer/refazer (até 8 registros em cada pilha) e, quando aplicável,
+  o contorno correspondente à máscara de seleção. O manifesto só é gravado
+  após os PNGs, e o carregamento valida o conjunto completo antes de
+  aceitar qualquer passo de histórico.
 - Salvamento automático ao voltar do editor para a galeria, ou Ctrl+S.
   Os arquivos ficam na pasta de dados do LÖVE, em lua-artworks/, como PNG por camada,
   index.tsv, layers.tsv e document.tsv. As obras salvas são listadas ao reiniciar.
@@ -84,9 +90,16 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
   para telas enormes ou pincéis grandes.
-- Histórico mantém até 8 snapshots de camada para telas até 32 MiB por
-  snapshot; não persiste ao encerrar. Operações estruturais de camadas
-  ainda não entram no histórico raster.
+- O histórico em memória mantém até 8 snapshots em cada pilha para telas
+  com até 32 MiB por snapshot. **Persistência do histórico** restringe-se
+  a obras de até 1.048.576 pixels, para limitar armazenamento e tempo de
+  reabertura. Cada snapshot salvo usa PNG e um manifesto `history.tsv`;
+  pode consumir espaço considerável com muitas etapas. Arquivos ausentes,
+  corrompidos, com dimensões inesperadas ou camada removida não impedem
+  abrir a pintura: o histórico inválido é ignorado, e referências antigas
+  a camadas removidas são descartadas no salvamento. Operações estruturais
+  de camadas não entram no histórico raster. O histórico não cobre mudanças
+  de interface, seleção feita sem pintura ou alterações externas aos PNGs.
 - A seleção ativa persiste como máscara `selection.png` na pasta da obra,
   e é validada por assinatura PNG, dimensões e limite de tamanho ao reabrir.
   Seleções inválidas são ignoradas sem afetar o conteúdo das camadas.
@@ -131,6 +144,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   limites de tela e desfazer/refazer com geometria da seleção.
   O CI também verifica roundtrip PNG da máscara, desmarcação com remoção
   do arquivo e rejeição de PNG truncado ou com dimensões incompatíveis.
+  O histórico persistente tem testes de undo/redo após reabertura,
+  múltiplas camadas, geometria da máscara, corrupção do manifesto,
+  ausência de um PNG e limpeza de snapshots obsoletos.
 - Os testes Windows precisam passar no GitHub Actions antes de declarar a
   distribuição verificada.
 
