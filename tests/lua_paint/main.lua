@@ -12,6 +12,142 @@ local function checkpoint(name)
     io.stdout:flush()
 end
 
+-- Espelhamento de máscaras irregulares, alfa, histórico e persistência.
+local function test_selection_flip(E)
+    local Selection = require("lua_selection")
+    local History = require("lua_history")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local p = E.new(16, 16)
+    E.sync(p, model)
+    local pixels = p.layers[1].pixels
+    pixels:setPixel(2, 2, 1, 0, 0, 1)
+    pixels:setPixel(4, 2, 0, 0, 1, 0.5)
+    pixels:setPixel(5, 3, 0, 1, 0, 1)
+    pixels:setPixel(2, 4, 1, 1, 0, 0.75)
+    pixels:setPixel(10, 10, 1, 0, 1, 1)
+    local indices = {}
+    for _, point in ipairs({{2, 2}, {4, 2}, {5, 3}, {2, 4}}) do
+        indices[point[2] * 16 + point[1]] = true
+    end
+    local selected = assert(Selection.from_mask(16, 16, indices, "lasso"))
+    assert(selected.count == 4 and selected.min_x == 2 and
+           selected.max_x == 5 and selected.min_y == 2 and
+           selected.max_y == 4, "Máscara irregular inicial incorreta")
+
+    assert(E.reshape_selection(p, 1, selected, "flip_horizontal"),
+        "Espelhamento horizontal falhou")
+    assert(selected.count == 4 and
+           Selection.contains(selected, 5, 2) and
+           Selection.contains(selected, 3, 2) and
+           Selection.contains(selected, 2, 3) and
+           Selection.contains(selected, 5, 4) and
+           not Selection.contains(selected, 2, 2) and
+           not Selection.contains(selected, 4, 2),
+           "Espelhamento horizontal não refletiu os buracos da máscara")
+    local red, _, _, red_a = p.layers[1].pixels:getPixel(5, 2)
+    local _, _, blue, blue_a = p.layers[1].pixels:getPixel(3, 2)
+    local _, green, _, green_a = p.layers[1].pixels:getPixel(2, 3)
+    local yellow_r, yellow_g, _, yellow_a = p.layers[1].pixels:getPixel(5, 4)
+    local _, _, _, empty = p.layers[1].pixels:getPixel(2, 2)
+    assert(red > 0.99 and red_a > 0.99 and
+           blue > 0.99 and close(blue_a, 0.5) and
+           green > 0.99 and green_a > 0.99 and
+           yellow_r > 0.99 and yellow_g > 0.99 and
+           close(yellow_a, 0.75) and empty == 0,
+           "Espelhamento horizontal perdeu cores ou alfa")
+    assert(select(1, p.layers[1].pixels:getPixel(10, 10)) > 0.99,
+           "Espelhamento alterou pixel fora da seleção")
+    assert(#p.undo == 1 and E.undo(p, selected),
+           "Espelhamento horizontal não gerou um undo")
+    assert(Selection.contains(selected, 2, 2) and
+           not Selection.contains(selected, 5, 2) and
+           select(1, p.layers[1].pixels:getPixel(2, 2)) > 0.99,
+           "Undo não restaurou pixels e máscara originais")
+    assert(E.redo(p, selected) and
+           Selection.contains(selected, 5, 2) and
+           select(1, p.layers[1].pixels:getPixel(5, 2)) > 0.99,
+           "Redo horizontal não restaurou a seleção")
+    assert(E.reshape_selection(p, 1, selected, "flip_horizontal"),
+           "Segundo flip horizontal falhou")
+    assert(Selection.contains(selected, 2, 2) and
+           Selection.contains(selected, 4, 2) and
+           select(1, p.layers[1].pixels:getPixel(2, 2)) > 0.99,
+           "Dois espelhamentos horizontais não restauraram o original")
+
+    assert(E.reshape_selection(p, 1, selected, "flip_vertical"),
+           "Espelhamento vertical falhou")
+    assert(selected.count == 4 and
+           Selection.contains(selected, 2, 4) and
+           Selection.contains(selected, 4, 4) and
+           Selection.contains(selected, 5, 3) and
+           Selection.contains(selected, 2, 2) and
+           select(1, p.layers[1].pixels:getPixel(2, 4)) > 0.99 and
+           select(3, p.layers[1].pixels:getPixel(4, 4)) > 0.99,
+           "Espelhamento vertical não refletiu máscara e conteúdo")
+    assert(E.undo(p, selected) and
+           Selection.contains(selected, 4, 2) and
+           select(3, p.layers[1].pixels:getPixel(4, 2)) > 0.99,
+           "Undo vertical não restaurou geometria e pixels")
+    assert(E.redo(p, selected) and
+           Selection.contains(selected, 4, 4),
+           "Redo vertical não restaurou geometria")
+    assert(E.reshape_selection(p, 1, selected, "flip_vertical") and
+           Selection.contains(selected, 4, 2),
+           "Dois flips verticais não restauraram o original")
+
+    -- Máscara com lacuna: o destino não selecionado tem azul opaco.
+    local overlay = E.new(16, 16)
+    E.sync(overlay, model)
+    overlay.layers[1].pixels:setPixel(2, 2, 1, 0, 0, 0.5)
+    overlay.layers[1].pixels:setPixel(4, 2, 0, 0, 1, 1)
+    overlay.layers[1].pixels:setPixel(4, 3, 0, 1, 0, 1)
+    local gap = assert(Selection.from_mask(16, 16, {
+        [2 + 2 * 16] = true, [4 + 3 * 16] = true}, "lasso"))
+    assert(E.reshape_selection(overlay, 1, gap, "flip_horizontal"))
+    local mixed_red, mixed_green, mixed_blue, mixed_a =
+        overlay.layers[1].pixels:getPixel(4, 2)
+    assert(close(mixed_red, 0.5) and close(mixed_green, 0) and
+           close(mixed_blue, 0.5) and close(mixed_a, 1) and
+           not Selection.contains(gap, 2, 2),
+           "RGBA source-over espelhado sobrescreveu pixel fora da máscara")
+    assert(E.undo(overlay, gap) and
+           Selection.contains(gap, 2, 2) and
+           select(3, overlay.layers[1].pixels:getPixel(4, 2)) > 0.99,
+           "Undo source-over não restaurou pixel de fundo")
+
+    -- Recusa operações inócuas e desconhecidas sem criar histórico.
+    local thin = assert(Selection.rectangle(16, 16, 8, 3, 8, 7))
+    local before = #p.undo
+    local no_horizontal = E.reshape_selection(p, 1, thin, "flip_horizontal")
+    assert(not no_horizontal and #p.undo == before,
+           "Espelhamento horizontal de coluna única gerou histórico")
+    local line = assert(Selection.rectangle(16, 16, 3, 8, 7, 8))
+    local no_vertical = E.reshape_selection(p, 1, line, "flip_vertical")
+    local unknown = E.reshape_selection(p, 1, selected, "flip_diagonal")
+    assert(not no_vertical and not unknown and #p.undo == before,
+           "Comando inválido ou linha única alterou histórico")
+
+    -- PNGs de seleção e do histórico preservam um flip e permitem undo/redo.
+    local path = "lua-flip-tests"
+    assert(love.filesystem.createDirectory(path))
+    assert(p.layers[1].pixels:encode("png", path .. "/layer_1.png"))
+    assert(Selection.save(selected, path .. "/selection.png"))
+    local wrote, count = History.save(p, path, selected)
+    assert(wrote and count > 0, "Histórico do espelhamento não foi persistido")
+    local reopened = E.new(16, 16)
+    E.sync(reopened, model)
+    assert(E.load_layer(reopened, 1, path .. "/layer_1.png"))
+    local restored = assert(Selection.load(path .. "/selection.png", 16, 16))
+    local loaded = History.load(reopened, path, restored)
+    assert(loaded and E.undo(reopened, restored) and
+           E.redo(reopened, restored),
+           "Histórico após reabertura não restaurou flip e máscara")
+    History.cleanup(path)
+    assert(love.filesystem.remove(path .. "/layer_1.png"))
+    assert(love.filesystem.remove(path .. "/selection.png"))
+    assert(love.filesystem.remove(path))
+end
+
 local function test_clipboard_transform(E)
     local Selection = require("lua_selection")
     checkpoint("before clipboard")
@@ -821,6 +957,103 @@ local function test_affine_bridge(Bridge, gallery)
     assert(Bridge.redo(), "Gesto de escala não gerou redo")
 end
 
+-- Eventos reais de teclado Ctrl+Shift+H/V, sem componentes novos.
+local function test_flip_bridge(Bridge, gallery)
+    local model = {
+        screen = "editor", document = {width = 64, height = 64},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Flip layer"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(64, 64, "Mirror shortcuts")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + 0.5 - 32) * 11,
+            62 + (768 - 160) / 2 + (y + 0.5 - 32) * 11
+    end
+    local function press(x, y)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+            view, prefs, {255, 0, 0}, 1, 100, nil))
+    end
+    local function release(x, y)
+        local mx, my = screen(x, y)
+        return Bridge.mousereleased(model, mx, my, 1)
+    end
+    local function rendered(x, y)
+        local target = love.graphics.newCanvas(64, 64)
+        love.graphics.push("all")
+        love.graphics.setCanvas(target)
+        love.graphics.clear(0, 0, 0, 0)
+        love.graphics.translate(32, 32)
+        Bridge.draw(model, {interpolation = "pixelated"})
+        love.graphics.pop()
+        local r, g, b, a = target:newImageData():getPixel(x, y)
+        target:release()
+        return r, g, b, a
+    end
+    local function shortcut(key)
+        local old = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local named = select(i, ...)
+                if named == "lctrl" or named == "lshift" then
+                    return true
+                end
+            end
+            return false
+        end
+        local consumed = Bridge.keypressed(key, model)
+        love.keyboard.isDown = old
+        return consumed
+    end
+    assert(not Bridge.selection_command(model, "flip_horizontal"),
+        "Espelhamento sem seleção deveria falhar")
+    press(28, 30)
+    Bridge.mousereleased()
+    local red, _, _, a = rendered(28, 30)
+    assert(red > 0.9 and a > 0.9, "Pixel inicial não foi pintado")
+    model.active_tool = "transform"
+    press(26, 26)
+    assert(release(34, 38), "Seleção da ponte não foi criada")
+    assert(shortcut("h"), "Ctrl+Shift+H não foi interceptado")
+    local right_r, _, _, right_a = rendered(32, 30)
+    local _, _, _, left_a = rendered(28, 30)
+    assert(right_r > 0.9 and right_a > 0.9 and left_a < 0.01,
+           "Ctrl+Shift+H não inverteu o conteúdo selecionado")
+    assert(shortcut("v"), "Ctrl+Shift+V não foi interceptado")
+    local lower_r, _, _, lower_a = rendered(32, 34)
+    local _, _, _, old_a = rendered(32, 30)
+    assert(lower_r > 0.9 and lower_a > 0.9 and old_a < 0.01,
+           "Ctrl+Shift+V não inverteu verticalmente o conteúdo")
+    assert(Bridge.undo() and select(1, rendered(32, 30)) > 0.9,
+           "Undo vertical da ponte falhou")
+    assert(Bridge.undo() and select(1, rendered(28, 30)) > 0.9,
+           "Undo horizontal da ponte falhou")
+    assert(Bridge.redo() and select(1, rendered(32, 30)) > 0.9,
+           "Redo horizontal da ponte falhou")
+    assert(Bridge.redo() and select(1, rendered(32, 34)) > 0.9,
+           "Redo vertical da ponte falhou")
+
+    local warnings = 0
+    local function notice() warnings = warnings + 1 end
+    model.layers[1].locked = true
+    assert(not Bridge.selection_command(model, "flip_horizontal", notice))
+    model.layers[1].locked = false
+    model.layers[1].alpha_lock = true
+    assert(not Bridge.selection_command(model, "flip_vertical", notice))
+    model.layers[1].alpha_lock = false
+    assert(warnings == 2 and select(1, rendered(32, 34)) > 0.9,
+           "Layer Lock/Alpha Lock não impediram espelhamento")
+    Bridge.clear_selection()
+    assert(not Bridge.selection_command(model, "flip_vertical"),
+           "Espelhamento sem máscara foi aceito")
+end
+
 function love.load()
     checkpoint("begin")
     local E = require("lua_engine")
@@ -1096,6 +1329,8 @@ function love.load()
            "Redo de movimento inconsistente")
 
     test_clipboard_transform(E)
+    checkpoint("selection horizontal and vertical mirror")
+    test_selection_flip(E)
     checkpoint("affine rotation and nonuniform scaling")
     test_affine_transforms(E)
     checkpoint("GPU affine preview vs CPU bilinear")
@@ -1245,6 +1480,8 @@ function love.load()
         "A escala da ponte não manteve o histórico")
     checkpoint("selection PNG roundtrip")
     test_selection_roundtrip(Bridge, model4, art4)
+    checkpoint("bridge selection flip shortcuts")
+    test_flip_bridge(Bridge, gallery)
     checkpoint("bridge affine gestures")
     test_affine_bridge(Bridge, gallery)
     checkpoint("bridge move preview and cancel")
@@ -1259,6 +1496,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: GPU affine/move previews + CPU commit + history + layers")
+    print("PASS: selection flip H/V + GPU previews + history + layers")
     love.event.quit(0)
 end

@@ -609,7 +609,8 @@ function Bridge.selection_command(model, command, notice)
         elseif notice and result then notice(result) end
         return ok
     elseif command == "rotate_cw" or command == "rotate_ccw" or
-           command == "scale_half" or command == "scale_double" then
+           command == "scale_half" or command == "scale_double" or
+           command == "flip_horizontal" or command == "flip_vertical" then
         if not selection then return false end
         local ok, reason = Engine.reshape_selection(p, info.id, selection, command)
         if not ok and notice and reason then notice(reason) end
@@ -639,6 +640,12 @@ function Bridge.keypressed(key, model, notice)
             return true
         elseif key == "down" then
             Bridge.selection_command(model, "scale_half", notice)
+            return true
+        elseif key == "h" then
+            Bridge.selection_command(model, "flip_horizontal", notice)
+            return true
+        elseif key == "v" then
+            Bridge.selection_command(model, "flip_vertical", notice)
             return true
         end
     end

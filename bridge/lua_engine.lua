@@ -677,7 +677,8 @@ function Engine.cut_selection(project, id, selected)
     return true, clip
 end
 
--- Rotações ortogonais e escalas simples por amostragem nearest-neighbour.
+-- Rotações ortogonais, espelhamento H/V e escalas nearest-neighbour.
+-- O espelhamento atua nos pixels E na geometria da máscara irregular.
 -- O retângulo de destino fica ancorado no canto superior esquerdo da seleção;
 -- se ultrapassar o canvas, a operação falha sem tocar no documento.
 function Engine.reshape_selection(project, id, selected, operation)
@@ -686,7 +687,8 @@ function Engine.reshape_selection(project, id, selected, operation)
         return false, LIMIT_MESSAGE
     end
     if operation ~= "rotate_cw" and operation ~= "rotate_ccw" and
-       operation ~= "scale_half" and operation ~= "scale_double" then
+       operation ~= "scale_half" and operation ~= "scale_double" and
+       operation ~= "flip_horizontal" and operation ~= "flip_vertical" then
         return false, "Transformação desconhecida."
     end
     local layer = assert(project.layers[id], "Camada inexistente")
@@ -696,6 +698,12 @@ function Engine.reshape_selection(project, id, selected, operation)
     local tw, th
     if operation == "rotate_cw" or operation == "rotate_ccw" then
         tw, th = sh, sw
+    elseif operation == "flip_horizontal" or operation == "flip_vertical" then
+        if (operation == "flip_horizontal" and sw < 2) or
+           (operation == "flip_vertical" and sh < 2) then
+            return false, "Espelhamento sem deslocamento de pixels."
+        end
+        tw, th = sw, sh
     else
         local factor = operation == "scale_half" and 0.5 or 2
         tw = math.max(1, math.floor(sw * factor + 0.5))
@@ -714,6 +722,10 @@ function Engine.reshape_selection(project, id, selected, operation)
                 su, sv = v, sh - 1 - u
             elseif operation == "rotate_ccw" then
                 su, sv = sw - 1 - v, u
+            elseif operation == "flip_horizontal" then
+                su, sv = sw - 1 - u, v
+            elseif operation == "flip_vertical" then
+                su, sv = u, sh - 1 - v
             else
                 su = math.min(sw - 1, math.floor(u * sw / tw))
                 sv = math.min(sh - 1, math.floor(v * sh / th))
@@ -729,7 +741,7 @@ function Engine.reshape_selection(project, id, selected, operation)
     local replacement = Selection.from_mask(project.w, project.h,
         newmask, operation)
     if not replacement then
-        return false, "A redução não preservou pixels selecionados."
+        return false, "A transformação não preservou pixels selecionados."
     end
 
     Engine.begin_stroke(project, id)
