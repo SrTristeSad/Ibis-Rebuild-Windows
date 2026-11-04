@@ -42,13 +42,32 @@ local function saved_layers(model, path, p)
     local data = love.filesystem.read(path .. "/layers.tsv")
     if not data then return end
     local layers = {}
+    local valid_blending = {
+        Normal = true, Multiply = true, Screen = true, Overlay = true,
+        Darken = true, Lighten = true, ["Color Burn"] = true,
+        ["Color Dodge"] = true, ["Soft Light"] = true
+    }
+    local ids = {}
     for line in data:gmatch("[^\r\n]+") do
-        local id, name, visible, opacity = line:match("^(%d+)\t([^\t]*)\t([01])\t(%d+)$")
+        -- Compatibilidade: arquivos antigos possuem somente quatro colunas.
+        local id, name, visible, opacity, blending, clipping, alpha_lock, locked =
+            line:match("^(%d+)\t([^\t]*)\t([01])\t(%d+)\t([^\t]+)\t([01])\t([01])\t([01])$")
+        if not id then
+            id, name, visible, opacity =
+                line:match("^(%d+)\t([^\t]*)\t([01])\t(%d+)$")
+            blending, clipping, alpha_lock, locked = "Normal", "0", "0", "0"
+        end
         id, opacity = tonumber(id), tonumber(opacity)
-        if id and opacity and opacity <= 100 and #layers < 32 then
-            layers[#layers + 1] = {id = id, name = name, visible = visible == "1",
-                opacity = opacity, blending = "Normal", clipping = false,
-                alpha_lock = false, locked = false}
+        if id and id >= 1 and not ids[id] and opacity and opacity <= 100
+           and #layers < 32 and name and #name >= 1 and
+           valid_blending[blending] then
+            ids[id] = true
+            layers[#layers + 1] = {
+                id = id, name = name, visible = visible == "1",
+                opacity = opacity, blending = blending,
+                clipping = clipping == "1", alpha_lock = alpha_lock == "1",
+                locked = locked == "1"
+            }
         end
     end
     if #layers == 0 then return end
@@ -58,6 +77,21 @@ local function saved_layers(model, path, p)
         Engine.load_layer(p, info.id, path .. "/layer_" .. info.id .. ".png")
     end
     model.active_layer_id = layers[#layers].id
+    local metadata = love.filesystem.read(path .. "/document.tsv")
+    if metadata then
+        local active_id, background =
+            metadata:match("^(%d+)\t([%a_]+)")
+        active_id = tonumber(active_id)
+        if active_id then
+            for _, info in ipairs(layers) do
+                if info.id == active_id then model.active_layer_id = active_id; break end
+            end
+        end
+        if background == "white" or background == "transparent_light"
+           or background == "transparent_dark" then
+            model.background_mode = background
+        end
+    end
 end
 
 function Bridge.open(model, id)
@@ -97,13 +131,19 @@ function Bridge.save()
             layer.pixels:encode("png", path .. "/layer_" .. info.id .. ".png")
             lines[#lines + 1] = table.concat({
                 tostring(info.id), safe(info.name), info.visible and "1" or "0",
-                tostring(info.opacity or 100)}, "\t")
+                tostring(info.opacity or 100), info.blending or "Normal",
+                info.clipping and "1" or "0",
+                info.alpha_lock and "1" or "0",
+                info.locked and "1" or "0"}, "\t")
         end
     end
     local preview = Engine.thumbnail(project, project.model)
     preview:encode("png", path .. "/preview.png")
     gallery_images[project.id] = nil
     assert(love.filesystem.write(path .. "/layers.tsv", table.concat(lines, "\n")))
+    assert(love.filesystem.write(path .. "/document.tsv",
+        table.concat({tostring(project.model.active_layer_id or 0),
+            safe(project.model.background_mode or "white")}, "\t")))
     local item = gallery_ref and gallery_ref:get(project.id)
     if item then record.name = item.name end
     record.saved = true
@@ -188,7 +228,7 @@ end
 
 local function paint(p, d, x, y)
     Engine.stroke(p, d.layer, d.x, d.y, x, y, d.size, d.color,
-                  d.opacity, d.eraser)
+                  d.opacity, d.eraser, d.alpha_lock)
     d.x, d.y = x, y
 end
 
@@ -220,8 +260,13 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     local info = model:active_layer()
     if not info or info.locked or not info.visible then return false end
     -- Evitar prometer efeitos que o motor Lua ainda não suporta.
-    if info.alpha_lock or info.clipping or info.blending ~= "Normal" then
-        if notice then notice("Pintura com Alpha Lock, Clipping ou Blending ainda não implementada.") end
+    if info.blending ~= "Normal" then
+        if notice then notice("Pintura com esse modo de mesclagem ainda não implementada.") end
+        return true
+    end
+    if info.alpha_lock and tool == "eraser" then
+        -- Alpha Lock não permite remover nem criar transparência.
+        if notice then notice("Borracha desativada enquanto Alpha Lock está ativo.") end
         return true
     end
     local rgb = {0, 0, 0}
@@ -229,7 +274,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     local normalized_opacity = math.max(0, math.min(100, opacity)) / 100
 
     if tool == "bucket" then
-        local _, reason = Engine.fill(p, info.id, px, py, rgb, normalized_opacity)
+        local _, reason = Engine.fill(p, info.id, px, py, rgb,
+            normalized_opacity, info.alpha_lock)
         if reason and notice then notice(reason) end
         return true
     end
@@ -238,7 +284,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     drawing = {layer = info.id, x = px, y = py, w = w, h = h,
                view = view, preferences = preferences,
                color = rgb, size = size, opacity = normalized_opacity,
-               eraser = tool == "eraser"}
+               eraser = tool == "eraser", alpha_lock = info.alpha_lock}
     paint(p, drawing, px, py)
     return true
 end

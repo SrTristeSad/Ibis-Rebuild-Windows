@@ -63,6 +63,79 @@ function love.load()
     local denied, reason = E.fill({w = 1025, h = 1025}, 1, 0, 0, {1, 1, 1}, 1)
     assert(not denied and reason, "Balde deve proteger documentos muito grandes")
 
+
+    -- Alpha Lock: tinta não cria transparência, mantém alfa parcial e é reversível.
+    local lock_project = E.new(16, 16)
+    E.sync(lock_project, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local locked = lock_project.layers[1]
+    locked.pixels:setPixel(4, 4, 0.2, 0.4, 0.6, 0.5)
+    E.begin_stroke(lock_project, 1)
+    E.stroke(lock_project, 1, 4.5, 4.5, 4.5, 4.5,
+             3, {1, 0, 0}, 1, false, true)
+    local lr, lg, lb, la = locked.pixels:getPixel(4, 4)
+    assert(lr > 0.99 and lg < 0.01 and lb < 0.01 and close(la, 0.5),
+           "Alpha Lock deve trocar RGB sem modificar alfa")
+    local _, _, _, empty_a = locked.pixels:getPixel(5, 5)
+    assert(empty_a < 0.01, "Alpha Lock criou pixels fora da área pintada")
+    assert(E.undo(lock_project), "Alpha Lock não permite desfazer")
+    local old_r, _, _, old_a = locked.pixels:getPixel(4, 4)
+    assert(close(old_r, 0.2) and close(old_a, 0.5),
+           "Undo do Alpha Lock não restaurou cor/alfa")
+    assert(E.redo(lock_project), "Alpha Lock não permite refazer")
+
+    -- O balde com Alpha Lock recolore apenas pixels existentes.
+    assert(not E.fill(lock_project, 1, 0, 0, {0, 1, 0}, 1, true),
+           "Balde Alpha Lock criou preenchimento sobre transparência")
+    assert(E.fill(lock_project, 1, 4, 4, {0, 1, 0}, 1, true),
+           "Balde Alpha Lock não alterou cor existente")
+    local _, lock_green, _, lock_a = locked.pixels:getPixel(4, 4)
+    assert(lock_green > 0.99 and close(lock_a, 0.5),
+           "Balde Alpha Lock mudou alfa")
+    assert(E.undo(lock_project), "Balde Alpha Lock não foi desfeito")
+
+    -- Clipping conserva os pixels brutos; recorta a visualização à
+    -- máscara alfa da camada-base, incluindo a opacidade da base.
+    local clip_project = E.new(32, 32)
+    local clip_model = {layers = {
+        {id = 1, visible = true, opacity = 100, clipping = false},
+        {id = 2, visible = true, opacity = 100, clipping = true}
+    }}
+    E.sync(clip_project, clip_model)
+    clip_project.layers[1].pixels:setPixel(4, 4, 1, 0, 0, 0.5)
+    clip_project.layers[2].pixels:setPixel(4, 4, 0, 0, 1, 1)
+    clip_project.layers[2].pixels:setPixel(12, 12, 0, 0, 1, 1)
+    for _, layer_id in ipairs({1, 2}) do
+        local entry = clip_project.layers[layer_id]
+        entry.image:replacePixels(entry.pixels)
+    end
+    local cl_r, cl_g, cl_b, cl_a = E.sample(clip_project, clip_model, 4, 4)
+    assert(close(cl_r, 1 / 3) and close(cl_g, 0)
+       and close(cl_b, 2 / 3) and close(cl_a, 0.75),
+       "Clipping no conta-gotas não combina alfas corretamente")
+    local _, _, _, outside = E.sample(clip_project, clip_model, 12, 12)
+    assert(close(outside, 0), "Clipping não ocultou região sem base")
+    local buffer = love.graphics.newCanvas(32, 32)
+    love.graphics.push("all")
+    love.graphics.setCanvas(buffer)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.translate(16, 16)
+    E.draw(clip_project, clip_model, "pixelated")
+    love.graphics.pop()
+    local actual = buffer:newImageData()
+    local gpu_r, _, gpu_b, gpu_a = actual:getPixel(4, 4)
+    local _, _, _, gpu_out = actual:getPixel(12, 12)
+    assert(close(gpu_r, cl_r, 0.04) and close(gpu_b, cl_b, 0.04)
+       and close(gpu_a, cl_a, 0.04),
+       "A máscara GLSL desenhada diverge da composição Lua")
+    assert(gpu_out < 0.01, "Clipping do renderer exibiu pixels fora da máscara")
+    clip_model.layers[1].visible = false
+    local _, _, _, hidden = E.sample(clip_project, clip_model, 4, 4)
+    assert(hidden < 0.01, "Camada-base invisível deve esconder a clipada")
+    clip_model.layers[1].visible = true
+    clip_model.layers[1].opacity = 50
+    local _, _, _, faded = E.sample(clip_project, clip_model, 4, 4)
+    assert(close(faded, 0.4375), "Clipping não respeitou opacidade da base")
+
     -- Prova de persistência da obra pela ponte usada pelo Ibis-Lua.
     local Bridge = require("lua_bridge")
     local model2 = {
@@ -95,6 +168,9 @@ function love.load()
     assert(Bridge.mousepressed(model2, id, x, y, 1024, 768,
         view, prefs, {255, 0, 0}, 5, 100, colors))
     Bridge.mousereleased()
+    model2.layers[1].alpha_lock = true
+    model2.layers[1].locked = true
+    model2.background_mode = "transparent_dark"
     assert(Bridge.save(), "Falha no salvamento da obra em camadas")
     assert(love.filesystem.getInfo("lua-artworks/index.tsv"))
     local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
@@ -102,6 +178,10 @@ function love.load()
     local path = "lua-artworks/" .. key
     assert(love.filesystem.getInfo(path .. "/layer_1.png"))
     assert(love.filesystem.getInfo(path .. "/preview.png"))
+    assert(love.filesystem.getInfo(path .. "/document.tsv"))
+    local layer_metadata = assert(love.filesystem.read(path .. "/layers.tsv"))
+    assert(layer_metadata:match("\tNormal\t0\t1\t1"),
+        "Alpha Lock e Lock não foram persistidos")
     local saved = love.image.newImageData(path .. "/layer_1.png")
     local sr, _, _, sa = saved:getPixel(8, 8)
     assert(sr > 0.9 and sa > 0.9, "PNG da camada não reteve pintura")
@@ -117,19 +197,33 @@ function love.load()
     function model3:set_color(red, green_, blue_) self.color = {red, green_, blue_} end
     Bridge.open(model3, id)
     assert(model3.layers[1].name == "Layer One", "Metadados da camada não reabertos")
+    assert(model3.layers[1].alpha_lock and model3.layers[1].locked,
+           "Propriedades da camada não foram reabertas")
+    assert(model3.background_mode == "transparent_dark",
+           "Cor do fundo não foi restaurada")
     assert(Bridge.mousepressed(model3, id, x, y, 1024, 768,
         view, prefs, {0, 0, 0}, 5, 100, colors),
         "Conta-gotas não acessou projeto reaberto")
     assert(model3.color[1] > 240 and model3.color[2] < 10,
         "Conta-gotas não encontrou os pixels após reabertura")
 
+    -- Um arquivo antigo de quatro colunas precisa continuar abrindo.
+    assert(love.filesystem.write(path .. "/layers.tsv", "1\tLegacy\t1\t80"))
+    Bridge.open(model3, id)
+    assert(model3.layers[1].name == "Legacy" and
+           model3.layers[1].opacity == 80 and
+           model3.layers[1].alpha_lock == false and
+           model3.layers[1].clipping == false and
+           model3.layers[1].blending == "Normal",
+           "Compatibilidade com layers.tsv legado de quatro colunas falhou")
+
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
-    for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv"}) do
+    for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv", "document.tsv"}) do
         love.filesystem.remove(path .. "/" .. filename)
     end
     love.filesystem.remove(path)
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
-    print("PASS: Lua brush/eraser/bucket/eyedropper/layers/preview/PNG roundtrip")
+    print("PASS: Lua Alpha Lock/Clipping/metadata legacy/PNG roundtrip")
     love.event.quit(0)
 end
