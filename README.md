@@ -19,7 +19,10 @@ por máscara alfa no shader do LÖVE, os nove modos de blend existentes no paine
 miniaturas de pixels reais e persistência PNG por camada com
 metadados compatíveis com o formato antigo. Varinha Mágica, Laço e
 Transformar conectam gestos existentes a seleções raster temporárias em Lua,
-com movimento de pixels e histórico reversível (limitados a 1 Mi de pixels). Outros controles
+com movimento de pixels e histórico reversível (limitados a 1 Mi de pixels).
+Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
+(Ctrl+C/X/V), rotação de 90° (Ctrl+Shift+R/L) e escala 50%/200%
+(Ctrl+Shift+Down/Up), sem alterar os elementos visuais do Ibis-Lua. Outros controles
 do Ibis-Lua podem continuar simulados; consulte [limitações](docs/LUA_MIGRATION.md).
 
 Para montar, execute `git submodule update --init` e depois

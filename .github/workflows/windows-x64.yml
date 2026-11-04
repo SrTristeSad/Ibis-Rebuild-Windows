@@ -81,6 +81,21 @@ jobs:
           Copy-Item bridge/lua_engine.lua tests/lua_paint/lua_engine.lua -Force
           Copy-Item bridge/lua_bridge.lua tests/lua_paint/lua_bridge.lua -Force
           Copy-Item bridge/lua_selection.lua tests/lua_paint/lua_selection.lua -Force
+          Copy-Item tests/lua_paint/main.lua tests/lua_syntax/paint_main.lua -Force
+          Copy-Item bridge/lua_engine.lua tests/lua_syntax/lua_engine.lua -Force
+          Copy-Item bridge/lua_bridge.lua tests/lua_syntax/lua_bridge.lua -Force
+          Copy-Item bridge/lua_selection.lua tests/lua_syntax/lua_selection.lua -Force
+          $syntaxOut = Join-Path $env:RUNNER_TEMP 'lua-syntax-stdout.log'
+          $syntaxErr = Join-Path $env:RUNNER_TEMP 'lua-syntax-stderr.log'
+          $syntax = Start-Process -FilePath "$env:LOVE_RUNTIME/lovec.exe" `
+            -ArgumentList @((Resolve-Path 'tests/lua_syntax').Path) -PassThru `
+            -RedirectStandardOutput $syntaxOut -RedirectStandardError $syntaxErr
+          $syntaxFinished = $syntax.WaitForExit(20000)
+          if (!$syntaxFinished) { Stop-Process -Id $syntax.Id -Force -ErrorAction SilentlyContinue }
+          if (Test-Path $syntaxOut) { Get-Content $syntaxOut }
+          if (Test-Path $syntaxErr) { Get-Content $syntaxErr }
+          if (!$syntaxFinished) { throw 'Lua syntax checker timeout (20 seconds)' }
+          if ($syntax.ExitCode -ne 0) { throw "Lua syntax checker failed ($($syntax.ExitCode))" }
           $path = (Resolve-Path 'tests/lua_paint').Path
           $stdout = Join-Path $env:RUNNER_TEMP 'lua-paint-stdout.log'
           $stderr = Join-Path $env:RUNNER_TEMP 'lua-paint-stderr.log'

@@ -7,7 +7,121 @@ function love.errorhandler(message)
 end
 
 local function close(a, b, epsilon) return math.abs(a - b) <= (epsilon or 0.02) end
+local function checkpoint(name)
+    io.stdout:write("LUA_STAGE ", name, "\n")
+    io.stdout:flush()
+end
+
+local function test_clipboard_transform(E)
+    local Selection = require("lua_selection")
+    checkpoint("before clipboard")
+    -- Transformações ortogonais e clipboard INTERNO em Lua.
+    local copy_project = E.new(16, 16)
+    E.sync(copy_project, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local copy_layer = copy_project.layers[1]
+    copy_layer.pixels:setPixel(2, 2, 1, 0, 0, 0.5)
+    copy_layer.pixels:setPixel(3, 3, 0, 1, 0, 1)
+    copy_layer.pixels:setPixel(8, 8, 0, 0, 1, 1)
+    local copied_mask = assert(Selection.rectangle(16, 16, 2, 2, 3, 3))
+    local copied = assert(E.copy_selection(copy_project, 1, copied_mask))
+    assert(copied.w == 2 and copied.h == 2 and copied.mask[0] and copied.mask[3])
+    -- O clipboard não deve referenciar pixels mutáveis da camada original.
+    copy_layer.pixels:setPixel(2, 2, 0, 0, 0, 0)
+    local frozen_red, _, _, frozen_a = copied.pixels:getPixel(0, 0)
+    assert(frozen_red > 0.99 and close(frozen_a, 0.5),
+        "Copy não congelou os pixels da máscara")
+    checkpoint("before cut")
+    local cut_ok, cut_clip = E.cut_selection(copy_project, 1, copied_mask)
+    assert(cut_ok and cut_clip, "Cut da seleção não retornou clipboard")
+    local _, _, _, cut_alpha = copy_layer.pixels:getPixel(3, 3)
+    assert(cut_alpha == 0, "Cut não limpou os pixels selecionados")
+    assert(E.undo(copy_project, copied_mask), "Cut não pôde ser desfeito")
+    local _, restored_green = copy_layer.pixels:getPixel(3, 3)
+    assert(restored_green > 0.99, "Undo do Cut não restaurou pixels")
+    assert(E.redo(copy_project, copied_mask), "Cut não pôde ser refeito")
+    checkpoint("before paste")
+    local paste_ok, pasted = E.paste_selection(copy_project, 1, copied, 8, 8, copied_mask)
+    assert(paste_ok and pasted == copied_mask, "Paste não preservou objeto seleção")
+    assert(Selection.contains(copied_mask, 8, 8) and
+       not Selection.contains(copied_mask, 2, 2),
+       "Paste não selecionou novos pixels")
+    local combined_red, combined_green, combined_blue, combined_a =
+        copy_layer.pixels:getPixel(8, 8)
+    assert(close(combined_red, 0.5) and close(combined_green, 0) and
+           close(combined_blue, 0.5) and close(combined_a, 1),
+           "Paste RGBA source-over incorreto")
+    assert(E.undo(copy_project, copied_mask), "Paste sem undo")
+    local undo_r, _, undo_b = copy_layer.pixels:getPixel(8, 8)
+    assert(undo_r < 0.01 and undo_b > 0.99 and
+        Selection.contains(copied_mask, 2, 2), "Undo do Paste falhou")
+    assert(E.redo(copy_project, copied_mask), "Paste sem redo")
+    assert(Selection.contains(copied_mask, 8, 8) and
+           select(1, copy_layer.pixels:getPixel(8, 8)) > 0.4,
+           "Redo do Paste falhou")
+    local rejected_paste, paste_reason =
+        E.paste_selection(copy_project, 1, copied, 15, 15, copied_mask)
+    assert(not rejected_paste and paste_reason, "Paste na borda deveria falhar")
+    local after_reject = select(1, copy_layer.pixels:getPixel(8, 8))
+    assert(after_reject > 0.4, "Paste inválido modificou imagem")
+
+    checkpoint("before rotate")
+    local rotate_project = E.new(16, 16)
+    E.sync(rotate_project, {layers = {{id = 1, visible = true, opacity = 100}}})
+    local rotated_layer = rotate_project.layers[1]
+    rotated_layer.pixels:setPixel(2, 2, 1, 0, 0, 1)
+    rotated_layer.pixels:setPixel(3, 4, 0, 0, 1, 1)
+    local shape = assert(Selection.rectangle(16, 16, 2, 2, 3, 4))
+    assert(E.reshape_selection(rotate_project, 1, shape, "rotate_cw"),
+        "Rotação horária de 90 graus falhou")
+    assert(shape.max_x == 4 and shape.max_y == 3,
+        "Rotação não atualizou dimensões da máscara")
+    local moved_red = select(1, rotated_layer.pixels:getPixel(4, 2))
+    local _, _, moved_blue = rotated_layer.pixels:getPixel(2, 3)
+    assert(moved_red > 0.99 and moved_blue > 0.99,
+        "Rotação horária posicionou pixels incorretamente")
+    assert(E.undo(rotate_project, shape), "Rotação sem undo")
+    assert(shape.max_x == 3 and shape.max_y == 4 and
+           select(1, rotated_layer.pixels:getPixel(2, 2)) > 0.99,
+           "Undo da rotação não restaurou geometria e pixels")
+    assert(E.redo(rotate_project, shape), "Rotação sem redo")
+    assert(shape.max_x == 4 and shape.max_y == 3 and
+        select(1, rotated_layer.pixels:getPixel(4, 2)) > 0.99,
+        "Redo da rotação não restaurou geometria e pixels")
+    assert(E.reshape_selection(rotate_project, 1, shape, "rotate_ccw"),
+           "Rotação anti-horária falhou")
+    assert(shape.max_x == 3 and shape.max_y == 4 and
+           select(1, rotated_layer.pixels:getPixel(2, 2)) > 0.99,
+           "Rotação inversa não restaurou o desenho")
+
+    checkpoint("before double")
+    assert(E.reshape_selection(rotate_project, 1, shape, "scale_double"),
+        "Escala 200% falhou")
+    assert(shape.max_x == 5 and shape.max_y == 7,
+        "Escala 200% não atualizou a máscara")
+    assert(select(1, rotated_layer.pixels:getPixel(2, 2)) > 0.99 and
+           select(1, rotated_layer.pixels:getPixel(3, 3)) > 0.99,
+           "Escala nearest-neighbour não duplicou pixels")
+    assert(E.reshape_selection(rotate_project, 1, shape, "scale_half"),
+           "Escala 50% falhou")
+    assert(shape.max_x == 3 and shape.max_y == 4,
+        "Redução não restaurou as dimensões anteriores")
+    local edge_mask = assert(Selection.rectangle(16, 16, 14, 14, 15, 15))
+    local before_count = #rotate_project.undo
+    local edge_ok, edge_reason =
+        E.reshape_selection(rotate_project, 1, edge_mask, "scale_double")
+    assert(not edge_ok and edge_reason and #rotate_project.undo == before_count,
+        "Escala fora do canvas deveria falhar sem histórico novo")
+    local selection_snapshot = Selection.clone(shape)
+    Selection.translate(shape, 1, 0)
+    Selection.restore(shape, selection_snapshot)
+    assert(shape.min_x == selection_snapshot.min_x and
+           shape.max_x == selection_snapshot.max_x,
+           "Snapshot de seleção não restaurou posição")
+
+end
+
 function love.load()
+    checkpoint("begin")
     local E = require("lua_engine")
     assert(E.supports(32, 32))
     assert(not E.supports(6000, 1))
@@ -280,6 +394,9 @@ function love.load()
            select(1, move.layers[1].pixels:getPixel(5, 2)) > 0.99,
            "Redo de movimento inconsistente")
 
+    test_clipboard_transform(E)
+
+    checkpoint("before persistence")
     -- Prova de persistência da obra pela ponte usada pelo Ibis-Lua.
     local Bridge = require("lua_bridge")
     local model2 = {
@@ -398,6 +515,17 @@ function love.load()
         view, prefs, {0, 0, 0}, 3, 100, colors))
     assert(model4.color[1] > 240 and model4.color[2] < 10,
         "Transformar da UI não moveu pixels para nova posição")
+    checkpoint("before bridge clipboard")
+    assert(Bridge.selection_command(model4, "copy"), "Ctrl+C da ponte falhou")
+    assert(Bridge.selection_command(model4, "paste"), "Ctrl+V da ponte falhou")
+    assert(Bridge.undo(), "Colagem pela ponte sem undo")
+    assert(Bridge.redo(), "Colagem pela ponte sem redo")
+    assert(Bridge.selection_command(model4, "rotate_cw"),
+        "Giro pela ponte falhou")
+    assert(Bridge.selection_command(model4, "scale_half"),
+        "Redução pela ponte falhou")
+    assert(Bridge.undo() and Bridge.redo(),
+        "A escala da ponte não manteve o histórico")
 
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
     for _, filename in ipairs({"layer_1.png", "preview.png", "layers.tsv", "document.tsv"}) do
@@ -406,6 +534,7 @@ function love.load()
     love.filesystem.remove(path)
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
-    print("PASS: Lua selection/lasso/wand/transform/undo + blend/persist")
+    checkpoint("complete")
+    print("PASS: Lua copy/cut/paste/rotation/scale + selection + blend/persist")
     love.event.quit(0)
 end
