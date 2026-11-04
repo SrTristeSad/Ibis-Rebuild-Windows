@@ -1,0 +1,3 @@
+[submodule "ui/Ibis-Lua"]
+	path = ui/Ibis-Lua
+	url = https://github.com/SrTristeSad/Ibis-Lua.git

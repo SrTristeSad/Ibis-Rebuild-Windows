@@ -1,5 +1,13 @@
 # Ibis Rebuild Windows
 
+> **Arquitetura Lua/LÖVE em migração (branch feat/ibis-lua-engine).**
+> A interface ativa vem do repositório [Ibis-Lua](https://github.com/SrTristeSad/Ibis-Lua),
+> fixado como submódulo. O motor ativo usa Lua e APIs do LÖVE, sem
+> rebuild_core.dll. Veja [a integração e suas limitações](docs/LUA_MIGRATION.md).
+> O histórico de etapas C++ abaixo se refere à implementação anterior e
+> não deve ser confundido com a funcionalidade do novo motor Lua.
+
+
 Reconstrução **independente e progressiva** dos fluxos do ibisPaint Android 14.1.2 para **Windows x64**, usando LuaJIT/LÖVE 11.5 na interface e C++ no processamento. **Sem WebView, sem Inkora e sem redistribuição de código ou binários Android.** Não existe paridade completa com o aplicativo de referência.
 
 ## Estado executável comprovado
