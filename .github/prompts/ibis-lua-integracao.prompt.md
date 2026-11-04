@@ -20,6 +20,13 @@ Copiar/Recortar/Colar são internos à aplicação (Ctrl+C, Ctrl+X, Ctrl+V);
 colagens preservam RGBA e não criam nova camada. Rotação ortogonal
 (Ctrl+Shift+R, Ctrl+Shift+L) e escala nearest-neighbour 200%/50%
 (Ctrl+Shift+Up/Down) estão integradas sem novos componentes visuais.
+No instrumento Transformar, **Alt+arrastar dentro da seleção** ativa
+rotação contínua pelo ângulo relativo ao centro da máscara; **Shift+
+arrastar dentro da seleção** ativa escala independente X/Y pelo
+deslocamento do ponteiro. A função `Engine.affine_selection`
+transforma por mapeamento inverso nearest-neighbour, valida o retângulo
+de destino antes de escrever e registra um único passo de undo/redo.
+Ainda não há pré-visualização da geometria durante o arraste.
 Histórico reversível deve incluir tanto pixels quanto a geometria da seleção.
 O clipboard não acessa o clipboard do Windows.
 O histórico de undo/redo agora persiste em `history.tsv` e PNGs por passo
@@ -53,7 +60,10 @@ possuem implementação Lua; preserve os testes de giro, amostragem,
 limites do canvas, source-over e histórico com contorno.
 A seleção é persistente como máscara por obra; o histórico dos passos de
 edição raster e da geometria associada também é salvo para obras pequenas.
-Não declare rotação livre, escala arbitrária ou clipboard Windows
+A rotação contínua e a escala independente estão implementadas por
+gestos modificados; teste o motor e a ponte em LÖVE e preserve o
+arraste comum de deslocamento. Não declare interpolação bilinear,
+pré-visualização ao vivo, transformação vetorial nem clipboard Windows
 como concluídos. Preserve testes de PNG roundtrip, arquivo inválido,
 desmarcação e compatibilidade com projetos sem seleção.
 

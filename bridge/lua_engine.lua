@@ -748,4 +748,101 @@ function Engine.reshape_selection(project, id, selected, operation)
     return true
 end
 
+
+-- Transformação raster livre sobre a máscara atual (amostragem nearest).
+-- A origem é o centro geométrico da seleção e ângulos são em graus.
+-- Prepara a máscara completa antes de apagar qualquer pixel; falhas de
+-- parâmetro/limite não modificam documento, histórico ou seleção.
+function Engine.affine_selection(project, id, selected, degrees, sx, sy)
+    if not selected or selected.count == 0 then
+        return false, "Selecione uma área antes de transformar."
+    end
+    if project.w * project.h > MAX_TRANSFORM_PIXELS then
+        return false, LIMIT_MESSAGE
+    end
+    local function finite(x)
+        return type(x) == "number" and x == x and
+            x ~= math.huge and x ~= -math.huge
+    end
+    if not finite(degrees) or math.abs(degrees) > 3600 or
+       not finite(sx) or not finite(sy) or
+       sx < 0.1 or sx > 8 or sy < 0.1 or sy > 8 then
+        return false, "Ângulo ou escala fora dos limites da transformação."
+    end
+    local angle = math.rad(degrees % 360)
+    if math.abs(angle) < 1e-10 and sx == 1 and sy == 1 then
+        return false, "A transformação não altera a seleção."
+    end
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local cx = (selected.min_x + selected.max_x + 1) / 2
+    local cy = (selected.min_y + selected.max_y + 1) / 2
+    local co, si = math.cos(angle), math.sin(angle)
+
+    local left, top = math.huge, math.huge
+    local right, bottom = -math.huge, -math.huge
+    for _, corner in ipairs({
+        {selected.min_x, selected.min_y},
+        {selected.max_x + 1, selected.min_y},
+        {selected.max_x + 1, selected.max_y + 1},
+        {selected.min_x, selected.max_y + 1}
+    }) do
+        local dx, dy = (corner[1] - cx) * sx, (corner[2] - cy) * sy
+        local tx = cx + co * dx - si * dy
+        local ty = cy + si * dx + co * dy
+        left, right = math.min(left, tx), math.max(right, tx)
+        top, bottom = math.min(top, ty), math.max(bottom, ty)
+    end
+    local xmin, xmax = math.floor(left + 1e-8), math.ceil(right - 1e-8) - 1
+    local ymin, ymax = math.floor(top + 1e-8), math.ceil(bottom - 1e-8) - 1
+    if xmin < 0 or ymin < 0 or xmax >= project.w or ymax >= project.h then
+        return false, "Transformação ultrapassaria os limites do canvas."
+    end
+
+    local function source_at(x, y)
+        local dx, dy = x + 0.5 - cx, y + 0.5 - cy
+        local ix = (co * dx + si * dy) / sx + cx
+        local iy = (-si * dx + co * dy) / sy + cy
+        return math.floor(ix), math.floor(iy)
+    end
+    local next_mask = {}
+    for y = ymin, ymax do
+        for x = xmin, xmax do
+            local source_x, source_y = source_at(x, y)
+            if Selection.contains(selected, source_x, source_y) then
+                next_mask[y * project.w + x] = true
+            end
+        end
+    end
+    local replacement = Selection.from_mask(project.w, project.h, next_mask,
+                                             "affine")
+    if not replacement then
+        return false, "A transformação eliminaria todos os pixels da seleção."
+    end
+
+    local snapshot = clone_pixels(project, layer)
+    Engine.begin_stroke(project, id)
+    local entry = project.undo[#project.undo]
+    if entry then
+        entry.selection_ref = selected
+        entry.selection_state = Selection.clone(selected)
+    end
+    for y = selected.min_y, selected.max_y do
+        for x = selected.min_x, selected.max_x do
+            if Selection.contains(selected, x, y) then
+                layer.pixels:setPixel(x, y, 0, 0, 0, 0)
+            end
+        end
+    end
+    for key in pairs(next_mask) do
+        local x, y = key % project.w, math.floor(key / project.w)
+        local source_x, source_y = source_at(x, y)
+        local r, g, b, a = snapshot:getPixel(source_x, source_y)
+        over_pixel(layer.pixels, x, y, r, g, b, a)
+    end
+    layer.image:replacePixels(layer.pixels)
+    Selection.restore(selected, replacement)
+    project.dirty = true
+    return true
+end
+
 return Engine

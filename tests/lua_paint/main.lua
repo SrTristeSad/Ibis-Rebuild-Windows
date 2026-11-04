@@ -292,6 +292,181 @@ local function test_history_roundtrip(E)
     assert(love.filesystem.remove(path))
 end
 
+-- Rotação livre e escalas não uniformes (incluindo rejeição atômica).
+local function test_affine_transforms(E)
+    local Selection = require("lua_selection")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local p = E.new(64, 64)
+    E.sync(p, model)
+    local layer = p.layers[1]
+    layer.pixels:setPixel(11, 11, 1, 0, 0, 1)
+    layer.pixels:setPixel(16, 12, 0, 0, 1, 0.5)
+    layer.pixels:setPixel(35, 35, 0, 1, 0, 1)
+    layer.image:replacePixels(layer.pixels)
+
+    local shape = assert(Selection.rectangle(64, 64, 10, 10, 17, 13))
+    local original = Selection.clone(shape)
+    assert(E.affine_selection(p, 1, shape, 30, 1, 1),
+        "Rotação livre em 30 graus não foi aplicada")
+    assert(shape.count > 0 and
+           (shape.min_x ~= original.min_x or shape.min_y ~= original.min_y
+            or shape.max_x ~= original.max_x or shape.max_y ~= original.max_y),
+        "Rotação 30 graus não alterou a máscara raster")
+    local _, green, _, alpha = layer.pixels:getPixel(35, 35)
+    assert(green > 0.99 and alpha > 0.99,
+        "Rotação alterou pixels fora da máscara")
+    local transformed = Selection.clone(shape)
+    local count_red, count_blue = 0, 0
+    for y = shape.min_y, shape.max_y do
+        for x = shape.min_x, shape.max_x do
+            if Selection.contains(shape, x, y) then
+                local r, _, b, a = layer.pixels:getPixel(x, y)
+                if r > 0.9 and a > 0.9 then count_red = count_red + 1 end
+                if b > 0.9 and a > 0.4 then count_blue = count_blue + 1 end
+            end
+        end
+    end
+    assert(count_red > 0 and count_blue > 0,
+        "Rotação não reposicionou os pixels RGBA escolhidos")
+    assert(E.undo(p, shape), "Undo de rotação livre falhou")
+    assert(shape.min_x == original.min_x and shape.max_y == original.max_y and
+        select(1, layer.pixels:getPixel(11, 11)) > 0.99,
+        "Undo não restaurou máscara e imagem originais")
+    assert(E.redo(p, shape), "Redo de rotação livre falhou")
+    assert(shape.count == transformed.count and
+        shape.min_x == transformed.min_x and shape.max_x == transformed.max_x,
+        "Redo não restaurou a geometria livre")
+
+    local p2 = E.new(64, 64)
+    E.sync(p2, model)
+    local layer2 = p2.layers[1]
+    layer2.pixels:setPixel(24, 24, 0.3, 0.6, 0.9, 0.8)
+    layer2.pixels:setPixel(50, 50, 1, 0, 1, 1)
+    layer2.image:replacePixels(layer2.pixels)
+    local area = assert(Selection.rectangle(64, 64, 20, 20, 27, 27))
+    local initial = Selection.clone(area)
+    assert(E.affine_selection(p2, 1, area, 0, 1.5, 0.75),
+        "Escala X=150% Y=75% não foi aplicada")
+    assert(area.min_x == 18 and area.max_x == 29 and
+           area.min_y == 21 and area.max_y == 26,
+        "Dimensões da escala não uniforme estão incorretas")
+    local _, _, _, untouched = layer2.pixels:getPixel(50, 50)
+    assert(untouched > 0.99, "Escala alterou pixel fora da seleção")
+    local cx_r, cx_g, cx_b, cx_a = layer2.pixels:getPixel(24, 24)
+    assert(cx_r > 0.25 and cx_g > 0.55 and cx_b > 0.85 and cx_a > 0.75,
+        "Escala alterou indevidamente cor/alfa do pixel central")
+    assert(E.undo(p2, area) and area.min_x == initial.min_x and
+           area.max_x == initial.max_x, "Undo escala livre falhou")
+    assert(E.redo(p2, area) and area.min_x == 18 and area.max_x == 29,
+           "Redo escala livre falhou")
+
+    -- Combinação arbitrária de giro e escalas independentes.
+    assert(E.affine_selection(p2, 1, area, -27.5, 1.1, 1.2),
+           "Transformação combinada não foi aceita")
+    local count_after = #p2.undo
+    local saved = Selection.clone(area)
+    local saved_pixel = {layer2.pixels:getPixel(50, 50)}
+    for _, args in ipairs({
+        {math.huge, 1, 1}, {0, 0, 1}, {0, 9, 1}, {0, 1, 0 / 0}
+    }) do
+        local ok = E.affine_selection(p2, 1, area, args[1], args[2], args[3])
+        assert(not ok and #p2.undo == count_after and
+               area.count == saved.count and area.min_x == saved.min_x,
+               "Parâmetros inválidos modificaram seleção ou histórico")
+    end
+    local sr, sg, sb, sa = layer2.pixels:getPixel(50, 50)
+    assert(close(sr, saved_pixel[1]) and close(sg, saved_pixel[2]) and
+           close(sb, saved_pixel[3]) and close(sa, saved_pixel[4]),
+           "Parâmetros inválidos modificaram pixel não selecionado")
+
+    local edge = assert(Selection.rectangle(64, 64, 61, 61, 63, 63))
+    local before_count = #p2.undo
+    local rejected, reason = E.affine_selection(p2, 1, edge, 0, 2, 2)
+    assert(not rejected and reason and #p2.undo == before_count and
+           edge.min_x == 61 and edge.max_x == 63,
+           "Transformação além do canvas não foi rejeitada antes de escrever")
+    local same, same_reason = E.affine_selection(p2, 1, edge, 0, 1, 1)
+    assert(not same and same_reason and #p2.undo == before_count,
+           "Transformação identidade não deveria gerar histórico")
+end
+
+-- Testa os gestos modificados no Bridge sem mexer nos botões existentes.
+local function test_affine_bridge(Bridge, gallery)
+    local model = {
+        screen = "editor", document = {width = 64, height = 64},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Paint"}},
+        active_layer_id = 1, active_tool = "brush", background_mode = "white"
+    }
+    function model:active_layer() return self.layers[1] end
+    function model:set_color(r, g, b) self.color = {r, g, b} end
+    local id = gallery:add_artwork(64, 64, "Affine gestures")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + 0.5 - 32) * 11,
+            62 + (768 - 160) / 2 + (y + 0.5 - 32) * 11
+    end
+    local function press(x, y)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+            view, prefs, {255, 0, 0}, 3, 100, nil))
+    end
+    local function release(x, y)
+        local mx, my = screen(x, y)
+        return Bridge.mousereleased(model, mx, my, 1)
+    end
+    press(30, 32)
+    Bridge.mousereleased()
+    model.active_tool = "transform"
+    press(26, 26)
+    assert(release(34, 38), "Transformar não construiu máscara de arraste")
+    local selection = assert(Bridge.selection_snapshot())
+    assert(selection.min_x == 26 and selection.max_x == 34 and
+           selection.min_y == 26 and selection.max_y == 38,
+           "Coordenadas de seleção da ponte incorretas")
+
+    local native_is_down = love.keyboard.isDown
+    love.keyboard.isDown = function(...)
+        for i = 1, select("#", ...) do
+            local key = select(i, ...)
+            if key == "lalt" or key == "ralt" then return true end
+        end
+        return false
+    end
+    press(33, 32)
+    love.keyboard.isDown = native_is_down
+    assert(release(30, 37), "Alt+arrastar não aplicou rotação")
+    local rotated = assert(Bridge.selection_snapshot())
+    assert(rotated.min_x ~= selection.min_x and rotated.count > 0,
+        "Alt+arrastar não rotacionou a geometria da seleção")
+    assert(Bridge.undo(), "Gesto de rotação não gerou undo")
+    local undone = assert(Bridge.selection_snapshot())
+    assert(undone.min_x == selection.min_x and undone.max_x == selection.max_x,
+        "Undo do gesto não restaurou máscara")
+    assert(Bridge.redo(), "Gesto de rotação não gerou redo")
+
+    love.keyboard.isDown = function(...)
+        for i = 1, select("#", ...) do
+            local key = select(i, ...)
+            if key == "lshift" or key == "rshift" then return true end
+        end
+        return false
+    end
+    press(33, 32)
+    love.keyboard.isDown = native_is_down
+    assert(release(35, 34), "Shift+arrastar não aplicou escala independente")
+    local scaled = assert(Bridge.selection_snapshot())
+    assert(scaled.count > rotated.count, "Escala livre não expandiu a seleção")
+    assert(Bridge.undo(), "Gesto de escala não gerou undo")
+    local restored = assert(Bridge.selection_snapshot())
+    assert(restored.count == rotated.count and
+           restored.min_x == rotated.min_x,
+           "Undo escala do gesto não restaurou contorno")
+    assert(Bridge.redo(), "Gesto de escala não gerou redo")
+end
+
 function love.load()
     checkpoint("begin")
     local E = require("lua_engine")
@@ -567,6 +742,8 @@ function love.load()
            "Redo de movimento inconsistente")
 
     test_clipboard_transform(E)
+    checkpoint("affine rotation and nonuniform scaling")
+    test_affine_transforms(E)
     checkpoint("history PNG roundtrip")
     test_history_roundtrip(E)
 
@@ -708,6 +885,8 @@ function love.load()
         "A escala da ponte não manteve o histórico")
     checkpoint("selection PNG roundtrip")
     test_selection_roundtrip(Bridge, model4, art4)
+    checkpoint("bridge affine gestures")
+    test_affine_bridge(Bridge, gallery)
 
     -- Limpeza do armazenamento efêmero do teste (não é o diretório da aplicação real).
     require("lua_history").cleanup(path)
@@ -718,6 +897,6 @@ function love.load()
     love.filesystem.remove("lua-artworks/index.tsv")
     love.filesystem.remove("lua-artworks")
     checkpoint("complete")
-    print("PASS: Lua history persisted undo/redo + selection/layers + corrupt recovery")
+    print("PASS: Lua affine rotation/scale + history + selected pixels")
     love.event.quit(0)
 end

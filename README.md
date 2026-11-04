@@ -26,7 +26,11 @@ Transformar conectam gestos existentes a seleções raster temporárias em Lua,
 com movimento de pixels e histórico reversível (limitados a 1 Mi de pixels).
 Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
 (Ctrl+C/X/V), rotação de 90° (Ctrl+Shift+R/L) e escala 50%/200%
-(Ctrl+Shift+Down/Up), sem alterar os elementos visuais do Ibis-Lua. Outros controles
+(Ctrl+Shift+Down/Up). Com Transformar selecionado, Alt+arrastar dentro
+da seleção aplica rotação livre; Shift+arrastar aplica escala X/Y
+independente. A rasterização usa nearest-neighbour e confirma a
+transformação ao soltar o mouse, sem alterar os controles visuais
+do Ibis-Lua. Outros controles
 do Ibis-Lua podem continuar simulados; consulte [limitações](docs/LUA_MIGRATION.md).
 
 Para montar, execute `git submodule update --init` e depois

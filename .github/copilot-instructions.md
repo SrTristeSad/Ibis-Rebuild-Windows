@@ -45,7 +45,16 @@
 - Atalhos sem novos controles: Ctrl+C/X/V (clipboard), Ctrl+Shift+R/L
   (giro horário/anti-horário), Ctrl+Shift+Up/Down (200%/50%).
   Preserve undo/redo de pixels e geometria, compatibilidade com a máscara
-  de seleção e testes da transformação. Não afirme rotação livre ou
+  de seleção e testes da transformação.
+- Rotação livre e escala X/Y independente usam `Engine.affine_selection`
+  com mapeamento inverso nearest-neighbour. Em Transformar:
+  Alt+arrastar gira relativamente ao centro da seleção, Shift+arrastar
+  redimensiona nos dois eixos, sem alterar o layout/controles visuais.
+  Os gestos aplicam pixels apenas ao soltar; o movimento sem
+  modificadores permanece como antes. Rejeitar parâmetros NaN/infinito,
+  fator fora de 0,1..8 e retângulo fora do canvas SEM alterar pixels,
+  máscara ou histórico. Preservar testes de undo/redo e RGBA.
+- Não alegue interpolação bilinear, preview em tempo real ou
   clipboard do SO como concluídos.
 - Não alegue paridade visual ou técnica 1:1 com ibisPaint Windows 14.1.4 sem medições verificáveis.
 
