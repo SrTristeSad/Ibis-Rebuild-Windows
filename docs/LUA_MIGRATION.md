@@ -63,7 +63,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   `document.tsv` ganha uma quarta coluna opcional (0=contígua,
   1=global), com padrão contíguo para obras antigas de duas/três colunas,
   e fallback seguro em caso de campo inválido. O modo só compara os
-  pixels da camada ativa, não a composição visível de todas as camadas.
+  pixels da camada ativa, a menos que a nova opção de fonte seja ativada.
+  **Ctrl+Alt+T** alterna a fonte da Varinha: **camada ativa** (padrão) ou
+  **composição das camadas visíveis**. A fonte composta usa o mesmo cálculo
+  RGBA do conta-gotas, incluindo opacidade, mesclagem e clipping, e
+  considera o fundo branco como opaco; os fundos transparentes mantêm alfa.
+  Contiguidade/global, tolerância e soma/subtração/interseção permanecem
+  independentes da fonte. Somente a máscara é criada: pintar/recortar
+  continua atuando na camada ativa. A quinta coluna opcional de
+  `document.tsv` armazena 0=camada ativa, 1=composição; duas, três ou
+  quatro colunas e campos inválidos retornam à camada ativa. A alteração
+  não marca dirty, não gera histórico nem cria controles visuais.
   **Laço** seleciona pixels dentro do contorno livre arrastado; **Transformar**
   cria uma seleção retangular ao arrastar sem seleção e move pixels selecionados
   ao arrastar dentro da seleção. Não foram criados controles visuais.
@@ -235,7 +245,7 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   a varinha usa tolerância ajustável por obra em RGBA 8-bit (0..255);
   o valor zero mantém a margem mínima de quantização. O modo contíguo
   preserva flood-fill 4-conexo; o modo global percorre a camada ativa
-  inteira, não as outras camadas. A rotação
+  inteira na fonte escolhida (camada ativa ou composição visível). A rotação
   admite rotação livre e escalas independentes por gesto na ferramenta
   Transformar; os atalhos anteriores de 90° e 50%/200% continuam disponíveis.
   Os fatores da API livre devem estar entre 0,1 e 8 por eixo.
@@ -295,6 +305,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   distinção do flood-fill 4-conexo, canal alfa, limite 1 Mi pixels,
   tolerância progressiva, combinações soma/subtração/interseção, undo/redo
   de máscara, atalho Ctrl+Alt+G, preferência por obra e metadados legados.
+  Testes adicionais cobrem Ctrl+Alt+T, fonte de todas as camadas visíveis,
+  clipping, visibilidade, Multiply, opacidade, transparência/fundo branco,
+  edição restrita à camada ativa e compatibilidade de metadados 2–5 colunas.
   Também cobre a varinha com tolerância RGBA ajustável, conectividade de
   quatro vizinhos, limites 0/255, canal alfa, combinações preservadas,
   atalhos Ctrl+Alt+←/→/0, ausência de histórico ao mudar configuração
