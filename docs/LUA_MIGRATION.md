@@ -22,8 +22,18 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - Desenho por mouse com pincel circular básico e borracha com redução de alfa.
 - Tamanho e opacidade vindos dos controles já existentes do Ibis-Lua.
 - Cor RGB atualmente selecionada pelo painel já existente.
-- Balde de preenchimento contíguo por igualdade RGBA na camada ativa (até
-  1.048.576 pixels por documento), com histórico raster reversível.
+- Balde de preenchimento contíguo na camada ativa, com tolerância
+  **RGBA de 0 a 255 por canal** (até 1.048.576 pixels por documento)
+  e histórico raster reversível. Zero mantém a igualdade RGBA anterior,
+  com margem de quantização 1/510. **Ctrl+Alt+PageUp/PageDown** ajustam
+  ±16 níveis e **Ctrl+Alt+Home** restaura zero, independentemente da
+  tolerância da Varinha. A preferência por obra é salva na **oitava
+  coluna opcional** de `document.tsv`; arquivos de 2–7 colunas
+  e valores inválidos usam zero. A região de preenchimento é determinada
+  antes de modificar o raster, evitando revisitas quando a tinta ainda
+  está dentro da tolerância; operações sem alteração real não criam
+  dirty nem histórico. Continua contíguo 4-conexo, respeita seleção,
+  Alpha Lock, opacidade e desfazer/refazer; sem novo controle visual.
 - Conta-gotas que lê a composição RGBA das camadas visíveis, considerando
   opacidade e fundo branco, e atualiza o seletor de cores existente.
 - Miniaturas reais em PNG na galeria para obras salvas e pixels reais
@@ -304,8 +314,15 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O uso de shader exige dispositivo compatível com LÖVE 11.5; o CI valida
   a composição recortada no renderizador software Mesa, mas não substitui
   testes em hardware gráfico físico.
-- O balde compara a cor RGBA da camada ativa com tolerância mínima de quantização,
-  sem controlar tolerância por slider. Não equivale ao balde do ibisPaint.
+- O balde compara RGBA da camada ativa com tolerância 0–255 por canal;
+  não há slider integrado na interface Lua, apenas os atalhos
+  Ctrl+Alt+PageUp/PageDown/Home. O algoritmo de duas fases mantém
+  uma região fixa, não contamina a comparação com pixels recém-pintados
+  e não cria histórico para preenchimento idêntico. Não equivale ao
+  balde do ibisPaint.
+- A suíte cobre Balde de Tinta com tolerância RGBA 0/16/48/64/255,
+  fronteira, ilhas, Alpha Lock, seleção, tinta de baixa opacidade,
+  no-op sem histórico, atalhos, preferências por obra e legados 2–8 colunas.
 - A suíte de pixels usa o LÖVE real para verificar tinta, borracha, balde,
   Alpha Lock, Clipping e os nove modos de blend na CPU e GPU,
   leitura de cores, composição semitransparente, miniatura,
