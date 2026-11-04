@@ -434,12 +434,19 @@ function Engine.sample(project, model, x, y)
     return Engine.composite_pixel_source(project, model, false).pixels:getPixel(x, y)
 end
 
--- Balde contíguo, cor RGBA exata (tolerância de 1/510 por canal).
--- Algoritmo scanline sem recursão; não extrapola os limites do buffer.
--- Impõe teto conservador de pixels para evitar travamentos da UI Lua.
-function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection)
+-- Balde contíguo: tolerância RGBA por canal em 8-bit (0..255).
+-- Descobre a região usando APENAS o raster original antes de pintá-lo.
+-- Isso impede revisitas e loops quando a cor aplicada está na tolerância.
+-- Não modifica a máscara de seleção, pixels fora dela ou histórico em no-op.
+function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
+                     tolerance)
     if project.w * project.h > 1024 * 1024 then
         return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
+    end
+    if tolerance == nil then tolerance = 0 end
+    if type(tolerance) ~= "number" or tolerance ~= math.floor(tolerance) or
+       tolerance < 0 or tolerance > 255 then
+        return false, "Tolerância do balde deve ser um inteiro de 0 a 255."
     end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= project.w or y >= project.h or
@@ -447,59 +454,32 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection)
         return false
     end
     alpha = math.max(0, math.min(1, alpha))
-    local seed_alpha = alpha * Selection.coverage(selection, x, y)
-    if seed_alpha <= 0 then return false end
+    if alpha * Selection.coverage(selection, x, y) <= 0 then return false end
     local layer = assert(project.layers[id], "Camada inexistente")
     local data = layer.pixels
     local tr, tg, tb, ta = data:getPixel(x, y)
     if alpha_lock and ta <= 0 then return false end
-    local na = alpha_lock and ta or seed_alpha + ta * (1 - seed_alpha)
-    local nr, ng, nb
-    if alpha_lock then
-        nr, ng, nb = tr * (1 - seed_alpha) + rgb[1] * seed_alpha,
-            tg * (1 - seed_alpha) + rgb[2] * seed_alpha,
-            tb * (1 - seed_alpha) + rgb[3] * seed_alpha
-    else
-        nr = (rgb[1] * seed_alpha + tr * ta * (1 - seed_alpha)) / na
-        ng = (rgb[2] * seed_alpha + tg * ta * (1 - seed_alpha)) / na
-        nb = (rgb[3] * seed_alpha + tb * ta * (1 - seed_alpha)) / na
-    end
-    local epsilon = 0.5 / 255
-    if math.abs(nr - tr) < epsilon and math.abs(ng - tg) < epsilon
-       and math.abs(nb - tb) < epsilon and math.abs(na - ta) < epsilon then
-        return false
-    end
 
     local w, h = project.w, project.h
+    local threshold = tolerance / 255 + 1 / 510
+    local visited, points = {}, {}
     local function matches(px, py)
         if px < 0 or py < 0 or px >= w or py >= h or
            (selection and not Selection.contains(selection, px, py)) then
             return false
         end
+        local key = py * w + px
+        if visited[key] then return false end
         local r, g, b, a = data:getPixel(px, py)
         if alpha_lock and a <= 0 then return false end
-        local tolerance = 1 / 510
-        return math.abs(r - tr) <= tolerance and math.abs(g - tg) <= tolerance
-           and math.abs(b - tb) <= tolerance and math.abs(a - ta) <= tolerance
+        return math.abs(r - tr) <= threshold and
+               math.abs(g - tg) <= threshold and
+               math.abs(b - tb) <= threshold and
+               math.abs(a - ta) <= threshold
     end
-    local function paint(px, py)
-        local alpha = alpha * Selection.coverage(selection, px, py)
-        if alpha <= 0 then return end
-        local dr, dg, db, da = data:getPixel(px, py)
-        if alpha_lock then
-            data:setPixel(px, py,
-                dr * (1 - alpha) + rgb[1] * alpha,
-                dg * (1 - alpha) + rgb[2] * alpha,
-                db * (1 - alpha) + rgb[3] * alpha, da)
-        else
-            local out_a = alpha + da * (1 - alpha)
-            data:setPixel(px, py,
-                (rgb[1] * alpha + dr * da * (1 - alpha)) / out_a,
-                (rgb[2] * alpha + dg * da * (1 - alpha)) / out_a,
-                (rgb[3] * alpha + db * da * (1 - alpha)) / out_a, out_a)
-        end
-    end
-    Engine.begin_stroke(project, id)
+
+    -- Scanline 4-conexo; a fila registra somente sementes de segmentos.
+    -- O conjunto visited substitui a mutação como controle de progresso.
     local stack = {{x, y}}
     while #stack > 0 do
         local point = table.remove(stack)
@@ -508,7 +488,9 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection)
             while matches(sx - 1, sy) do sx = sx - 1 end
             local above, below = false, false
             while matches(sx, sy) do
-                paint(sx, sy)
+                local key = sy * w + sx
+                visited[key] = true
+                points[#points + 1] = key
                 if matches(sx, sy - 1) then
                     if not above then stack[#stack + 1] = {sx, sy - 1} end
                     above = true
@@ -519,6 +501,51 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection)
                 else below = false end
                 sx = sx + 1
             end
+        end
+    end
+
+    local epsilon = 0.5 / 255
+    local function replacement(key)
+        local px, py = key % w, math.floor(key / w)
+        local strength = alpha * Selection.coverage(selection, px, py)
+        local dr, dg, db, da = data:getPixel(px, py)
+        if strength <= 0 then return dr, dg, db, da end
+        if alpha_lock then
+            return dr * (1 - strength) + rgb[1] * strength,
+                   dg * (1 - strength) + rgb[2] * strength,
+                   db * (1 - strength) + rgb[3] * strength, da
+        end
+        local out_a = strength + da * (1 - strength)
+        return (rgb[1] * strength + dr * da * (1 - strength)) / out_a,
+               (rgb[2] * strength + dg * da * (1 - strength)) / out_a,
+               (rgb[3] * strength + db * da * (1 - strength)) / out_a,
+               out_a
+    end
+    local function different(key, nr, ng, nb, na)
+        local px, py = key % w, math.floor(key / w)
+        local r, g, b, a = data:getPixel(px, py)
+        return math.abs(nr - r) >= epsilon or
+               math.abs(ng - g) >= epsilon or
+               math.abs(nb - b) >= epsilon or math.abs(na - a) >= epsilon
+    end
+
+    -- Uma cor igual à do clique pode ainda alterar vizinhos semelhantes.
+    -- Só dispensar histórico quando NENHUM pixel efetivamente mudaria.
+    local changed = false
+    for _, key in ipairs(points) do
+        local nr, ng, nb, na = replacement(key)
+        if different(key, nr, ng, nb, na) then
+            changed = true
+            break
+        end
+    end
+    if not changed then return false end
+
+    Engine.begin_stroke(project, id)
+    for _, key in ipairs(points) do
+        local nr, ng, nb, na = replacement(key)
+        if different(key, nr, ng, nb, na) then
+            data:setPixel(key % w, math.floor(key / w), nr, ng, nb, na)
         end
     end
     layer.image:replacePixels(data)

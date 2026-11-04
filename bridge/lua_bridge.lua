@@ -141,6 +141,7 @@ function Bridge.create(model, id, gallery)
     project.wand_sample_all = false
     project.wand_diagonal = false
     project.wand_rgb_only = false
+    project.bucket_tolerance = 0
     Engine.sync(project, model)
     counter = counter + 1
     local key = string.format("art_%d_%d", os.time(), counter)
@@ -194,8 +195,14 @@ local function saved_layers(model, path, p)
         local active_id, background =
             metadata:match("^(%d+)\t([%a_]+)")
         local stored_tolerance, stored_global, stored_sample_all,
-              stored_diagonal, stored_rgb_only = metadata:match(
-            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+              stored_diagonal, stored_rgb_only, stored_bucket_tolerance =
+            metadata:match(
+            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        if not stored_tolerance then
+            stored_tolerance, stored_global, stored_sample_all,
+                stored_diagonal, stored_rgb_only = metadata:match(
+                "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        end
         if not stored_tolerance then
             stored_tolerance, stored_global, stored_sample_all,
                 stored_diagonal = metadata:match(
@@ -223,6 +230,10 @@ local function saved_layers(model, path, p)
         p.wand_sample_all = stored_sample_all == "1"
         p.wand_diagonal = stored_diagonal == "1"
         p.wand_rgb_only = stored_rgb_only == "1"
+        local bucket_number = tonumber(stored_bucket_tolerance)
+        p.bucket_tolerance = bucket_number and
+            bucket_number >= 0 and bucket_number <= 255 and
+            bucket_number == math.floor(bucket_number) and bucket_number or 0
         active_id = tonumber(active_id)
         if active_id then
             for _, info in ipairs(layers) do
@@ -248,6 +259,7 @@ function Bridge.open(model, id)
     project.wand_sample_all = false
     project.wand_diagonal = false
     project.wand_rgb_only = false
+    project.bucket_tolerance = 0
     if record then saved_layers(model, project_path(record.key), project) end
     Engine.sync(project, model)
     if record then
@@ -314,7 +326,8 @@ function Bridge.save()
             project.wand_global and "1" or "0",
             project.wand_sample_all and "1" or "0",
             project.wand_diagonal and "1" or "0",
-            project.wand_rgb_only and "1" or "0"}, "\t")))
+            project.wand_rgb_only and "1" or "0",
+            tostring(project.bucket_tolerance or 0)}, "\t")))
     -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
     -- retrocompatível e evita que a seleção contamine qualquer camada.
     local mask_path = path .. "/selection.png"
@@ -565,7 +578,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
 
     if tool == "bucket" then
         local _, reason = Engine.fill(p, info.id, px, py, rgb,
-            normalized_opacity, info.alpha_lock, selection)
+            normalized_opacity, info.alpha_lock, selection,
+            p.bucket_tolerance or 0)
         if reason and notice then notice(reason) end
         return true
     end
@@ -947,6 +961,25 @@ function Bridge.toggle_wand_rgb_only(model, notice)
     return true
 end
 
+-- Tolerância própria do Balde, independente da Varinha Mágica.
+-- Não modifica a máscara, o histórico ou os pixels até o preenchimento.
+function Bridge.bucket_tolerance(model)
+    local p = ensure(model)
+    return p and (p.bucket_tolerance or 0) or nil
+end
+
+function Bridge.adjust_bucket_tolerance(model, delta, notice)
+    local p = ensure(model)
+    if not p or type(delta) ~= "number" or
+       delta ~= math.floor(delta) then return false end
+    local value = math.max(0, math.min(255, (p.bucket_tolerance or 0) + delta))
+    p.bucket_tolerance = value
+    if notice then
+        notice(string.format("Balde: tolerância RGBA %d/255", value))
+    end
+    return true
+end
+
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" and selection then
@@ -973,6 +1006,14 @@ function Bridge.keypressed(key, model, notice)
             return Bridge.toggle_wand_diagonal(model, notice)
         elseif key == "r" then
             return Bridge.toggle_wand_rgb_only(model, notice)
+        elseif key == "pageup" then
+            return Bridge.adjust_bucket_tolerance(model, 16, notice)
+        elseif key == "pagedown" then
+            return Bridge.adjust_bucket_tolerance(model, -16, notice)
+        elseif key == "home" then
+            local current = Bridge.bucket_tolerance(model)
+            return current ~= nil and
+                Bridge.adjust_bucket_tolerance(model, -current, notice)
         elseif key == "right" then
             return Bridge.adjust_wand_tolerance(model, 16, notice)
         elseif key == "left" then

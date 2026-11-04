@@ -12,6 +12,17 @@
 - Não adicione chamadas FFI à DLL C++, rebuild_core.dll, dependência WebView ou um mecanismo de pintura oculto em C++.
 - native/, app/, CMakeLists.txt e scripts Python legados são apenas referência/histórico e não integram o build Lua ativo.
 - Não afirme que tudo está funcional: documente recursos conectados, limitações e funções ainda simuladas.
+- Balde Lua: `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance)`
+  recebe tolerância opcional 0..255 por canal RGBA, 0 como padrão
+  historicamente exato (margem 1/510). Deve descobrir primeiro toda
+  a região original 4-conexa e somente depois modificar pixels;
+  marcar visited evita loops quando a tinta aplicada continua semelhante
+  ao seed. No-op não deve criar dirty ou passo de undo. Preservar máscara,
+  feather, Alpha Lock, opacidade, isolamento da camada e limite 1 Mi px.
+  Ctrl+Alt+PageUp/PageDown/Home ajustam `project.bucket_tolerance`
+  (+16/−16/zero) por obra, independente da tolerância da Varinha.
+  Salvar na oitava coluna de `document.tsv`, com zero padrão para
+  documentos antigos de 2–7 colunas e flags inválidas. Não criar UI.
 - Alpha Lock preserva o alfa dos pixels; Clipping usa a máscara da camada-base
   na composição Lua/LÖVE, sem modificar os pixels salvos da camada clipada.
   Preserve testes que comparam a amostra CPU com o resultado de shader GPU.

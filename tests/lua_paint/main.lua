@@ -813,6 +813,112 @@ local function test_selection_morph_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Balde tolerante: região fixada ANTES da escrita, máscara, Alpha Lock,
+-- no-op e histórico reversível com o mesmo critério RGBA por canal.
+local function test_bucket_tolerance(E)
+    local Selection = require("lua_selection")
+    local function fixture()
+        local p = E.new(12, 12)
+        E.sync(p, {layers = {{id = 1, visible = true, opacity = 100}}})
+        local d = p.layers[1].pixels
+        d:setPixel(2, 3, .4, .2, .3, 1)
+        d:setPixel(3, 3, .4 + 12 / 255, .2, .3, 1)
+        d:setPixel(4, 3, .4, .2 + 16 / 255, .3, 1)
+        d:setPixel(5, 3, .4 + 39 / 255, .2, .3, 1)
+        d:setPixel(6, 3, .4, .2, .3, .75)
+        d:setPixel(8, 8, .4, .2, .3, 1) -- ilha desconectada
+        p.layers[1].image:replacePixels(d)
+        p.dirty = false
+        return p
+    end
+    for _, scenario in ipairs({
+        {0, 1}, {16, 3}, {48, 4}, {64, 5}, {255, 144}
+    }) do
+        local p = fixture()
+        local tol, count = scenario[1], scenario[2]
+        local ok = E.fill(p, 1, 2, 3, {0, 0, 1}, 1,
+                          false, nil, tol)
+        assert(ok and p.dirty and #p.undo == 1 and #p.redo == 0,
+               "Balde tolerante não gerou um único histórico raster")
+        local d = p.layers[1].pixels
+        local changed = 0
+        for py = 0, 11 do
+            for px = 0, 11 do
+                local r, g, b, a = d:getPixel(px, py)
+                if b > .99 and r < .01 and g < .01 and a > .99 then
+                    changed = changed + 1
+                end
+            end
+        end
+        -- No início há 2 pixels de azul? Apenas 0: todos os originais
+        -- têm B=.3, então o número de pixels alterados é determinístico.
+        assert(changed == count,
+               "Tolerância RGBA do balde não selecionou a região esperada")
+        if tol < 255 then
+            local ir = select(1, d:getPixel(8, 8))
+            assert(close(ir, .4, .005), "Balde atravessou ilha desconectada")
+        end
+        assert(E.undo(p), "Undo do balde tolerante falhou")
+        local old = p.layers[1].pixels
+        assert(close(select(1, old:getPixel(2, 3)), .4, .005),
+               "Undo não restaurou pixel fonte do balde")
+        assert(E.redo(p), "Redo do balde tolerante falhou")
+        assert(select(3, p.layers[1].pixels:getPixel(2, 3)) > .99,
+               "Redo não restaurou preenchimento tolerante")
+    end
+
+    -- Cores novas próximas à cor original NÃO podem recircular pelo
+    -- flood-fill. Tampouco cria histórico se o resultado for idêntico.
+    local empty = E.new(16, 16)
+    E.sync(empty, {layers = {{id = 1, visible = true, opacity = 100}}})
+    empty.dirty = false
+    assert(E.fill(empty, 1, 0, 0, {1, 0, 0}, .05, false, nil, 255),
+           "Balde opaco parcial não concluiu preenchimento com tolerância 255")
+    local _, _, _, partial_alpha = empty.layers[1].pixels:getPixel(15, 15)
+    assert(close(partial_alpha, .05, .005) and #empty.undo == 1,
+           "Balde parcial não preservou alfa ou criou múltiplos históricos")
+    assert(E.undo(empty) and E.redo(empty),
+           "Histórico do balde parcial não é reversível")
+
+    local p = fixture()
+    local d = p.layers[1].pixels
+    local rgb = {.4, .2, .3}
+    assert(E.fill(p, 1, 2, 3, rgb, 1, false, nil, 16),
+           "Balde deve alterar vizinho quando cor seed já é destino")
+    assert(close(select(1, d:getPixel(3, 3)), .4, .005) and
+           close(select(2, d:getPixel(4, 3)), .2, .005),
+           "Balde tolerante não recoloriu vizinhos próximos")
+    p.dirty = false
+    local before = #p.undo
+    assert(not E.fill(p, 1, 2, 3, rgb, 1, false, nil, 16) and
+           not p.dirty and #p.undo == before,
+           "Preenchimento idêntico criou raster dirty ou histórico")
+    local selection = assert(Selection.rectangle(12, 12, 2, 3, 3, 3))
+    local restricted = fixture()
+    assert(E.fill(restricted, 1, 2, 3, {0, 0, 1}, 1,
+                  false, selection, 255),
+           "Balde tolerante não preencheu área selecionada")
+    assert(select(3, restricted.layers[1].pixels:getPixel(3, 3)) > .99 and
+           close(select(1, restricted.layers[1].pixels:getPixel(4, 3)),
+                 .4, .005),
+           "Balde tolerante escapou dos limites da seleção")
+    local lock = fixture()
+    assert(E.fill(lock, 1, 2, 3, {0, 1, 0}, 1,
+                  true, nil, 255), "Balde Alpha Lock tolerante falhou")
+    assert(close(select(4, lock.layers[1].pixels:getPixel(6, 3)), .75) and
+           close(select(4, lock.layers[1].pixels:getPixel(0, 0)), 0),
+           "Balde tolerante ignorou restrição de alfa do Alpha Lock")
+    for _, bad in ipairs({-1, 256, .5, "16", math.huge}) do
+        local invalid, reason = E.fill(fixture(), 1, 2, 3,
+                                      {1, 1, 1}, 1, false, nil, bad)
+        assert(not invalid and reason, "Balde aceitou tolerância inválida")
+    end
+    local too_large, reason = E.fill({w = 1025, h = 1025}, 1, 0, 0,
+                                      {0, 0, 0}, 1, false, nil, 16)
+    assert(not too_large and reason,
+           "Balde tolerante perdeu limite de 1.048.576 pixels")
+end
+
 -- Comparação opcional RGB: transparência diferente não separa cores.
 -- Por padrão, RGBA exato continua preservado em todos os algoritmos.
 local function test_magic_wand_rgb_only(E)
@@ -962,6 +1068,149 @@ local function test_magic_wand_diagonal(E)
            "Oito vizinhos ultrapassaram limites ou perderam cantos")
 end
 
+-- Ponte: configuração própria do balde, shortcuts e metadata legado.
+local function test_bucket_tolerance_bridge(Bridge, gallery)
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Bucket RGBA", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Bucket tolerance RGBA")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, color)
+        local mx, my = screen(x, y)
+        assert(Bridge.mousepressed(model, id, mx, my, 1024, 768,
+                                   view, prefs, color, 1, 100, nil))
+        Bridge.mousereleased()
+    end
+    press(3, 3, {100, 50, 75})
+    press(4, 3, {112, 50, 75})
+    press(5, 3, {139, 50, 75})
+    press(10, 10, {100, 50, 75})
+    model.active_tool = "bucket"
+    local notices = {}
+    local function notify(msg) notices[#notices + 1] = msg end
+    local function shortcut(key)
+        local original = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" or k == "lalt" then return true end
+            end
+            return false
+        end
+        local handled = Bridge.keypressed(key, model, notify)
+        love.keyboard.isDown = original
+        return handled
+    end
+    local function artwork_path()
+        local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+        for line in index:gmatch("[^\r\n]+") do
+            if line:find("Bucket tolerance RGBA", 1, true) then
+                local key = line:match("^(art_%d+_%d+)\t")
+                return "lua-artworks/" .. key
+            end
+        end
+        error("Diretório da obra do Balde não foi encontrado")
+    end
+    local function pixel(path, x, y)
+        local image = love.image.newImageData(path .. "/layer_1.png")
+        return image:getPixel(x, y)
+    end
+    assert(Bridge.bucket_tolerance(model) == 0
+           and Bridge.wand_tolerance(model) == 0,
+           "Balde não iniciou com tolerância zero independente da Varinha")
+    press(3, 3, {0, 0, 255})
+    assert(Bridge.save(), "Balde sem persistência inicial")
+    local path = artwork_path()
+    assert(select(3, pixel(path, 3, 3)) > .99 and
+           close(select(1, pixel(path, 4, 3)), 112 / 255, .02),
+           "Balde padrão modificou cor próxima")
+    assert(Bridge.undo(), "Balde não gerou undo")
+    local old_mask_undo = Bridge.selection_history_snapshot().undo
+    assert(shortcut("pageup") and Bridge.bucket_tolerance(model) == 16
+           and Bridge.wand_tolerance(model) == 0
+           and Bridge.selection_history_snapshot().undo == old_mask_undo
+           and notices[#notices]:find("16/255", 1, true),
+           "Ctrl+Alt+PageUp não ajustou tolerância independentemente")
+    press(3, 3, {0, 0, 255})
+    assert(Bridge.save(), "Balde tolerante não salvou")
+    assert(select(3, pixel(path, 4, 3)) > .99 and
+           close(select(1, pixel(path, 5, 3)), 139 / 255, .02)
+           and close(select(1, pixel(path, 10, 10)), 100 / 255, .02),
+           "Balde tolerante ultrapassou cor fronteira ou ilha")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Preenchimento tolerante não manteve histórico raster")
+    assert(shortcut("pagedown") and Bridge.bucket_tolerance(model) == 0)
+    assert(Bridge.adjust_bucket_tolerance(model, 999)
+           and Bridge.bucket_tolerance(model) == 255
+           and Bridge.adjust_bucket_tolerance(model, -239)
+           and Bridge.bucket_tolerance(model) == 16,
+           "Balde não limitou tolerância entre 0 e 255")
+    assert(shortcut("home") and Bridge.bucket_tolerance(model) == 0,
+           "Ctrl+Alt+Home não restaurou tolerância padrão")
+    assert(not Bridge.adjust_bucket_tolerance(model, 1.5)
+           and not Bridge.adjust_bucket_tolerance({screen="gallery"}, 16),
+           "Balde permitiu ajuste fora do editor ou fracionário")
+    assert(Bridge.adjust_bucket_tolerance(model, 32) and Bridge.save())
+    local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
+    assert(metadata:match("\t0\t0\t0\t0\t0\t32$"),
+           "Balde não persistiu tolerância na oitava coluna")
+    local other = gallery:add_artwork(16, 16, "Other Bucket")
+    Bridge.create(model, other, gallery)
+    assert(Bridge.bucket_tolerance(model) == 0,
+           "Tolerância do balde vazou entre obras")
+    Bridge.open(model, id)
+    assert(Bridge.bucket_tolerance(model) == 32
+           and Bridge.wand_tolerance(model) == 0,
+           "Reabertura não restaurou tolerância do balde")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Preferência do balde quebrou histórico raster após abertura")
+    assert(love.filesystem.write(path .. "/document.tsv",
+                                 "1\ttransparent_dark\t16\t1\t1\t1\t1"))
+    Bridge.open(model, id)
+    assert(Bridge.bucket_tolerance(model) == 0 and
+           Bridge.wand_tolerance(model) == 16
+           and Bridge.wand_global(model) and Bridge.wand_sample_all(model)
+           and Bridge.wand_diagonal(model) and Bridge.wand_rgb_only(model),
+           "Legado de sete colunas perdeu configuração da Varinha")
+    for _, previous in ipairs({
+        "1\ttransparent_dark\t16\t1\t1\t1",
+        "1\ttransparent_dark\t16\t1\t1",
+        "1\ttransparent_dark\t16\t1",
+        "1\ttransparent_dark\t16",
+        "1\ttransparent_dark"
+    }) do
+        assert(love.filesystem.write(path .. "/document.tsv", previous))
+        Bridge.open(model, id)
+        assert(Bridge.bucket_tolerance(model) == 0,
+               "Documento legado alterou tolerância padrão do balde")
+    end
+    assert(love.filesystem.write(path .. "/document.tsv",
+               "1\ttransparent_dark\t16\t1\t1\t1\t1\tbroken"))
+    Bridge.open(model, id)
+    assert(Bridge.bucket_tolerance(model) == 0 and
+           Bridge.wand_tolerance(model) == 16 and Bridge.wand_global(model)
+           and Bridge.wand_rgb_only(model),
+           "Valor inválido do Balde alterou preferências da Varinha")
+    assert(Bridge.bucket_tolerance({screen = "gallery"}) == nil)
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Ponte: atalho, independência de modos, persistência e compatibilidade.
 local function test_magic_wand_rgb_only_bridge(Bridge, gallery)
     local Selection = require("lua_selection")
@@ -1054,7 +1303,7 @@ local function test_magic_wand_rgb_only_bridge(Bridge, gallery)
     assert(key, "Diretório da obra RGB-only não encontrado")
     local path = "lua-artworks/" .. key
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t16\t1\t0\t0\t1$"),
+    assert(saved:match("\t16\t1\t0\t0\t1\t0$"),
            "document.tsv não gravou sétima coluna RGB-only")
     local image = love.image.newImageData(path .. "/layer_1.png")
     local _, _, _, alpha = image:getPixel(5, 3)
@@ -1207,7 +1456,7 @@ local function test_magic_wand_diagonal_bridge(Bridge, gallery)
     assert(key, "Pasta do teste diagonal ausente")
     local path = "lua-artworks/" .. key
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t16\t0\t0\t1\t0$"),
+    assert(saved:match("\t16\t0\t0\t1\t0\t0$"),
            "Documento não salvou sexta coluna de conectividade")
     local other = gallery:add_artwork(16, 16, "Wand another diagonal")
     Bridge.create(model, other, gallery)
@@ -1498,7 +1747,7 @@ local function test_magic_wand_sample_all_bridge(Bridge, gallery)
     assert(key, "Não encontrou pasta da amostragem composta")
     local path = "lua-artworks/" .. key
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t1\t1\t0\t0$"),
+    assert(metadata:match("\t0\t1\t1\t0\t0\t0$"),
            "Preferência global e amostragem composta não persistiram")
     local layer1 = love.image.newImageData(path .. "/layer_1.png")
     local layer2 = love.image.newImageData(path .. "/layer_2.png")
@@ -1670,7 +1919,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
     assert(key, "Obra temporária do modo global não foi localizada")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t32\t1\t0\t0\t0$"),
+    assert(meta:match("\t32\t1\t0\t0\t0\t0$"),
            "document.tsv não registrou modo global e tolerância")
     local other = gallery:add_artwork(16, 16, "Wand other mode")
     Bridge.create(model, other, gallery)
@@ -1694,7 +1943,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
            not Selection.contains(Bridge.selection_snapshot(), 2, 2),
            "Modo contíguo deixou escapar pixels de regiões separadas")
     assert(Bridge.save())
-    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0\t0$"))
+    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0\t0\t0$"))
     assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32"))
     Bridge.open(model, id)
     assert(Bridge.wand_tolerance(model) == 32 and
@@ -1886,7 +2135,7 @@ local function test_magic_wand_tolerance_bridge(Bridge, gallery)
     assert(key, "Não encontrou diretório da varinha")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t48\t0\t0\t0\t0$"),
+    assert(meta:match("\t48\t0\t0\t0\t0\t0$"),
            "document.tsv não persistiu tolerância nem modo contíguo")
     -- Abrir outra obra não pode herdar a tolerância desta.
     local id2 = gallery:add_artwork(16, 16, "Temporary wand")
@@ -3629,6 +3878,7 @@ function love.load()
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
     checkpoint("magic wand global color across disconnected regions")
+    test_bucket_tolerance(E)
     test_magic_wand_rgb_only(E)
     test_magic_wand_diagonal(E)
     test_magic_wand_composite_source(E)
@@ -3799,6 +4049,7 @@ function love.load()
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge magic wand global mode and persistence")
+    test_bucket_tolerance_bridge(Bridge, gallery)
     test_magic_wand_rgb_only_bridge(Bridge, gallery)
     test_magic_wand_diagonal_bridge(Bridge, gallery)
     test_magic_wand_sample_all_bridge(Bridge, gallery)
