@@ -1,4 +1,11 @@
 -- Teste de pixels e persistência reais, executado no LÖVE 11.5 do CI Windows.
+-- Testes automatizados não podem ficar presos na tela de erro gráfica do LÖVE.
+function love.errorhandler(message)
+    io.stderr:write("LUA_TEST_ERROR: ", tostring(message), "\n", debug.traceback(), "\n")
+    io.stderr:flush()
+    return function() return 1 end
+end
+
 local function close(a, b, epsilon) return math.abs(a - b) <= (epsilon or 0.02) end
 function love.load()
     local E = require("lua_engine")

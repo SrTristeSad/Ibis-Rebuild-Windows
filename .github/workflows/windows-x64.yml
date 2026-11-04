@@ -80,8 +80,20 @@ jobs:
         run: |
           Copy-Item bridge/lua_engine.lua tests/lua_paint/lua_engine.lua -Force
           Copy-Item bridge/lua_bridge.lua tests/lua_paint/lua_bridge.lua -Force
-          & "$env:LOVE_RUNTIME/lovec.exe" (Resolve-Path 'tests/lua_paint').Path
-          if ($LASTEXITCODE -ne 0) { throw "Lua engine test failed ($LASTEXITCODE)" }
+          $path = (Resolve-Path 'tests/lua_paint').Path
+          $stdout = Join-Path $env:RUNNER_TEMP 'lua-paint-stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'lua-paint-stderr.log'
+          $process = Start-Process -FilePath "$env:LOVE_RUNTIME/lovec.exe" `
+            -ArgumentList @($path) -PassThru `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $finished = $process.WaitForExit(60000)
+          if (!$finished) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+          if (!$finished) { throw 'Lua pixel engine test timeout (60 seconds)' }
+          if ($process.ExitCode -ne 0) { throw "Lua engine test failed ($($process.ExitCode))" }
 
       - name: Validate original UI navigation through LÖVE
         shell: pwsh
