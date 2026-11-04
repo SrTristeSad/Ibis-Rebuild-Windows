@@ -302,11 +302,20 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
             end
             return true
         end
+        local action = "rectangle"
+        if moving then
+            if love.keyboard.isDown("lalt", "ralt") then
+                action = "rotate_free"
+            elseif love.keyboard.isDown("lshift", "rshift") then
+                action = "scale_free"
+            else
+                action = "move"
+            end
+        end
         gesture = {
-            kind = moving and "move" or "rectangle",
-            x = px, y = py, w = w, h = h, view = view,
-            preferences = preferences,
-            layer = info and info.id, end_x = px, end_y = py
+            kind = action, x = px, y = py, w = w, h = h, view = view,
+            preferences = preferences, layer = info and info.id,
+            end_x = px, end_y = py
         }
         if not moving then selection = nil end
         return true
@@ -406,6 +415,26 @@ function Bridge.mousereleased(model, rx, ry, scale)
     elseif d.kind == "move" and selection and d.layer then
         return Engine.move_selection(project, d.layer, selection,
             d.end_x - d.x, d.end_y - d.y)
+    elseif d.kind == "rotate_free" and selection and d.layer then
+        -- Alt+arrastar dentro da seleção: ângulo contínuo em torno do centro.
+        local cx = (selection.min_x + selection.max_x + 1) / 2
+        local cy = (selection.min_y + selection.max_y + 1) / 2
+        local begin_x, begin_y = d.x - cx, d.y - cy
+        local end_x, end_y = d.end_x - cx, d.end_y - cy
+        if begin_x * begin_x + begin_y * begin_y < 0.25 or
+           end_x * end_x + end_y * end_y < 0.25 then return false end
+        local degrees = math.deg(math.atan2(end_y, end_x) -
+                                 math.atan2(begin_y, begin_x))
+        return Engine.affine_selection(project, d.layer, selection,
+                                       degrees, 1, 1)
+    elseif d.kind == "scale_free" and selection and d.layer then
+        -- Shift+arrastar: escalas horizontal/vertical independentes.
+        local sw = selection.max_x - selection.min_x + 1
+        local sh = selection.max_y - selection.min_y + 1
+        local sx = math.max(0.1, math.min(8, 1 + (d.end_x - d.x) / sw))
+        local sy = math.max(0.1, math.min(8, 1 + (d.end_y - d.y) / sh))
+        return Engine.affine_selection(project, d.layer, selection,
+                                       0, sx, sy)
     end
     if mask then selection = mask end
     return mask ~= nil, reason

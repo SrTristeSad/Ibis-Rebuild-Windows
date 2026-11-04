@@ -62,6 +62,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Os atalhos são específicos desta integração Lua, sem novos controles
   visuais na interface Ibis-Lua. Undo/redo restaura pixels e geometria
   enquanto a mesma seleção permanecer ativa.
+- **Transformação livre por gesto** na ferramenta Transformar:
+  **Alt + arrastar dentro da seleção** gira pelo ângulo definido entre
+  a posição inicial e final do ponteiro em torno do centro geométrico;
+  **Shift + arrastar dentro da seleção** redimensiona horizontal e
+  verticalmente de maneira independente, conforme o deslocamento do mouse.
+  O gesto normal sem modificadores continua movendo pixels. O resultado
+  aparece ao soltar o botão (não há pré-visualização durante o arraste).
+  A API `Engine.affine_selection(project,id,selection,angle,sx,sy)`
+  também aceita ângulo fracionário em graus e fatores X/Y contínuos.
+  A amostragem é nearest-neighbour, com recorte pela máscara transformada,
+  composição RGBA source-over e histórico reversível em um único passo.
 - Undo/redo do raster por traço pelos botões existentes, Ctrl+Z / Ctrl+Y.
   O histórico raster agora persiste por obra em `history.tsv` e PNGs de
   snapshots com geração identificada. Ao reabrir, recupera as pilhas de
@@ -84,8 +95,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - **Não** há paridade com os algoritmos do ibisPaint oficial.
 - Pincel circular, borracha, balde, conta-gotas, Alpha Lock, recorte básico por
   Clipping e os nove modos de mesclagem visíveis têm implementação independente.
-  Filtros, seleção por tolerância ajustável, rotação livre e escala
-  arbitrária, formas, estabilização, pressão, máscaras adicionais, efeitos,
+  Filtros, seleção por tolerância ajustável, pré-visualização de
+  transformação, interpolação bilinear, formas, estabilização,
+  pressão, máscaras adicionais, efeitos,
   texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
@@ -108,7 +120,11 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   pixels da camada ativa, sem novos objetos ou camadas. Recortes de seleção,
   movimento, rotação e escala estão limitados a 1.048.576 pixels por documento;
   a varinha compara RGBA com tolerância mínima de quantização. A rotação
-  é apenas ortogonal (90°) e a escala apenas 50%/200% (nearest-neighbour).
+  admite rotação livre e escalas independentes por gesto na ferramenta
+  Transformar; os atalhos anteriores de 90° e 50%/200% continuam disponíveis.
+  Os fatores da API livre devem estar entre 0,1 e 8 por eixo.
+  A amostragem nearest-neighbour pode produzir serrilhado e perda de
+  detalhes em reduções: não representa um filtro de alta qualidade.
   Operações cuja nova área exceda as bordas da tela falham sem cortar pixels.
   O movimento é deslocamento inteiro, limitado para manter a máscara no canvas.
   O contorno visual tem teto de 10.000 segmentos para não sobrecarregar
@@ -142,6 +158,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   restrição de pintura à seleção, mover pixels, clipboard interno
   congelado, cut/paste source-over, giros 90°, escala 50%/200%,
   limites de tela e desfazer/refazer com geometria da seleção.
+  Testes adicionais cobrem ângulos livres, escalas X/Y independentes,
+  pixels RGBA preservados, parâmetros inválidos, operações nas bordas
+  e gestos Alt/Shift reais na ponte com undo/redo.
   O CI também verifica roundtrip PNG da máscara, desmarcação com remoção
   do arquivo e rejeição de PNG truncado ou com dimensões incompatíveis.
   O histórico persistente tem testes de undo/redo após reabertura,
