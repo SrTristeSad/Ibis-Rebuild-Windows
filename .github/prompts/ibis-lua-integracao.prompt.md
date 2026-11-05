@@ -23,6 +23,19 @@ sem callback não cria histórico automaticamente, preservando seu
 contrato com `Engine.begin_stroke` explícito. Testar pixels,
 arraste real da UI, máscaras, undo/redo e histórico persistido.
 Não alterar atalhos, assets ou o submódulo.
+**Troca de ferramenta/camada com arraste ainda ativo**:
+`Bridge.mousemoved` e `Bridge.mousereleased` verificam
+`stroke_context_valid` e `gesture_context_valid` antes
+de continuar pintura ou finalizar transformações/seleções.
+Uma pincelada usa a ferramenta, camada, máscara e Alpha Lock
+do mousepress; se a ferramenta ou camada ativa for trocada,
+a camada ficar oculta/bloqueada, Alpha Lock mudar ou a
+referência da máscara mudar, cancelar o restante do gesto.
+Manter os pixels já pintados e seu undo único, sem criar
+novas escritas após a troca. Uma prévia de movimento/giro/
+escala desatualizada não pode virar commit; retângulo e laço
+inacabados restauram a seleção prévia. Testar mousemove e
+mouseup, duas camadas, máscara, PNG e undo/redo, sem UI nova.
 **Um novo clique interrompe o gesto antigo**:
 `Bridge.mousepressed` invoca `interrupt_active_gesture()`
 APÓS validar que a ferramenta e o clique no canvas são válidos,
