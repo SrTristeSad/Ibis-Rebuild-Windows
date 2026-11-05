@@ -219,6 +219,184 @@ local function test_feather_paint(E)
            "Contração não preservou pesos graduais da máscara")
 end
 
+-- A ponte nao deve perder a ponta do traco ao sair do canvas,
+-- nem ligar pontos distantes depois de um passeio fora da tela.
+local function test_stroke_canvas_edge_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Stroke edges", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Stroke edge clipping")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function position(x, y)
+        local co, si = math.cos(view.rotation), math.sin(view.rotation)
+        local dx, dy = x + .5 - 8, y + .5 - 8
+        return 62 + (1024 - 62 - 34) / 2 + (co * dx - si * dy) * 11,
+               62 + (768 - 160) / 2 + (si * dx + co * dy) * 11
+    end
+    local function press(x, y, opacity)
+        local px, py = position(x, y)
+        assert(Bridge.mousepressed(model, id, px, py, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1,
+                                   opacity or 100, nil),
+               "Mousepress nao iniciou traco de borda")
+    end
+    local function move(x, y)
+        local px, py = position(x, y)
+        assert(Bridge.mousemoved(model, px, py, 1),
+               "Mousemove ignorou arraste fora do canvas")
+    end
+    local function release(x, y)
+        local px, py = position(x, y)
+        Bridge.mousereleased(model, px, py, 1)
+    end
+    local path
+    local function snapshot()
+        assert(Bridge.save())
+        if not path then
+            local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+            for line in index:gmatch("[^\r\n]+") do
+                if line:find("Stroke edge clipping", 1, true) then
+                    local key = assert(line:match("^(art_%d+_%d+)\t"))
+                    path = "lua-artworks/" .. key
+                end
+            end
+        end
+        assert(path, "Obra de teste de borda nao encontrada")
+        return love.image.newImageData(path .. "/layer_1.png")
+    end
+    local function painted(data, x, y)
+        local r, _, _, a = data:getPixel(x, y)
+        return r > .99 and a > .99
+    end
+    local function empty(data, x, y)
+        return close(select(4, data:getPixel(x, y)), 0)
+    end
+
+    -- Sair à direita com mousemove deve chegar ao ultimo pixel.
+    press(4, 4)
+    move(20, 4)
+    local picture = snapshot()
+    for x = 4, 15 do
+        assert(painted(picture, x, 4),
+               "Pincel nao alcancou a borda direita: " .. x)
+    end
+    -- Ainda fora do canvas: atualizar o cursor cru, mas nao pintar.
+    move(20, 10)
+    picture = snapshot()
+    assert(empty(picture, 12, 7) and empty(picture, 15, 7),
+           "Ponte pintou linha enquanto cursor estava fora")
+    -- Reentrar pela direita nao cria atalho diagonal desde (15,4).
+    move(14, 10)
+    release(14, 10)
+    picture = snapshot()
+    assert(painted(picture, 14, 10) and painted(picture, 15, 10)
+           and empty(picture, 12, 7) and empty(picture, 13, 8),
+           "Reentrada ligou pontos por diagonal indevida")
+    assert(Bridge.undo(), "Pincel na borda perdeu undo")
+    picture = snapshot()
+    assert(empty(picture, 15, 4) and empty(picture, 14, 10),
+           "Undo nao removeu os dois trechos da mesma pincelada")
+    assert(Bridge.redo(), "Pincel na borda perdeu redo")
+
+    -- Soltar fora, sem mousemoved, conclui até o limite esquerdo.
+    press(7, 12)
+    release(-4, 12)
+    picture = snapshot()
+    assert(painted(picture, 0, 12) and painted(picture, 7, 12)
+           and empty(picture, 0, 11),
+           "Release fora do canvas descartou ultima parte do traco")
+    assert(Bridge.undo())
+    picture = snapshot()
+    assert(empty(picture, 0, 12) and painted(picture, 15, 4),
+           "Undo da borda esquerda alterou outra pincelada")
+    assert(Bridge.redo())
+
+    -- Cima e baixo, com cursor fora; clamping nao deve pintar
+    -- por acidente na outra borda.
+    press(9, 6)
+    move(9, -6)
+    release(9, -6)
+    picture = snapshot()
+    assert(painted(picture, 9, 0) and empty(picture, 10, 0),
+           "Borda superior nao recebeu segmento recortado")
+    press(11, 9)
+    release(11, 22)
+    picture = snapshot()
+    assert(painted(picture, 11, 15) and empty(picture, 10, 15),
+           "Borda inferior nao recebeu segmento recortado")
+
+    -- Um movimento repetido fora da tela nao deve aumentar o alfa:
+    -- compara PNG antes e depois de soltar na mesma posicao.
+    press(6, 2, 50)
+    move(20, 2)
+    picture = snapshot()
+    local before = select(4, picture:getPixel(15, 2))
+    assert(before > 0 and before < 1,
+           "Traço de opacidade parcial nao chegou ate a borda")
+    move(20, 2)
+    release(20, 2)
+    picture = snapshot()
+    assert(close(select(4, picture:getPixel(15, 2)), before, 1 / 255),
+           "Repetir mousemove/release fora multiplicou opacidade")
+
+    -- Uma selecao limita a area pintada mesmo quando a ponta do
+    -- segmento cru esta fora do canvas.
+    model.active_tool = "transform"
+    press(11, 7)
+    release(12, 7)
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 2 and Selection.contains(selected, 11, 7)
+           and Selection.contains(selected, 12, 7))
+    model.active_tool = "brush"
+    press(10, 7)
+    release(20, 7)
+    picture = snapshot()
+    assert(painted(picture, 11, 7) and painted(picture, 12, 7)
+           and empty(picture, 15, 7) and empty(picture, 10, 7),
+           "Clipping do traco perdeu restricao de selecao")
+    assert(Bridge.undo() and Bridge.redo())
+    Bridge.clear_selection()
+
+    -- O clipping segue funcionando com canvas rotacionado: a
+    -- coordenada externa precisa passar pela mesma matriz inversa.
+    view.rotation = math.pi / 2
+    press(3, 3)
+    release(-5, 3)
+    picture = snapshot()
+    assert(painted(picture, 0, 3) and painted(picture, 3, 3)
+           and empty(picture, 0, 2),
+           "Transformacao rotacionada nao recortou borda correta")
+    assert(Bridge.undo() and Bridge.redo())
+
+    -- Sem paint em um arraste inteiro fora, manter o redo existente.
+    assert(Bridge.undo())
+    model.active_tool = "eraser"
+    view.rotation = 0
+    press(2, 14)
+    move(-5, 14)
+    release(-5, 14)
+    assert(Bridge.redo(), "Borracha fora de pixels apagou redo valido")
+
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico de tracos na borda nao persistiu")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Pintura no mouseup: o último segmento precisa ser aplicado mesmo
 -- sem mousemoved; eventos repetidos não acumulam alfa adicional.
 local function test_stroke_release_bridge(Bridge, gallery)
@@ -5506,6 +5684,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("brush and eraser strokes clipped to canvas edges")
+    test_stroke_canvas_edge_bridge(Bridge, gallery)
     checkpoint("brush and eraser final segment on release")
     test_stroke_release_bridge(Bridge, gallery)
     checkpoint("lazy brush and eraser history")
