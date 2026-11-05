@@ -12,6 +12,20 @@
 - Não adicione chamadas FFI à DLL C++, rebuild_core.dll, dependência WebView ou um mecanismo de pintura oculto em C++.
 - native/, app/, CMakeLists.txt e scripts Python legados são apenas referência/histórico e não integram o build Lua ativo.
 - Não afirme que tudo está funcional: documente recursos conectados, limitações e funções ainda simuladas.
+- Pincel e borracha com histórico tardio: `Engine.stroke(project,id,x0,y0,x1,y1,diameter,rgb,alpha,eraser,alpha_lock,selection,on_first_change)`
+  tem callback final opcional, invocado **uma vez por chamada de
+  stroke e ANTES da primeira escrita efetiva**. O callback da ponte
+  captura `Engine.begin_stroke` no máximo uma vez por gesto de
+  mouse, com `drawing.history_started`. Gestos no-op (borracha
+  em transparência, opacidade zero, Alpha Lock em pixel vazio,
+  pintura RGB idêntica, seleção sem cobertura ou alteração abaixo
+  de meio byte) não devem criar dirty, upload de textura ou
+  snapshot; não devem descartar um redo válido. Chamadas diretas
+  a `Engine.stroke` sem callback mantêm o contrato de histórico
+  explícito (não criam undo automaticamente). Arrastes que começam
+  sem efeito e modificam pixels depois devem capturar o estado
+  inteiro da camada antes da primeira mudança, um único undo para
+  toda a pincelada. Testar também restauração, persistência e Alpha Lock.
 - Balde Lua: `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance)`
   recebe tolerância opcional 0..255 por canal RGBA, 0 como padrão
   historicamente exato (margem 1/510). Deve descobrir primeiro toda
