@@ -32,6 +32,12 @@ pixels, opacidade zero, cobertura de seleção nula ou pintura idêntica não
 criam estado sujo nem invalidam `Refazer`. A detecção usa margem de
 quantização compatível com RGBA 8-bit; um arraste alterado conserva
 um único passo de Desfazer. Não há mudança no desenho da interface.
+**O último trecho do pincel e da borracha é aplicado também no evento
+de soltar o mouse**: se não houver um último evento de movimento,
+a ponta do traço ainda chega à posição final. Movimentos repetidos
+sem deslocamento não reaplicam tinta nem acumulam opacidade.
+O fechamento usa a mesma máscara, camada e histórico único do
+arraste. O comportamento das seleções não foi alterado.
 Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
 (Ctrl+C/X/V), rotação de 90° (Ctrl+Shift+R/L) e escala 50%/200%
 (Ctrl+Shift+Down/Up). Com Transformar selecionado, Alt+arrastar dentro
