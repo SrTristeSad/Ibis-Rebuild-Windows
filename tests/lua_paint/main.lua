@@ -873,7 +873,7 @@ local function test_bucket_diagonal(E)
     local masked = fixture()
     local mask = assert(Selection.rectangle(12, 12, 2, 2, 4, 4))
     assert(E.fill(masked, 1, 2, 2, {0, 1, 0}, 1,
-                  false, mask, 255, false, false, true),
+                  false, mask, 0, false, false, true),
            "Balde diagonal nao respeitou a selecao")
     assert(green_count(masked) == 3
            and close(select(1, masked.layers[1].pixels:getPixel(4, 5)),
