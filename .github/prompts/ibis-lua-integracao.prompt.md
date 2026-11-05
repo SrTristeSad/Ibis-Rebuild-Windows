@@ -24,9 +24,17 @@ contrato com `Engine.begin_stroke` explícito. Testar pixels,
 arraste real da UI, máscaras, undo/redo e histórico persistido.
 Não alterar atalhos, assets ou o submódulo.
 **Segmento final no mouseup do pincel/borracha**:
-`Bridge.mousereleased(model,rx,ry,scale)` deve, quando houver
-coordenadas finais válidas, pintar da última posição registrada em
-`drawing` até a posição do mouseup antes de descartar o gesto.
+`Bridge.mousereleased(model,rx,ry,scale)` deve processar as
+coordenadas finais do gesto, mesmo quando estão fora do canvas,
+e pintar apenas o trecho interno antes de descartar `drawing`.
+Pincel/borracha armazenam `drawing.raw_x/raw_y` fora da obra.
+`canvas_point(..., true)` é permitido somente para o percurso da
+tinta, não nos cliques, conta-gotas nem seleções. Recortar cada
+segmento à área válida em `clip_stroke_segment` (Liang–Barsky),
+sem extrapolar a borda e sem gerar longa diagonal artificial
+quando o cursor retorna à obra após percorrer área externa.
+Atualizar a posição bruta também para segmentos 100% externos.
+Preservar rotação, Alpha Lock, máscara e um snapshot por gesto.
 Movimentos e releases repetidos na mesma posição (diferença menor
 ou igual a 0,005 pixel) não podem reaplicar dabs nem acumular
 opacidade. Reutilizar a mesma função auxiliar `continue_stroke`
