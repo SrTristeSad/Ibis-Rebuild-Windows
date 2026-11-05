@@ -1267,9 +1267,10 @@ end
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" then
-        if gesture then
-            -- Esc cancela a seleção/transformação em curso, sem desmarcar
-            -- a seleção anterior nem criar um passo de histórico.
+        if gesture or drawing then
+            -- Esc interrompe o gesto em curso (inclusive pincel/borracha)
+            -- sem remover a seleção já confirmada. Pixels que foram
+            -- pintados antes do Esc mantêm seu histórico reversível.
             interrupt_active_gesture()
             return true
         elseif selection then
