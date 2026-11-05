@@ -57,6 +57,13 @@ O fechamento usa a mesma máscara, camada e histórico único do
 arraste. O comportamento das seleções não foi alterado.
 **Quando o cursor cruza as bordas do canvas**, pincel e borracha
 completam o trecho até a borda sem modificar pixels fora da obra.
+**Pincel e borracha podem entrar numa seleção após iniciar
+fora dela.** O clique inicial sem tinta mantém o gesto aberto; só
+os pixels cobertos pela máscara recebem cor ou apagamento quando
+o traço a alcança. Pincéis largos também podem pintar a parte
+selecionada mesmo com o centro do círculo fora da máscara.
+Gestos que nunca tocam a seleção não consomem Desfazer/Refazer.
+O Balde continua exigindo a semente dentro da seleção.
 **Pincéis largos continuam tocando a borda mesmo com o centro
 fora do canvas**: o recorte considera o raio real do círculo,
 não apenas sua posição central. A borracha usa a mesma geometria.
