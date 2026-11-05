@@ -458,7 +458,6 @@ local function test_selection_command_interrupt_bridge(Bridge, gallery)
     -- Feather durante um replace pendente deve agir sobre a máscara
     -- anterior (aqui, restaurada para o retângulo de 3x3).
     assert(Bridge.selection_undo() and mask().count == 247)
-    assert(Bridge.selection_undo() and mask().count == 247)
     assert(Bridge.selection_undo() and mask().count == 9)
     press(10, 10)
     assert(not mask())
