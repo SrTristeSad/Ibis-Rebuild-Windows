@@ -505,7 +505,15 @@ end
 
 local function paint(p, d, x, y)
     Engine.stroke(p, d.layer, d.x, d.y, x, y, d.size, d.color,
-                  d.opacity, d.eraser, d.alpha_lock, selection)
+                  d.opacity, d.eraser, d.alpha_lock, selection,
+                  function()
+                      -- O snapshot só existe se algum pixel realmente
+                      -- mudar. Um gesto inteiro sem efeito preserva redo.
+                      if not d.history_started then
+                          Engine.begin_stroke(p, d.layer)
+                          d.history_started = true
+                      end
+                  end)
     d.x, d.y = x, y
 end
 
@@ -632,8 +640,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         return true
     end
 
-    Engine.begin_stroke(p, info.id)
     drawing = {layer = info.id, x = px, y = py, w = w, h = h,
+               history_started = false,
                view = view, preferences = preferences,
                color = rgb, size = size, opacity = normalized_opacity,
                eraser = tool == "eraser", alpha_lock = info.alpha_lock}
