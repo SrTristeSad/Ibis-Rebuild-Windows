@@ -359,6 +359,23 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O no-op do pincel e da borracha evita modificações sub-byte por
   comparação RGBA 8-bit; isso não implementa acúmulo de opacidade
   abaixo da precisão do raster ou estabilização de traços.
+- **Alterações de contexto durante o gesto**: `Bridge.mousemoved`
+  e `Bridge.mousereleased` validam ferramenta, camada ativa e
+  estado do editor antes de continuar um stroke ou confirmar
+  seleção/transformação. Pincel/borracha também verificam que
+  a camada não ficou oculta/bloqueada, que Alpha Lock não mudou,
+  que a camada ainda existe e que a referência da máscara ativa
+  continua a mesma do mousepress. Em caso de mudança, o gesto
+  é interrompido via `interrupt_active_gesture`, sem apagar
+  a tinta já pintada nem seu snapshot único de histórico.
+  A máscara inicial também é usada em `Engine.stroke` para
+  não misturar coberturas durante o mesmo gesto. Para move,
+  rotate e scale, mudanças de ferramenta, camada, bloqueio,
+  visibilidade ou Alpha Lock descartam a prévia antes de um
+  commit tardio. Retângulos e laços inacabados restauram a
+  seleção original. Testes LÖVE cobrem as mudanças durante
+  mousemoved e mouseup, duas camadas, histórico, prévia GPU
+  e persistência do PNG.
 - **Um novo mousepress válido substitui o gesto anterior**:
   após validar ferramenta, modelo e coordenada inicial dentro
   do canvas, `Bridge.mousepressed` chama
