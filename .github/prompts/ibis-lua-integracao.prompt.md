@@ -138,6 +138,24 @@ RGBA preservando todos os campos anteriores. Sem controles novos,
 sem DLL própria. Testar alfas diferentes, global/contíguo,
 tolerância, no-op, Undo/Redo, Alpha Lock, seleção, dados inválidos,
 atalho Ctrl+Alt+M, reabertura e isolation por obra.
+**Conectividade diagonal opcional do Balde**:
+Ctrl+Alt+9 alterna `project.bucket_diagonal` entre false
+(padrão histórico, somente 4 lados) e true (8 vizinhos, incluindo cantos).
+`Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode,rgb_only,diagonal_mode)`
+recebe último booleano opcional. Nil/false mantém exatamente o
+scanline 4-conexo; true percorre segmentos que se tocam por diagonais,
+estendendo a busca uma coluna para cada lado nas linhas acima e abaixo.
+A lista de pontos deve estar completa antes de modificar o raster;
+o conjunto visited protege contra revisitas, mesmo com tolerância
+e opacidade parcial. Modo global ignora diagonal. Preservar máscara,
+feather, Alpha Lock, critérios RGBA/RGB-only, tolerância, limite de 1 Mi,
+um passo de histórico e no-op sem dirty. É independente de
+`wand_diagonal`, da preferência global e da comparação de cores.
+Persistir na 11ª coluna opcional de `document.tsv` (0=4, 1=8);
+legados 2–10 colunas e flag inválida assumem false, sem perder as
+preferências anteriores. Toggle sem alterar pixels ou máscaras.
+Cobrir testes de cantos, bordas, global, tolerância, Alpha Lock,
+seleções, undo/redo, reabertura e Ctrl+Alt+9. Não alterar UI.
 **Comparação RGB-only opcional da Varinha**: Ctrl+Alt+R alterna
 `project.wand_rgb_only`. Com false/nil (padrão) a comparação considera
 R/G/B/A com tolerância independente 0..255 em cada canal. Com true,
