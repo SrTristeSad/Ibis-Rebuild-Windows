@@ -344,6 +344,21 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O no-op do pincel e da borracha evita modificações sub-byte por
   comparação RGBA 8-bit; isso não implementa acúmulo de opacidade
   abaixo da precisão do raster ou estabilização de traços.
+- **Navegação de histórico segura durante mousepress**:
+  `interrupt_active_gesture` encerra `drawing` antes de
+  `Bridge.undo/redo` e antes de `Bridge.selection_undo/redo`.
+  Assim nenhum `mousemoved` ou `mousereleased` atrasado pode
+  pintar/confirmar um gesto após a restauração de pixels/máscaras.
+  Retângulos e laços que ainda estavam em construção restauram
+  a **referência da seleção anterior**, sem criar passo de histórico,
+  inclusive no modo replace que esconde a máscara provisoriamente.
+  Prévias de movimento/giro/escala são descartadas e liberadas
+  sem confirmar pixels. Isso acontece mesmo com pilha vazia:
+  Ctrl+Z/Y encerra o gesto e não deixa uma edição sem histórico.
+  O histórico raster e o de máscaras permanecem independentes,
+  inclusive para salvar e reabrir a obra. Testes reais exercitam
+  undo no meio do arraste, redo com borracha no-op, redo vazio,
+  seleção replace em curso, preview de movimento e mouseup tardio.
 - **Opacidade uniforme por gesto**: para tinta/borracha com opacidade
   menor que 100%, ou seleção suave (feather), a ponte mantém
   `drawing.covered_pixels` durante o arraste e o mouseup.

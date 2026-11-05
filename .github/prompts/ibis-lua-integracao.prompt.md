@@ -23,6 +23,20 @@ sem callback não cria histórico automaticamente, preservando seu
 contrato com `Engine.begin_stroke` explícito. Testar pixels,
 arraste real da UI, máscaras, undo/redo e histórico persistido.
 Não alterar atalhos, assets ou o submódulo.
+**Undo/Redo sem gestos pendentes**:
+`Bridge.undo/redo` e `Bridge.selection_undo/redo` chamam
+`interrupt_active_gesture()` antes de navegar nas pilhas,
+mesmo quando o histórico está vazio. Uma pincelada iniciada
+é encerrada sem descartar seu snapshot válido, para que
+Ctrl+Z desfaça a pincelada inteira e eventos posteriores de
+mouse não repintem o raster. Um retângulo ou laço inacabado
+restitui a máscara original `before_selection_ref` (o
+modo replace esconde a máscara só temporariamente), sem novo
+histórico. Prévia GPU de mover/transformar é liberada sem
+commit. Undo/Redo de máscaras são independentes do raster.
+Testar também redo no-op, pilha vazia, mouseup atrasado,
+atalhos Ctrl+Alt+Z/Y, PNG e histórico persistido.
+Não alterar a interface Ibis-Lua.
 **Opacidade uniforme do pincel e da borracha por gesto**:
 `Engine.stroke(..., on_first_change, covered_pixels)` aceita uma
 tabela opcional esparsa de pixels já modificados. Quando a ponte

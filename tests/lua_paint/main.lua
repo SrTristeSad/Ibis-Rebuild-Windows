@@ -348,6 +348,192 @@ local function test_feather_paint(E)
            "Contração não preservou pesos graduais da máscara")
 end
 
+-- Undo/redo durante um gesto deve encerrar o estado pendente antes
+-- de restaurar pixels/máscaras. Mousemoved/mouseup atrasados são inertes.
+local function test_history_interrupt_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "History interrupt"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "History interrupt test")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(px, py)
+        return 62 + (1024 - 62 - 34) / 2 + (px + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (py + .5 - 8) * 11
+    end
+    local function press(x, y, tool)
+        model.active_tool = tool or "brush"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 2, 100, nil))
+    end
+    local function moved(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local path
+    local function read()
+        assert(Bridge.save())
+        if not path then
+            local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+            for line in index:gmatch("[^\r\n]+") do
+                if line:find("History interrupt test", 1, true) then
+                    path = "lua-artworks/" ..
+                           assert(line:match("^(art_%d+_%d+)\t"))
+                end
+            end
+        end
+        assert(path)
+        return love.image.newImageData(path .. "/layer_1.png")
+    end
+    local function has(pixels, x, y)
+        return select(4, pixels:getPixel(x, y)) > .99
+    end
+    local function empty(pixels, x, y)
+        return close(select(4, pixels:getPixel(x, y)), 0)
+    end
+
+    -- Ctrl+Z durante uma pincelada interrompe o gesto inteiro;
+    -- eventos de mouse ainda na fila não podem repintar seu final.
+    press(2, 2)
+    assert(moved(5, 2))
+    local painted = read()
+    assert(has(painted, 2, 2) and has(painted, 5, 2))
+    assert(Bridge.undo(), "Undo durante o arraste nao desfez o gesto")
+    assert(not moved(9, 2), "Movimento apos undo reativou pincel")
+    release(9, 2)
+    local undone = read()
+    assert(empty(undone, 2, 2) and empty(undone, 5, 2)
+           and empty(undone, 9, 2),
+           "Pincel interrompido escreveu pixels apos undo")
+    assert(Bridge.redo(), "Redo apos interromper gesto falhou")
+    local restored = read()
+    assert(has(restored, 2, 2) and has(restored, 5, 2)
+           and empty(restored, 9, 2),
+           "Redo nao restaurou somente o segmento anterior ao undo")
+
+    -- Redo de historico valido tambem encerra uma borracha no-op,
+    -- sem permitir que eventos posteriores apaguem pixels restaurados.
+    assert(Bridge.undo())
+    press(9, 2, "eraser")
+    assert(Bridge.redo(),
+           "Borracha no-op em andamento apagou redo valido")
+    assert(not moved(2, 2), "Borracha continuou depois do redo")
+    release(2, 2)
+    restored = read()
+    assert(has(restored, 2, 2), "Borracha tardia apagou redo restaurado")
+
+    -- Redo sem itens ainda interrompe o pincel que iniciou alteracoes.
+    press(2, 4)
+    assert(not Bridge.redo(), "Redo sem pilha deveria ser no-op")
+    assert(not moved(9, 4),
+           "Movimento apos redo vazio criou outro trecho")
+    release(9, 4)
+    painted = read()
+    assert(has(painted, 2, 4) and empty(painted, 9, 4),
+           "Interrupcao de redo vazio pintou pixel posterior")
+    assert(Bridge.undo(), "Undo do primeiro dab nao foi preservado")
+    undone = read()
+    assert(empty(undone, 2, 4) and has(undone, 2, 2),
+           "Redo vazio afetou o historico de gesto anterior")
+    assert(Bridge.redo())
+
+    -- Começar um retangulo replace limpa a mascara PROVISORIAMENTE.
+    -- Undo/redo com a seleção ainda em arraste deve primeiro restaurar
+    -- o objeto anterior, sem transformar uma prévia em operação.
+    press(3, 6, "transform")
+    assert(release(5, 6), "Nao criou retangulo inicial")
+    local initial = assert(Bridge.selection_snapshot())
+    assert(initial.count == 3 and Selection.contains(initial, 4, 6))
+    press(10, 10, "transform")
+    assert(not Bridge.selection_snapshot(),
+           "Replace nao iniciou com mascara temporariamente vazia")
+    assert(not Bridge.selection_redo(),
+           "Redo de mascara sem pilha deveria continuar vazio")
+    assert(not moved(12, 12), "Selecao reativou apos redo vazio")
+    release(12, 12)
+    local unchanged = assert(Bridge.selection_snapshot())
+    assert(unchanged.count == 3 and
+           Selection.contains(unchanged, 4, 6) and
+           not Selection.contains(unchanged, 10, 10),
+           "Redo de mascara nao restaurou selecao em construcao")
+
+    press(10, 10, "transform")
+    assert(not Bridge.selection_snapshot())
+    assert(Bridge.selection_undo(), "Undo de mascara durante replace falhou")
+    assert(not Bridge.selection_snapshot(),
+           "Undo nao deveria registrar retangulo inacabado")
+    release(12, 12)
+    assert(not Bridge.selection_snapshot(),
+           "Mouseup tardio recriou selecao cancelada por undo")
+    assert(Bridge.selection_redo(), "Redo da selecao anterior falhou")
+    unchanged = assert(Bridge.selection_snapshot())
+    assert(unchanged.count == 3 and Selection.contains(unchanged, 4, 6))
+
+    -- Uma prévia de MOVE nunca deve ser confirmada por um release que
+    -- chega depois de Ctrl+Z: a mascara e os pixels permanecem no lugar.
+    press(4, 6, "transform")
+    assert(moved(8, 6))
+    local preview = assert(Bridge.preview_snapshot())
+    assert(preview.kind == "move" and preview.active,
+           "Gesto de movimento nao criou previa")
+    assert(Bridge.undo(),
+           "Undo raster durante previa deveria desfazer ultima pintura")
+    assert(not Bridge.preview_snapshot(),
+           "Undo manteve Canvas/máscara temporaria de preview")
+    assert(not moved(10, 6), "Movimento reativou previa apos undo")
+    release(10, 6)
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 3 and
+           Selection.contains(selected, 4, 6) and
+           not Selection.contains(selected, 10, 6),
+           "Preview cancelada por undo moveu a selecao")
+    assert(Bridge.redo(), "Redo raster apos descartar previa falhou")
+
+    -- O atalho Ctrl+Alt+Z deve interromper a prévia de laço sem
+    -- apagar uma máscara que só havia sido escondida provisoriamente.
+    press(10, 10, "lasso")
+    assert(not Bridge.selection_snapshot())
+    local native = love.keyboard.isDown
+    love.keyboard.isDown = function(...)
+        for i = 1, select("#", ...) do
+            if select(i, ...) == "lctrl" or select(i, ...) == "lalt" then
+                return true
+            end
+        end
+        return false
+    end
+    local used = Bridge.keypressed("z", model)
+    love.keyboard.isDown = native
+    assert(used, "Ctrl+Alt+Z nao foi capturado")
+    release(12, 12)
+    selected = Bridge.selection_snapshot()
+    assert(not selected or not Selection.contains(selected, 10, 10),
+           "Laço inacabado foi confirmado depois do atalho")
+
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico raster apos interrupcoes nao persistiu")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Mesma pincelada semitransparente deve produzir o mesmo raster
 -- com um release longo ou muitos mousemoved pequenos.
 local function test_uniform_stroke_opacity_bridge(Bridge, gallery)
@@ -5928,6 +6114,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("undo/redo interrupts active paint and selection gestures")
+    test_history_interrupt_bridge(Bridge, gallery)
     checkpoint("uniform opacity across mousemove frequency")
     test_uniform_stroke_opacity_bridge(Bridge, gallery)
     checkpoint("brush and eraser strokes clipped to canvas edges")

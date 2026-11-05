@@ -32,6 +32,14 @@ pixels, opacidade zero, cobertura de seleção nula ou pintura idêntica não
 criam estado sujo nem invalidam `Refazer`. A detecção usa margem de
 quantização compatível com RGBA 8-bit; um arraste alterado conserva
 um único passo de Desfazer. Não há mudança no desenho da interface.
+**Desfazer/Refazer durante um gesto:** Ctrl+Z/Ctrl+Y agora encerram
+a pincelada antes de navegar no histórico. O mouse ainda pressionado
+não pode pintar novamente após a restauração; um gesto sem alteração
+continua preservando o Refazer anterior. Nos gestos de seleção,
+Ctrl+Alt+Z/Y também cancelam retângulos e laços ainda não confirmados,
+restaurando a máscara anterior sem criar histórico extra. Prévias de
+movimento/transformação são descartadas sem alterar os pixels.
+O fluxo de mouse e a interface original permanecem inalterados.
 **Opacidade uniforme por pincelada:** dentro de um mesmo gesto de
 mouse, o pincel e a borracha aplicam a cor ou a redução de alfa
 uma única vez em cada pixel. Pontos interpolados e eventos de
