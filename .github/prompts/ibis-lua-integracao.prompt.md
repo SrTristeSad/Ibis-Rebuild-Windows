@@ -23,6 +23,22 @@ sem callback não cria histórico automaticamente, preservando seu
 contrato com `Engine.begin_stroke` explícito. Testar pixels,
 arraste real da UI, máscaras, undo/redo e histórico persistido.
 Não alterar atalhos, assets ou o submódulo.
+**Opacidade uniforme do pincel e da borracha por gesto**:
+`Engine.stroke(..., on_first_change, covered_pixels)` aceita uma
+tabela opcional esparsa de pixels já modificados. Quando a ponte
+pinta com opacidade menor que 100% ou seleção com cobertura suave,
+`drawing.covered_pixels` persiste entre mousepress, mousemoved
+e mousereleased. A mesma pincelada modifica um pixel uma só vez,
+sem aumentar alfa por sobreposições de dabs interpolados e sem
+depender da fragmentação dos eventos de mouse. Uma nova
+pincelada começa com mapa vazio e pode acumular cor/opacidade.
+Alpha Lock, feather, borracha, no-op, histórico tardio, um
+snapshot por gesto, bordas e composição source-over permanecem
+funcionais. Chamadas do motor sem argumento adicional preservam
+o comportamento antigo por dab. Não gravar mapa no arquivo;
+descartar ao fim do gesto. Cobrir equivalência com segmentos
+longos/curtos, histórico, PNG, Alpha Lock e máscaras feather.
+Não alterar Ibis-Lua.
 **Segmento final no mouseup do pincel/borracha**:
 `Bridge.mousereleased(model,rx,ry,scale)` deve processar as
 coordenadas finais do gesto, mesmo quando estão fora do canvas,
