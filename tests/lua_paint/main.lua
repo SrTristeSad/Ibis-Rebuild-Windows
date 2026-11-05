@@ -1783,22 +1783,19 @@ local function test_stroke_canvas_edge_bridge(Bridge, gallery)
     -- Sair à direita com mousemove deve chegar ao ultimo pixel.
     press(4, 4)
     move(20, 4)
+    -- Bridge.save() encerra gestos: conferir os segmentos somente após
+    -- release, sem interromper o traço para obter PNG intermediário.
+    move(20, 10)
+    move(14, 10)
+    release(14, 10)
     local picture = snapshot()
     for x = 4, 15 do
         assert(painted(picture, x, 4),
                "Pincel nao alcancou a borda direita: " .. x)
     end
-    -- Ainda fora do canvas: atualizar o cursor cru, mas nao pintar.
-    move(20, 10)
-    picture = snapshot()
-    assert(empty(picture, 12, 7) and empty(picture, 15, 7),
-           "Ponte pintou linha enquanto cursor estava fora")
-    -- Reentrar pela direita nao cria atalho diagonal desde (15,4).
-    move(14, 10)
-    release(14, 10)
-    picture = snapshot()
     assert(painted(picture, 14, 10) and painted(picture, 15, 10)
-           and empty(picture, 12, 7) and empty(picture, 13, 8),
+           and empty(picture, 12, 7) and empty(picture, 13, 8)
+           and empty(picture, 15, 7),
            "Reentrada ligou pontos por diagonal indevida")
     assert(Bridge.undo(), "Pincel na borda perdeu undo")
     picture = snapshot()
@@ -1837,15 +1834,12 @@ local function test_stroke_canvas_edge_bridge(Bridge, gallery)
     -- compara PNG antes e depois de soltar na mesma posicao.
     press(6, 2, 50)
     move(20, 2)
-    picture = snapshot()
-    local before = select(4, picture:getPixel(15, 2))
-    assert(before > 0 and before < 1,
-           "Traço de opacidade parcial nao chegou ate a borda")
     move(20, 2)
     release(20, 2)
     picture = snapshot()
-    assert(close(select(4, picture:getPixel(15, 2)), before, 1 / 255),
-           "Repetir mousemove/release fora multiplicou opacidade")
+    local actual = select(4, picture:getPixel(15, 2))
+    assert(close(actual, 0.5, 1 / 255),
+           "Mover repetidamente e soltar fora multiplicou opacidade")
 
     -- Uma selecao limita a area pintada mesmo quando a ponta do
     -- segmento cru esta fora do canvas.
