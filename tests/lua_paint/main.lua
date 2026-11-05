@@ -348,6 +348,165 @@ local function test_feather_paint(E)
            "Contração não preservou pesos graduais da máscara")
 end
 
+-- Atalhos/comandos de seleção aplicam-se à máscara confirmada,
+-- não à ocultação provisória de um retângulo/laço replace.
+local function test_selection_command_interrupt_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Selection shortcuts in drag",
+                   visible = true, opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "transform",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Selection shortcut interruption")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, tool)
+        model.active_tool = tool or "transform"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1, 100, nil),
+               "Nao iniciou gesto de teste de atalho")
+    end
+    local function moved(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local function mask()
+        return Bridge.selection_snapshot()
+    end
+    local function count()
+        return Bridge.selection_history_snapshot().undo
+    end
+    local function alpha_at(x, y)
+        assert(Bridge.save())
+        local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+        local path
+        for line in index:gmatch("[^\r\n]+") do
+            if line:find("Selection shortcut interruption", 1, true) then
+                path = "lua-artworks/" ..
+                    assert(line:match("^(art_%d+_%d+)\t"))
+            end
+        end
+        assert(path)
+        local data = love.image.newImageData(path .. "/layer_1.png")
+        return select(4, data:getPixel(x, y)), path
+    end
+
+    press(3, 3)
+    assert(release(5, 5), "Nao criou mascara inicial")
+    assert(mask().count == 9 and Selection.contains(mask(), 4, 4))
+    local steps = count()
+
+    -- Inverter durante um replace pendente deve inverter a seleção
+    -- ANTIGA, não selecionar o canvas inteiro por causa do nil provisório.
+    press(10, 10)
+    assert(not mask(), "Replace deveria ocultar temporariamente a mascara")
+    assert(Bridge.selection_command(model, "invert_selection"))
+    assert(not moved(12, 12), "Mousemoved reabriu retangulo interrompido")
+    release(12, 12)
+    assert(mask().count == 247 and not Selection.contains(mask(), 4, 4)
+           and Selection.contains(mask(), 10, 10),
+           "Inverter usou nil temporario em vez da mascara anterior")
+    assert(count() == steps + 1,
+           "Interromper retangulo criou passo fantasma")
+    assert(Bridge.selection_undo() and mask().count == 9)
+    assert(Bridge.selection_redo() and mask().count == 247)
+
+    -- Escape cancela a seleção provisória sem apagar a máscara já pronta.
+    steps = count()
+    press(3, 3)
+    assert(not mask())
+    assert(Bridge.keypressed("escape", model), "Escape ignorou gesto pendente")
+    release(12, 12)
+    assert(mask().count == 247 and count() == steps,
+           "Escape desmarcou a seleção anterior ou registrou historico")
+
+    -- Ctrl+D/Desmarcar dentro do replace deve contar uma única
+    -- transição de seleção antiga -> nil, reversível via Ctrl+Alt+Z.
+    press(3, 3)
+    assert(not mask())
+    Bridge.clear_selection()
+    release(6, 6)
+    assert(not mask() and count() == steps + 1,
+           "Desmarcar perdeu mascara anterior no modo replace")
+    assert(Bridge.selection_undo() and mask().count == 247)
+    assert(Bridge.selection_redo() and not mask())
+    assert(Bridge.selection_undo() and mask().count == 247)
+
+    -- Selecionar tudo via comando enquanto uma máscara está escondida
+    -- precisa preservar a máscara anterior no undo.
+    press(3, 3)
+    assert(not mask())
+    assert(Bridge.selection_command(model, "select_all"))
+    release(8, 8)
+    assert(mask().count == 256)
+    assert(Bridge.selection_undo() and mask().count == 247)
+    assert(Bridge.selection_redo() and mask().count == 256)
+
+    -- Feather durante um replace pendente deve agir sobre a máscara
+    -- anterior (aqui, restaurada para o retângulo de 3x3).
+    assert(Bridge.selection_undo() and mask().count == 247)
+    assert(Bridge.selection_undo() and mask().count == 247)
+    assert(Bridge.selection_undo() and mask().count == 9)
+    press(10, 10)
+    assert(not mask())
+    assert(Bridge.selection_command(model, "feather_selection"))
+    release(12, 12)
+    assert(mask() and Selection.is_soft(mask()),
+           "Feather ignorou mascara oculta pelo retangulo")
+    assert(Bridge.selection_undo() and mask().count == 9)
+
+    -- Um comando de máscara interrompe também uma pincelada já iniciada;
+    -- eventos posteriores não podem pintar mais pixels.
+    press(4, 4, "brush")
+    assert(select(1, alpha_at(4, 4)) > .99)
+    assert(Bridge.selection_command(model, "invert_selection"))
+    assert(not moved(8, 4), "Pincel continuou apos editar selecao")
+    release(8, 4)
+    assert(select(1, alpha_at(8, 4)) == 0,
+           "Mouseup atrasado pintou com mascara alterada")
+    assert(Bridge.undo(), "Pincel interrompido perdeu snapshot")
+    assert(select(1, alpha_at(4, 4)) == 0)
+    assert(Bridge.redo(), "Pincel interrompido perdeu redo")
+
+    -- Esc também deve cancelar uma prévia de movimento sem executar
+    -- transformacao nem alterar geometria já confirmada.
+    assert(Bridge.selection_undo() and mask().count == 9)
+    press(4, 4, "transform")
+    assert(moved(8, 4) and Bridge.preview_snapshot(),
+           "Nao criou previa de movimento")
+    assert(Bridge.keypressed("escape", model))
+    assert(not Bridge.preview_snapshot())
+    release(8, 4)
+    assert(mask().count == 9 and Selection.contains(mask(), 4, 4)
+           and not Selection.contains(mask(), 8, 4),
+           "Escape confirmou transformacao pendente")
+
+    local _, path = alpha_at(4, 4)
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    assert(mask() and mask().count == 9 and Bridge.undo()
+           and Bridge.redo(), "Historico apos atalhos nao persistiu")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, file in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. file)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Alterações de ferramenta, camada e máscara entre mousepress/mouseup
 -- não podem continuar pintando na camada antiga nem confirmar previews.
 local function test_stale_drag_context_bridge(Bridge, gallery)
@@ -6812,6 +6971,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("selection keyboard commands interrupt pending masks")
+    test_selection_command_interrupt_bridge(Bridge, gallery)
     checkpoint("drag context changes cancel stale brush and selection")
     test_stale_drag_context_bridge(Bridge, gallery)
     checkpoint("new mousepress preempts unfinished brush or selection")
