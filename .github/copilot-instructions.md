@@ -39,6 +39,21 @@
   interrupção restaura a máscara anterior. Preservar snapshots
   e redo/no-op já existentes; não alterar a interface original.
   Testar interrupção em mousemoved, somente mouseup e PNG.
+- Comandos de seleção durante interação: chamar
+  `interrupt_active_gesture()` no início de
+  `Bridge.selection_command`, APÓS validar modelo/editor e
+  ANTES de inspecionar a máscara para feather/expand etc.
+  `Bridge.clear_selection()` também deve interromper o gesto
+  antes de `set_mask(nil)`. No modo replace, a máscara é
+  ocultada temporariamente: restaurar `before_selection_ref`
+  garante que Inverter, Selecionar tudo, Feather e operações
+  seguintes usem a seleção original sem perder histórico.
+  `Esc` com `gesture` pendente apenas cancela a operação;
+  `Esc` sem `gesture` e com máscara ativa desmarca.
+  Nunca confirmar preview nem pintura por mouseup atrasado;
+  preservar alterações raster já efetivas e redo.
+  Testar comando com retângulo/laço, brush, movimento e
+  timeline de máscara, incluindo PNG salvo/reaberto.
 - Pressões consecutivas: em `Bridge.mousepressed`, chamar
   `interrupt_active_gesture()` depois de verificar ferramenta
   suportada, modelo/editor e coordenada válida no canvas, antes

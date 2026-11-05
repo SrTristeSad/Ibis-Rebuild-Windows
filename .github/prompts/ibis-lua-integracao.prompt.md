@@ -36,6 +36,19 @@ novas escritas após a troca. Uma prévia de movimento/giro/
 escala desatualizada não pode virar commit; retângulo e laço
 inacabados restauram a seleção prévia. Testar mousemove e
 mouseup, duas camadas, máscara, PNG e undo/redo, sem UI nova.
+**Atalhos de seleção devem encerrar interações provisórias**:
+`Bridge.selection_command` chama `interrupt_active_gesture`
+antes de calcular Inverter/Selecionar tudo/Feather ou executar
+ações de clipboard/raster. `Bridge.clear_selection` faz
+o mesmo antes de aplicar `set_mask(nil)`. Se havia retângulo/
+laço em replace, restaurar a referência original da máscara
+para evitar operar sobre `nil` provisório; não criar histórico
+fantasma. `Esc` durante uma seleção/transformação pendente
+cancela esse gesto sem limpar a seleção anterior. `Esc` fora
+do gesto preserva seu comportamento de desmarcar.
+Eventos mousemoved/mouseup atrasados não podem confirmar a
+operação cancelada. Testar máscara, undo/redo raster e máscara,
+feather, preview de move, PNG persistido e sem novo controle UI.
 **Um novo clique interrompe o gesto antigo**:
 `Bridge.mousepressed` invoca `interrupt_active_gesture()`
 APÓS validar que a ferramenta e o clique no canvas são válidos,
