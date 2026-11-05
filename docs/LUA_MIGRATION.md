@@ -217,7 +217,18 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Selecionar tudo novamente restaura máscara opaca, mesmo após feather.
   As operações combinadas e morfológicas preservam coberturas parciais.
   **Feather aqui não é blur gaussiano nem antialiasing nativo do ibisPaint**.
-- Seleções limitam a pintura e o balde à máscara ativa. O contorno da
+- Seleções limitam a pintura e o balde à máscara ativa.
+  A ponte não descarta mais um gesto de pincel ou borracha só porque
+  o **centro inicial** está fora da seleção: `Engine.stroke` verifica
+  `Selection.coverage` por pixel e aplica apenas dentro da máscara.
+  Assim um arraste pode entrar na área selecionada depois de começar
+  fora, ou um pincel circular largo pode atingir a borda da seleção
+  mesmo com o centro fora dela. Um gesto totalmente fora continua
+  no-op e preserva redo e dirty, graças ao histórico tardio.
+  O Balde mantém sua semente obrigatoriamente dentro da seleção;
+  a conversão de coordenadas também continua exigindo clique
+  inicial dentro do canvas. Testes LÖVE cobrem entrada de
+  pincel/borracha, raio largo, undo/redo, Balde e PNG persistido. O contorno da
   seleção aparece sobre a tela de edição; Ctrl+D ou Esc desfazem a seleção.
   **Ctrl+A seleciona todo o canvas**; **Ctrl+Shift+I inverte a máscara**
   no documento inteiro, inclusive regiões fora do retângulo da seleção.

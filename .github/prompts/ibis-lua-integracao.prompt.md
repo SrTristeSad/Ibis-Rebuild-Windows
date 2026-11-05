@@ -37,6 +37,18 @@ commit. Undo/Redo de máscaras são independentes do raster.
 Testar também redo no-op, pilha vazia, mouseup atrasado,
 atalhos Ctrl+Alt+Z/Y, PNG e histórico persistido.
 Não alterar a interface Ibis-Lua.
+**Começar pincelada fora da máscara ativa**:
+Não descartar `Bridge.mousepressed` com pincel/borracha quando
+o centro inicial está fora de `Selection.contains`. A máscara
+se aplica a **cada pixel** em `Engine.stroke` por
+`Selection.coverage`, permitindo arrastar de fora para dentro
+ou tocar a seleção com a borda de um pincel largo. Nenhuma
+edição pode ocorrer fora da máscara. Um gesto totalmente fora
+é no-op, não cria histórico nem descarta redo. O Balde mantém
+a semente obrigatoriamente dentro da máscara; seleções e
+conta-gotas conservam suas próprias regras. Não iniciar o
+pincel fora do canvas. Testar pintando, apagando, raios largos,
+undo/redo e PNG após reabrir. Não modificar Ibis-Lua.
 **Opacidade uniforme do pincel e da borracha por gesto**:
 `Engine.stroke(..., on_first_change, covered_pixels)` aceita uma
 tabela opcional esparsa de pixels já modificados. Quando a ponte
