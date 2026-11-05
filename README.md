@@ -45,9 +45,11 @@ Feather, Desmarcar e outros comandos de seleção agora encerram
 primeiro qualquer gesto pendente. Se um retângulo ou laço ainda
 não foi confirmado, sua máscara original é restaurada ANTES
 de aplicar o comando; não há etapas fantasmas no histórico.
-`Esc` durante uma seleção ou transformação em curso cancela
-somente a operação provisória, preservando a seleção anterior;
-fora de gestos, `Esc` continua desmarcando normalmente.
+`Esc` durante uma seleção, transformação, pincelada ou borracha
+em curso encerra somente o gesto, preservando a seleção anterior
+e os pixels já editados (com Desfazer/Refazer). O mouseup atrasado
+não continua pintando. Sem gesto ativo, `Esc` continua desmarcando
+normalmente.
 O mouseup atrasado não pode reaplicar pintura ou seleção.
 **Pressões consecutivas sem mouseup:** um novo clique válido no
 canvas encerra a pincelada ou seleção que ainda estava em andamento.
