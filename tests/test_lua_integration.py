@@ -105,7 +105,7 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn('if tool == "bucket" and selection and', bridge)
         self.assertIn('not Selection.contains(selection,', bridge)
         self.assertIn('Engine.stroke(p, d.layer,', bridge)
-        self.assertIn('d.opacity, d.eraser, d.alpha_lock, selection,', bridge)
+        self.assertIn('d.opacity, d.eraser, d.alpha_lock, d.selection_at_start,', bridge)
         self.assertNotIn('if selection and not Selection.contains(selection,', bridge)
         self.assertIn("local function interrupt_active_gesture()", bridge)
         self.assertIn("local function stroke_context_valid(model, d)", bridge)
