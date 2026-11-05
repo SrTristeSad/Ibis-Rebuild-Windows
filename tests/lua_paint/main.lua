@@ -854,6 +854,86 @@ end
 -- Pressões consecutivas nunca podem manter dois gestos simultâneos.
 -- O novo press substitui o anterior, preservando seus pixels/histórico,
 -- mas cancelando máscaras temporárias e prévias sem commit.
+-- Salvar durante um gesto provisório não deve gravar máscara vazia
+-- nem permitir que eventos de mouse atrasados alterem a obra salva.
+local function test_save_interrupt_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Save gesture"}},
+        active_layer_id = 1, active_tool = "transform",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Save pending gesture")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, tool)
+        model.active_tool = tool or "transform"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1, 100, nil))
+    end
+    local function moved(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    press(2, 2)
+    assert(release(4, 4))
+    local original = assert(Bridge.selection_snapshot())
+    assert(original.count == 9 and Selection.contains(original, 3, 3))
+    local history = Bridge.selection_history_snapshot()
+    press(10, 10)
+    assert(not Bridge.selection_snapshot(), "Replace nao ocultou selecao provisoria")
+    assert(Bridge.save(), "Falha ao salvar durante selecao provisoria")
+    assert(not moved(12, 12) and not release(12, 12),
+           "Eventos tardios confirmaram selecao depois do salvamento")
+    local restored = assert(Bridge.selection_snapshot())
+    assert(restored.count == 9 and Selection.contains(restored, 3, 3)
+           and not Selection.contains(restored, 11, 11),
+           "Salvar nao restaurou a mascara confirmada")
+    assert(Bridge.selection_history_snapshot().undo == history.undo,
+           "Salvar criou etapa fantasma no historico de selecao")
+    Bridge.open(model, id)
+    restored = assert(Bridge.selection_snapshot())
+    assert(restored.count == 9 and Selection.contains(restored, 3, 3),
+           "Reabrir perdeu a selecao confirmada")
+
+    -- Uma pincelada parcialmente aplicada conserva pixels e undo,
+    -- mas o mouseup posterior ao salvamento não pode completá-la.
+    press(3, 3, "brush")
+    assert(Bridge.save(), "Falha ao salvar durante pincelada")
+    assert(not moved(4, 3) and not release(4, 3),
+           "Salvar permitiu continuar pincelada interrompida")
+    assert(Bridge.undo(), "Salvar descartou o undo da pincelada")
+    assert(Bridge.redo(), "Salvar descartou o redo da pincelada")
+
+    local path
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Save pending gesture", 1, true) then
+            path = "lua-artworks/" .. assert(line:match("^(art_%d+_%d+)\t"))
+        end
+    end
+    assert(path, "Nao encontrou arte salva no indice")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 local function test_mousepress_preempts_gesture_bridge(Bridge, gallery)
     local Selection = require("lua_selection")
     local model = {
@@ -7117,6 +7197,8 @@ function love.load()
     test_selection_command_interrupt_bridge(Bridge, gallery)
     checkpoint("drag context changes cancel stale brush and selection")
     test_stale_drag_context_bridge(Bridge, gallery)
+    checkpoint("saving interrupts provisional selection and brush")
+    test_save_interrupt_bridge(Bridge, gallery)
     checkpoint("new mousepress preempts unfinished brush or selection")
     test_mousepress_preempts_gesture_bridge(Bridge, gallery)
     checkpoint("undo/redo interrupts active paint and selection gestures")
