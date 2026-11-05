@@ -99,7 +99,7 @@ end
 -- Usar a mesma margem de quantização do Balde (RGBA 8-bit).
 local STROKE_EPSILON = 0.5 / 255
 local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
-                   alpha_lock, selection, before_first_change)
+                   alpha_lock, selection, before_first_change, covered_pixels)
     local data = layer.pixels
     local xmin = math.max(0, math.floor(x - radius))
     local xmax = math.min(w - 1, math.ceil(x + radius))
@@ -110,7 +110,10 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
     for py = ymin, ymax do
         for px = xmin, xmax do
             local dx, dy = px + 0.5 - x, py + 0.5 - y
-            if dx * dx + dy * dy <= rr then
+            -- A ponte mantém esta cobertura entre eventos do mesmo
+            -- gesto, evitando composição repetida em dabs sobrepostos.
+            if dx * dx + dy * dy <= rr and
+               (not covered_pixels or not covered_pixels[py * w + px]) then
                 local effective_alpha = alpha * Selection.coverage(selection, px, py)
                 if effective_alpha > 0 then
                     local dr, dg, db, da = data:getPixel(px, py)
@@ -150,6 +153,9 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
                                math.abs(na - da) >= STROKE_EPSILON) then
                         if before_first_change then before_first_change() end
                         data:setPixel(px, py, nr, ng, nb, na)
+                        if covered_pixels then
+                            covered_pixels[py * w + px] = true
+                        end
                         changed = true
                     end
                 end
@@ -162,8 +168,12 @@ end
 -- O callback opcional permite à ponte capturar um único snapshot,
 -- inclusive quando o arraste começa sem efeito e muda pixels só depois.
 -- Chamadas diretas sem callback mantêm a semântica de histórico explícito.
+-- covered_pixels é opcional: quando fornecido pela ponte e mantido pelo
+-- gesto, impede reaplicar tinta/borracha em pixels já modificados.
+-- Chamadas existentes sem essa tabela mantêm a composição por dab.
 function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha,
-                       eraser, alpha_lock, selection, on_first_change)
+                       eraser, alpha_lock, selection, on_first_change,
+                       covered_pixels)
     local layer = assert(project.layers[id], "Camada inexistente")
     local radius = math.max(0.75, math.min(256, diameter) / 2)
     alpha = math.max(0, math.min(1, alpha))
@@ -182,7 +192,7 @@ function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha,
         local t = i / steps
         if dab(layer, project.w, project.h, x0 + dx * t, y0 + dy * t,
                radius, rgb, alpha, eraser, alpha_lock, selection,
-               capture_once) then
+               capture_once, covered_pixels) then
             changed = true
         end
     end

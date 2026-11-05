@@ -32,6 +32,15 @@ pixels, opacidade zero, cobertura de seleção nula ou pintura idêntica não
 criam estado sujo nem invalidam `Refazer`. A detecção usa margem de
 quantização compatível com RGBA 8-bit; um arraste alterado conserva
 um único passo de Desfazer. Não há mudança no desenho da interface.
+**Opacidade uniforme por pincelada:** dentro de um mesmo gesto de
+mouse, o pincel e a borracha aplicam a cor ou a redução de alfa
+uma única vez em cada pixel. Pontos interpolados e eventos de
+movimento sobrepostos não escurecem o traço dependendo da velocidade
+do cursor. Pinceladas **separadas** continuam acumulando opacidade
+normalmente. Seleções com feather preservam a cobertura fracionária.
+Chamadas diretas antigas ao motor continuam aceitando composição por
+dab; a ponte ativa a cobertura uniforme em tinta parcial e máscara
+suave, sem controles visuais novos.
 **O último trecho do pincel e da borracha é aplicado também no evento
 de soltar o mouse**: se não houver um último evento de movimento,
 a ponta do traço ainda chega à posição final. Movimentos repetidos

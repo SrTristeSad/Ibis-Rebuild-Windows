@@ -518,7 +518,7 @@ local function paint(p, d, x, y, start_x, start_y)
                           Engine.begin_stroke(p, d.layer)
                           d.history_started = true
                       end
-                  end)
+                  end, d.covered_pixels)
     d.x, d.y = x, y
 end
 
@@ -694,7 +694,14 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
                w = w, h = h, history_started = false,
                view = view, preferences = preferences,
                color = rgb, size = size, opacity = normalized_opacity,
-               eraser = tool == "eraser", alpha_lock = info.alpha_lock}
+               eraser = tool == "eraser", alpha_lock = info.alpha_lock,
+               -- Em tinta parcial ou seleção feather, aplicar uma vez
+               -- por pixel/gesto. Em tinta 100% com máscara binária,
+               -- a repetição é naturalmente um no-op: evita mapa
+               -- desnecessário em pinceladas grandes.
+               covered_pixels = (normalized_opacity < 1 or
+                   (selection and Selection.is_soft(selection)))
+                   and {} or nil}
     paint(p, drawing, px, py)
     return true
 end

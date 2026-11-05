@@ -26,6 +26,21 @@
   sem efeito e modificam pixels depois devem capturar o estado
   inteiro da camada antes da primeira mudança, um único undo para
   toda a pincelada. Testar também restauração, persistência e Alpha Lock.
+- Cobertura uniforme por gesto de pincel/borracha: `Engine.stroke`
+  aceita, após o callback `on_first_change`, a tabela opcional
+  `covered_pixels` de índices `py*w+px`. Pixels já modificados
+  dentro do mesmo gesto não devem ser compostos novamente,
+  independentemente do número de dabs ou eventos `mousemoved`.
+  A ponte armazena a tabela em `drawing.covered_pixels` quando
+  a opacidade é menor que 100% ou a seleção tem feather; tinta
+  100% com máscara binária não precisa do mapa. Aplique somente
+  uma vez por pixel por gesto, mas **novos gestos somam opacidade**
+  normalmente. Mantenha o primeiro snapshot antes de pintar,
+  undo/redo, no-op, Alpha Lock, máscara e recorte do canvas.
+  Sem argumento `covered_pixels`, o contrato de `Engine.stroke`
+  mantém a composição histórica por dab para uso programático.
+  O mapa esparso é descartado no fim do gesto; não persistir
+  metadados nem modificar o submódulo da interface.
 - Finalização correta do gesto: `Bridge.mousereleased(model,rx,ry,scale)`
   deve pintar o segmento final ANTES de limpar o estado do traço.
   O cursor bruto fica em `drawing.raw_x/raw_y` mesmo fora da obra.

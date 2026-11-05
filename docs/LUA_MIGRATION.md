@@ -344,6 +344,24 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O no-op do pincel e da borracha evita modificações sub-byte por
   comparação RGBA 8-bit; isso não implementa acúmulo de opacidade
   abaixo da precisão do raster ou estabilização de traços.
+- **Opacidade uniforme por gesto**: para tinta/borracha com opacidade
+  menor que 100%, ou seleção suave (feather), a ponte mantém
+  `drawing.covered_pixels` durante o arraste e o mouseup.
+  `Engine.stroke(..., on_first_change, covered_pixels)` recebe um
+  mapa opcional de índices de pixel. Apenas o primeiro dab que
+  efetivamente modifica um pixel aplica a composição RGBA; dabs
+  sobrepostos do mesmo gesto não multiplicam alfa. Dividir a mesma
+  linha em muitos `mousemoved` ou recebê-la inteira no mouseup
+  produz os mesmos pixels para a mesma amostragem geométrica.
+  Uma **nova** pincelada cria um mapa novo e pode acumular tinta,
+  ou apagar mais alfa. A cobertura parcial de seleções feather
+  participa da mesma proteção, inclusive com opacidade 100%.
+  Chamadas diretas legadas sem o parâmetro mantêm a composição
+  por dab e o histórico explícito. O mapa é esparso, mantido só
+  no gesto e alocado apenas quando a tinta é parcial ou a máscara
+  suave; o uso de memória cresce com o número de pixels atingidos.
+  O primeiro pixel modificado continua criando um único snapshot
+  de histórico via callback tardio.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
   para telas enormes ou pincéis grandes.
 - O histórico em memória mantém até 8 snapshots em cada pilha para telas
