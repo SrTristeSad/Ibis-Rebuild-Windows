@@ -26,6 +26,22 @@
   sem efeito e modificam pixels depois devem capturar o estado
   inteiro da camada antes da primeira mudança, um único undo para
   toda a pincelada. Testar também restauração, persistência e Alpha Lock.
+- Interrupção segura de gestos quando Undo/Redo é acionado:
+  `Bridge.undo/redo` e `Bridge.selection_undo/redo` chamam
+  `interrupt_active_gesture()` ANTES de examinar a pilha,
+  inclusive quando ela está vazia. Isso descarta `drawing`
+  e `gesture` e libera buffers de `discard_preview`;
+  `mousemoved/mousereleased` atrasados tornam-se inertes.
+  Um retângulo ou laço não confirmado restaura a referência
+  original `before_selection_ref` da máscara, evitando desfazer
+  somente a ocultação temporária do modo replace ou romper
+  referências de histórico. O gesto de mover/transformar é
+  descartado sem confirmar pixels ou a máscara. O snapshot
+  raster já criado durante a pincelada continua disponível
+  normalmente para o Undo da operação inteira. Não combinar
+  as pilhas independentes de máscara e raster e não adicionar UI.
+  Testar Ctrl+Z/Y durante o drag, pilha vazia, Ctrl+Alt+Z/Y
+  durante a seleção, preview GPU e eventos atrasados de release.
 - Cobertura uniforme por gesto de pincel/borracha: `Engine.stroke`
   aceita, após o callback `on_first_change`, a tabela opcional
   `covered_pixels` de índices `py*w+px`. Pixels já modificados
