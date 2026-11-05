@@ -199,6 +199,7 @@ local function test_uniform_stroke_opacity(E)
 
     local lock = project()
     lock.layers[1].pixels:setPixel(6, 5, .2, .4, .6, .7)
+    lock.layers[1].pixels:setPixel(8, 5, .2, .4, .6, .7)
     lock.dirty = false
     assert(run(lock, true, {}, false, true) == 1,
            "Alpha Lock uniforme nao registrou pintura")
