@@ -67,6 +67,22 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   de `document.tsv` (0=4, 1=8). Arquivos de 2–10 colunas ou
   sinalizador inválido usam 4 vizinhos sem perder campos anteriores.
   Alternar não altera raster, seleção, dirty ou histórico.
+  **Ctrl+Alt+V** alterna a **fonte de comparação do Balde** entre
+  camada ativa (padrão) e composição visível, reutilizando
+  `Engine.composite_pixel_source(project, model, true)`. A fonte
+  considera visibilidade, opacidade, mesclagem, clipping e fundo
+  branco; outros modos de fundo preservam alfa transparente.
+  A busca de região termina antes de qualquer escrita. A tinta é
+  aplicada **somente à camada ativa**, inclusive quando a referência
+  deriva das camadas superiores. Alpha Lock consulta o alfa da
+  camada de destino, não da composição. Compatível com global,
+  conexidade 4/8, RGB-only, tolerância, máscara/feather e undo/redo,
+  sem histórico para no-op. `project.bucket_sample_all` é false
+  por padrão e persistido na **12ª coluna opcional** de
+  `document.tsv` (0=camada ativa, 1=composição). Arquivos com
+  2–11 colunas e flags inválidas mantêm a camada ativa, preservando
+  outras opções. A preferência não depende de `wand_sample_all`.
+  Toggle não modifica raster, seleção nem histórico.
   Sem controles visuais novos.
 - Conta-gotas que lê a composição RGBA das camadas visíveis, considerando
   opacidade e fundo branco, e atualiza o seletor de cores existente.
@@ -348,7 +364,8 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O uso de shader exige dispositivo compatível com LÖVE 11.5; o CI valida
   a composição recortada no renderizador software Mesa, mas não substitui
   testes em hardware gráfico físico.
-- O balde compara RGBA da camada ativa com tolerância 0–255 por canal,
+- O balde compara RGBA da camada ativa ou da composição visível
+  (Ctrl+Alt+V) com tolerância 0–255 por canal,
   ou só RGB (Ctrl+Alt+M), em modo contíguo ou global por cor
   (Ctrl+Alt+B);
   não há slider integrado na interface Lua, apenas os atalhos
@@ -370,6 +387,11 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   tolerância/RGBA/RGB-only, independência do modo global, máscaras,
   Alpha Lock, no-op, histórico, Ctrl+Alt+9, isolamento por obra e
   formatos 2–11 colunas.
+  Os testes do Balde com referência composta verificam escrita
+  restrita à camada ativa, camadas visíveis/ocultas, opacidade,
+  clipping, fundo branco, comparação RGB/RGBA, conectividade,
+  modo global, Alpha Lock, máscara, no-op, histórico, Ctrl+Alt+V
+  e compatibilidade de documentos de 2–12 colunas.
 - A suíte de pixels usa o LÖVE real para verificar tinta, borracha, balde,
   Alpha Lock, Clipping e os nove modos de blend na CPU e GPU,
   leitura de cores, composição semitransparente, miniatura,
