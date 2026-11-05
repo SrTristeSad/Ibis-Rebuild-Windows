@@ -81,6 +81,14 @@ de `document.tsv`; arquivos anteriores usam RGBA. A opção muda
 alterar o alfa dos pixels atingidos, salvo quando Alpha Lock está ativo.
 Cores RGB armazenadas sob alfa zero também entram na comparação
 RGB-only, embora não sejam visíveis na tela.
+**Ctrl+Alt+9** alterna a conectividade do Balde **contíguo** entre
+**4 vizinhos** (padrão, apenas lados) e **8 vizinhos** (também cantos).
+A conectividade não altera o modo global, que já preenche todas as
+regiões semelhantes. Funciona com comparação RGB-only, RGBA, tolerância
+e seleções, sem afetar a Varinha. O toggle não edita raster, máscara ou
+histórico. Salva por obra na **11ª coluna opcional** de `document.tsv`;
+arquivos antigos mantêm a conexão de 4 vizinhos. Nenhum controle
+visual foi adicionado ao submódulo Ibis-Lua.
 Nenhum controle visual da interface original foi adicionado.
 **Ctrl+Alt+R** alterna a comparação entre **RGBA** (padrão, incluindo
 a transparência) e **somente RGB** (desconsidera diferenças de alfa).
