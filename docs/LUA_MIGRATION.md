@@ -20,6 +20,19 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   sujeito também ao limite real da GPU. Dimensões superiores recebem aviso
   sem alterar os controles existentes.
 - Desenho por mouse com pincel circular básico e borracha com redução de alfa.
+  O registro de histórico de cada gesto agora é **tardio**: o primeiro
+  pixel que muda chama a captura do snapshot antes da escrita. Gestos
+  sem alteração efetiva não criam undo, não descartam redo, não marcam
+  o raster como dirty e não executam upload da imagem para a GPU.
+  Isso cobre borracha sobre transparência, tinta idêntica em pixels
+  opacos, Alpha Lock em pixels vazios, seleção fora da pincelada e
+  opacidade zero/sub-byte. O arraste pode começar sem mudanças e
+  capturar somente no segmento que efetivamente pinta. Há apenas
+  um snapshot por gesto. `Engine.stroke` continua aceitando chamadas
+  diretas com histórico explícito via `Engine.begin_stroke`; a ponte
+  fornece o callback opcional `on_first_change` e só captura quando
+  ocorre alteração. A comparação usa margem de meio nível RGBA 8-bit,
+  compatível com a detecção de no-op do Balde.
 - Tamanho e opacidade vindos dos controles já existentes do Ibis-Lua.
 - Cor RGB atualmente selecionada pelo painel já existente.
 - Balde de preenchimento contíguo na camada ativa, com tolerância
@@ -301,6 +314,9 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   efeitos,
   texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
+- O no-op do pincel e da borracha evita modificações sub-byte por
+  comparação RGBA 8-bit; isso não implementa acúmulo de opacidade
+  abaixo da precisão do raster ou estabilização de traços.
 - A rasterização por pixel feita em Lua é uma base funcional, não otimizada
   para telas enormes ou pincéis grandes.
 - O histórico em memória mantém até 8 snapshots em cada pilha para telas
