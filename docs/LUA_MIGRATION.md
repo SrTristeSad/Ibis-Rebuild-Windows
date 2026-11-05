@@ -33,6 +33,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   fornece o callback opcional `on_first_change` e só captura quando
   ocorre alteração. A comparação usa margem de meio nível RGBA 8-bit,
   compatível com a detecção de no-op do Balde.
+  Ao soltar o mouse, `Bridge.mousereleased(model,rx,ry,scale)`
+  conclui o último segmento de pincel/borracha a partir da posição
+  final quando houver coordenadas válidas, mesmo que não tenha
+  ocorrido `mousemoved`. A conclusão precede a limpeza de `drawing`
+  e reutiliza o mesmo snapshot tardio e a seleção ativa.
+  `continue_stroke` ignora deslocamento inferior ou igual a
+  0,005 pixel para evitar pinceladas repetidas e acúmulo de alfa
+  na posição idêntica, tanto ao mover como ao soltar.
+  Chamadas legadas de `mousereleased()` sem coordenadas continuam
+  encerrando o traço sem inventar movimento; gestos de seleção
+  preservam seu fechamento independente.
 - Tamanho e opacidade vindos dos controles já existentes do Ibis-Lua.
 - Cor RGB atualmente selecionada pelo painel já existente.
 - Balde de preenchimento contíguo na camada ativa, com tolerância
@@ -314,6 +325,10 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   efeitos,
   texturas e demais ferramentas
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
+- O evento de soltar o mouse só acrescenta um trecho de pintura
+  se a posição final válida for diferente da última já processada.
+  A UI e a rasterização permanecem limitadas ao canvas e não
+  extrapolam a borda ao receber coordenadas externas.
 - O no-op do pincel e da borracha evita modificações sub-byte por
   comparação RGBA 8-bit; isso não implementa acúmulo de opacidade
   abaixo da precisão do raster ou estabilização de traços.
