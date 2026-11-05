@@ -348,6 +348,210 @@ local function test_feather_paint(E)
            "Contração não preservou pesos graduais da máscara")
 end
 
+-- Alterações de ferramenta, camada e máscara entre mousepress/mouseup
+-- não podem continuar pintando na camada antiga nem confirmar previews.
+local function test_stale_drag_context_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {
+            {id = 1, visible = true, opacity = 100, blending = "Normal",
+             name = "Drag context one"},
+            {id = 2, visible = true, opacity = 100, blending = "Normal",
+             name = "Drag context two"}
+        },
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer()
+        for _, info in ipairs(self.layers) do
+            if info.id == self.active_layer_id then return info end
+        end
+    end
+    local id = gallery:add_artwork(16, 16, "Stale drag context")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, tool)
+        model.active_tool = tool or "brush"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1, 100, nil),
+               "Nao iniciou gesto de teste")
+    end
+    local function moved(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local path
+    local function pixels(layer)
+        assert(Bridge.save(), "Nao salvou teste de contexto de arraste")
+        if not path then
+            local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+            for line in index:gmatch("[^\r\n]+") do
+                if line:find("Stale drag context", 1, true) then
+                    path = "lua-artworks/" ..
+                           assert(line:match("^(art_%d+_%d+)\t"))
+                end
+            end
+        end
+        assert(path)
+        return love.image.newImageData(
+            path .. "/layer_" .. tostring(layer or 1) .. ".png")
+    end
+    local function opaque(data, x, y)
+        return select(4, data:getPixel(x, y)) > .99
+    end
+    local function empty(data, x, y)
+        return close(select(4, data:getPixel(x, y)), 0)
+    end
+
+    -- Uma troca de ferramenta antes do movimento cancela a continuação,
+    -- sem perder os pixels anteriores nem seu undo.
+    press(2, 2)
+    assert(moved(4, 2))
+    model.active_tool = "eraser"
+    assert(not moved(10, 2), "Troca de ferramenta manteve brush antigo")
+    release(10, 2)
+    local painted = pixels()
+    assert(opaque(painted, 2, 2) and opaque(painted, 4, 2) and
+           empty(painted, 8, 2), "Troca de ferramenta pintou trecho antigo")
+    assert(Bridge.undo(), "Troca de ferramenta perdeu undo do pincel")
+    painted = pixels()
+    assert(empty(painted, 2, 2) and empty(painted, 4, 2))
+    assert(Bridge.redo(), "Troca de ferramenta perdeu redo")
+
+    -- Mudança de camada no mouseup não pode concluir a linha anterior
+    -- nem pintar acidentalmente a camada que se tornou ativa.
+    model.active_layer_id = 1
+    press(2, 4)
+    model.active_layer_id = 2
+    assert(not release(10, 4),
+           "Mouseup concluiu pincelada com outra camada ativa")
+    painted = pixels(1)
+    local second = pixels(2)
+    assert(opaque(painted, 2, 4) and empty(painted, 10, 4) and
+           empty(second, 2, 4) and empty(second, 10, 4),
+           "Mudanca de camada pintou pixels apos a troca")
+    assert(Bridge.undo())
+    painted = pixels(1)
+    assert(empty(painted, 2, 4) and opaque(painted, 2, 2))
+    assert(Bridge.redo())
+
+    model.active_layer_id = 1
+    press(2, 6)
+    model.layers[1].locked = true
+    assert(not moved(10, 6), "Camada bloqueada aceitou pincelada antiga")
+    release(10, 6)
+    model.layers[1].locked = false
+    painted = pixels()
+    assert(opaque(painted, 2, 6) and empty(painted, 10, 6),
+           "Bloqueio de camada nao cancelou resto do traco")
+
+    -- O release precisa verificar visibilidade e Alpha Lock mesmo
+    -- quando não houve nenhum mousemoved intermediário.
+    press(2, 8)
+    model.layers[1].visible = false
+    assert(not release(10, 8), "Mouseup pintou em camada agora oculta")
+    model.layers[1].visible = true
+    painted = pixels()
+    assert(opaque(painted, 2, 8) and empty(painted, 10, 8),
+           "Ocultar camada nao interrompeu pincel")
+
+    press(2, 10)
+    model.layers[1].alpha_lock = true
+    assert(not release(10, 10), "Mouseup usou Alpha Lock desatualizado")
+    model.layers[1].alpha_lock = false
+    painted = pixels()
+    assert(opaque(painted, 2, 10) and empty(painted, 10, 10),
+           "Alpha Lock alterado nao interrompeu pincel")
+
+    -- A seleção pode mudar por atalho durante um arraste. A pincelada
+    -- iniciada antes não deve misturar cobertura de duas máscaras.
+    press(2, 12)
+    assert(Bridge.selection_command(model, "select_all"))
+    assert(not moved(10, 12), "Brush continuou apos troca da selecao")
+    release(10, 12)
+    painted = pixels()
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 256 and opaque(painted, 2, 12) and
+           empty(painted, 10, 12),
+           "Selecao nova alterou a pincelada antiga")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Troca da mascara perdeu o historico raster")
+    Bridge.clear_selection()
+
+    -- Gesto de retângulo replace não confirmado: trocar a ferramenta
+    -- antes do mouseup restaura a seleção anterior sem histórico fantasma.
+    press(8, 4, "transform")
+    assert(release(10, 6))
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 9, 5))
+    local count = Bridge.selection_history_snapshot().undo
+    press(2, 14, "transform")
+    assert(not Bridge.selection_snapshot())
+    model.active_tool = "brush"
+    assert(not release(12, 14), "Mouseup concluiu retangulo de outra ferramenta")
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 9, 5))
+    assert(Bridge.selection_history_snapshot().undo == count,
+           "Retangulo abortado criou historico fantasma")
+
+    -- A troca de camada durante uma prévia de movimento não deve
+    -- confirmar pixels nem deslocar a seleção.
+    press(9, 5, "brush")
+    release(9, 5)
+    press(9, 5, "transform")
+    assert(moved(13, 5))
+    local preview = assert(Bridge.preview_snapshot())
+    assert(preview.kind == "move" and preview.active)
+    model.active_layer_id = 2
+    assert(not release(13, 5), "Mouseup confirmou previa em outra camada")
+    assert(not Bridge.preview_snapshot(), "Nao liberou previa desatualizada")
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 9, 5) and
+           not Selection.contains(selected, 13, 5),
+           "Troca de camada moveu mascara de previa cancelada")
+    painted = pixels(1)
+    second = pixels(2)
+    assert(opaque(painted, 9, 5) and empty(painted, 13, 5) and
+           empty(second, 9, 5),
+           "Troca de camada confirmou preview de pixels")
+
+    -- Laço ainda pendente também deve cancelar ao trocar ferramenta;
+    -- a máscara anterior continua válida.
+    model.active_layer_id = 1
+    press(3, 14, "lasso")
+    assert(not Bridge.selection_snapshot())
+    model.active_tool = "brush"
+    assert(not moved(5, 14), "Laco sobreviveu a troca de ferramenta")
+    release(5, 14)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 9, 5)
+           and Bridge.selection_history_snapshot().undo == count,
+           "Laço cancelado alterou selecao ou timeline")
+
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Bridge.undo() and Bridge.redo(),
+           "Historico e selecao apos mudanças de contexto nao persistiram")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, file in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. file)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Pressões consecutivas nunca podem manter dois gestos simultâneos.
 -- O novo press substitui o anterior, preservando seus pixels/histórico,
 -- mas cancelando máscaras temporárias e prévias sem commit.
@@ -6608,6 +6812,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("drag context changes cancel stale brush and selection")
+    test_stale_drag_context_bridge(Bridge, gallery)
     checkpoint("new mousepress preempts unfinished brush or selection")
     test_mousepress_preempts_gesture_bridge(Bridge, gallery)
     checkpoint("undo/redo interrupts active paint and selection gestures")
