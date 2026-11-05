@@ -348,6 +348,147 @@ local function test_feather_paint(E)
            "Contração não preservou pesos graduais da máscara")
 end
 
+-- Esc interrompe pincel e borracha sem descartar a selecao confirmada
+-- nem completar a linha por eventos de mouse atrasados.
+local function test_escape_stroke_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Escape strokes"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Escape active stroke")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, tool)
+        model.active_tool = tool or "brush"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1, 100, nil),
+               "Nao iniciou ferramenta para testar Esc")
+    end
+    local function move(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local path
+    local function pixels()
+        assert(Bridge.save())
+        if not path then
+            local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+            for line in index:gmatch("[^\r\n]+") do
+                if line:find("Escape active stroke", 1, true) then
+                    path = "lua-artworks/" ..
+                           assert(line:match("^(art_%d+_%d+)\t"))
+                end
+            end
+        end
+        assert(path, "Nao localizou PNG de Esc")
+        return love.image.newImageData(path .. "/layer_1.png")
+    end
+    local function opaque(image, x, y)
+        return select(4, image:getPixel(x, y)) > .99
+    end
+    local function empty(image, x, y)
+        return close(select(4, image:getPixel(x, y)), 0)
+    end
+
+    assert(not Bridge.keypressed("escape", model),
+           "Esc sem gesto/mascara foi consumido")
+    press(2, 2)
+    assert(move(4, 2))
+    assert(Bridge.keypressed("escape", model),
+           "Esc nao interrompeu a pincelada sem selecao")
+    assert(not move(10, 2) and not release(10, 2),
+           "Eventos tardios continuaram pincelada apos Esc")
+    local data = pixels()
+    assert(opaque(data, 2, 2) and opaque(data, 4, 2) and
+           empty(data, 10, 2),
+           "Esc desenhou o trecho final ou perdeu tinta ja aplicada")
+    assert(Bridge.undo(), "Pincel interrompido perdeu undo")
+    data = pixels()
+    assert(empty(data, 2, 2) and empty(data, 4, 2))
+    assert(Bridge.redo(), "Pincel interrompido perdeu redo")
+
+    -- Uma selecao existente nao pode ser desmarcada pelo PRIMEIRO Esc
+    -- usado para interromper o pincel.
+    press(8, 8, "transform")
+    assert(release(10, 10))
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 9, 9))
+    local mask_steps = Bridge.selection_history_snapshot().undo
+    press(8, 8)
+    assert(move(9, 8))
+    assert(Bridge.keypressed("escape", model),
+           "Esc com mascara ativa nao interrompeu pincel")
+    assert(not move(10, 8) and not release(10, 8))
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 8, 8)
+           and Bridge.selection_history_snapshot().undo == mask_steps,
+           "Esc do pincel apagou selecao ou gerou historico de mascara")
+    data = pixels()
+    assert(opaque(data, 8, 8) and opaque(data, 9, 8)
+           and empty(data, 10, 8) and empty(data, 7, 8),
+           "Esc com selecao desenhou fora do segmento aplicado")
+    assert(Bridge.undo())
+    data = pixels()
+    assert(empty(data, 8, 8) and empty(data, 9, 8))
+    assert(Bridge.redo())
+
+    -- Borracha interrompida: o pixel ja apagado permanece apagado,
+    -- mas o proximo pixel nao deve ser atingido pelo mouseup tardio.
+    press(8, 8, "eraser")
+    assert(Bridge.keypressed("escape", model),
+           "Esc nao interrompeu borracha")
+    assert(not move(9, 8) and not release(9, 8))
+    data = pixels()
+    assert(empty(data, 8, 8) and opaque(data, 9, 8),
+           "Esc permitiu segmento tardio da borracha")
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and
+           Bridge.selection_history_snapshot().undo == mask_steps)
+    assert(Bridge.undo(), "Borracha interrompida perdeu undo")
+    data = pixels()
+    assert(opaque(data, 8, 8) and opaque(data, 9, 8))
+    assert(Bridge.redo(), "Borracha interrompida perdeu redo")
+
+    -- Somente o SEGUNDO Esc, ja sem gesto ativo, desmarca normalmente.
+    assert(Bridge.keypressed("escape", model))
+    assert(not Bridge.selection_snapshot()
+           and Bridge.selection_history_snapshot().undo == mask_steps + 1,
+           "Esc sem gesto deixou selecao ativa ou perdeu seu historico")
+    assert(Bridge.selection_undo() and
+           Bridge.selection_snapshot().count == 9)
+    assert(Bridge.selection_redo() and not Bridge.selection_snapshot())
+    assert(Bridge.selection_undo() and
+           Bridge.selection_snapshot().count == 9)
+
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Bridge.undo() and Bridge.redo(),
+           "Esc perdeu mascara ou historico raster apos reabrir")
+
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, file in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. file)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Atalhos/comandos de seleção aplicam-se à máscara confirmada,
 -- não à ocultação provisória de um retângulo/laço replace.
 local function test_selection_command_interrupt_bridge(Bridge, gallery)
@@ -6970,6 +7111,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("Escape interrupts brush and eraser without clearing mask")
+    test_escape_stroke_bridge(Bridge, gallery)
     checkpoint("selection keyboard commands interrupt pending masks")
     test_selection_command_interrupt_bridge(Bridge, gallery)
     checkpoint("drag context changes cancel stale brush and selection")
