@@ -376,6 +376,23 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   seleção original. Testes LÖVE cobrem as mudanças durante
   mousemoved e mouseup, duas camadas, histórico, prévia GPU
   e persistência do PNG.
+- **Comandos de seleção durante um arraste**: todos os comandos de
+  `Bridge.selection_command` interrompem primeiro o gesto pendente
+  com `interrupt_active_gesture()`. Isso libera prévias GPU,
+  encerra pincel/borracha e restaura a referência original da
+  máscara ocultada por um retângulo ou laço no modo replace.
+  A ação usa a seleção **confirmada**, não o nil temporário;
+  Inverter, Selecionar tudo, Feather, Copiar/Colar e operações
+  raster passam pela mesma normalização. `Bridge.clear_selection`
+  também interrompe o gesto antes de `set_mask(nil)`, criando
+  no máximo o passo real de desmarcar. `Esc` com um gesto de
+  seleção/transformação pendente cancela somente esse gesto,
+  sem criar histórico ou limpar a máscara anterior; `Esc`
+  sem gesto segue desmarcando. Undo/redo das duas timelines,
+  pixels já escritos e máscara persistida permanecem intactos.
+  Os testes LÖVE incluem inversão durante replace, seleção
+  total, feather, Desmarcar, Esc, prévia de move, pincel
+  interrompido e persistência.
 - **Um novo mousepress válido substitui o gesto anterior**:
   após validar ferramenta, modelo e coordenada inicial dentro
   do canvas, `Bridge.mousepressed` chama
