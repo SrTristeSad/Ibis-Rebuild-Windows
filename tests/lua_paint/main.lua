@@ -648,6 +648,155 @@ local function test_uniform_stroke_opacity_bridge(Bridge, gallery)
     end
 end
 
+-- Pincéis largos mantêm a borda tocada mesmo quando o CENTRO do
+-- círculo está fora do canvas. O mesmo vale para a borracha.
+local function test_wide_stroke_canvas_edge_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Wide edge stroke", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Wide edge footprint")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(px, py)
+        return 62 + (1024 - 62 - 34) / 2 + (px + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (py + .5 - 8) * 11
+    end
+    local function press(x, y, tool, size)
+        model.active_tool = tool or "brush"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0},
+                                   size or 8, 100, nil),
+               "Nao iniciou pincel largo na borda")
+    end
+    local function move(x, y)
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousemoved(model, sx, sy, 1),
+               "Movimento fora do canvas nao foi acompanhado")
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local path
+    local function image()
+        assert(Bridge.save())
+        if not path then
+            local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+            for line in index:gmatch("[^\r\n]+") do
+                if line:find("Wide edge footprint", 1, true) then
+                    path = "lua-artworks/" ..
+                        assert(line:match("^(art_%d+_%d+)\t"))
+                end
+            end
+        end
+        assert(path, "Obra de pincel largo nao foi salva")
+        return love.image.newImageData(path .. "/layer_1.png")
+    end
+    local function alpha(pixels, x, y)
+        return select(4, pixels:getPixel(x, y))
+    end
+    local function painted(pixels, x, y)
+        return alpha(pixels, x, y) > .99
+    end
+    local function empty(pixels, x, y)
+        return close(alpha(pixels, x, y), 0)
+    end
+
+    -- Centro do ultimo dab (17,5;10,5) ja esta fora da tela, mas
+    -- seu raio de 4 pixels ainda atinge (15,11). O recorte anterior,
+    -- limitado ao centro x < 16, perdia inteiramente esse pixel.
+    press(15, 5)
+    release(17, 10)
+    local result = image()
+    assert(painted(result, 15, 11),
+           "Mouseup externo descartou a pegada do pincel largo")
+    assert(empty(result, 13, 13),
+           "Pincel largo atingiu pixel fora do alcance do circulo")
+    assert(Bridge.undo(), "Traco largo nao criou undo")
+    result = image()
+    assert(empty(result, 15, 11),
+           "Undo nao removeu a pegada fora do centro do canvas")
+    assert(Bridge.redo())
+    result = image()
+    assert(painted(result, 15, 11), "Redo perdeu pixels da borda")
+
+    -- A borracha deve atingir os mesmos pixels, com centro externo.
+    press(15, 5, "eraser")
+    release(17, 10)
+    result = image()
+    assert(empty(result, 15, 11),
+           "Borracha larga nao alcancou o pixel tocado pelo raio")
+    assert(Bridge.undo())
+    result = image()
+    assert(painted(result, 15, 11),
+           "Undo da borracha larga nao restaurou a borda")
+    assert(Bridge.redo())
+
+    -- Cursor muito longe da obra: nenhum pixel novo deve aparecer.
+    -- Ao reentrar APENAS na faixa alcançada pelo raio, o pincel
+    -- pinta a borda sem criar um atalho diagonal no interior.
+    press(15, 8)
+    move(25, 8)
+    local outside = image()
+    move(25, 15)
+    local still_outside = image()
+    for y = 0, 15 do
+        for x = 0, 15 do
+            assert(close(alpha(outside, x, y),
+                         alpha(still_outside, x, y), 1 / 255),
+                   "Mover pincel totalmente fora alterou o raster")
+        end
+    end
+    move(18, 15)
+    release(18, 15)
+    result = image()
+    assert(painted(result, 15, 15),
+           "Reentrada com centro externo nao pintou o pixel tocado")
+    assert(empty(result, 10, 14),
+           "Reentrada de pincel largo gerou diagonal indevida")
+    assert(Bridge.undo())
+    result = image()
+    assert(empty(result, 15, 15),
+           "Undo da reentrada nao reverteu o gesto inteiro")
+    assert(Bridge.redo())
+
+    -- Seleção continua limitando os pixels mesmo com raio externo.
+    model.active_tool = "transform"
+    press(14, 0, "transform", 1)
+    assert(release(15, 1), "Nao confirmou selecao no canto")
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 4 and
+           Selection.contains(selected, 15, 1),
+           "Mascara retangular na borda foi perdida")
+    press(15, 0)
+    release(18, 2)
+    result = image()
+    assert(painted(result, 15, 1) and empty(result, 14, 2),
+           "Borda larga nao respeitou a mascara ativa")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Selecao e pincel largo perderam undo/redo")
+    Bridge.clear_selection()
+
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico de pincel largo na borda nao persistiu")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- A ponte nao deve perder a ponta do traco ao sair do canvas,
 -- nem ligar pontos distantes depois de um passeio fora da tela.
 local function test_stroke_canvas_edge_bridge(Bridge, gallery)
@@ -6118,6 +6267,8 @@ function love.load()
     test_history_interrupt_bridge(Bridge, gallery)
     checkpoint("uniform opacity across mousemove frequency")
     test_uniform_stroke_opacity_bridge(Bridge, gallery)
+    checkpoint("wide brush radius reaches canvas edges")
+    test_wide_stroke_canvas_edge_bridge(Bridge, gallery)
     checkpoint("brush and eraser strokes clipped to canvas edges")
     test_stroke_canvas_edge_bridge(Bridge, gallery)
     checkpoint("brush and eraser final segment on release")

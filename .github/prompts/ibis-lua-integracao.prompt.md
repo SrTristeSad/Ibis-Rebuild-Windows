@@ -60,8 +60,12 @@ e pintar apenas o trecho interno antes de descartar `drawing`.
 Pincel/borracha armazenam `drawing.raw_x/raw_y` fora da obra.
 `canvas_point(..., true)` é permitido somente para o percurso da
 tinta, não nos cliques, conta-gotas nem seleções. Recortar cada
-segmento à área válida em `clip_stroke_segment` (Liang–Barsky),
-sem extrapolar a borda e sem gerar longa diagonal artificial
+segmento em `clip_stroke_segment` (Liang–Barsky), recortando
+os **centros do pincel** ao retângulo dos centros de pixels
+expandido pelo raio efetivo de `Engine.stroke`
+(`max(0.75, min(256, d.size)/2)`). Pincéis e borrachas largos
+devem atingir a borda mesmo quando o centro já está fora;
+`dab` nunca escreve fora do raster. Não gerar diagonal artificial
 quando o cursor retorna à obra após percorrer área externa.
 Atualizar a posição bruta também para segmentos 100% externos.
 Preservar rotação, Alpha Lock, máscara e um snapshot por gesto.

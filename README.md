@@ -57,6 +57,11 @@ O fechamento usa a mesma máscara, camada e histórico único do
 arraste. O comportamento das seleções não foi alterado.
 **Quando o cursor cruza as bordas do canvas**, pincel e borracha
 completam o trecho até a borda sem modificar pixels fora da obra.
+**Pincéis largos continuam tocando a borda mesmo com o centro
+fora do canvas**: o recorte considera o raio real do círculo,
+não apenas sua posição central. A borracha usa a mesma geometria.
+Nenhum pixel é escrito fora do raster; o histórico e as máscaras
+permanecem respeitados.
 O cursor continua sendo acompanhado fora do canvas: ao reentrar,
 o traço é recortado a partir do ponto de entrada, sem criar uma
 linha diagonal entre dois pontos distantes. Isso também vale

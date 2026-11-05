@@ -536,11 +536,14 @@ local function paint(p, d, x, y, start_x, start_y)
     d.x, d.y = x, y
 end
 
--- Recorte paramétrico de um segmento à área raster. A posição CRUA do
--- cursor é mantida mesmo fora do canvas: ao reentrar, pintamos só
--- a parte interna do novo segmento, jamais uma diagonal artificial
--- ligando o último ponto pintado à nova posição.
-local function clip_stroke_segment(x0, y0, x1, y1, w, h)
+-- Recorte paramétrico dos CENTROS do pincel. Um centro fora do
+-- canvas ainda deve pintar enquanto seu círculo atingir algum
+-- centro de pixel interno; por isso expandimos os limites pelo
+-- raio efetivo usado por Engine.stroke. O rasterizador continua
+-- impedindo qualquer escrita fora do canvas.
+-- A posição CRUA do cursor é mantida fora para evitar diagonais
+-- artificiais ao reentrar.
+local function clip_stroke_segment(x0, y0, x1, y1, w, h, radius)
     local dx, dy = x1 - x0, y1 - y0
     local start_t, end_t = 0, 1
     local function bound(p, q)
@@ -555,11 +558,12 @@ local function clip_stroke_segment(x0, y0, x1, y1, w, h)
         end
         return true
     end
-    -- Limite superior exclusivo, coerente com canvas_point: não
-    -- ultrapassar a borda e ainda atingir o último pixel do raster.
-    local xmax, ymax = w - 1e-6, h - 1e-6
-    if not bound(-dx, x0) or not bound(dx, xmax - x0) or
-       not bound(-dy, y0) or not bound(dy, ymax - y0) then
+    -- Centros de pixels vão de 0,5 até largura/altura - 0,5.
+    -- Fora desse retângulo ampliado, nenhum dab pode atingir pixel.
+    local xmin, ymin = 0.5 - radius, 0.5 - radius
+    local xmax, ymax = w - 0.5 + radius, h - 0.5 + radius
+    if not bound(-dx, x0 - xmin) or not bound(dx, xmax - x0) or
+       not bound(-dy, y0 - ymin) or not bound(dy, ymax - y0) then
         return nil
     end
     return x0 + start_t * dx, y0 + start_t * dy,
@@ -574,8 +578,10 @@ local function continue_stroke(p, d, x, y)
     if math.abs(x - old_x) + math.abs(y - old_y) <= 0.005 then
         return
     end
+    -- Usar exatamente o mesmo raio limitado do motor Lua.
+    local radius = math.max(0.75, math.min(256, d.size) / 2)
     local x0, y0, x1, y1 = clip_stroke_segment(
-        old_x, old_y, x, y, p.w, p.h)
+        old_x, old_y, x, y, p.w, p.h, radius)
     if x0 and math.abs(x1 - x0) + math.abs(y1 - y0) > 0.005 then
         paint(p, d, x1, y1, x0, y0)
     end

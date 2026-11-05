@@ -330,10 +330,14 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Pincel e borracha acompanham o **cursor bruto fora do canvas**
   separadamente do último pixel pintado. A conversão
   `canvas_point(..., allow_outside=true)` e o clipping paramétrico
-  `clip_stroke_segment` recortam cada trecho ao retângulo
-  [0, largura) × [0, altura). Ao sair, a pintura termina na borda;
-  trechos totalmente externos não pintam e atualizam a posição
-  bruta. Ao reentrar, a pintura começa no novo ponto de entrada,
+  `clip_stroke_segment` recortam os **centros do pincel** ao
+  retângulo dos centros de pixels, ampliado pelo raio efetivo
+  `max(0.75, min(256, tamanho)/2)` usado em `Engine.stroke`.
+  Assim um pincel ou borracha largos ainda atingem a última coluna
+  mesmo com seu centro fora do canvas; os dabs em `Engine.stroke`
+  continuam limitando a escrita ao raster [0,largura) × [0,altura).
+  Segmentos inteiramente além do alcance do círculo não pintam
+  e atualizam a posição bruta. Ao reentrar, a pintura começa no novo ponto de entrada,
   sem criar diagonal entre pontos anteriores da obra. O mesmo
   comportamento vale para mouseup fora e para canvas rotacionado.
   Mousepress, seleção, conta-gotas e Varinha continuam rejeitando
