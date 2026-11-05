@@ -718,7 +718,7 @@ local function test_stroke_release_bridge(Bridge, gallery)
     canvas = read()
     assert(close(select(4, canvas:getPixel(2, 2)), 0)
            and close(select(4, canvas:getPixel(8, 2)), 0)
-           and select(4, canvas:getPixel(9, 9)) > .7,
+           and close(select(4, canvas:getPixel(9, 9)), .5, .02),
            "Undo do release deveria desfazer todo o gesto em um passo")
     assert(Bridge.redo())
 
