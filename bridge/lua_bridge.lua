@@ -375,6 +375,10 @@ function Bridge.save()
     if not project or not project.id or not project.model then return false end
     local record = records[project.id]
     if not record then return false end
+    -- A máscara de um retângulo/laço replace pode estar oculta até mouseup.
+    -- Salvar deve persistir somente o último estado confirmado, nunca a
+    -- seleção provisória; os pixels já pintados conservam seu undo raster.
+    interrupt_active_gesture()
     local path = project_path(record.key)
     assert(love.filesystem.createDirectory(path), "Não foi possível criar diretório da obra")
     Engine.sync(project, project.model)

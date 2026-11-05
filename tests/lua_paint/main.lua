@@ -854,6 +854,86 @@ end
 -- Pressões consecutivas nunca podem manter dois gestos simultâneos.
 -- O novo press substitui o anterior, preservando seus pixels/histórico,
 -- mas cancelando máscaras temporárias e prévias sem commit.
+-- Salvar durante um gesto provisório não deve gravar máscara vazia
+-- nem permitir que eventos de mouse atrasados alterem a obra salva.
+local function test_save_interrupt_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Save gesture"}},
+        active_layer_id = 1, active_tool = "transform",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Save pending gesture")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, tool)
+        model.active_tool = tool or "transform"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1, 100, nil))
+    end
+    local function moved(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    press(2, 2)
+    assert(release(4, 4))
+    local original = assert(Bridge.selection_snapshot())
+    assert(original.count == 9 and Selection.contains(original, 3, 3))
+    local history = Bridge.selection_history_snapshot()
+    press(10, 10)
+    assert(not Bridge.selection_snapshot(), "Replace nao ocultou selecao provisoria")
+    assert(Bridge.save(), "Falha ao salvar durante selecao provisoria")
+    assert(not moved(12, 12) and not release(12, 12),
+           "Eventos tardios confirmaram selecao depois do salvamento")
+    local restored = assert(Bridge.selection_snapshot())
+    assert(restored.count == 9 and Selection.contains(restored, 3, 3)
+           and not Selection.contains(restored, 11, 11),
+           "Salvar nao restaurou a mascara confirmada")
+    assert(Bridge.selection_history_snapshot().undo == history.undo,
+           "Salvar criou etapa fantasma no historico de selecao")
+    Bridge.open(model, id)
+    restored = assert(Bridge.selection_snapshot())
+    assert(restored.count == 9 and Selection.contains(restored, 3, 3),
+           "Reabrir perdeu a selecao confirmada")
+
+    -- Uma pincelada parcialmente aplicada conserva pixels e undo,
+    -- mas o mouseup posterior ao salvamento não pode completá-la.
+    press(3, 3, "brush")
+    assert(Bridge.save(), "Falha ao salvar durante pincelada")
+    assert(not moved(4, 3) and not release(4, 3),
+           "Salvar permitiu continuar pincelada interrompida")
+    assert(Bridge.undo(), "Salvar descartou o undo da pincelada")
+    assert(Bridge.redo(), "Salvar descartou o redo da pincelada")
+
+    local path
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Save pending gesture", 1, true) then
+            path = "lua-artworks/" .. assert(line:match("^(art_%d+_%d+)\t"))
+        end
+    end
+    assert(path, "Nao encontrou arte salva no indice")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 local function test_mousepress_preempts_gesture_bridge(Bridge, gallery)
     local Selection = require("lua_selection")
     local model = {
@@ -1592,17 +1672,11 @@ local function test_wide_stroke_canvas_edge_bridge(Bridge, gallery)
     -- Ao reentrar APENAS na faixa alcançada pelo raio, o pincel
     -- pinta a borda sem criar um atalho diagonal no interior.
     press(15, 8)
+    -- Não chamar Bridge.save() no meio do arraste: salvar agora encerra
+    -- deliberadamente o gesto. O resultado final abaixo continua
+    -- verificando reentrada, clipping e ausência de diagonal indevida.
     move(25, 8)
-    local outside = image()
     move(25, 15)
-    local still_outside = image()
-    for y = 0, 15 do
-        for x = 0, 15 do
-            assert(close(alpha(outside, x, y),
-                         alpha(still_outside, x, y), 1 / 255),
-                   "Mover pincel totalmente fora alterou o raster")
-        end
-    end
     move(18, 15)
     release(18, 15)
     result = image()
@@ -1709,22 +1783,19 @@ local function test_stroke_canvas_edge_bridge(Bridge, gallery)
     -- Sair à direita com mousemove deve chegar ao ultimo pixel.
     press(4, 4)
     move(20, 4)
+    -- Bridge.save() encerra gestos: conferir os segmentos somente após
+    -- release, sem interromper o traço para obter PNG intermediário.
+    move(20, 10)
+    move(14, 10)
+    release(14, 10)
     local picture = snapshot()
     for x = 4, 15 do
         assert(painted(picture, x, 4),
                "Pincel nao alcancou a borda direita: " .. x)
     end
-    -- Ainda fora do canvas: atualizar o cursor cru, mas nao pintar.
-    move(20, 10)
-    picture = snapshot()
-    assert(empty(picture, 12, 7) and empty(picture, 15, 7),
-           "Ponte pintou linha enquanto cursor estava fora")
-    -- Reentrar pela direita nao cria atalho diagonal desde (15,4).
-    move(14, 10)
-    release(14, 10)
-    picture = snapshot()
     assert(painted(picture, 14, 10) and painted(picture, 15, 10)
-           and empty(picture, 12, 7) and empty(picture, 13, 8),
+           and empty(picture, 12, 7) and empty(picture, 13, 8)
+           and empty(picture, 15, 7),
            "Reentrada ligou pontos por diagonal indevida")
     assert(Bridge.undo(), "Pincel na borda perdeu undo")
     picture = snapshot()
@@ -1763,15 +1834,12 @@ local function test_stroke_canvas_edge_bridge(Bridge, gallery)
     -- compara PNG antes e depois de soltar na mesma posicao.
     press(6, 2, 50)
     move(20, 2)
-    picture = snapshot()
-    local before = select(4, picture:getPixel(15, 2))
-    assert(before > 0 and before < 1,
-           "Traço de opacidade parcial nao chegou ate a borda")
     move(20, 2)
     release(20, 2)
     picture = snapshot()
-    assert(close(select(4, picture:getPixel(15, 2)), before, 1 / 255),
-           "Repetir mousemove/release fora multiplicou opacidade")
+    local actual = select(4, picture:getPixel(15, 2))
+    assert(close(actual, 0.5, 1 / 255),
+           "Mover repetidamente e soltar fora multiplicou opacidade")
 
     -- Uma selecao limita a area pintada mesmo quando a ponta do
     -- segmento cru esta fora do canvas.
@@ -7117,6 +7185,8 @@ function love.load()
     test_selection_command_interrupt_bridge(Bridge, gallery)
     checkpoint("drag context changes cancel stale brush and selection")
     test_stale_drag_context_bridge(Bridge, gallery)
+    checkpoint("saving interrupts provisional selection and brush")
+    test_save_interrupt_bridge(Bridge, gallery)
     checkpoint("new mousepress preempts unfinished brush or selection")
     test_mousepress_preempts_gesture_bridge(Bridge, gallery)
     checkpoint("undo/redo interrupts active paint and selection gestures")
