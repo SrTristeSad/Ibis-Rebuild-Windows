@@ -42,6 +42,17 @@
   as pilhas independentes de máscara e raster e não adicionar UI.
   Testar Ctrl+Z/Y durante o drag, pilha vazia, Ctrl+Alt+Z/Y
   durante a seleção, preview GPU e eventos atrasados de release.
+- Seleções não bloqueiam o INÍCIO do pincel/borracha: o centro
+  do clique pode estar fora de `Selection.contains`, mas o traço
+  pode entrar na máscara ou um dab circular largo pode alcançá-la.
+  `Engine.stroke` usa `Selection.coverage` por pixel; manter essa
+  restrição e o histórico tardio, sem criar undo/dirty em gesto
+  totalmente externo. O teste de semente fora da máscara no
+  `Bridge.mousepressed` deve valer **somente para tool=="bucket"**;
+  Varinha/transformação/conta-gotas seguem regras independentes,
+  e mousepress continua limitado à área do canvas. Cobrir drag de
+  fora para dentro, círculo largo com centro externo, borracha,
+  undo/redo e Balde sem vazamento.
 - Cobertura uniforme por gesto de pincel/borracha: `Engine.stroke`
   aceita, após o callback `on_first_change`, a tabela opcional
   `covered_pixels` de índices `py*w+px`. Pixels já modificados
