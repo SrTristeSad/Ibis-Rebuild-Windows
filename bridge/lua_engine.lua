@@ -437,11 +437,14 @@ end
 -- Balde por cor: tolerância de 0..255 em RGBA (padrão) ou apenas RGB.
 -- Contíguo 4-conexo por padrão; diagonal_mode=true inclui os cantos.
 -- O modo global ignora a conectividade e inclui ilhas sem conexão.
--- Descobre a região usando APENAS o raster original antes de pintá-lo.
+-- Amostra a camada ativa por padrão; uma fonte opcional pode representar
+-- a composição visível. A edição continua restrita à camada ativa.
+-- Descobre a região usando APENAS os pixels de referência originais,
+-- antes de pintar qualquer pixel da camada ativa.
 -- Isso impede revisitas e loops quando a cor aplicada está na tolerância.
 -- Não modifica a máscara de seleção, pixels fora dela ou histórico em no-op.
 function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
-                     tolerance, global_mode, rgb_only, diagonal_mode)
+                     tolerance, global_mode, rgb_only, diagonal_mode, reference)
     if project.w * project.h > 1024 * 1024 then
         return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
     end
@@ -459,6 +462,11 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
     if diagonal_mode ~= nil and type(diagonal_mode) ~= "boolean" then
         return false, "Conectividade diagonal do balde deve ser booleana."
     end
+    if reference ~= nil and
+       (type(reference) ~= "table" or not reference.pixels or
+        type(reference.pixels.getPixel) ~= "function") then
+        return false, "Fonte de referência do balde deve fornecer pixels RGBA."
+    end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= project.w or y >= project.h or
        (selection and not Selection.contains(selection, x, y)) then
@@ -468,8 +476,11 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
     if alpha * Selection.coverage(selection, x, y) <= 0 then return false end
     local layer = assert(project.layers[id], "Camada inexistente")
     local data = layer.pixels
-    local tr, tg, tb, ta = data:getPixel(x, y)
-    if alpha_lock and ta <= 0 then return false end
+    local sample = reference and reference.pixels or data
+    local tr, tg, tb, ta = sample:getPixel(x, y)
+    if alpha_lock and select(4, data:getPixel(x, y)) <= 0 then
+        return false
+    end
 
     local w, h = project.w, project.h
     local threshold = tolerance / 255 + 1 / 510
@@ -481,8 +492,12 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
         end
         local key = py * w + px
         if visited[key] then return false end
-        local r, g, b, a = data:getPixel(px, py)
-        if alpha_lock and a <= 0 then return false end
+        -- A tolerância verifica a fonte escolhida. Alpha Lock, por
+        -- outro lado, depende sempre do alfa da camada a editar.
+        if alpha_lock and select(4, data:getPixel(px, py)) <= 0 then
+            return false
+        end
+        local r, g, b, a = sample:getPixel(px, py)
         return math.abs(r - tr) <= threshold and
                math.abs(g - tg) <= threshold and
                math.abs(b - tb) <= threshold and
@@ -490,7 +505,7 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
     end
 
     if global_mode then
-        -- Varredura única de toda a camada ativa: cada célula é
+        -- Varredura única de toda a fonte: cada célula é
         -- examinada antes de pintar e não se aloca pilha de busca.
         -- Máscara e Alpha Lock continuam restringindo a amostragem.
         for py = 0, h - 1 do
