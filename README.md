@@ -32,6 +32,14 @@ pixels, opacidade zero, cobertura de seleção nula ou pintura idêntica não
 criam estado sujo nem invalidam `Refazer`. A detecção usa margem de
 quantização compatível com RGBA 8-bit; um arraste alterado conserva
 um único passo de Desfazer. Não há mudança no desenho da interface.
+**Arrastes interrompidos por troca de contexto:** se a ferramenta,
+a camada ativa, sua visibilidade/bloqueio, o Alpha Lock ou a
+seleção mudarem durante uma pincelada, o próximo movimento ou
+mouseup cancela o trecho restante. A pintura já realizada e seu
+histórico são mantidos, mas não surgem pixels na camada antiga.
+Trocar de ferramenta/camada durante um retângulo, laço ou prévia
+de transformação também cancela essa operação sem confirmar
+seu resultado. A validação não exige outro clique no canvas.
 **Pressões consecutivas sem mouseup:** um novo clique válido no
 canvas encerra a pincelada ou seleção que ainda estava em andamento.
 A tinta já aplicada conserva seu Desfazer próprio; retângulos/laços
