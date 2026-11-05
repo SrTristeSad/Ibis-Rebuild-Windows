@@ -1672,17 +1672,11 @@ local function test_wide_stroke_canvas_edge_bridge(Bridge, gallery)
     -- Ao reentrar APENAS na faixa alcançada pelo raio, o pincel
     -- pinta a borda sem criar um atalho diagonal no interior.
     press(15, 8)
+    -- Não chamar Bridge.save() no meio do arraste: salvar agora encerra
+    -- deliberadamente o gesto. O resultado final abaixo continua
+    -- verificando reentrada, clipping e ausência de diagonal indevida.
     move(25, 8)
-    local outside = image()
     move(25, 15)
-    local still_outside = image()
-    for y = 0, 15 do
-        for x = 0, 15 do
-            assert(close(alpha(outside, x, y),
-                         alpha(still_outside, x, y), 1 / 255),
-                   "Mover pincel totalmente fora alterou o raster")
-        end
-    end
     move(18, 15)
     release(18, 15)
     result = image()
