@@ -110,12 +110,10 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
     for py = ymin, ymax do
         for px = xmin, xmax do
             local dx, dy = px + 0.5 - x, py + 0.5 - y
-            if dx * dx + dy * dy <= rr then
-                local key = py * w + px
-                -- A ponte mantém a cobertura entre mousemoved de um
-                -- único gesto. No modo uniforme cada pixel recebe
-                -- apenas uma aplicação, não uma por dab sobreposto.
-                if not covered_pixels or not covered_pixels[key] then
+            -- A ponte mantém esta cobertura entre eventos do mesmo
+            -- gesto, evitando composição repetida em dabs sobrepostos.
+            if dx * dx + dy * dy <= rr and
+               (not covered_pixels or not covered_pixels[py * w + px]) then
                 local effective_alpha = alpha * Selection.coverage(selection, px, py)
                 if effective_alpha > 0 then
                     local dr, dg, db, da = data:getPixel(px, py)
@@ -155,10 +153,11 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
                                math.abs(na - da) >= STROKE_EPSILON) then
                         if before_first_change then before_first_change() end
                         data:setPixel(px, py, nr, ng, nb, na)
-                        if covered_pixels then covered_pixels[key] = true end
+                        if covered_pixels then
+                            covered_pixels[py * w + px] = true
+                        end
                         changed = true
                     end
-                end
                 end
             end
         end
