@@ -38,6 +38,14 @@ a ponta do traço ainda chega à posição final. Movimentos repetidos
 sem deslocamento não reaplicam tinta nem acumulam opacidade.
 O fechamento usa a mesma máscara, camada e histórico único do
 arraste. O comportamento das seleções não foi alterado.
+**Quando o cursor cruza as bordas do canvas**, pincel e borracha
+completam o trecho até a borda sem modificar pixels fora da obra.
+O cursor continua sendo acompanhado fora do canvas: ao reentrar,
+o traço é recortado a partir do ponto de entrada, sem criar uma
+linha diagonal entre dois pontos distantes. Isso também vale
+para o mouseup fora do canvas e para canvas rotacionados.
+A seleção e o histórico único do gesto continuam respeitados;
+não foram introduzidos controles visuais.
 Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
 (Ctrl+C/X/V), rotação de 90° (Ctrl+Shift+R/L) e escala 50%/200%
 (Ctrl+Shift+Down/Up). Com Transformar selecionado, Alt+arrastar dentro

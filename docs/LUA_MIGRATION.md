@@ -327,8 +327,20 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   exibidas pelo Ibis-Lua continuam sem backend real nesta etapa.
 - O evento de soltar o mouse só acrescenta um trecho de pintura
   se a posição final válida for diferente da última já processada.
-  A UI e a rasterização permanecem limitadas ao canvas e não
-  extrapolam a borda ao receber coordenadas externas.
+  Pincel e borracha acompanham o **cursor bruto fora do canvas**
+  separadamente do último pixel pintado. A conversão
+  `canvas_point(..., allow_outside=true)` e o clipping paramétrico
+  `clip_stroke_segment` recortam cada trecho ao retângulo
+  [0, largura) × [0, altura). Ao sair, a pintura termina na borda;
+  trechos totalmente externos não pintam e atualizam a posição
+  bruta. Ao reentrar, a pintura começa no novo ponto de entrada,
+  sem criar diagonal entre pontos anteriores da obra. O mesmo
+  comportamento vale para mouseup fora e para canvas rotacionado.
+  Mousepress, seleção, conta-gotas e Varinha continuam rejeitando
+  coordenadas externas. O recorte mantém máscara, Alpha Lock,
+  camada ativa e único snapshot de histórico por gesto.
+  Testes reais LÖVE cobrem todas as bordas, reentrada, rotação,
+  máscara, opacidade parcial, histórico e reabertura.
 - O no-op do pincel e da borracha evita modificações sub-byte por
   comparação RGBA 8-bit; isso não implementa acúmulo de opacidade
   abaixo da precisão do raster ou estabilização de traços.

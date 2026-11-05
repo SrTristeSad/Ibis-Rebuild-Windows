@@ -27,8 +27,16 @@
   inteiro da camada antes da primeira mudança, um único undo para
   toda a pincelada. Testar também restauração, persistência e Alpha Lock.
 - Finalização correta do gesto: `Bridge.mousereleased(model,rx,ry,scale)`
-  deve aplicar o segmento final entre `drawing.x/y` e a posição
-  convertida do mouseup, ANTES de limpar o estado do traço.
+  deve pintar o segmento final ANTES de limpar o estado do traço.
+  O cursor bruto fica em `drawing.raw_x/raw_y` mesmo fora da obra.
+  `canvas_point(..., true)` permite coordenadas externas SOMENTE
+  para traços; clique, seleção e conta-gotas continuam limitados.
+  `clip_stroke_segment` recorta o próximo trecho ao retângulo
+  [0,w) × [0,h) (parametrização Liang–Barsky).
+  Mesmo um segmento inteiramente externo atualiza raw_x/raw_y
+  para impedir uma diagonal artificial quando o cursor reentra.
+  Mousemove/mouseup externos, rotação, seleção e histórico tardio
+  continuam usando o mesmo fluxo, sem novo passo de undo.
   Eventos de `mousemoved` e `mousereleased` que repetem a mesma
   posição (diferença até 0,005 pixel) não devem reaplicar dabs:
   isso evita aumento artificial de alfa em pintura parcial.
