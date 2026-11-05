@@ -25,6 +25,13 @@ persistidas em `selection.png` por obra, separado dos pixels das camadas,
 sem impedir a abertura de projetos antigos. Varinha Mágica, Laço e
 Transformar conectam gestos existentes a seleções raster temporárias em Lua,
 com movimento de pixels e histórico reversível (limitados a 1 Mi de pixels).
+**Pincel e borracha agora registram histórico apenas na primeira alteração
+real de pixels de cada gesto**, inclusive quando o arraste começa sobre uma
+área onde nada muda. Clique de borracha em transparência, Alpha Lock sem
+pixels, opacidade zero, cobertura de seleção nula ou pintura idêntica não
+criam estado sujo nem invalidam `Refazer`. A detecção usa margem de
+quantização compatível com RGBA 8-bit; um arraste alterado conserva
+um único passo de Desfazer. Não há mudança no desenho da interface.
 Também há copiar/recortar/colar pixels da camada ativa por clipboard interno
 (Ctrl+C/X/V), rotação de 90° (Ctrl+Shift+R/L) e escala 50%/200%
 (Ctrl+Shift+Down/Up). Com Transformar selecionado, Alt+arrastar dentro

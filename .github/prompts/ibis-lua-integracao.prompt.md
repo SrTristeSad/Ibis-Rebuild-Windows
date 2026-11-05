@@ -7,6 +7,22 @@ A interface de referência é **exclusivamente** https://github.com/SrTristeSad/
 
 O motor de edição ativo deve ser implementado em **Lua/LuaJIT + LÖVE 11.5**, sem chamadas a rebuild_core.dll, FFI, WebView ou C++ do projeto. Separe pixels, persistência e integração de eventos do código visual. Não elimine recursos de UI para facilitar o motor.
 
+**Histórico do pincel/borracha somente quando muda pixels**:
+`Engine.stroke(..., selection, on_first_change)` recebe um callback
+final opcional, que é executado uma vez por chamada e ANTES da primeira
+escrita que ultrapasse meio nível RGBA 8-bit. A ponte só chama
+`Engine.begin_stroke` quando houver alteração e no máximo uma vez
+por gesto via `drawing.history_started`. Sem alterações reais,
+não fazer `replacePixels`, não marcar dirty, não criar undo nem
+apagar redo. Um clique no pixel já da mesma cor, eraser em
+transparência, Alpha Lock em vazio, opacidade zero/sub-byte e
+seleção fora da pincelada são no-op. Um arraste pode começar sem
+efeito e pintar depois; capturar a camada ANTES da primeira edição
+e permitir undo/redo do gesto completo. O `Engine.stroke` direto
+sem callback não cria histórico automaticamente, preservando seu
+contrato com `Engine.begin_stroke` explícito. Testar pixels,
+arraste real da UI, máscaras, undo/redo e histórico persistido.
+Não alterar atalhos, assets ou o submódulo.
 Estado funcional conhecido: motor Lua com pincel circular, borracha,
 preenchimento contíguo, conta-gotas, camadas normais, Alpha Lock,
 Clipping com shader do LÖVE, blend RGBA CPU/GPU para os nove modos

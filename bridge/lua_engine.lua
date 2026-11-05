@@ -94,61 +94,103 @@ function Engine.redo(project, selection)
 end
 
 -- Composição source-over com RGB não pré-multiplicado, em canais 0..1.
-local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser, alpha_lock, selection)
+-- Pincel e borracha registram a primeira alteração ANTES de escrever
+-- o pixel. Assim um clique sem efeito não consome undo/redo nem GPU upload.
+-- Usar a mesma margem de quantização do Balde (RGBA 8-bit).
+local STROKE_EPSILON = 0.5 / 255
+local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
+                   alpha_lock, selection, before_first_change)
     local data = layer.pixels
     local xmin = math.max(0, math.floor(x - radius))
     local xmax = math.min(w - 1, math.ceil(x + radius))
     local ymin = math.max(0, math.floor(y - radius))
     local ymax = math.min(h - 1, math.ceil(y + radius))
     local rr = radius * radius
+    local changed = false
     for py = ymin, ymax do
         for px = xmin, xmax do
             local dx, dy = px + 0.5 - x, py + 0.5 - y
-            local effective_alpha = alpha * Selection.coverage(selection, px, py)
-            if dx * dx + dy * dy <= rr and effective_alpha > 0 then
-                local dr, dg, db, da = data:getPixel(px, py)
-                local alpha = effective_alpha
-                if alpha_lock then
-                    -- Alpha Lock changes RGB only where alpha already exists.
-                    -- The alpha channel is preserved exactly; erasing is a no-op.
-                    if da > 0 and not eraser then
-                        data:setPixel(px, py,
-                            dr * (1 - alpha) + rgb[1] * alpha,
-                            dg * (1 - alpha) + rgb[2] * alpha,
-                            db * (1 - alpha) + rgb[3] * alpha, da)
+            if dx * dx + dy * dy <= rr then
+                local effective_alpha = alpha * Selection.coverage(selection, px, py)
+                if effective_alpha > 0 then
+                    local dr, dg, db, da = data:getPixel(px, py)
+                    local nr, ng, nb, na
+                    if alpha_lock then
+                        -- Alpha Lock apenas muda RGB de pixels existentes.
+                        if da > 0 and not eraser then
+                            nr = dr * (1 - effective_alpha) +
+                                 rgb[1] * effective_alpha
+                            ng = dg * (1 - effective_alpha) +
+                                 rgb[2] * effective_alpha
+                            nb = db * (1 - effective_alpha) +
+                                 rgb[3] * effective_alpha
+                            na = da
+                        end
+                    elseif eraser then
+                        na = da * (1 - effective_alpha)
+                        if na < 0.0001 then
+                            nr, ng, nb, na = 0, 0, 0, 0
+                        else
+                            nr, ng, nb = dr, dg, db
+                        end
+                    else
+                        na = effective_alpha + da * (1 - effective_alpha)
+                        if na > 0 then
+                            nr = (rgb[1] * effective_alpha +
+                                  dr * da * (1 - effective_alpha)) / na
+                            ng = (rgb[2] * effective_alpha +
+                                  dg * da * (1 - effective_alpha)) / na
+                            nb = (rgb[3] * effective_alpha +
+                                  db * da * (1 - effective_alpha)) / na
+                        end
                     end
-                elseif eraser then
-                    local a = da * (1 - alpha)
-                    if a < 0.0001 then data:setPixel(px, py, 0, 0, 0, 0)
-                    else data:setPixel(px, py, dr, dg, db, a) end
-                else
-                    local a = alpha + da * (1 - alpha)
-                    if a > 0 then
-                        data:setPixel(px, py,
-                            (rgb[1] * alpha + dr * da * (1 - alpha)) / a,
-                            (rgb[2] * alpha + dg * da * (1 - alpha)) / a,
-                            (rgb[3] * alpha + db * da * (1 - alpha)) / a, a)
+                    if nr and (math.abs(nr - dr) >= STROKE_EPSILON or
+                               math.abs(ng - dg) >= STROKE_EPSILON or
+                               math.abs(nb - db) >= STROKE_EPSILON or
+                               math.abs(na - da) >= STROKE_EPSILON) then
+                        if before_first_change then before_first_change() end
+                        data:setPixel(px, py, nr, ng, nb, na)
+                        changed = true
                     end
                 end
             end
         end
     end
+    return changed
 end
 
-function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha, eraser, alpha_lock, selection)
+-- O callback opcional permite à ponte capturar um único snapshot,
+-- inclusive quando o arraste começa sem efeito e muda pixels só depois.
+-- Chamadas diretas sem callback mantêm a semântica de histórico explícito.
+function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha,
+                       eraser, alpha_lock, selection, on_first_change)
     local layer = assert(project.layers[id], "Camada inexistente")
     local radius = math.max(0.75, math.min(256, diameter) / 2)
     alpha = math.max(0, math.min(1, alpha))
-    if alpha == 0 then return end
+    if alpha == 0 then return false end
     local dx, dy = x1 - x0, y1 - y0
-    local steps = math.max(1, math.ceil(math.sqrt(dx * dx + dy * dy) / math.max(0.5, radius * 0.5)))
+    local steps = math.max(1, math.ceil(
+        math.sqrt(dx * dx + dy * dy) / math.max(0.5, radius * 0.5)))
+    local changed, captured = false, false
+    local function capture_once()
+        if not captured then
+            if on_first_change then on_first_change() end
+            captured = true
+        end
+    end
     for i = 0, steps do
         local t = i / steps
-        dab(layer, project.w, project.h, x0 + dx * t, y0 + dy * t,
-            radius, rgb, alpha, eraser, alpha_lock, selection)
+        if dab(layer, project.w, project.h, x0 + dx * t, y0 + dy * t,
+               radius, rgb, alpha, eraser, alpha_lock, selection,
+               capture_once) then
+            changed = true
+        end
     end
-    layer.image:replacePixels(layer.pixels)
-    project.dirty = true
+    if changed then
+        layer.image:replacePixels(layer.pixels)
+        project.dirty = true
+    end
+    return changed
 end
 
 -- O recorte usa o alfa da camada-base mais próxima abaixo das camadas

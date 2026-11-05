@@ -12,6 +12,99 @@ local function checkpoint(name)
     io.stdout:flush()
 end
 
+-- Pincel e borracha não devem criar dirty, upload nem um passo
+-- reversível antes de existir alguma alteração RGBA de fato.
+local function test_lazy_stroke_history(E)
+    local Selection = require("lua_selection")
+    local p = E.new(16, 16)
+    E.sync(p, {layers = {{id = 1, visible = true, opacity = 100}}})
+    p.dirty = false
+    local captures = 0
+    local function capture()
+        captures = captures + 1
+        E.begin_stroke(p, 1)
+    end
+    local red = {1, 0, 0}
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                        1, true, false, nil, capture),
+           "Borracha sobre transparencia deveria ser no-op")
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                        0, false, false, nil, capture),
+           "Pincel com opacidade zero deveria ser no-op")
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                        1, false, true, nil, capture),
+           "Alpha Lock em pixels vazios deveria ser no-op")
+    local mask = assert(Selection.rectangle(16, 16, 9, 9, 11, 11))
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                        1, false, false, mask, capture),
+           "Pincel fora da selecao deveria ser no-op")
+    assert(not p.dirty and captures == 0 and #p.undo == 0 and #p.redo == 0,
+           "Gestos vazios criaram historico ou dirty")
+    assert(E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                    1, false, false, nil, capture)
+           and p.dirty and captures == 1 and #p.undo == 1,
+           "Primeira alteracao real nao registrou undo")
+    assert(E.undo(p) and close(select(4, p.layers[1].pixels:getPixel(4, 4)), 0)
+           and E.redo(p) and select(1, p.layers[1].pixels:getPixel(4, 4)) > .99,
+           "Undo/redo da pincelada com registro tardio falhou")
+
+    p.dirty = false
+    local last_undo, last_redo = #p.undo, #p.redo
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                        1, false, false, nil, capture)
+           and not p.dirty and #p.undo == last_undo
+           and #p.redo == last_redo and captures == 1,
+           "Pintar mesma cor opaca criou dirty/undo")
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, {0, 0, 0},
+                        .0001, false, false, nil, capture)
+           and not p.dirty and captures == 1,
+           "Pintura sub-byte gerou passo raster fantasma")
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                        1, false, true, nil, capture)
+           and not p.dirty and captures == 1,
+           "Pincel Alpha Lock de cor identica alterou historia")
+
+    assert(E.undo(p))
+    p.dirty = false
+    local redo = #p.redo
+    assert(not E.stroke(p, 1, 4.5, 4.5, 4.5, 4.5, 1, red,
+                        1, true, false, nil, capture)
+           and #p.redo == redo and #p.undo == 0 and not p.dirty
+           and E.redo(p),
+           "Borracha vazia apagou redo valido")
+
+    -- O primeiro dab do gesto nao muda nada: captura acontece depois,
+    -- antes de pintar o proximo segmento. Duas chamadas = um snapshot.
+    local q = E.new(16, 16)
+    E.sync(q, {layers = {{id = 1, visible = true, opacity = 100}}})
+    q.layers[1].pixels:setPixel(2, 2, 1, 0, 0, 1)
+    q.dirty = false
+    local snapshots, started = 0, false
+    local function lazy_capture()
+        if not started then
+            started = true
+            snapshots = snapshots + 1
+            E.begin_stroke(q, 1)
+        end
+    end
+    assert(not E.stroke(q, 1, 2.5, 2.5, 2.5, 2.5, 1, red,
+                        1, false, false, nil, lazy_capture)
+           and snapshots == 0 and #q.undo == 0 and not q.dirty,
+           "Dab inicial sem mudanca disparou snapshot")
+    assert(E.stroke(q, 1, 2.5, 2.5, 6.5, 2.5, 1, red,
+                    1, false, false, nil, lazy_capture)
+           and E.stroke(q, 1, 6.5, 2.5, 7.5, 2.5, 1, red,
+                        1, false, false, nil, lazy_capture)
+           and snapshots == 1 and #q.undo == 1,
+           "Arraste nao compartilhou unico snapshot")
+    assert(E.undo(q)
+           and select(1, q.layers[1].pixels:getPixel(2, 2)) > .99
+           and close(select(4, q.layers[1].pixels:getPixel(6, 2)), 0)
+           and E.redo(q)
+           and select(1, q.layers[1].pixels:getPixel(7, 2)) > .99,
+           "Arraste com captura tardia nao restaurou o estado anterior")
+end
+
 -- Feather separável e pintura com cobertura parcial da máscara em RGBA.
 local function test_feather_paint(E)
     local Selection = require("lua_selection")
@@ -124,6 +217,115 @@ local function test_feather_paint(E)
            Selection.coverage(shrunk, 5, 5) > 0 and
            Selection.coverage(shrunk, 5, 5) < 1,
            "Contração não preservou pesos graduais da máscara")
+end
+
+-- Integração da UI: no-op não apaga redo, inclusive quando a
+-- pincelada só começa a alterar pixels depois do primeiro movimento.
+local function test_lazy_stroke_bridge(Bridge, gallery)
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Lazy brush", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Lazy stroke history")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(px, py)
+        return 62 + (1024 - 62 - 34) / 2 + (px + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (py + .5 - 8) * 11
+    end
+    local function press(px, py, color, opacity)
+        local sx, sy = screen(px, py)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, color or {255, 0, 0},
+                                   1, opacity or 100, nil))
+        Bridge.mousereleased()
+    end
+    local function drag(x0, y0, x1, y1, color)
+        local sx, sy = screen(x0, y0)
+        local ex, ey = screen(x1, y1)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, color or {255, 0, 0},
+                                   1, 100, nil))
+        assert(Bridge.mousemoved(model, ex, ey, 1))
+        Bridge.mousereleased()
+    end
+    local function path_of_artwork()
+        local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+        for line in index:gmatch("[^\r\n]+") do
+            if line:find("Lazy stroke history", 1, true) then
+                local key = line:match("^(art_%d+_%d+)\t")
+                return "lua-artworks/" .. assert(key)
+            end
+        end
+        error("Obra de historico lazy nao encontrada")
+    end
+    local red = {255, 0, 0}
+    press(2, 2, red)
+    assert(Bridge.save())
+    local path = path_of_artwork()
+    assert(select(1, love.image.newImageData(path .. "/layer_1.png"):
+                  getPixel(2, 2)) > .99)
+    assert(Bridge.undo(), "Pincel nao gerou undo")
+    model.active_tool = "eraser"
+    press(8, 8, red)
+    assert(Bridge.redo(), "Borracha em pixel vazio consumiu redo")
+    assert(Bridge.undo())
+    model.active_tool = "brush"
+    press(8, 8, red, 0)
+    assert(Bridge.redo(), "Pincel com opacidade zero consumiu redo")
+    assert(Bridge.undo())
+    model.layers[1].alpha_lock = true
+    press(8, 8, red)
+    assert(Bridge.redo(), "Alpha Lock sobre vazio consumiu redo")
+    model.layers[1].alpha_lock = false
+
+    -- O pixel inicial ja e vermelho: somente a continuacao do gesto
+    -- precisa abrir um snapshot; undo deve preservar o pixel inicial.
+    drag(2, 2, 5, 2, red)
+    assert(Bridge.save())
+    local saved = love.image.newImageData(path .. "/layer_1.png")
+    assert(select(1, saved:getPixel(2, 2)) > .99
+           and select(1, saved:getPixel(5, 2)) > .99,
+           "Arraste nao pintou novos pixels")
+    assert(Bridge.undo())
+    assert(Bridge.save())
+    local undone = love.image.newImageData(path .. "/layer_1.png")
+    assert(select(1, undone:getPixel(2, 2)) > .99
+           and close(select(4, undone:getPixel(5, 2)), 0),
+           "Undo do arraste nao respeitou snapshot previo ao primeiro pixel")
+    assert(Bridge.redo())
+    press(2, 2, red)
+    assert(Bridge.undo(), "Pincel identico criou passo fantasma no historico")
+    assert(Bridge.redo())
+
+    -- A borracha tambem pode iniciar em uma area transparente.
+    model.active_tool = "eraser"
+    drag(9, 2, 5, 2, red)
+    assert(Bridge.save())
+    local erased = love.image.newImageData(path .. "/layer_1.png")
+    assert(close(select(4, erased:getPixel(5, 2)), 0))
+    assert(Bridge.undo())
+    assert(Bridge.save())
+    local restored = love.image.newImageData(path .. "/layer_1.png")
+    assert(select(1, restored:getPixel(5, 2)) > .99,
+           "Undo da borracha nao restaurou o pixel inicial")
+    assert(Bridge.redo(), "Redo da borracha nao foi preservado")
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico persistido perdeu arraste com snapshot tardio")
+
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path))
 end
 
 -- Transformações e prévia GPU preservam frações da seleção.
@@ -4692,6 +4894,7 @@ end
 function love.load()
     checkpoint("begin")
     local E = require("lua_engine")
+    test_lazy_stroke_history(E)
     assert(E.supports(32, 32))
     assert(not E.supports(6000, 1))
     local p = E.new(32, 32)
@@ -5145,6 +5348,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("lazy brush and eraser history")
+    test_lazy_stroke_bridge(Bridge, gallery)
     checkpoint("bridge magic wand global mode and persistence")
     test_bucket_sample_all_bridge(Bridge, gallery)
     test_bucket_diagonal_bridge(Bridge, gallery)
