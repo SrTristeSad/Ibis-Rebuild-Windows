@@ -387,10 +387,10 @@ local function test_history_interrupt_bridge(Bridge, gallery)
         assert(Bridge.save())
         if not path then
             local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
-            for line in index:gmatch("[^\\r\\n]+") do
+            for line in index:gmatch("[^\r\n]+") do
                 if line:find("History interrupt test", 1, true) then
                     path = "lua-artworks/" ..
-                           assert(line:match("^(art_%d+_%d+)\\t"))
+                           assert(line:match("^(art_%d+_%d+)\t"))
                 end
             end
         end
