@@ -909,13 +909,10 @@ function Bridge.selection_snapshot()
 end
 
 function Bridge.clear_selection()
-    local before = selection
-    if gesture and gesture.before_selection then
-        before = gesture.before_selection
-    end
-    discard_preview(gesture)
-    gesture = nil
-    set_mask(nil, before, true)
+    -- Desmarcar durante um retângulo/laço replace deve partir da máscara
+    -- anterior, não do nil provisório. Também encerra pintura pendente.
+    interrupt_active_gesture()
+    set_mask(nil)
 end
 
 function Bridge.selection_history_snapshot()
@@ -983,6 +980,10 @@ function Bridge.selection_command(model, command, notice)
     if model.screen ~= "editor" then return false end
     local p = ensure(model)
     if not p then return false end
+    -- Comandos de teclado/botão substituem a interação em andamento.
+    -- Restaurar a seleção temporariamente oculta antes de aplicar
+    -- Inverter/Selecionar tudo/Feather/Copiar/Colar/transformações.
+    interrupt_active_gesture()
 
     -- São mudanças de máscara, NÃO operações raster: permitidas inclusive
     -- em camadas bloqueadas / Alpha Lock e sem adicionar passos ao histórico.
@@ -994,8 +995,6 @@ function Bridge.selection_command(model, command, notice)
             if notice then notice("Selecione uma área antes de expandir, contrair ou suavizar.") end
             return false
         end
-        discard_preview(gesture)
-        gesture = nil
         if command == "select_all" and selection and
            selection.count == p.w * p.h and
            not Selection.is_soft(selection) then return true end
@@ -1267,9 +1266,16 @@ end
 
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
-    if key == "escape" and selection then
-        Bridge.clear_selection()
-        return true
+    if key == "escape" then
+        if gesture then
+            -- Esc cancela a seleção/transformação em curso, sem desmarcar
+            -- a seleção anterior nem criar um passo de histórico.
+            interrupt_active_gesture()
+            return true
+        elseif selection then
+            Bridge.clear_selection()
+            return true
+        end
     end
     if not love.keyboard.isDown("lctrl", "rctrl") then return false end
     if key == "d" then Bridge.clear_selection(); return true end
