@@ -105,6 +105,132 @@ local function test_lazy_stroke_history(E)
            "Arraste com captura tardia nao restaurou o estado anterior")
 end
 
+-- A opcao de cobertura do gesto impede que a frequencia de
+-- mousemoved multiplique alfa em pixels ja atingidos. Chamadas
+-- diretas antigas sem estado mantem seu resultado historico.
+local function test_uniform_stroke_opacity(E)
+    local Selection = require("lua_selection")
+    local model = {layers = {{id = 1, visible = true, opacity = 100}}}
+    local red = {1, 0, 0}
+    local function project()
+        local p = E.new(16, 16)
+        E.sync(p, model)
+        p.dirty = false
+        return p
+    end
+    local function run(p, split, coverage, erase, lock, mask, color)
+        local captured = 0
+        local function history()
+            if captured == 0 then E.begin_stroke(p, 1) end
+            captured = captured + 1
+        end
+        local args = color or red
+        local segments = split and {{2.5, 5.5, 6.5, 5.5},
+                                    {6.5, 5.5, 10.5, 5.5}} or
+                                   {{2.5, 5.5, 10.5, 5.5}}
+        for _, segment in ipairs(segments) do
+            assert(E.stroke(p, 1, segment[1], segment[2],
+                            segment[3], segment[4], 2, args, .5,
+                            erase, lock, mask, history, coverage),
+                   "Pincel uniforme nao alterou pixels")
+        end
+        return captured
+    end
+    local one = project()
+    local marked = {}
+    assert(run(one, false, marked) == 1 and #one.undo == 1,
+           "Cobertura unica nao registrou um snapshot")
+    for x = 2, 10 do
+        assert(close(select(4, one.layers[1].pixels:getPixel(x, 5)),
+                     .5, 1 / 255),
+               "Sobreposicao de dabs aumentou opacidade: " .. x)
+    end
+    assert(marked[5 * 16 + 5] and marked[5 * 16 + 9],
+           "Mapa do gesto nao registrou pixels realmente pintados")
+    local two = project()
+    assert(run(two, true, {}) == 1,
+           "Trechos separados registraram mais de um snapshot")
+    for y = 0, 15 do
+        for x = 0, 15 do
+            local r1, g1, b1, a1 = one.layers[1].pixels:getPixel(x, y)
+            local r2, g2, b2, a2 = two.layers[1].pixels:getPixel(x, y)
+            assert(close(r1, r2, 1 / 255) and
+                   close(g1, g2, 1 / 255) and
+                   close(b1, b2, 1 / 255) and
+                   close(a1, a2, 1 / 255),
+                   "Fracionar eventos mudou os pixels finais")
+        end
+    end
+    assert(E.undo(two) and
+           close(select(4, two.layers[1].pixels:getPixel(6, 5)), 0)
+           and E.redo(two) and
+           close(select(4, two.layers[1].pixels:getPixel(6, 5)), .5),
+           "Undo/redo de gesto uniforme nao foi atomico")
+    assert(E.stroke(one, 1, 2.5, 5.5, 10.5, 5.5, 2, red, .5,
+                    false, false, nil, nil, {}),
+           "Novo gesto deveria acumular tinta")
+    assert(close(select(4, one.layers[1].pixels:getPixel(6, 5)), .75,
+                 1 / 255),
+           "Pinceladas separadas nao puderam acumular opacidade")
+    local legacy = project()
+    assert(E.stroke(legacy, 1, 2.5, 5.5, 10.5, 5.5, 2, red, .5),
+           "Chamada direta anterior deixou de funcionar")
+    assert(select(4, legacy.layers[1].pixels:getPixel(6, 5)) > .5,
+           "Sem estado opcional o resultado legado mudou")
+
+    local eraser = project()
+    for x = 2, 10 do
+        eraser.layers[1].pixels:setPixel(x, 5, 1, 0, 0, 1)
+    end
+    eraser.dirty = false
+    assert(run(eraser, true, {}, true) == 1,
+           "Borracha nao registrou historico unico")
+    for x = 2, 10 do
+        assert(close(select(4, eraser.layers[1].pixels:getPixel(x, 5)),
+                     .5, 1 / 255),
+               "Borracha acumulou apagamento dentro do gesto: " .. x)
+    end
+    assert(E.undo(eraser) and
+           close(select(4, eraser.layers[1].pixels:getPixel(6, 5)), 1)
+           and E.redo(eraser),
+           "Borracha uniforme perdeu historico")
+
+    local lock = project()
+    lock.layers[1].pixels:setPixel(6, 5, .2, .4, .6, .7)
+    lock.dirty = false
+    assert(run(lock, true, {}, false, true) == 1,
+           "Alpha Lock uniforme nao registrou pintura")
+    local lr, lg, lb, la = lock.layers[1].pixels:getPixel(6, 5)
+    assert(close(lr, .6, .02) and close(lg, .2, .02) and
+           close(lb, .3, .02) and close(la, .7, .02),
+           "Alpha Lock aplicou varias vezes ou modificou o alfa")
+
+    local feather = project()
+    local selected = assert(Selection.from_mask(16, 16,
+        {[5 + 5 * 16] = .5}, "feathered"))
+    local weights = {}
+    assert(E.stroke(feather, 1, 5.5, 5.5, 5.5, 5.5, 1,
+                    red, 1, false, false, selected, nil, weights))
+    assert(close(select(4, feather.layers[1].pixels:getPixel(5, 5)),
+                 .5, 1 / 255),
+           "Feather da selecao foi aplicado mais de uma vez")
+    assert(not E.stroke(feather, 1, 5.5, 5.5, 5.5, 5.5, 1,
+                        red, 1, false, false, selected, nil, weights)
+           and close(select(4, feather.layers[1].pixels:getPixel(5, 5)),
+                     .5, 1 / 255),
+           "Cobertura repetida alterou selecao feather")
+    local blank = project()
+    local visited, history = {}, 0
+    local function track() history = history + 1 end
+    assert(not E.stroke(blank, 1, 3.5, 3.5, 3.5, 3.5, 2, red,
+                        0, false, false, nil, track, visited)
+           and not E.stroke(blank, 1, 3.5, 3.5, 3.5, 3.5, 2, red,
+                            .5, true, false, nil, track, visited)
+           and next(visited) == nil and history == 0
+           and not blank.dirty and #blank.undo == 0,
+           "Gesto uniforme no-op gerou cobertura, dirty ou undo")
+end
+
 -- Feather separável e pintura com cobertura parcial da máscara em RGBA.
 local function test_feather_paint(E)
     local Selection = require("lua_selection")
@@ -217,6 +343,120 @@ local function test_feather_paint(E)
            Selection.coverage(shrunk, 5, 5) > 0 and
            Selection.coverage(shrunk, 5, 5) < 1,
            "Contração não preservou pesos graduais da máscara")
+end
+
+-- Mesma pincelada semitransparente deve produzir o mesmo raster
+-- com um release longo ou muitos mousemoved pequenos.
+local function test_uniform_stroke_opacity_bridge(Bridge, gallery)
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Uniform stroke"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(id, x, y, tool)
+        model.active_tool = tool or "brush"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 2, 50, nil))
+    end
+    local function moved(x, y)
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousemoved(model, sx, sy, 1))
+    end
+    local function released(x, y)
+        local sx, sy = screen(x, y)
+        Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local function path_for(title)
+        local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+        for line in index:gmatch("[^\r\n]+") do
+            if line:find(title, 1, true) then
+                local key = assert(line:match("^(art_%d+_%d+)\t"))
+                return "lua-artworks/" .. key
+            end
+        end
+        error("Nao encontrou obra para comparar opacidade")
+    end
+    local function save(title)
+        assert(Bridge.save())
+        local path = path_for(title)
+        return love.image.newImageData(path .. "/layer_1.png"), path
+    end
+    local slow_name = "Uniform stroke many events"
+    local slow = gallery:add_artwork(16, 16, slow_name)
+    Bridge.create(model, slow, gallery)
+    press(slow, 3, 5)
+    for x = 4, 8 do moved(x, 5) end
+    released(9, 5)
+    local many, path1 = save(slow_name)
+    for x = 3, 9 do
+        assert(close(select(4, many:getPixel(x, 5)), .5, 1 / 255),
+               "Mousemoved duplicou alfa de pincelada: " .. x)
+    end
+    assert(Bridge.undo(), "Pincelada uniforme nao gerou undo")
+    assert(Bridge.redo(), "Pincelada uniforme nao gerou redo")
+    -- Um clique da mesma cor com alpha parcial em novo gesto soma
+    -- opacidade naturalmente; desfazer restaura exatamente o anterior.
+    press(slow, 5, 5)
+    released(5, 5)
+    local layered = save(slow_name)
+    assert(close(select(4, layered:getPixel(5, 5)), .75, 1 / 255),
+           "Pincelada nova nao acumulou opacidade")
+    assert(Bridge.undo())
+    local restored = save(slow_name)
+    assert(close(select(4, restored:getPixel(5, 5)), .5, 1 / 255)
+           and Bridge.redo(), "Undo nao recuperou opacidade do gesto")
+
+    local fast_name = "Uniform stroke single release"
+    local fast = gallery:add_artwork(16, 16, fast_name)
+    Bridge.create(model, fast, gallery)
+    press(fast, 3, 5)
+    released(9, 5)
+    local once, path2 = save(fast_name)
+    for y = 0, 15 do
+        for x = 0, 15 do
+            local a = select(4, many:getPixel(x, y))
+            local b = select(4, once:getPixel(x, y))
+            assert(close(a, b, 1 / 255),
+                   "Opacidade depende do numero de eventos: " .. x .. "," .. y)
+        end
+    end
+    assert(Bridge.undo() and Bridge.redo(),
+           "Release unico nao preservou historico")
+    -- A borracha apaga apenas metade do alfa em cada gesto.
+    model.active_tool = "eraser"
+    press(fast, 3, 5, "eraser")
+    for x = 4, 8 do moved(x, 5) end
+    released(9, 5)
+    local erased = save(fast_name)
+    assert(close(select(4, erased:getPixel(6, 5)), .25, 1 / 255),
+           "Arraste de borracha apagou mais do que opacidade 50%")
+    assert(Bridge.undo())
+    local un_erased = save(fast_name)
+    assert(close(select(4, un_erased:getPixel(6, 5)), .5, 1 / 255)
+           and Bridge.redo(), "Undo da borracha uniforme falhou")
+    assert(Bridge.save())
+    Bridge.open(model, fast)
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico persistido nao preservou opacidade uniforme")
+
+    for _, path in ipairs({path1, path2}) do
+        require("lua_history").cleanup(path)
+        require("lua_selection_history").cleanup(path)
+        for _, file in ipairs(love.filesystem.getDirectoryItems(path)) do
+            love.filesystem.remove(path .. "/" .. file)
+        end
+        assert(love.filesystem.remove(path))
+    end
 end
 
 -- A ponte nao deve perder a ponta do traco ao sair do canvas,
@@ -457,7 +697,7 @@ local function test_stroke_release_bridge(Bridge, gallery)
     move(9, 9)
     up(9, 9)
     local canvas = read()
-    assert(close(select(4, canvas:getPixel(9, 9)), .75, .02),
+    assert(close(select(4, canvas:getPixel(9, 9)), .5, .02),
            "Mousemoved/mouseup identico acumulou alfa no pincel")
     assert(Bridge.undo() and Bridge.redo(),
            "Clique parcial perdeu historico ao finalizar")
@@ -5230,6 +5470,7 @@ end
 function love.load()
     checkpoint("begin")
     local E = require("lua_engine")
+    test_uniform_stroke_opacity(E)
     test_lazy_stroke_history(E)
     assert(E.supports(32, 32))
     assert(not E.supports(6000, 1))
@@ -5684,6 +5925,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("uniform opacity across mousemove frequency")
+    test_uniform_stroke_opacity_bridge(Bridge, gallery)
     checkpoint("brush and eraser strokes clipped to canvas edges")
     test_stroke_canvas_edge_bridge(Bridge, gallery)
     checkpoint("brush and eraser final segment on release")
