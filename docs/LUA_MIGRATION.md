@@ -385,10 +385,15 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   Inverter, Selecionar tudo, Feather, Copiar/Colar e operações
   raster passam pela mesma normalização. `Bridge.clear_selection`
   também interrompe o gesto antes de `set_mask(nil)`, criando
-  no máximo o passo real de desmarcar. `Esc` com um gesto de
-  seleção/transformação pendente cancela somente esse gesto,
-  sem criar histórico ou limpar a máscara anterior; `Esc`
-  sem gesto segue desmarcando. Undo/redo das duas timelines,
+  no máximo o passo real de desmarcar. `Esc` com `gesture`
+  **ou `drawing`** ativo interrompe somente a seleção,
+  transformação, pincel ou borracha, sem limpar a máscara
+  anterior. Pixels já pintados conservam seu snapshot raster,
+  mas um mousemove/mouseup atrasado não prolonga a pincelada.
+  Sem gesto ativo, `Esc` continua desmarcando como antes.
+  Testes LÖVE verificam pincel sem máscara, pincel/borracha
+  com seleção, máscara preservada no primeiro Esc, segundo
+  Esc para desmarcar e histórico persistido após reabrir. Undo/redo das duas timelines,
   pixels já escritos e máscara persistida permanecem intactos.
   Os testes LÖVE incluem inversão durante replace, seleção
   total, feather, Desmarcar, Esc, prévia de move, pincel
