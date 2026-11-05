@@ -48,8 +48,11 @@
   ocultada temporariamente: restaurar `before_selection_ref`
   garante que Inverter, Selecionar tudo, Feather e operações
   seguintes usem a seleção original sem perder histórico.
-  `Esc` com `gesture` pendente apenas cancela a operação;
-  `Esc` sem `gesture` e com máscara ativa desmarca.
+  `Esc` com `gesture` **ou `drawing`** pendente apenas
+  interrompe o gesto, sem desmarcar. Para pincel/borracha,
+  preservar pixels já escritos e seu histórico; mousemove
+  e mouseup posteriores devem ser inertes. `Esc` sem
+  nenhum gesto e com máscara ativa desmarca normalmente.
   Nunca confirmar preview nem pintura por mouseup atrasado;
   preservar alterações raster já efetivas e redo.
   Testar comando com retângulo/laço, brush, movimento e
