@@ -907,17 +907,17 @@ local function test_bucket_composite_source(E)
            and close(select(4, masked_p.layers[1].pixels:getPixel(7, 7)), 0),
            "Balde composto ultrapassou a selecao")
     local alpha_p, alpha_model = fixture()
-    alpha_model.layers[2].pixels:setPixel(7, 7, 0, 0, 1, .5)
+    alpha_p.layers[2].pixels:setPixel(7, 7, 0, 0, 1, .5)
     assert(fill(alpha_p, alpha_model, true)
            and close(select(4, alpha_p.layers[1].pixels:getPixel(7, 7)), 0),
            "RGBA composto nao distinguiu opacidade")
     local rgb_p, rgb_model = fixture()
-    rgb_model.layers[2].pixels:setPixel(7, 7, 0, 0, 1, .5)
+    rgb_p.layers[2].pixels:setPixel(7, 7, 0, 0, 1, .5)
     assert(fill(rgb_p, rgb_model, true, nil, true)
            and is_green(rgb_p, 7, 7),
            "RGB-only composto nao ignorou alfa")
     local diag_p, diag_model = fixture()
-    diag_model.layers[2].pixels:setPixel(3, 3, 0, 0, 1, 1)
+    diag_p.layers[2].pixels:setPixel(3, 3, 0, 0, 1, 1)
     assert(fill(diag_p, diag_model, false, nil, false, true)
            and is_green(diag_p, 3, 3)
            and close(select(4, diag_p.layers[1].pixels:getPixel(7, 7)), 0),
