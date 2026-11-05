@@ -26,6 +26,19 @@
   sem efeito e modificam pixels depois devem capturar o estado
   inteiro da camada antes da primeira mudança, um único undo para
   toda a pincelada. Testar também restauração, persistência e Alpha Lock.
+- Mudanças sem novo mousepress: `stroke_context_valid` e
+  `gesture_context_valid` são verificadas em mousemoved E
+  mousereleased, antes de qualquer pintura ou commit. O pincel
+  guarda `tool` e `selection_at_start`, além da camada,
+  Alpha Lock e parâmetros de pintura, para impedir que mudança
+  de ferramenta, camada ativa, bloqueio, visibilidade, Alpha
+  Lock ou máscara causem escrita usando contexto obsoleto.
+  `paint` aplica a máscara capturada no início. Para move/
+  rotate/scale, mudança da ferramenta/camada ou bloqueio
+  cancela prévias sem confirmar pixels. Para retângulo/laço,
+  interrupção restaura a máscara anterior. Preservar snapshots
+  e redo/no-op já existentes; não alterar a interface original.
+  Testar interrupção em mousemoved, somente mouseup e PNG.
 - Pressões consecutivas: em `Bridge.mousepressed`, chamar
   `interrupt_active_gesture()` depois de verificar ferramenta
   suportada, modelo/editor e coordenada válida no canvas, antes

@@ -79,6 +79,30 @@ local function interrupt_active_gesture()
     end
 end
 
+-- Os eventos seguintes de um arraste podem chegar depois de o usuário
+-- mudar ferramenta/camada, visibilidade ou Alpha Lock. Nunca pintar
+-- novamente no estado antigo nem confirmar uma prévia desatualizada.
+local function stroke_context_valid(model, d)
+    local info = model:active_layer()
+    return model.screen == "editor" and model.active_tool == d.tool
+       and info and info.id == d.layer and info.visible and not info.locked
+       and (info.alpha_lock == true) == (d.alpha_lock == true)
+       and selection == d.selection_at_start
+       and project and project.layers[d.layer] ~= nil
+end
+
+local function gesture_context_valid(model, d)
+    local info = model:active_layer()
+    if model.screen ~= "editor" or model.active_tool ~= d.tool or
+       not info or info.id ~= d.active_layer_id then return false end
+    if d.kind == "move" or d.kind == "rotate_free" or
+       d.kind == "scale_free" then
+        return not info.locked and info.visible and not info.alpha_lock
+           and project and project.layers[d.layer] ~= nil
+    end
+    return true
+end
+
 local function mask_history_step(from, to)
     interrupt_active_gesture()
     if #from == 0 then return false end
@@ -524,7 +548,7 @@ end
 local function paint(p, d, x, y, start_x, start_y)
     Engine.stroke(p, d.layer, start_x or d.x, start_y or d.y,
                   x, y, d.size, d.color,
-                  d.opacity, d.eraser, d.alpha_lock, selection,
+                  d.opacity, d.eraser, d.alpha_lock, d.selection_at_start,
                   function()
                       -- O snapshot só existe se algum pixel realmente
                       -- mudar. Um gesto inteiro sem efeito preserva redo.
@@ -635,7 +659,9 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         local before_ref = selection
         local before = Selection.clone(selection)
         if mode == "replace" then selection = nil end
+        local info = model:active_layer()
         gesture = {kind = "lasso", w = w, h = h, view = view,
+                   tool = tool, active_layer_id = info and info.id,
                    preferences = preferences, points = {{px, py}},
                    mode = mode, before_selection = before,
                    before_selection_ref = before_ref,
@@ -670,6 +696,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         end
         gesture = {
             kind = action, x = px, y = py, w = w, h = h, view = view,
+            tool = tool, active_layer_id = info and info.id,
             preferences = preferences, layer = info and info.id,
             mode = mode, before_selection = before,
             before_selection_ref = before_ref,
@@ -727,7 +754,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         return true
     end
 
-    drawing = {layer = info.id, x = px, y = py, raw_x = px, raw_y = py,
+    drawing = {layer = info.id, tool = tool, selection_at_start = selection,
+               x = px, y = py, raw_x = px, raw_y = py,
                w = w, h = h, history_started = false,
                view = view, preferences = preferences,
                color = rgb, size = size, opacity = normalized_opacity,
@@ -744,6 +772,12 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
 end
 
 function Bridge.mousemoved(model, rx, ry, scale)
+    if project and project.model == model and
+       ((drawing and not stroke_context_valid(model, drawing)) or
+        (gesture and not gesture_context_valid(model, gesture))) then
+        interrupt_active_gesture()
+        return false
+    end
     if gesture and project and project.model == model then
         local d = gesture
         local px, py = canvas_point(model, rx / scale, ry / scale,
@@ -796,6 +830,14 @@ function Bridge.mousemoved(model, rx, ry, scale)
 end
 
 function Bridge.mousereleased(model, rx, ry, scale)
+    -- O último segmento no mouseup também precisa do mesmo contexto
+    -- válido; não pintar/confirmar com ferramenta ou camada trocada.
+    if project and project.model == model and
+       ((drawing and not stroke_context_valid(model, drawing)) or
+        (gesture and not gesture_context_valid(model, gesture))) then
+        interrupt_active_gesture()
+        return false
+    end
     local stroke = drawing
     drawing = nil
     -- A UI pode entregar o último movimento apenas no mouse release.
