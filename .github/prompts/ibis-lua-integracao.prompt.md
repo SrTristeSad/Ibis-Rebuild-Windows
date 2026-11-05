@@ -43,9 +43,12 @@ ações de clipboard/raster. `Bridge.clear_selection` faz
 o mesmo antes de aplicar `set_mask(nil)`. Se havia retângulo/
 laço em replace, restaurar a referência original da máscara
 para evitar operar sobre `nil` provisório; não criar histórico
-fantasma. `Esc` durante uma seleção/transformação pendente
-cancela esse gesto sem limpar a seleção anterior. `Esc` fora
-do gesto preserva seu comportamento de desmarcar.
+fantasma. `Esc` durante uma seleção/transformação ou
+pincel/borracha pendente encerra esse gesto SEM limpar a
+seleção anterior. Preservar tinta já pintada e seu único
+snapshot de histórico, mas nenhum mousemove/mouseup atrasado
+pode continuar o traço. Um segundo `Esc`, sem gesto ativo,
+desmarca normalmente quando houver seleção.
 Eventos mousemoved/mouseup atrasados não podem confirmar a
 operação cancelada. Testar máscara, undo/redo raster e máscara,
 feather, preview de move, PNG persistido e sem novo controle UI.
