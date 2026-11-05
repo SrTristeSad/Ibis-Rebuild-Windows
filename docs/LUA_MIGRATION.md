@@ -359,6 +359,21 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
 - O no-op do pincel e da borracha evita modificações sub-byte por
   comparação RGBA 8-bit; isso não implementa acúmulo de opacidade
   abaixo da precisão do raster ou estabilização de traços.
+- **Um novo mousepress válido substitui o gesto anterior**:
+  após validar ferramenta, modelo e coordenada inicial dentro
+  do canvas, `Bridge.mousepressed` chama
+  `interrupt_active_gesture()`. Pressões consecutivas com mouseup
+  perdido não podem combinar pintura, seleção e transformações
+  simultaneamente. Pixels já pintados e seu snapshot de Desfazer
+  permanecem; máscaras retangulares e laços provisórios restauram
+  a referência original da seleção, sem criar item no histórico,
+  e as texturas da prévia de movimento/transformação são liberadas.
+  O próximo press inicia a nova operação normalmente, inclusive
+  pintando sob a máscara restaurada. Cliques inválidos, ferramentas
+  não suportadas ou fora do canvas não cancelam o gesto anterior.
+  Testes reais cobrem duas pinceladas consecutivas, troca para
+  retângulo, seleção replace cancelada, laço, prévia GPU, histórico
+  raster e de máscara, undo/redo e PNG salvo/reaberto.
 - **Navegação de histórico segura durante mousepress**:
   `interrupt_active_gesture` encerra `drawing` antes de
   `Bridge.undo/redo` e antes de `Bridge.selection_undo/redo`.

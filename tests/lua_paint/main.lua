@@ -348,6 +348,193 @@ local function test_feather_paint(E)
            "Contração não preservou pesos graduais da máscara")
 end
 
+-- Pressões consecutivas nunca podem manter dois gestos simultâneos.
+-- O novo press substitui o anterior, preservando seus pixels/histórico,
+-- mas cancelando máscaras temporárias e prévias sem commit.
+local function test_mousepress_preempts_gesture_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, visible = true, opacity = 100,
+                   blending = "Normal", name = "Preempt gestures"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Preempt mousepress gestures")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local red, blue = {255, 0, 0}, {0, 0, 255}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, tool, color)
+        model.active_tool = tool or "brush"
+        local sx, sy = screen(x, y)
+        return Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, color or red, 1, 100, nil)
+    end
+    local function moved(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local path
+    local function pixels()
+        assert(Bridge.save(), "Nao salvou teste de press consecutivo")
+        if not path then
+            local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+            for line in index:gmatch("[^\r\n]+") do
+                if line:find("Preempt mousepress gestures", 1, true) then
+                    path = "lua-artworks/" ..
+                           assert(line:match("^(art_%d+_%d+)\t"))
+                end
+            end
+        end
+        assert(path, "Nao localizou arte dos presses consecutivos")
+        return love.image.newImageData(path .. "/layer_1.png")
+    end
+    local function empty(data, x, y)
+        return close(select(4, data:getPixel(x, y)), 0)
+    end
+    local function colored(data, x, y, rgb)
+        local r, g, b, a = data:getPixel(x, y)
+        return a > .99 and
+            close(r, rgb[1] / 255, 1 / 255) and
+            close(g, rgb[2] / 255, 1 / 255) and
+            close(b, rgb[3] / 255, 1 / 255)
+    end
+
+    -- O segundo mousepress substitui o primeiro pincel: não conecta
+    -- pontos distantes e cada gesto continua com seu próprio undo.
+    assert(press(2, 2))
+    assert(moved(4, 2))
+    assert(press(10, 2, "brush", blue))
+    release(10, 2)
+    local data = pixels()
+    assert(colored(data, 2, 2, red) and
+           colored(data, 4, 2, red) and
+           colored(data, 10, 2, blue) and empty(data, 6, 2),
+           "Segundo press conectou pinceis separados ou perdeu cor")
+    assert(Bridge.undo(), "Novo press perdeu seu snapshot")
+    data = pixels()
+    assert(colored(data, 4, 2, red) and empty(data, 10, 2),
+           "Undo do segundo press alterou o primeiro gesto")
+    assert(Bridge.undo(), "Primeiro gesto interrompido perdeu undo")
+    data = pixels()
+    assert(empty(data, 2, 2) and empty(data, 4, 2))
+    assert(Bridge.redo() and Bridge.redo(),
+           "Redo dos dois gestos consecutivos foi perdido")
+
+    -- Um clique externo ou ferramenta nao suportada NAO aceita um
+    -- novo gesto e nao deve interromper a pincelada atual.
+    assert(press(2, 5))
+    local sx, sy = screen(-30, 5)
+    assert(not Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, red, 1, 100, nil),
+           "Clique fora do canvas foi aceito")
+    model.active_tool = "unsupported_tool"
+    assert(not Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, red, 1, 100, nil),
+           "Ferramenta invalida foi aceita")
+    model.active_tool = "brush"
+    assert(moved(5, 5), "Press rejeitado cancelou pincelada atual")
+    release(5, 5)
+    data = pixels()
+    assert(colored(data, 2, 5, red) and colored(data, 5, 5, red),
+           "Press rejeitado interrompeu o gesto original")
+
+    -- Nova ferramenta de selecao encerra tinta em andamento sem
+    -- consumir um segundo snapshot raster ou pintar no mouseup.
+    assert(press(1, 14))
+    assert(press(10, 10, "transform"))
+    assert(release(11, 11), "Novo retangulo nao finalizou")
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 4 and Selection.contains(selected, 10, 10))
+    data = pixels()
+    assert(colored(data, 1, 14, red) and empty(data, 10, 14),
+           "Selecionar apos pincel criou segmento falso")
+    local mask_count = Bridge.selection_history_snapshot().undo
+
+    -- Inicio de outro retangulo replace esconde temporariamente a
+    -- selecao anterior. Novo pincel cancela essa previa e restaura
+    -- a referencia original antes de pintar.
+    assert(press(5, 12, "transform"))
+    assert(not Bridge.selection_snapshot(),
+           "Retangulo replace nao ocultou temporariamente a mascara")
+    assert(press(10, 10, "brush", blue))
+    release(10, 10)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 4 and Selection.contains(selected, 10, 10)
+           and not Selection.contains(selected, 5, 12),
+           "Novo press nao restaurou selecao de retangulo pendente")
+    assert(Bridge.selection_history_snapshot().undo == mask_count,
+           "Retangulo abortado criou item fantasma de historico")
+    data = pixels()
+    assert(colored(data, 10, 10, blue) and empty(data, 5, 12),
+           "Novo pincel nao respeitou mascara restaurada")
+    assert(Bridge.undo())
+    data = pixels()
+    assert(empty(data, 10, 10) and colored(data, 1, 14, red))
+    assert(Bridge.redo())
+
+    -- Prévia de mover pixels deve ser liberada sem commit quando
+    -- chega um novo press válido, inclusive fora da máscara.
+    assert(press(10, 10, "transform"))
+    assert(moved(13, 10))
+    local preview = assert(Bridge.preview_snapshot())
+    assert(preview.kind == "move" and preview.active,
+           "Movimento nao iniciou previa")
+    assert(press(11, 11, "brush"))
+    assert(not Bridge.preview_snapshot(),
+           "Nova pincelada nao descartou previa de movimento")
+    release(11, 11)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 4 and Selection.contains(selected, 10, 10)
+           and not Selection.contains(selected, 13, 10),
+           "Novo press moveu mascara da previa abortada")
+    data = pixels()
+    assert(colored(data, 10, 10, blue) and
+           colored(data, 11, 11, red) and empty(data, 13, 10),
+           "Preview abortada alterou pixels ou nova pintura nao funcionou")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Novo gesto apos preview nao manteve undo/redo")
+
+    -- O laço replace inacabado também é cancelado antes de iniciar
+    -- um novo pincel. Nenhum retângulo/laço deve sobreviver ao press.
+    assert(press(5, 13, "lasso"))
+    assert(not Bridge.selection_snapshot(),
+           "Laco replace nao iniciou mascara pendente")
+    assert(press(10, 11, "brush", blue))
+    release(10, 11)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 4 and
+           Selection.contains(selected, 10, 10) and
+           Bridge.selection_history_snapshot().undo == mask_count,
+           "Laco interrompido confirmou mascara ou alterou timeline")
+    data = pixels()
+    assert(colored(data, 10, 11, blue) and empty(data, 5, 13),
+           "Novo press apos laco nao respeitou selecao original")
+    assert(Bridge.undo() and Bridge.redo())
+
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 4 and Bridge.undo() and Bridge.redo(),
+           "Historico ou selecao de presses consecutivos nao persistiu")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Undo/redo durante um gesto deve encerrar o estado pendente antes
 -- de restaurar pixels/máscaras. Mousemoved/mouseup atrasados são inertes.
 local function test_history_interrupt_bridge(Bridge, gallery)
@@ -6421,6 +6608,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("new mousepress preempts unfinished brush or selection")
+    test_mousepress_preempts_gesture_bridge(Bridge, gallery)
     checkpoint("undo/redo interrupts active paint and selection gestures")
     test_history_interrupt_bridge(Bridge, gallery)
     checkpoint("uniform opacity across mousemove frequency")

@@ -32,6 +32,14 @@ pixels, opacidade zero, cobertura de seleção nula ou pintura idêntica não
 criam estado sujo nem invalidam `Refazer`. A detecção usa margem de
 quantização compatível com RGBA 8-bit; um arraste alterado conserva
 um único passo de Desfazer. Não há mudança no desenho da interface.
+**Pressões consecutivas sem mouseup:** um novo clique válido no
+canvas encerra a pincelada ou seleção que ainda estava em andamento.
+A tinta já aplicada conserva seu Desfazer próprio; retângulos/laços
+não confirmados restauram a seleção original e prévias de
+movimento/transformação são descartadas. O segundo clique inicia
+um gesto independente, sem linhas ligando pontos distantes.
+Cliques rejeitados ou fora da obra não cancelam o gesto ativo.
+Nenhuma alteração foi feita no layout original.
 **Desfazer/Refazer durante um gesto:** Ctrl+Z/Ctrl+Y agora encerram
 a pincelada antes de navegar no histórico. O mouse ainda pressionado
 não pode pintar novamente após a restauração; um gesto sem alteração

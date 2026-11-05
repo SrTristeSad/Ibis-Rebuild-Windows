@@ -108,6 +108,8 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn('d.opacity, d.eraser, d.alpha_lock, selection,', bridge)
         self.assertNotIn('if selection and not Selection.contains(selection,', bridge)
         self.assertIn("local function interrupt_active_gesture()", bridge)
+        self.assertIn('if not px then return false end\n\n    -- Um novo mousepress válido', bridge)
+        self.assertIn('    interrupt_active_gesture()\n\n    if tool == "magic_wand" then', bridge)
         self.assertIn("drawing = nil", bridge)
         self.assertIn("selection = pending.before_selection_ref", bridge)
         self.assertIn('if pending.kind == "rectangle" or pending.kind == "lasso" then', bridge)

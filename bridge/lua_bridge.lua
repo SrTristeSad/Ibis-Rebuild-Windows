@@ -600,6 +600,13 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     local px, py = canvas_point(model, x, y, w, h, view, preferences)
     if not px then return false end
 
+    -- Um novo mousepress válido substitui qualquer gesto anterior.
+    -- Eventos de release perdidos ou pressões consecutivas não podem
+    -- deixar a pintura antiga coexistir com uma seleção/transformação.
+    -- Preserva pixels já pintados e seu histórico; seleções provisórias
+    -- são canceladas sem criar entradas na linha do tempo.
+    interrupt_active_gesture()
+
     if tool == "magic_wand" then
         discard_preview(gesture)
         gesture = nil
