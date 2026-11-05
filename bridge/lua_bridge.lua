@@ -208,7 +208,7 @@ local function saved_layers(model, path, p)
                 stored_diagonal, stored_rgb_only, stored_bucket_tolerance,
                 stored_bucket_global, stored_bucket_rgb_only,
                 stored_bucket_diagonal = metadata:match(
-                ""^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$"")
+                "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
         end
         if not stored_tolerance then
             stored_tolerance, stored_global, stored_sample_all,
