@@ -121,8 +121,10 @@ local function test_uniform_stroke_opacity(E)
     local function run(p, split, coverage, erase, lock, mask, color)
         local captured = 0
         local function history()
-            if captured == 0 then E.begin_stroke(p, 1) end
-            captured = captured + 1
+            if captured == 0 then
+                E.begin_stroke(p, 1)
+                captured = 1
+            end
         end
         local args = color or red
         local segments = split and {{2.5, 5.5, 6.5, 5.5},
