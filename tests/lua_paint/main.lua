@@ -356,7 +356,7 @@ local function test_stroke_canvas_edge_bridge(Bridge, gallery)
     assert(selected.count == 2 and Selection.contains(selected, 11, 7)
            and Selection.contains(selected, 12, 7))
     model.active_tool = "brush"
-    press(10, 7)
+    press(11, 7)
     release(20, 7)
     picture = snapshot()
     assert(painted(picture, 11, 7) and painted(picture, 12, 7)
