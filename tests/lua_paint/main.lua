@@ -813,6 +813,129 @@ local function test_selection_morph_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Amostrar composicao visivel sem modificar outras camadas.
+local function test_bucket_composite_source(E)
+    local Selection = require("lua_selection")
+    local function fixture()
+        local model = {background_mode = "transparent_dark", layers = {
+            {id = 1, visible = true, opacity = 100, blending = "Normal"},
+            {id = 2, visible = true, opacity = 100, blending = "Normal"},
+            {id = 3, visible = false, opacity = 100, blending = "Normal"}
+        }}
+        local p = E.new(12, 12)
+        E.sync(p, model)
+        local bottom, top, hidden = p.layers[1].pixels, p.layers[2].pixels,
+                                    p.layers[3].pixels
+        bottom:setPixel(2, 2, 1, 0, 0, 1)
+        bottom:setPixel(8, 8, 1, 0, 0, 1)
+        top:setPixel(2, 2, 0, 0, 1, 1)
+        top:setPixel(7, 7, 0, 0, 1, 1)
+        hidden:setPixel(8, 8, 0, 0, 1, 1)
+        p.dirty = false
+        return p, model
+    end
+    local green = {0, 1, 0}
+    local function is_green(p, x, y)
+        local r, g, b, a = p.layers[1].pixels:getPixel(x, y)
+        return r < .01 and g > .99 and b < .01 and a > .99
+    end
+    local function fill(p, model, global, selection, rgb_only, diagonal,
+                        alpha_lock, x, y)
+        return E.fill(p, 1, x or 2, y or 2, green, 1,
+                      alpha_lock or false, selection, 0, global,
+                      rgb_only, diagonal,
+                      E.composite_pixel_source(p, model, true))
+    end
+    local p, model = fixture()
+    assert(E.fill(p, 1, 2, 2, green, 1, false, nil, 0, true)
+           and is_green(p, 2, 2) and is_green(p, 8, 8)
+           and select(4, p.layers[1].pixels:getPixel(7, 7)) == 0,
+           "Balde legado deixou de usar referencia da camada ativa")
+    assert(E.undo(p))
+    assert(fill(p, model, true) and #p.undo == 1 and p.dirty
+           and is_green(p, 2, 2) and is_green(p, 7, 7)
+           and close(select(1, p.layers[1].pixels:getPixel(8, 8)), 1),
+           "Balde composto nao separou pixels ocultos e visiveis")
+    assert(select(3, p.layers[2].pixels:getPixel(2, 2)) > .99
+           and select(3, p.layers[2].pixels:getPixel(7, 7)) > .99
+           and select(3, p.layers[3].pixels:getPixel(8, 8)) > .99,
+           "Balde alterou camadas de referencia")
+    p.dirty = false
+    local steps = #p.undo
+    assert(not fill(p, model, true) and #p.undo == steps and not p.dirty,
+           "No-op do Balde composto criou historico/dirty")
+    assert(E.undo(p)
+           and close(select(1, p.layers[1].pixels:getPixel(2, 2)), 1)
+           and close(select(4, p.layers[1].pixels:getPixel(7, 7)), 0)
+           and E.redo(p) and is_green(p, 7, 7),
+           "Historico do Balde composto nao restaurou a camada ativa")
+    local hidden_p, hidden_model = fixture()
+    hidden_model.layers[2].visible = false
+    assert(fill(hidden_p, hidden_model, true)
+           and is_green(hidden_p, 8, 8)
+           and close(select(4, hidden_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "Balde composto incluiu camada invisivel")
+    local faded_p, faded_model = fixture()
+    faded_model.layers[2].opacity = 50
+    assert(fill(faded_p, faded_model, true)
+           and is_green(faded_p, 2, 2)
+           and close(select(4, faded_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "Balde composto ignorou opacidade da camada")
+    local clipped_p, clipped_model = fixture()
+    clipped_model.layers[2].clipping = true
+    assert(fill(clipped_p, clipped_model, true)
+           and is_green(clipped_p, 2, 2)
+           and close(select(4, clipped_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "Balde composto ignorou clipping")
+    local white_p, white_model = fixture()
+    white_model.background_mode = "white"
+    assert(fill(white_p, white_model, true, nil, false, false,
+                false, 0, 0)
+           and is_green(white_p, 0, 0) and is_green(white_p, 11, 11)
+           and close(select(1, white_p.layers[1].pixels:getPixel(8, 8)), 1)
+           and close(select(4, white_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "Balde composto nao considerou fundo branco visivel")
+    local locked_p, locked_model = fixture()
+    assert(fill(locked_p, locked_model, true, nil, false, false, true)
+           and is_green(locked_p, 2, 2)
+           and close(select(4, locked_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "Alpha Lock deve consultar o alfa da camada ativa")
+    local masked_p, masked_model = fixture()
+    local mask = assert(Selection.rectangle(12, 12, 2, 2, 3, 3))
+    assert(fill(masked_p, masked_model, true, mask)
+           and is_green(masked_p, 2, 2)
+           and close(select(4, masked_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "Balde composto ultrapassou a selecao")
+    local alpha_p, alpha_model = fixture()
+    alpha_p.layers[2].pixels:setPixel(7, 7, 0, 0, 1, .5)
+    assert(fill(alpha_p, alpha_model, true)
+           and close(select(4, alpha_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "RGBA composto nao distinguiu opacidade")
+    local rgb_p, rgb_model = fixture()
+    rgb_p.layers[2].pixels:setPixel(7, 7, 0, 0, 1, .5)
+    assert(fill(rgb_p, rgb_model, true, nil, true)
+           and is_green(rgb_p, 7, 7),
+           "RGB-only composto nao ignorou alfa")
+    local diag_p, diag_model = fixture()
+    diag_p.layers[2].pixels:setPixel(3, 3, 0, 0, 1, 1)
+    assert(fill(diag_p, diag_model, false, nil, false, true)
+           and is_green(diag_p, 3, 3)
+           and close(select(4, diag_p.layers[1].pixels:getPixel(7, 7)), 0),
+           "Balde composto nao manteve conectividade diagonal")
+    local invalid_p = fixture()
+    for _, bad in ipairs({1, "bad", {}, {pixels = {}}}) do
+        local ok, reason = E.fill(invalid_p, 1, 2, 2, green, 1,
+                                  false, nil, 0, true, false, false, bad)
+        assert(not ok and reason and not invalid_p.dirty
+               and #invalid_p.undo == 0,
+               "Balde aceitou fonte de referencia invalida")
+    end
+    local huge, reason = E.fill({w = 1025, h = 1025}, 1, 2, 2,
+                                  green, 1, false, nil, 0, true,
+                                  false, false, {})
+    assert(not huge and reason, "Balde composto perdeu limite de tamanho")
+end
+
 -- Balde contíguo opcionalmente 8-conexo, sem afetar modo global,
 -- tolerância, critério RGB-only ou Alpha Lock.
 local function test_bucket_diagonal(E)
@@ -1418,6 +1541,161 @@ local function test_magic_wand_diagonal(E)
            "Oito vizinhos ultrapassaram limites ou perderam cantos")
 end
 
+-- Ctrl+Alt+V: usar todas as camadas como referencia do Balde.
+local function test_bucket_sample_all_bridge(Bridge, gallery)
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {
+            {id = 1, name = "Bottom", visible = true, opacity = 100,
+             blending = "Normal"},
+            {id = 2, name = "Top", visible = true, opacity = 100,
+             blending = "Normal"}
+        }, active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer()
+        for _, layer in ipairs(self.layers) do
+            if layer.id == self.active_layer_id then return layer end
+        end
+    end
+    local id = gallery:add_artwork(16, 16, "Bucket visible reference")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function press(x, y, color)
+        local sx = 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11
+        local sy = 62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, color, 1, 100, nil))
+        Bridge.mousereleased()
+    end
+    local notices = {}
+    local function notify(s) notices[#notices + 1] = s end
+    local function shortcut(key)
+        local original = love.keyboard.isDown
+        love.keyboard.isDown = function(...)
+            for i = 1, select("#", ...) do
+                local k = select(i, ...)
+                if k == "lctrl" or k == "lalt" then return true end
+            end
+            return false
+        end
+        local ok = Bridge.keypressed(key, model, notify)
+        love.keyboard.isDown = original
+        return ok
+    end
+    press(3, 3, {255, 0, 0})
+    press(10, 10, {255, 0, 0})
+    model.active_layer_id = 2
+    press(3, 3, {0, 0, 255})
+    press(8, 8, {0, 0, 255})
+    model.active_layer_id = 1
+    model.active_tool = "bucket"
+    assert(not Bridge.bucket_sample_all(model)
+           and not Bridge.wand_sample_all(model),
+           "Balde novo amostrou a composicao indevidamente")
+    assert(shortcut("b") and Bridge.bucket_global(model))
+    press(3, 3, {0, 255, 0})
+    assert(Bridge.save())
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    local path
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Bucket visible reference", 1, true) then
+            local key = line:match("^(art_%d+_%d+)\t")
+            path = "lua-artworks/" .. assert(key)
+        end
+    end
+    assert(path, "Obra do Balde composto nao encontrada")
+    local function pixel(layer_id, x, y)
+        return love.image.newImageData(path .. "/layer_" .. layer_id .. ".png"):
+            getPixel(x, y)
+    end
+    assert(select(2, pixel(1, 10, 10)) > .99
+           and close(select(4, pixel(1, 8, 8)), 0),
+           "Balde padrao deixou de usar pixels ativos")
+    assert(Bridge.undo())
+    local mask_undo = Bridge.selection_history_snapshot().undo
+    assert(shortcut("v") and Bridge.bucket_sample_all(model)
+           and not Bridge.wand_sample_all(model)
+           and Bridge.selection_history_snapshot().undo == mask_undo
+           and notices[#notices]:find("camadas visíveis", 1, true),
+           "Ctrl+Alt+V nao ajustou a fonte de cor independentemente")
+    press(3, 3, {0, 255, 0})
+    assert(Bridge.save())
+    assert(select(2, pixel(1, 3, 3)) > .99
+           and select(2, pixel(1, 8, 8)) > .99
+           and select(1, pixel(1, 10, 10)) > .99
+           and select(3, pixel(2, 3, 3)) > .99
+           and select(3, pixel(2, 8, 8)) > .99,
+           "Balde composto alterou fonte ou comparou camada errada")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico do Balde composto nao foi reversivel")
+    assert(shortcut("t") and Bridge.wand_sample_all(model)
+           and Bridge.bucket_sample_all(model)
+           and shortcut("v") and not Bridge.bucket_sample_all(model)
+           and Bridge.wand_sample_all(model)
+           and shortcut("v") and Bridge.bucket_sample_all(model),
+           "Fonte da Varinha e do Balde ficaram vinculadas")
+    assert(shortcut("pageup") and Bridge.bucket_tolerance(model) == 16)
+    assert(shortcut("m") and Bridge.bucket_rgb_only(model))
+    assert(shortcut("9") and Bridge.bucket_diagonal(model))
+    assert(Bridge.save())
+    local saved = assert(love.filesystem.read(path .. "/document.tsv"))
+    assert(saved:match("\t0\t0\t1\t0\t0\t16\t1\t1\t1\t1$"),
+           "Nao persistiu 12a coluna de referencia do Balde")
+    local other = gallery:add_artwork(16, 16, "Other bucket source")
+    Bridge.create(model, other, gallery)
+    assert(not Bridge.bucket_sample_all(model)
+           and not Bridge.wand_sample_all(model),
+           "Preferencia do Balde vazou entre obras")
+    Bridge.open(model, id)
+    assert(Bridge.bucket_sample_all(model) and Bridge.wand_sample_all(model)
+           and Bridge.bucket_tolerance(model) == 16
+           and Bridge.bucket_global(model) and Bridge.bucket_diagonal(model)
+           and Bridge.bucket_rgb_only(model),
+           "Reabrir obra perdeu configuracoes do Balde")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico raster apos reabertura falhou")
+    assert(love.filesystem.write(path .. "/document.tsv",
+        "1\ttransparent_dark\t16\t1\t1\t1\t1\t32\t1\t1\t1"))
+    Bridge.open(model, id)
+    assert(not Bridge.bucket_sample_all(model) and Bridge.bucket_diagonal(model)
+           and Bridge.bucket_rgb_only(model) and Bridge.bucket_tolerance(model) == 32
+           and Bridge.wand_sample_all(model),
+           "Legado 11 colunas perdeu opcoes existentes")
+    for _, old in ipairs({
+        "1\ttransparent_dark\t16\t1\t1\t1\t1\t32\t1\t1",
+        "1\ttransparent_dark\t16\t1\t1\t1\t1\t32\t1",
+        "1\ttransparent_dark\t16\t1\t1\t1\t1\t32",
+        "1\ttransparent_dark\t16\t1\t1\t1\t1",
+        "1\ttransparent_dark\t16\t1\t1\t1",
+        "1\ttransparent_dark\t16\t1\t1",
+        "1\ttransparent_dark\t16\t1",
+        "1\ttransparent_dark\t16",
+        "1\ttransparent_dark"
+    }) do
+        assert(love.filesystem.write(path .. "/document.tsv", old))
+        Bridge.open(model, id)
+        assert(not Bridge.bucket_sample_all(model),
+               "Formato legado ativou referencia composta indevidamente")
+    end
+    assert(love.filesystem.write(path .. "/document.tsv",
+        "1\ttransparent_dark\t16\t1\t1\t1\t1\t32\t1\t1\t1\tinvalid"))
+    Bridge.open(model, id)
+    assert(not Bridge.bucket_sample_all(model) and Bridge.bucket_diagonal(model)
+           and Bridge.bucket_global(model) and Bridge.bucket_tolerance(model) == 32,
+           "Flag invalida nao preservou preferencias anteriores")
+    assert(Bridge.bucket_sample_all({screen = "gallery"}) == nil
+           and not Bridge.toggle_bucket_sample_all({screen = "gallery"}),
+           "Balde composto atuou fora do editor")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, file in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. file)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Ponte real para Ctrl+Alt+9, historico e compatibilidade 2-11 colunas.
 local function test_bucket_diagonal_bridge(Bridge, gallery)
     local model = {
@@ -1522,7 +1800,7 @@ local function test_bucket_diagonal_bridge(Bridge, gallery)
     assert(shortcut("r") and Bridge.wand_rgb_only(model))
     assert(Bridge.save())
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t0\t0\t0\t1\t1\t16\t0\t1\t1$"),
+    assert(saved:match("\t0\t0\t0\t1\t1\t16\t0\t1\t1\t0$"),
            "Balde nao gravou 11a coluna de conectividade")
     local other = gallery:add_artwork(16, 16, "Bucket next diagonal")
     Bridge.create(model, other, gallery)
@@ -1680,7 +1958,7 @@ local function test_bucket_rgb_only_bridge(Bridge, gallery)
     assert(shortcut("m") and Bridge.bucket_rgb_only(model))
     assert(Bridge.save())
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t0\t0\t0\t1\t16\t1\t1\t0$"),
+    assert(metadata:match("\t0\t0\t0\t0\t1\t16\t1\t1\t0\t0$"),
            "Documento não salvou décima coluna RGB-only do Balde")
 
     local other = gallery:add_artwork(16, 16, "Other bucket color")
@@ -1835,7 +2113,7 @@ local function test_bucket_global_bridge(Bridge, gallery)
     assert(shortcut("b") and Bridge.bucket_global(model))
     assert(Bridge.save())
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t1\t0\t0\t0\t16\t1\t0\t0$"),
+    assert(metadata:match("\t0\t1\t0\t0\t0\t16\t1\t0\t0\t0$"),
            "Documento não gravou nona coluna global do Balde")
     local other = gallery:add_artwork(16, 16, "Other global bucket")
     Bridge.create(model, other, gallery)
@@ -1978,7 +2256,7 @@ local function test_bucket_tolerance_bridge(Bridge, gallery)
            "Balde permitiu ajuste fora do editor ou fracionário")
     assert(Bridge.adjust_bucket_tolerance(model, 32) and Bridge.save())
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t0\t0\t0\t0\t32\t0\t0\t0$"),
+    assert(metadata:match("\t0\t0\t0\t0\t0\t32\t0\t0\t0\t0$"),
            "Balde não persistiu tolerância na oitava coluna")
     local other = gallery:add_artwork(16, 16, "Other Bucket")
     Bridge.create(model, other, gallery)
@@ -2118,7 +2396,7 @@ local function test_magic_wand_rgb_only_bridge(Bridge, gallery)
     assert(key, "Diretório da obra RGB-only não encontrado")
     local path = "lua-artworks/" .. key
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t16\t1\t0\t0\t1\t0\t0\t0\t0$"),
+    assert(saved:match("\t16\t1\t0\t0\t1\t0\t0\t0\t0\t0$"),
            "document.tsv não gravou sétima coluna RGB-only")
     local image = love.image.newImageData(path .. "/layer_1.png")
     local _, _, _, alpha = image:getPixel(5, 3)
@@ -2271,7 +2549,7 @@ local function test_magic_wand_diagonal_bridge(Bridge, gallery)
     assert(key, "Pasta do teste diagonal ausente")
     local path = "lua-artworks/" .. key
     local saved = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(saved:match("\t16\t0\t0\t1\t0\t0\t0\t0\t0$"),
+    assert(saved:match("\t16\t0\t0\t1\t0\t0\t0\t0\t0\t0$"),
            "Documento não salvou sexta coluna de conectividade")
     local other = gallery:add_artwork(16, 16, "Wand another diagonal")
     Bridge.create(model, other, gallery)
@@ -2562,7 +2840,7 @@ local function test_magic_wand_sample_all_bridge(Bridge, gallery)
     assert(key, "Não encontrou pasta da amostragem composta")
     local path = "lua-artworks/" .. key
     local metadata = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(metadata:match("\t0\t1\t1\t0\t0\t0\t0\t0\t0$"),
+    assert(metadata:match("\t0\t1\t1\t0\t0\t0\t0\t0\t0\t0$"),
            "Preferência global e amostragem composta não persistiram")
     local layer1 = love.image.newImageData(path .. "/layer_1.png")
     local layer2 = love.image.newImageData(path .. "/layer_2.png")
@@ -2734,7 +3012,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
     assert(key, "Obra temporária do modo global não foi localizada")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t32\t1\t0\t0\t0\t0\t0\t0\t0$"),
+    assert(meta:match("\t32\t1\t0\t0\t0\t0\t0\t0\t0\t0$"),
            "document.tsv não registrou modo global e tolerância")
     local other = gallery:add_artwork(16, 16, "Wand other mode")
     Bridge.create(model, other, gallery)
@@ -2758,7 +3036,7 @@ local function test_magic_wand_global_bridge(Bridge, gallery)
            not Selection.contains(Bridge.selection_snapshot(), 2, 2),
            "Modo contíguo deixou escapar pixels de regiões separadas")
     assert(Bridge.save())
-    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0\t0\t0\t0\t0\t0$"))
+    assert(love.filesystem.read(path .. "/document.tsv"):match("\t32\t0\t0\t0\t0\t0\t0\t0\t0\t0$"))
     assert(love.filesystem.write(path .. "/document.tsv", "1\twhite\t32"))
     Bridge.open(model, id)
     assert(Bridge.wand_tolerance(model) == 32 and
@@ -2950,7 +3228,7 @@ local function test_magic_wand_tolerance_bridge(Bridge, gallery)
     assert(key, "Não encontrou diretório da varinha")
     local path = "lua-artworks/" .. key
     local meta = assert(love.filesystem.read(path .. "/document.tsv"))
-    assert(meta:match("\t48\t0\t0\t0\t0\t0\t0\t0\t0$"),
+    assert(meta:match("\t48\t0\t0\t0\t0\t0\t0\t0\t0\t0$"),
            "document.tsv não persistiu tolerância nem modo contíguo")
     -- Abrir outra obra não pode herdar a tolerância desta.
     local id2 = gallery:add_artwork(16, 16, "Temporary wand")
@@ -4693,6 +4971,7 @@ function love.load()
     checkpoint("selection morphology expand contract")
     test_selection_morph(E)
     checkpoint("magic wand global color across disconnected regions")
+    test_bucket_composite_source(E)
     test_bucket_diagonal(E)
     test_bucket_rgb_only(E)
     test_bucket_global(E)
@@ -4867,6 +5146,7 @@ function love.load()
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
     checkpoint("bridge magic wand global mode and persistence")
+    test_bucket_sample_all_bridge(Bridge, gallery)
     test_bucket_diagonal_bridge(Bridge, gallery)
     test_bucket_rgb_only_bridge(Bridge, gallery)
     test_bucket_global_bridge(Bridge, gallery)

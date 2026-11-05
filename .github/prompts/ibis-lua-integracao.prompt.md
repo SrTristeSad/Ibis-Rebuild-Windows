@@ -156,6 +156,28 @@ legados 2–10 colunas e flag inválida assumem false, sem perder as
 preferências anteriores. Toggle sem alterar pixels ou máscaras.
 Cobrir testes de cantos, bordas, global, tolerância, Alpha Lock,
 seleções, undo/redo, reabertura e Ctrl+Alt+9. Não alterar UI.
+**Amostragem composta opcional do Balde**: Ctrl+Alt+V alterna
+`project.bucket_sample_all` entre false (camada ativa, padrão)
+e true (composição das camadas visíveis). A ponte deve passar a
+`Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode,rgb_only,diagonal_mode,reference)`
+a fonte opcional `Engine.composite_pixel_source(project,model,true)`
+na forma `{ pixels = objeto_com_getPixel }`. A referência é
+usada apenas para **descobrir os pixels correspondentes** pelo
+mesmo RGBA/RGB/tolerância; a escrita e o snapshot do histórico
+continuam exclusivamente na camada ativa. A composição considera
+visibilidade, opacidade, blend, clipping e fundo branco (outros
+fundos mantêm transparência). A região deve ser encontrada antes
+de qualquer mutação para não contaminar a própria amostragem.
+Alpha Lock compara o alfa da camada de DESTINO, e impede pintar
+pixels vazios independentemente da cor composta. Preservar
+máscara/feather, global/contíguo, 4/8, no-op, limite 1 Mi e
+undo/redo. Preferência independente de `wand_sample_all`, salva
+na 12ª coluna opcional de `document.tsv` (0/1); arquivos com
+2–11 colunas ou flag inválida usam false mantendo os campos
+anteriores. Alternar não edita pixels/máscara/histórico. Testar
+camadas ocultas e superiores, fundo branco, opacidade, clipping,
+comparação RGB, Alpha Lock de destino, Ctrl+Alt+V, persistência
+e isolamento por obra. Sem novos controles visuais nem DLL própria.
 **Comparação RGB-only opcional da Varinha**: Ctrl+Alt+R alterna
 `project.wand_rgb_only`. Com false/nil (padrão) a comparação considera
 R/G/B/A com tolerância independente 0..255 em cada canal. Com true,

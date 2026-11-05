@@ -67,6 +67,26 @@
   demais campos. Toggle apenas muda preferência, sem editar pixels,
   seleção ou histórico. Testar bordas, cantos, ilhas, atalho e undo.
   Não alterar Ibis-Lua nem introduzir controles novos.
+- Fonte composta opcional do Balde via Ctrl+Alt+V:
+  `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode,rgb_only,diagonal_mode,reference)`
+  aceita no final uma fonte de pixels opcional da forma
+  `{ pixels = <getPixel> }`. Nil usa exclusivamente a camada ativa;
+  a fonte fornecida é usada **apenas para combinar pixels e buscar
+  a região**, jamais para aplicar tinta. A ponte passa
+  `Engine.composite_pixel_source(project, model, true)` quando
+  `project.bucket_sample_all` é true, como faz a Varinha. A
+  composição respeita visibilidade, opacidade, blending, clipping
+  e fundo branco; o raster de todas as camadas de referência é
+  intocado. **Alpha Lock sempre consulta o alfa da camada ativa**.
+  Os pixels são identificados antes de qualquer escrita; preservar
+  global/contíguo, 4/8, RGB/RGBA, tolerância, seleção/feather,
+  no-op, histórico e limite 1 Mi px. Persistir `bucket_sample_all`
+  na 12ª coluna opcional de `document.tsv`, false por padrão em
+  obras antigas (2–11 colunas) ou flag inválida, sem perder outras
+  opções e independente de `wand_sample_all`. Toggle sem raster,
+  dirty, seleção ou histórico. Testar fonte de composição, fundo,
+  clipping, Alpha Lock de destino, reabertura, atalhos e camadas.
+  Não alterar Ibis-Lua nem introduzir controles novos.
 - Alpha Lock preserva o alfa dos pixels; Clipping usa a máscara da camada-base
   na composição Lua/LÖVE, sem modificar os pixels salvos da camada clipada.
   Preserve testes que comparam a amostra CPU com o resultado de shader GPU.

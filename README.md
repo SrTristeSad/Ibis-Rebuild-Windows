@@ -89,6 +89,16 @@ e seleções, sem afetar a Varinha. O toggle não edita raster, máscara ou
 histórico. Salva por obra na **11ª coluna opcional** de `document.tsv`;
 arquivos antigos mantêm a conexão de 4 vizinhos. Nenhum controle
 visual foi adicionado ao submódulo Ibis-Lua.
+**Ctrl+Alt+V** alterna a **fonte de cor do Balde** entre a **camada
+ativa** (padrão) e a **composição das camadas visíveis**, incluindo
+visibilidade, opacidade, modos de mesclagem, clipping e fundo branco
+quando configurado. Apenas a **camada ativa é pintada**: as camadas
+usadas na referência não são modificadas. A fonte é independente da
+Varinha e funciona com Balde global/contíguo, 4/8 vizinhos,
+RGB/RGBA, tolerância, seleção e Alpha Lock. O modo é salvo por obra
+na **12ª coluna opcional** de `document.tsv`; projetos antigos
+mantêm a fonte camada ativa. Alterar a opção não modifica pixels
+nem histórico. Nenhum novo controle visual foi adicionado.
 Nenhum controle visual da interface original foi adicionado.
 **Ctrl+Alt+R** alterna a comparação entre **RGBA** (padrão, incluindo
 a transparência) e **somente RGB** (desconsidera diferenças de alfa).

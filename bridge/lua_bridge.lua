@@ -145,6 +145,7 @@ function Bridge.create(model, id, gallery)
     project.bucket_global = false
     project.bucket_rgb_only = false
     project.bucket_diagonal = false
+    project.bucket_sample_all = false
     Engine.sync(project, model)
     counter = counter + 1
     local key = string.format("art_%d_%d", os.time(), counter)
@@ -200,8 +201,15 @@ local function saved_layers(model, path, p)
         local stored_tolerance, stored_global, stored_sample_all,
               stored_diagonal, stored_rgb_only, stored_bucket_tolerance,
               stored_bucket_global, stored_bucket_rgb_only,
-              stored_bucket_diagonal = metadata:match(
-            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+              stored_bucket_diagonal, stored_bucket_sample_all = metadata:match(
+            "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        if not stored_tolerance then
+            stored_tolerance, stored_global, stored_sample_all,
+                stored_diagonal, stored_rgb_only, stored_bucket_tolerance,
+                stored_bucket_global, stored_bucket_rgb_only,
+                stored_bucket_diagonal = metadata:match(
+                "^%d+\t[%a_]+\t(%d+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)\t([^\t\r\n]+)%s*$")
+        end
         if not stored_tolerance then
             stored_tolerance, stored_global, stored_sample_all,
                 stored_diagonal, stored_rgb_only, stored_bucket_tolerance,
@@ -259,6 +267,7 @@ local function saved_layers(model, path, p)
         p.bucket_global = stored_bucket_global == "1"
         p.bucket_rgb_only = stored_bucket_rgb_only == "1"
         p.bucket_diagonal = stored_bucket_diagonal == "1"
+        p.bucket_sample_all = stored_bucket_sample_all == "1"
         active_id = tonumber(active_id)
         if active_id then
             for _, info in ipairs(layers) do
@@ -288,6 +297,7 @@ function Bridge.open(model, id)
     project.bucket_global = false
     project.bucket_rgb_only = false
     project.bucket_diagonal = false
+    project.bucket_sample_all = false
     if record then saved_layers(model, project_path(record.key), project) end
     Engine.sync(project, model)
     if record then
@@ -358,7 +368,8 @@ function Bridge.save()
             tostring(project.bucket_tolerance or 0),
             project.bucket_global and "1" or "0",
             project.bucket_rgb_only and "1" or "0",
-            project.bucket_diagonal and "1" or "0"}, "\t")))
+            project.bucket_diagonal and "1" or "0",
+            project.bucket_sample_all and "1" or "0"}, "\t")))
     -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
     -- retrocompatível e evita que a seleção contamine qualquer camada.
     local mask_path = path .. "/selection.png"
@@ -608,10 +619,15 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     local normalized_opacity = math.max(0, math.min(100, opacity)) / 100
 
     if tool == "bucket" then
+        -- A fonte composta é somente leitura; a aplicação e o histórico
+        -- permanecem restritos à camada ativa, inclusive com Alpha Lock.
+        local reference = p.bucket_sample_all and
+            Engine.composite_pixel_source(p, model, true) or nil
         local _, reason = Engine.fill(p, info.id, px, py, rgb,
             normalized_opacity, info.alpha_lock, selection,
             p.bucket_tolerance or 0, p.bucket_global or false,
-            p.bucket_rgb_only or false, p.bucket_diagonal or false)
+            p.bucket_rgb_only or false, p.bucket_diagonal or false,
+            reference)
         if reason and notice then notice(reason) end
         return true
     end
@@ -1072,6 +1088,26 @@ function Bridge.toggle_bucket_diagonal(model, notice)
     return true
 end
 
+-- Fonte da comparação do Balde (camada ativa ou composição visível).
+-- Mudar a fonte é uma preferência e não escreve pixels nem máscara.
+function Bridge.bucket_sample_all(model)
+    local p = ensure(model)
+    if not p then return nil end
+    return p.bucket_sample_all == true
+end
+
+function Bridge.toggle_bucket_sample_all(model, notice)
+    local p = ensure(model)
+    if not p then return false end
+    p.bucket_sample_all = not p.bucket_sample_all
+    if notice then
+        notice(p.bucket_sample_all and
+            "Balde: amostrar todas as camadas visíveis" or
+            "Balde: amostrar somente a camada ativa")
+    end
+    return true
+end
+
 function Bridge.keypressed(key, model, notice)
     if model.screen ~= "editor" then return false end
     if key == "escape" and selection then
@@ -1104,6 +1140,8 @@ function Bridge.keypressed(key, model, notice)
             return Bridge.toggle_bucket_rgb_only(model, notice)
         elseif key == "9" then
             return Bridge.toggle_bucket_diagonal(model, notice)
+        elseif key == "v" then
+            return Bridge.toggle_bucket_sample_all(model, notice)
         elseif key == "pageup" then
             return Bridge.adjust_bucket_tolerance(model, 16, notice)
         elseif key == "pagedown" then
