@@ -23,6 +23,20 @@ sem callback não cria histórico automaticamente, preservando seu
 contrato com `Engine.begin_stroke` explícito. Testar pixels,
 arraste real da UI, máscaras, undo/redo e histórico persistido.
 Não alterar atalhos, assets ou o submódulo.
+**Um novo clique interrompe o gesto antigo**:
+`Bridge.mousepressed` invoca `interrupt_active_gesture()`
+APÓS validar que a ferramenta e o clique no canvas são válidos,
+mas ANTES de executar a nova ação. Evita pinceladas e seleções
+simultâneas com mouseup perdido ou presses consecutivos.
+A tinta já aplicada mantém o histórico único; retângulo/laço
+ainda não confirmado restaura a máscara prévia, sem gerar
+um passo de seleção; preview de movimento/transformação é
+liberada sem commit. Um segundo press de pincel é um gesto
+independente e não cria linha conectando os centros. Não
+cancelar o gesto por clique rejeitado fora do canvas ou
+ferramenta desconhecida. Testar todos esses casos em eventos
+reais, incluindo máscara, PNG, undo/redo e reabertura.
+Não modificar o submódulo Ibis-Lua.
 **Undo/Redo sem gestos pendentes**:
 `Bridge.undo/redo` e `Bridge.selection_undo/redo` chamam
 `interrupt_active_gesture()` antes de navegar nas pilhas,
