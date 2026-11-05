@@ -683,7 +683,7 @@ local function test_wide_stroke_canvas_edge_bridge(Bridge, gallery)
     end
     local function release(x, y)
         local sx, sy = screen(x, y)
-        Bridge.mousereleased(model, sx, sy, 1)
+        return Bridge.mousereleased(model, sx, sy, 1)
     end
     local path
     local function image()
