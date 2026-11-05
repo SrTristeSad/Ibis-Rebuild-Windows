@@ -648,6 +648,164 @@ local function test_uniform_stroke_opacity_bridge(Bridge, gallery)
     end
 end
 
+-- Pincel/borracha devem poder iniciar fora da máscara e entrar nela,
+-- inclusive quando o círculo largo toca a seleção sem que seu centro entre.
+-- O Balde permanece restrito à semente dentro da máscara.
+local function test_stroke_enters_selection_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Selection entry", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Selection entry painting")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function screen(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(x, y, tool, diameter, opacity)
+        model.active_tool = tool or "brush"
+        local sx, sy = screen(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0},
+                                   diameter or 1, opacity or 100, nil),
+               "Clique inicial da ferramenta foi rejeitado")
+    end
+    local function move(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousemoved(model, sx, sy, 1)
+    end
+    local function release(x, y)
+        local sx, sy = screen(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local path
+    local function image()
+        assert(Bridge.save(), "Falha ao salvar teste de mascara")
+        if not path then
+            local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+            for line in index:gmatch("[^\r\n]+") do
+                if line:find("Selection entry painting", 1, true) then
+                    path = "lua-artworks/" ..
+                        assert(line:match("^(art_%d+_%d+)\t"))
+                end
+            end
+        end
+        assert(path, "Nao localizou a obra de selecao")
+        return love.image.newImageData(path .. "/layer_1.png")
+    end
+    local function alpha(data, x, y)
+        return select(4, data:getPixel(x, y))
+    end
+    local function painted(data, x, y)
+        return alpha(data, x, y) > .99
+    end
+    local function empty(data, x, y)
+        return close(alpha(data, x, y), 0)
+    end
+
+    -- Seleção do retângulo x=8..10, y=4..6.
+    press(8, 4, "transform")
+    assert(release(10, 6), "Nao criou mascara retangular")
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 8, 5)
+           and not Selection.contains(selected, 7, 5))
+
+    -- Clique fora da seleção não deve criar tinta nem um passo raster.
+    press(3, 5)
+    release(3, 5)
+    local pixels = image()
+    assert(empty(pixels, 8, 5) and not Bridge.undo(),
+           "Clique sem alcance dentro da mascara criou historico")
+
+    -- O início sem efeito nao encerra o gesto; o movimento posterior
+    -- entra na seleção e só a área selecionada recebe tinta.
+    press(3, 5)
+    assert(move(9, 5), "Pincel nao continuou ao entrar na selecao")
+    release(12, 5)
+    pixels = image()
+    for x = 8, 10 do
+        assert(painted(pixels, x, 5),
+               "Pincel nao entrou na mascara: " .. x)
+    end
+    assert(empty(pixels, 7, 5) and empty(pixels, 11, 5)
+           and empty(pixels, 9, 3) and empty(pixels, 9, 7),
+           "Pincel modificou pixels fora da mascara")
+    assert(Bridge.undo(), "Arraste desde fora nao gerou undo")
+    pixels = image()
+    assert(empty(pixels, 8, 5) and empty(pixels, 10, 5))
+    -- Gesto inteiramente fora não pode invalidar o redo existente.
+    press(3, 3)
+    assert(move(5, 3))
+    release(5, 3)
+    assert(Bridge.redo(), "Pincel fora da mascara descartou redo")
+    pixels = image()
+    assert(painted(pixels, 8, 5) and painted(pixels, 10, 5)
+           and empty(pixels, 5, 3))
+
+    -- Borracha começando fora também deve apagar apenas dentro.
+    press(3, 5, "eraser")
+    assert(move(9, 5), "Borracha nao continuou ao entrar na selecao")
+    release(12, 5)
+    pixels = image()
+    assert(empty(pixels, 8, 5) and empty(pixels, 10, 5))
+    assert(Bridge.undo(), "Borracha nao gerou um passo reversivel")
+    pixels = image()
+    assert(painted(pixels, 8, 5) and painted(pixels, 10, 5))
+    assert(Bridge.redo())
+
+    -- Com diâmetro 8, um clique centrado em x=5 toca a seleção x=8,
+    -- embora o centro do círculo continue fora da máscara.
+    press(5, 5, "brush", 8)
+    release(5, 5)
+    pixels = image()
+    assert(painted(pixels, 8, 5) and painted(pixels, 9, 5)
+           and empty(pixels, 10, 5) and empty(pixels, 7, 5),
+           "Pincel largo perdeu a interseção com a mascara")
+    assert(Bridge.undo())
+    pixels = image()
+    assert(empty(pixels, 8, 5) and empty(pixels, 9, 5))
+    assert(Bridge.redo())
+
+    press(5, 5, "eraser", 8)
+    release(5, 5)
+    pixels = image()
+    assert(empty(pixels, 8, 5) and empty(pixels, 9, 5),
+           "Borracha larga nao atingiu mascara com centro externo")
+    assert(Bridge.undo() and Bridge.redo())
+
+    -- O Balde usa uma semente, não uma área de pincel. Clicar fora
+    -- da máscara não deve alterar pixels nem consumir redo valido.
+    assert(Bridge.undo())
+    press(3, 5, "bucket", 8)
+    release(3, 5)
+    assert(Bridge.redo(), "Balde fora da mascara invalidou redo")
+    pixels = image()
+    assert(empty(pixels, 8, 5) and empty(pixels, 9, 5)
+           and empty(pixels, 3, 5),
+           "Balde vazou pela area externa da selecao")
+
+    -- A máscara e o histórico raster devem sobreviver à reabertura.
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 9 and Selection.contains(selected, 8, 5)
+           and Bridge.undo() and Bridge.redo(),
+           "Persistencia perdeu selecao ou historico raster")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. filename)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Pincéis largos mantêm a borda tocada mesmo quando o CENTRO do
 -- círculo está fora do canvas. O mesmo vale para a borracha.
 local function test_wide_stroke_canvas_edge_bridge(Bridge, gallery)
@@ -6267,6 +6425,8 @@ function love.load()
     test_history_interrupt_bridge(Bridge, gallery)
     checkpoint("uniform opacity across mousemove frequency")
     test_uniform_stroke_opacity_bridge(Bridge, gallery)
+    checkpoint("brush and eraser enter a selection from outside")
+    test_stroke_enters_selection_bridge(Bridge, gallery)
     checkpoint("wide brush radius reaches canvas edges")
     test_wide_stroke_canvas_edge_bridge(Bridge, gallery)
     checkpoint("brush and eraser strokes clipped to canvas edges")
