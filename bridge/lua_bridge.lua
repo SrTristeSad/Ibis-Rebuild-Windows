@@ -64,10 +64,24 @@ local function set_mask(next_mask, previous, previous_is_explicit)
     selection = next_mask
 end
 
-local function mask_history_step(from, to)
-    if #from == 0 then return false end
-    discard_preview(gesture)
+-- Navegar em qualquer histórico encerra primeiro as interações em curso.
+-- Isso impede que um mousemoved posterior pinte DEPOIS do undo/redo.
+-- Uma seleção em construção (retângulo/laço) ainda não foi confirmada:
+-- restaurar o objeto original, sem criar um passo de histórico de máscara.
+local function interrupt_active_gesture()
+    drawing = nil
+    local pending = gesture
+    if not pending then return end
     gesture = nil
+    discard_preview(pending)
+    if pending.kind == "rectangle" or pending.kind == "lasso" then
+        selection = pending.before_selection_ref
+    end
+end
+
+local function mask_history_step(from, to)
+    interrupt_active_gesture()
+    if #from == 0 then return false end
     local entry = table.remove(from)
     push_mask_state(to, selection)
     selection = entry.mask
@@ -605,11 +619,13 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
     if tool == "lasso" then
         discard_preview(gesture)
         local mode = selection_merge_mode()
+        local before_ref = selection
         local before = Selection.clone(selection)
         if mode == "replace" then selection = nil end
         gesture = {kind = "lasso", w = w, h = h, view = view,
                    preferences = preferences, points = {{px, py}},
                    mode = mode, before_selection = before,
+                   before_selection_ref = before_ref,
                    x = px, y = py, end_x = px, end_y = py}
         return true
     end
@@ -617,6 +633,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         discard_preview(gesture)
         local info = model:active_layer()
         local mode = selection_merge_mode()
+        local before_ref = selection
         local before = Selection.clone(selection)
         -- Com Ctrl+Shift/Alt, inicia um novo retângulo inclusive dentro
         -- da área já marcada; não desloca nem transforma pixels.
@@ -642,6 +659,7 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
             kind = action, x = px, y = py, w = w, h = h, view = view,
             preferences = preferences, layer = info and info.id,
             mode = mode, before_selection = before,
+            before_selection_ref = before_ref,
             end_x = px, end_y = py
         }
         if not moving and mode == "replace" then selection = nil end
@@ -882,6 +900,7 @@ function Bridge.preview_snapshot()
 end
 
 function Bridge.undo()
+    interrupt_active_gesture()
     if not project then return false end
     local before = Selection.clone(selection)
     local ok = Engine.undo(project, selection)
@@ -889,6 +908,7 @@ function Bridge.undo()
     return ok
 end
 function Bridge.redo()
+    interrupt_active_gesture()
     if not project then return false end
     local before = Selection.clone(selection)
     local ok = Engine.redo(project, selection)
