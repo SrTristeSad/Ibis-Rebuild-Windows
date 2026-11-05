@@ -517,6 +517,14 @@ local function paint(p, d, x, y)
     d.x, d.y = x, y
 end
 
+-- Eventos repetidos no mesmo ponto não devem aplicar tinta parcial
+-- novamente. Essa mesma regra vale para mover e soltar o mouse.
+local function continue_stroke(p, d, x, y)
+    if math.abs(x - d.x) + math.abs(y - d.y) > 0.005 then
+        paint(p, d, x, y)
+    end
+end
+
 function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
                              color, size, opacity, colors, notice)
     if model.screen ~= "editor" or love.keyboard.isDown("space") then return false end
@@ -697,12 +705,23 @@ function Bridge.mousemoved(model, rx, ry, scale)
     local d = drawing
     local px, py = canvas_point(model, rx / scale, ry / scale,
                                 d.w, d.h, d.view, d.preferences)
-    if px then paint(project, d, px, py) end
+    if px then continue_stroke(project, d, px, py) end
     return true
 end
 
 function Bridge.mousereleased(model, rx, ry, scale)
+    local stroke = drawing
     drawing = nil
+    -- A UI pode entregar o último movimento apenas no mouse release.
+    -- Finalizar antes de descartar a pincelada mantém sua ponta e um
+    -- único snapshot de histórico, sem duplicar o último dab.
+    if stroke and project and project.model == model and
+       rx and ry and scale then
+        local x, y = canvas_point(model, rx / scale, ry / scale,
+                                  stroke.w, stroke.h, stroke.view,
+                                  stroke.preferences)
+        if x then continue_stroke(project, stroke, x, y) end
+    end
     local d = gesture
     gesture = nil
     if not d or not project or project.model ~= model then return end

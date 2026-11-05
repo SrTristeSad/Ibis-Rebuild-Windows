@@ -219,6 +219,164 @@ local function test_feather_paint(E)
            "Contração não preservou pesos graduais da máscara")
 end
 
+-- Pintura no mouseup: o último segmento precisa ser aplicado mesmo
+-- sem mousemoved; eventos repetidos não acumulam alfa adicional.
+local function test_stroke_release_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local model = {
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Release stroke", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "brush",
+        background_mode = "transparent_dark"
+    }
+    function model:active_layer() return self.layers[1] end
+    local id = gallery:add_artwork(16, 16, "Release final segment")
+    Bridge.create(model, id, gallery)
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function point(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function down(x, y, color, opacity)
+        local sx, sy = point(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, color or {255, 0, 0},
+                                   1, opacity or 100, nil),
+               "Mousepress do pincel nao iniciou")
+    end
+    local function up(x, y)
+        local sx, sy = point(x, y)
+        Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local function move(x, y)
+        local sx, sy = point(x, y)
+        assert(Bridge.mousemoved(model, sx, sy, 1))
+    end
+    local function artwork_path()
+        local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+        for line in index:gmatch("[^\r\n]+") do
+            if line:find("Release final segment", 1, true) then
+                local key = assert(line:match("^(art_%d+_%d+)\t"))
+                return "lua-artworks/" .. key
+            end
+        end
+        error("Nao encontrou obra do teste de ponta de traco")
+    end
+    local path
+    local function read()
+        assert(Bridge.save(), "Nao salvou pintura de release")
+        path = path or artwork_path()
+        return love.image.newImageData(path .. "/layer_1.png")
+    end
+
+    -- Um único click com opacidade parcial já aplica duas amostras no
+    -- stroke atual. Nem move sem deslocamento nem release igual podem
+    -- aplicar novas amostras e escurecer acidentalmente o pixel.
+    down(9, 9, {255, 0, 0}, 50)
+    move(9, 9)
+    move(9, 9)
+    up(9, 9)
+    local canvas = read()
+    assert(close(select(4, canvas:getPixel(9, 9)), .75, .02),
+           "Mousemoved/mouseup identico acumulou alfa no pincel")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Clique parcial perdeu historico ao finalizar")
+
+    -- O movimento existe somente no evento de soltar.
+    down(2, 2, {255, 0, 0}, 100)
+    up(8, 2)
+    canvas = read()
+    for x = 2, 8 do
+        assert(select(1, canvas:getPixel(x, 2)) > .99
+               and select(4, canvas:getPixel(x, 2)) > .99,
+               "Ultimo trecho do pincel nao chegou ao mouseup: " .. x)
+    end
+    assert(Bridge.undo())
+    canvas = read()
+    assert(close(select(4, canvas:getPixel(2, 2)), 0)
+           and close(select(4, canvas:getPixel(8, 2)), 0)
+           and select(4, canvas:getPixel(9, 9)) > .7,
+           "Undo do release deveria desfazer todo o gesto em um passo")
+    assert(Bridge.redo())
+
+    -- O mouse se move uma vez, mas o release alcança outro destino.
+    down(2, 4, {255, 0, 0}, 100)
+    move(4, 4)
+    up(8, 4)
+    canvas = read()
+    for x = 2, 8 do
+        assert(select(1, canvas:getPixel(x, 4)) > .99,
+               "Trecho final apos move nao foi pintado: " .. x)
+    end
+    assert(Bridge.undo() and Bridge.redo(),
+           "Segmento final criou passos extras de historico")
+
+    -- Borracha: se o ponteiro for solto sobre tinta, o último
+    -- segmento deve apagar. Undo/redo restaura exatamente o pixel.
+    model.active_tool = "eraser"
+    down(12, 4, {255, 0, 0}, 100)
+    up(8, 4)
+    canvas = read()
+    assert(close(select(4, canvas:getPixel(8, 4)), 0),
+           "Borracha ignorou a posicao final de release")
+    assert(Bridge.undo())
+    canvas = read()
+    assert(select(4, canvas:getPixel(8, 4)) > .99
+           and Bridge.redo(),
+           "Undo da borracha no mouseup nao restaurou estado")
+
+    -- Nenhum movimento real da borracha deve manter redo intacto.
+    assert(Bridge.undo())
+    down(12, 12, {255, 0, 0}, 100)
+    up(12, 12)
+    assert(Bridge.redo(),
+           "Release da borracha sobre vazio invalidou redo")
+
+    -- O gesto de seleção tem seu proprio mouseup; não pode passar
+    -- pelo fechamento do traço de pincel.
+    model.active_tool = "transform"
+    down(3, 6, {255, 0, 0}, 100)
+    up(5, 6)
+    local selected = assert(Bridge.selection_snapshot())
+    assert(selected.count == 3
+           and Selection.contains(selected, 3, 6)
+           and Selection.contains(selected, 5, 6),
+           "Mouseup de selecao foi confundido com pincel")
+    model.active_tool = "brush"
+    down(3, 6, {255, 0, 0}, 100)
+    up(8, 6)
+    canvas = read()
+    assert(select(4, canvas:getPixel(5, 6)) > .99
+           and close(select(4, canvas:getPixel(6, 6)), 0),
+           "Fechamento de pincel nao respeitou mascara de selecao")
+    assert(Bridge.undo() and Bridge.redo(),
+           "Pincel de release com selecao perdeu historico")
+    Bridge.clear_selection()
+
+    -- Chamada sem coordenadas preserva comportamento anterior: pinta
+    -- o clique, mas nao inventa um deslocamento de cursor.
+    down(2, 11, {255, 0, 0}, 100)
+    Bridge.mousereleased()
+    canvas = read()
+    assert(select(1, canvas:getPixel(2, 11)) > .99
+           and close(select(4, canvas:getPixel(8, 11)), 0),
+           "Mouseup legado sem coordenadas alterou a pintura")
+    assert(Bridge.undo() and Bridge.redo())
+
+    assert(Bridge.save())
+    Bridge.open(model, id)
+    assert(Bridge.undo() and Bridge.redo(),
+           "Historico de pintura com ponta final nao persistiu")
+    require("lua_history").cleanup(path)
+    require("lua_selection_history").cleanup(path)
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        love.filesystem.remove(path .. "/" .. name)
+    end
+    assert(love.filesystem.remove(path))
+end
+
 -- Integração da UI: no-op não apaga redo, inclusive quando a
 -- pincelada só começa a alterar pixels depois do primeiro movimento.
 local function test_lazy_stroke_bridge(Bridge, gallery)
@@ -5348,6 +5506,8 @@ function love.load()
     test_selection_only_history(Bridge, gallery)
     checkpoint("bridge selection morphology shortcuts")
     test_selection_morph_bridge(Bridge, gallery)
+    checkpoint("brush and eraser final segment on release")
+    test_stroke_release_bridge(Bridge, gallery)
     checkpoint("lazy brush and eraser history")
     test_lazy_stroke_bridge(Bridge, gallery)
     checkpoint("bridge magic wand global mode and persistence")

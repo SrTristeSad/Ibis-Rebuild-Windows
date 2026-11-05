@@ -26,6 +26,21 @@
   sem efeito e modificam pixels depois devem capturar o estado
   inteiro da camada antes da primeira mudança, um único undo para
   toda a pincelada. Testar também restauração, persistência e Alpha Lock.
+- Finalização correta do gesto: `Bridge.mousereleased(model,rx,ry,scale)`
+  deve aplicar o segmento final entre `drawing.x/y` e a posição
+  convertida do mouseup, ANTES de limpar o estado do traço.
+  Eventos de `mousemoved` e `mousereleased` que repetem a mesma
+  posição (diferença até 0,005 pixel) não devem reaplicar dabs:
+  isso evita aumento artificial de alfa em pintura parcial.
+  Quando o mouseup não fornece coordenadas, preservar o
+  comportamento legado; não pintar fora dos limites nem quando
+  o modelo não pertence ao projeto em edição. O último segmento
+  compartilha o callback de histórico tardio, a máscara e a camada
+  ativa do gesto, sem novo snapshot; seleção e transformação
+  continuam usando seus eventos de release normais.
+  Testar mouseup sem mousemove, movimento e release em posições
+  diferentes, borracha, opacidade parcial, máscara, undo/redo
+  e histórico salvo/reaberto. Não modificar a interface.
 - Balde Lua: `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance)`
   recebe tolerância opcional 0..255 por canal RGBA, 0 como padrão
   historicamente exato (margem 1/510). Deve descobrir primeiro toda
