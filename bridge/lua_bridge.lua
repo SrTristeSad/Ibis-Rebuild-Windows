@@ -688,8 +688,14 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
 
     local info = model:active_layer()
     if not info or info.locked or not info.visible then return false end
-    if selection and not Selection.contains(selection,
-            math.floor(px), math.floor(py)) then return true end
+    -- O Balde usa o ponto clicado como semente: fora da máscara
+    -- continua sem efeito. Pincel e borracha são áreas circulares e
+    -- podem tocar a seleção mesmo com o centro fora dela; deixar o
+    -- Engine.stroke aplicar Selection.coverage a cada pixel e
+    -- acompanhar o gesto caso ele entre na região selecionada.
+    if tool == "bucket" and selection and
+       not Selection.contains(selection,
+           math.floor(px), math.floor(py)) then return true end
     -- Evitar prometer efeitos que o motor Lua ainda não suporta.
     if info.alpha_lock and tool == "eraser" then
         -- Alpha Lock não permite remover nem criar transparência.
