@@ -26,6 +26,19 @@
   sem efeito e modificam pixels depois devem capturar o estado
   inteiro da camada antes da primeira mudança, um único undo para
   toda a pincelada. Testar também restauração, persistência e Alpha Lock.
+- Pressões consecutivas: em `Bridge.mousepressed`, chamar
+  `interrupt_active_gesture()` depois de verificar ferramenta
+  suportada, modelo/editor e coordenada válida no canvas, antes
+  de qualquer ação da nova ferramenta. Isso evita dois gestos
+  em `drawing` e `gesture` quando um mouseup foi perdido.
+  Pixels já alterados preservam seu snapshot raster, mas a
+  seleção temporária de retângulo/laço é restaurada sem histórico
+  e prévias de movimento/transformação são liberadas.
+  Não cancelar pintura por clique fora da obra nem por ferramenta
+  rejeitada. Não conectar as posições de dois mousepress em
+  uma pincelada. Testar press de brush→brush, brush→retângulo,
+  retângulo/laço→brush, prévia de move→brush, máscara, histórico
+  e PNG persistido; manter Ibis-Lua intacto.
 - Interrupção segura de gestos quando Undo/Redo é acionado:
   `Bridge.undo/redo` e `Bridge.selection_undo/redo` chamam
   `interrupt_active_gesture()` ANTES de examinar a pilha,
