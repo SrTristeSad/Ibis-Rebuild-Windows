@@ -23,6 +23,20 @@ sem callback não cria histórico automaticamente, preservando seu
 contrato com `Engine.begin_stroke` explícito. Testar pixels,
 arraste real da UI, máscaras, undo/redo e histórico persistido.
 Não alterar atalhos, assets ou o submódulo.
+**Segmento final no mouseup do pincel/borracha**:
+`Bridge.mousereleased(model,rx,ry,scale)` deve, quando houver
+coordenadas finais válidas, pintar da última posição registrada em
+`drawing` até a posição do mouseup antes de descartar o gesto.
+Movimentos e releases repetidos na mesma posição (diferença menor
+ou igual a 0,005 pixel) não podem reaplicar dabs nem acumular
+opacidade. Reutilizar a mesma função auxiliar `continue_stroke`
+para `mousemoved` e `mousereleased`, chamando `paint` e o
+snapshot tardio no máximo uma vez por gesto. Respeitar seleção
+ativa, limite do canvas, modelo do projeto, Alpha Lock, borracha,
+camada ativa e undo/redo persistido. Sem coordenadas finais,
+`mousereleased()` legado apenas encerra a pincelada.
+Os gestos de seleção/transformação conservam o próprio release.
+Não alterar UI. Testar eventos reais da ponte, RGBA e PNG.
 Estado funcional conhecido: motor Lua com pincel circular, borracha,
 preenchimento contíguo, conta-gotas, camadas normais, Alpha Lock,
 Clipping com shader do LÖVE, blend RGBA CPU/GPU para os nove modos
