@@ -487,7 +487,8 @@ function Bridge.draw_gallery_thumbnail(id, x, y, w, h)
     return true
 end
 
-local function canvas_point(model, x, y, w, h, view, preferences)
+local function canvas_point(model, x, y, w, h, view, preferences,
+                            allow_outside)
     local dw, dh = model.document.width, model.document.height
     local left = preferences.tool_position == "left" and 62 or 0
     local right = preferences.tool_position == "right" and 75 or 34
@@ -499,12 +500,16 @@ local function canvas_point(model, x, y, w, h, view, preferences)
     local co, si = math.cos(view.rotation), math.sin(view.rotation)
     local px = (co * dx + si * dy) / factor + dw / 2
     local py = (-si * dx + co * dy) / factor + dh / 2
-    if px < 0 or px >= dw or py < 0 or py >= dh then return nil end
+    if not allow_outside and
+       (px < 0 or px >= dw or py < 0 or py >= dh) then
+        return nil
+    end
     return px, py
 end
 
-local function paint(p, d, x, y)
-    Engine.stroke(p, d.layer, d.x, d.y, x, y, d.size, d.color,
+local function paint(p, d, x, y, start_x, start_y)
+    Engine.stroke(p, d.layer, start_x or d.x, start_y or d.y,
+                  x, y, d.size, d.color,
                   d.opacity, d.eraser, d.alpha_lock, selection,
                   function()
                       -- O snapshot só existe se algum pixel realmente
@@ -517,11 +522,48 @@ local function paint(p, d, x, y)
     d.x, d.y = x, y
 end
 
--- Eventos repetidos no mesmo ponto não devem aplicar tinta parcial
--- novamente. Essa mesma regra vale para mover e soltar o mouse.
+-- Recorte paramétrico de um segmento à área raster. A posição CRUA do
+-- cursor é mantida mesmo fora do canvas: ao reentrar, pintamos só
+-- a parte interna do novo segmento, jamais uma diagonal artificial
+-- ligando o último ponto pintado à nova posição.
+local function clip_stroke_segment(x0, y0, x1, y1, w, h)
+    local dx, dy = x1 - x0, y1 - y0
+    local start_t, end_t = 0, 1
+    local function bound(p, q)
+        if p == 0 then return q >= 0 end
+        local t = q / p
+        if p < 0 then
+            if t > end_t then return false end
+            if t > start_t then start_t = t end
+        else
+            if t < start_t then return false end
+            if t < end_t then end_t = t end
+        end
+        return true
+    end
+    -- Limite superior exclusivo, coerente com canvas_point: não
+    -- ultrapassar a borda e ainda atingir o último pixel do raster.
+    local xmax, ymax = w - 1e-6, h - 1e-6
+    if not bound(-dx, x0) or not bound(dx, xmax - x0) or
+       not bound(-dy, y0) or not bound(dy, ymax - y0) then
+        return nil
+    end
+    return x0 + start_t * dx, y0 + start_t * dy,
+           x0 + end_t * dx, y0 + end_t * dy
+end
+
+-- Deslocamentos sem efeito não reaplicam tinta nem multiplicam alfa.
+-- Armazenar o ponto cru MESMO se o segmento não intersectar o canvas.
 local function continue_stroke(p, d, x, y)
-    if math.abs(x - d.x) + math.abs(y - d.y) > 0.005 then
-        paint(p, d, x, y)
+    local old_x, old_y = d.raw_x, d.raw_y
+    d.raw_x, d.raw_y = x, y
+    if math.abs(x - old_x) + math.abs(y - old_y) <= 0.005 then
+        return
+    end
+    local x0, y0, x1, y1 = clip_stroke_segment(
+        old_x, old_y, x, y, p.w, p.h)
+    if x0 and math.abs(x1 - x0) + math.abs(y1 - y0) > 0.005 then
+        paint(p, d, x1, y1, x0, y0)
     end
 end
 
@@ -648,8 +690,8 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
         return true
     end
 
-    drawing = {layer = info.id, x = px, y = py, w = w, h = h,
-               history_started = false,
+    drawing = {layer = info.id, x = px, y = py, raw_x = px, raw_y = py,
+               w = w, h = h, history_started = false,
                view = view, preferences = preferences,
                color = rgb, size = size, opacity = normalized_opacity,
                eraser = tool == "eraser", alpha_lock = info.alpha_lock}
@@ -704,7 +746,7 @@ function Bridge.mousemoved(model, rx, ry, scale)
     if not drawing or not project or project.model ~= model then return false end
     local d = drawing
     local px, py = canvas_point(model, rx / scale, ry / scale,
-                                d.w, d.h, d.view, d.preferences)
+                                d.w, d.h, d.view, d.preferences, true)
     if px then continue_stroke(project, d, px, py) end
     return true
 end
@@ -719,7 +761,7 @@ function Bridge.mousereleased(model, rx, ry, scale)
        rx and ry and scale then
         local x, y = canvas_point(model, rx / scale, ry / scale,
                                   stroke.w, stroke.h, stroke.view,
-                                  stroke.preferences)
+                                  stroke.preferences, true)
         if x then continue_stroke(project, stroke, x, y) end
     end
     local d = gesture
