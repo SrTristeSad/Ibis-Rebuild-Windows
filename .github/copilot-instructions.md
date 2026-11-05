@@ -62,8 +62,12 @@
   O cursor bruto fica em `drawing.raw_x/raw_y` mesmo fora da obra.
   `canvas_point(..., true)` permite coordenadas externas SOMENTE
   para traços; clique, seleção e conta-gotas continuam limitados.
-  `clip_stroke_segment` recorta o próximo trecho ao retângulo
-  [0,w) × [0,h) (parametrização Liang–Barsky).
+  `clip_stroke_segment` recorta os centros do próximo trecho
+  ao retângulo dos centros de pixels expandido pelo **raio efetivo
+  da ferramenta** (parametrização Liang–Barsky). Usar o mesmo
+  `max(0.75, min(256, d.size)/2)` do `Engine.stroke`.
+  O centro do pincel pode estar fora da obra enquanto o círculo
+  ainda toca a borda, mas `dab` grava somente dentro do raster.
   Mesmo um segmento inteiramente externo atualiza raw_x/raw_y
   para impedir uma diagonal artificial quando o cursor reentra.
   Mousemove/mouseup externos, rotação, seleção e histórico tardio
