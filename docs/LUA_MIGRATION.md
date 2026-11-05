@@ -56,6 +56,17 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   de `document.tsv` (0/1). Arquivos de 2–9 colunas ou sinalizador
   inválido seguem em RGBA sem perder as outras preferências.
   Alterar o modo não toca na máscara, dirty, raster ou histórico.
+  **Ctrl+Alt+9** alterna a conectividade do Balde contíguo entre
+  **4 vizinhos** (padrão histórico) e **8 vizinhos** (lados e cantos).
+  O scanline 8-conexo pesquisa também um pixel além das extremidades
+  nas linhas vizinhas; a área continua sendo identificada inteiramente
+  antes da aplicação de tinta. Funciona com tolerância e RGB-only,
+  máscara/feather, Alpha Lock e o mesmo undo/redo. No modo global
+  a conectividade é ignorada. A preferência `bucket_diagonal`
+  é false por obra por padrão e salva na **11ª coluna opcional**
+  de `document.tsv` (0=4, 1=8). Arquivos de 2–10 colunas ou
+  sinalizador inválido usam 4 vizinhos sem perder campos anteriores.
+  Alternar não altera raster, seleção, dirty ou histórico.
   Sem controles visuais novos.
 - Conta-gotas que lê a composição RGBA das camadas visíveis, considerando
   opacidade e fundo branco, e atualiza o seletor de cores existente.
@@ -355,6 +366,10 @@ distribuído pelo fluxo principal. LÖVE tem suas próprias bibliotecas nativas;
   conectividade, varredura global, tolerância por canal, limites de
   seleção, Alpha Lock, preenchimento source-over, no-op, histórico,
   Ctrl+Alt+M, isolamento por obra e formatos 2–10 colunas.
+  A suíte de Balde 8-conexo verifica cantos isolados, bordas,
+  tolerância/RGBA/RGB-only, independência do modo global, máscaras,
+  Alpha Lock, no-op, histórico, Ctrl+Alt+9, isolamento por obra e
+  formatos 2–11 colunas.
 - A suíte de pixels usa o LÖVE real para verificar tinta, borracha, balde,
   Alpha Lock, Clipping e os nove modos de blend na CPU e GPU,
   leitura de cores, composição semitransparente, miniatura,

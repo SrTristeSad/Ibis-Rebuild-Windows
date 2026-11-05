@@ -435,12 +435,13 @@ function Engine.sample(project, model, x, y)
 end
 
 -- Balde por cor: tolerância de 0..255 em RGBA (padrão) ou apenas RGB.
--- Contíguo 4-conexo por padrão; global_mode=true inclui ilhas sem conexão.
+-- Contíguo 4-conexo por padrão; diagonal_mode=true inclui os cantos.
+-- O modo global ignora a conectividade e inclui ilhas sem conexão.
 -- Descobre a região usando APENAS o raster original antes de pintá-lo.
 -- Isso impede revisitas e loops quando a cor aplicada está na tolerância.
 -- Não modifica a máscara de seleção, pixels fora dela ou histórico em no-op.
 function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
-                     tolerance, global_mode, rgb_only)
+                     tolerance, global_mode, rgb_only, diagonal_mode)
     if project.w * project.h > 1024 * 1024 then
         return false, "Balde Lua limitado a documentos de até 1.048.576 pixels."
     end
@@ -454,6 +455,9 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
     end
     if rgb_only ~= nil and type(rgb_only) ~= "boolean" then
         return false, "Comparação RGB do balde deve ser booleana."
+    end
+    if diagonal_mode ~= nil and type(diagonal_mode) ~= "boolean" then
+        return false, "Conectividade diagonal do balde deve ser booleana."
     end
     x, y = math.floor(x), math.floor(y)
     if x < 0 or y < 0 or x >= project.w or y >= project.h or
@@ -493,6 +497,39 @@ function Engine.fill(project, id, x, y, rgb, alpha, alpha_lock, selection,
             for px = 0, w - 1 do
                 if matches(px, py) then
                     points[#points + 1] = py * w + px
+                end
+            end
+        end
+    elseif diagonal_mode then
+        -- Scanline 8-conexo: explorar também os pontos de cima/baixo
+        -- a um pixel além de cada extremidade. Como visited registra
+        -- apenas pixels alcançados, a tinta não influencia a busca.
+        local stack = {{x, y}}
+        while #stack > 0 do
+            local point = table.remove(stack)
+            local sx, sy = point[1], point[2]
+            if matches(sx, sy) then
+                while matches(sx - 1, sy) do sx = sx - 1 end
+                local left = sx
+                while matches(sx, sy) do
+                    local key = sy * w + sx
+                    visited[key] = true
+                    points[#points + 1] = key
+                    sx = sx + 1
+                end
+                local right = sx - 1
+                for _, next_y in ipairs({sy - 1, sy + 1}) do
+                    local in_run = false
+                    for next_x = left - 1, right + 1 do
+                        if matches(next_x, next_y) then
+                            if not in_run then
+                                stack[#stack + 1] = {next_x, next_y}
+                            end
+                            in_run = true
+                        else
+                            in_run = false
+                        end
+                    end
                 end
             end
         end

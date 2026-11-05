@@ -53,6 +53,20 @@
   Toggle não modifica seleção, dirty, pixels nem histórico.
   Testar RGBA vs RGB, transparência total/fracionária, ilhas, source-over,
   Alpha Lock, limites, no-op/undo, persistência e atalho. Não alterar UI.
+- Conectividade diagonal opcional do Balde via Ctrl+Alt+9:
+  `Engine.fill(project,id,x,y,rgb,alpha,alpha_lock,selection,tolerance,global_mode,rgb_only,diagonal_mode)`
+  recebe booleano opcional no último argumento. Nil/false usa scanline
+  **4-conexo** original; true usa scanline **8-conexo**, estendendo
+  uma coluna além de cada extremidade da faixa nas linhas adjacentes.
+  O modo global ignora a conectividade, pois já compara todas as ilhas.
+  Preservar tolerância 0–255, RGB-only/RGBA, Alpha Lock, máscara/feather,
+  preenchimento em duas fases, histórico único e no-op sem dirty.
+  `project.bucket_diagonal` é false por padrão, independente de
+  `wand_diagonal` e salvo na 11ª coluna opcional de `document.tsv`;
+  legados de 2–10 colunas e flag inválida usam false sem perder os
+  demais campos. Toggle apenas muda preferência, sem editar pixels,
+  seleção ou histórico. Testar bordas, cantos, ilhas, atalho e undo.
+  Não alterar Ibis-Lua nem introduzir controles novos.
 - Alpha Lock preserva o alfa dos pixels; Clipping usa a máscara da camada-base
   na composição Lua/LÖVE, sem modificar os pixels salvos da camada clipada.
   Preserve testes que comparam a amostra CPU com o resultado de shader GPU.
