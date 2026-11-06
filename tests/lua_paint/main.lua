@@ -76,6 +76,41 @@ local function test_interrupted_save_recovery()
     assert(love.filesystem.read(root .. "/layer_1.png") == "new-committed",
            "Commit valido foi desfeito")
 
+    -- Corrupção que preserva o tamanho não pode passar pelo checksum.
+    assert(Recovery.begin(root))
+    local marker_path = root .. "/.save-recovery/pending.tsv"
+    local manifest = assert(love.filesystem.read(marker_path))
+    assert(manifest:match("^v2\n"), "Novo backup nao usa manifesto v2")
+    local backup_file = root .. "/.save-recovery/layer_1.png"
+    local previous = assert(love.filesystem.read(backup_file))
+    assert(#previous > 1)
+    assert(love.filesystem.write(backup_file,
+        string.rep("X", #previous)))
+    assert(love.filesystem.write(root .. "/layer_1.png", "uncommitted-data"))
+    assert(not Recovery.restore(root),
+           "Checksum nao detectou backup corrompido com mesmo tamanho")
+    assert(love.filesystem.read(root .. "/layer_1.png") == "uncommitted-data",
+           "Backup corrompido sobrescreveu dados antes de validar todos")
+    -- Reparar a cópia para comprovar que é possível tentar restaurar novamente.
+    assert(love.filesystem.write(backup_file, previous))
+    assert(Recovery.restore(root), "Backup reparado nao foi restaurado")
+    assert(love.filesystem.read(root .. "/layer_1.png") == previous)
+
+    -- Compatibilidade com recuperações v1 interrompidas em versões antigas.
+    assert(Recovery.begin(root))
+    manifest = assert(love.filesystem.read(marker_path))
+    local legacy = {"v1"}
+    for line in manifest:gmatch("[^\r\n]+") do
+        if line ~= "v2" then
+            legacy[#legacy + 1] = assert(line:match("^([^\t]+)\t"))
+        end
+    end
+    assert(love.filesystem.write(marker_path, table.concat(legacy, "\n") .. "\n"))
+    assert(love.filesystem.write(root .. "/layer_1.png", "legacy-interrupted"))
+    assert(Recovery.restore(root), "Backup v1 legado nao foi aceito")
+    assert(love.filesystem.read(root .. "/layer_1.png") == previous,
+           "Recuperacao v1 alterou bytes antigos")
+
     -- Backup incompleto: rejeitar sem sobrescrever o arquivo atual.
     assert(Recovery.begin(root))
     local pending = root .. "/.save-recovery"
