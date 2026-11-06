@@ -239,4 +239,204 @@ function Recovery.commit(path)
     return true
 end
 
+
+-- Primeira gravação: a obra ainda não tem snapshot confirmado para rollback.
+-- Gravar primeiro em um diretório oculto evita publicar camadas/TSVs parciais.
+-- Um marcador "ready" guarda metadados suficientes para concluir a publicação
+-- no próximo início, mesmo se a execução terminar antes de atualizar index.tsv.
+local FIRST_DIRECTORY = ".first-save"
+local FIRST_MARKER = "ready.tsv"
+local FIRST_HEADER = "IBIS_LUA_FIRST_SAVE_V1"
+
+local function first_dir(path) return path .. "/" .. FIRST_DIRECTORY end
+
+local function clear_directory(dir)
+    if not love.filesystem.getInfo(dir, "directory") then return true end
+    for _, name in ipairs(love.filesystem.getDirectoryItems(dir)) do
+        if not love.filesystem.remove(dir .. "/" .. name) then
+            return false, "Falha ao limpar diretório da primeira gravação"
+        end
+    end
+    if not love.filesystem.remove(dir) then
+        return false, "Falha ao remover diretório da primeira gravação"
+    end
+    return true
+end
+
+function Recovery.begin_first(path)
+    local dir = first_dir(path)
+    if love.filesystem.getInfo(dir .. "/" .. FIRST_MARKER, "file") then
+        return nil, "Primeiro salvamento anterior aguarda publicação"
+    end
+    local ok, err = clear_directory(dir)
+    if not ok then return nil, err end
+    if not love.filesystem.createDirectory(dir) then
+        return nil, "Falha ao preparar primeira gravação"
+    end
+    return dir
+end
+
+function Recovery.ready_first(path, width, height, title)
+    if type(width) ~= "number" or type(height) ~= "number" or
+       width < 1 or height < 1 or width % 1 ~= 0 or height % 1 ~= 0 or
+       type(title) ~= "string" or title == "" or
+       title:find("[\t\r\n]") then
+        return false, "Metadados inválidos da primeira gravação"
+    end
+    local dir = first_dir(path)
+    if not love.filesystem.getInfo(dir .. "/layers.tsv", "file") or
+       not love.filesystem.getInfo(dir .. "/document.tsv", "file") then
+        return false, "Manifestos incompletos da primeira gravação"
+    end
+    local names = snapshot_names(dir)
+    local has_layer = false
+    local lines = {FIRST_HEADER,
+        table.concat({width, height, title}, "\t")}
+    for _, name in ipairs(names) do
+        if name:match("^layer_%d+%.png$") then has_layer = true end
+        local size, hash, err = checksum_file(dir .. "/" .. name)
+        if not size then return false, err end
+        lines[#lines + 1] = name .. "\t" .. size .. "\t" .. hash
+    end
+    if not has_layer then return false, "Primeira gravação sem PNG de camada" end
+    return love.filesystem.write(dir .. "/" .. FIRST_MARKER,
+        table.concat(lines, "\n") .. "\n")
+end
+
+local function first_snapshot(path)
+    local dir = first_dir(path)
+    local marker = dir .. "/" .. FIRST_MARKER
+    local data = love.filesystem.read(marker)
+    if not data or data:sub(-1) ~= "\n" then
+        return nil, "Marcador incompleto da primeira gravação"
+    end
+    local lines = {}
+    for line in data:gmatch("([^\r\n]+)") do
+        lines[#lines + 1] = line
+    end
+    if #lines < 4 or lines[1] ~= FIRST_HEADER then
+        return nil, "Marcador inválido da primeira gravação"
+    end
+    local width, height, title =
+        lines[2]:match("^(%d+)\t(%d+)\t([^\t]+)$")
+    width, height = tonumber(width), tonumber(height)
+    if not width or not height or width < 1 or height < 1 or
+       not title or title == "" then
+        return nil, "Dimensões inválidas da primeira gravação"
+    end
+    local names, seen, has_layer = {}, {}, false
+    local required = {["layers.tsv"] = false, ["document.tsv"] = false}
+    for i = 3, #lines do
+        local name, size, hash =
+            lines[i]:match("^([^\t]+)\t(%d+)\t(%x%x%x%x%x%x%x%x)$")
+        if not name or not managed(name) or seen[name] then
+            return nil, "Arquivo inválido no primeiro salvamento"
+        end
+        local expected = tonumber(size)
+        local measured, actual, err = checksum_file(dir .. "/" .. name)
+        if not measured or measured ~= expected or actual ~= hash then
+            return nil, err or "Backup inicial corrompido"
+        end
+        if required[name] ~= nil then required[name] = true end
+        if name:match("^layer_%d+%.png$") then has_layer = true end
+        seen[name] = {size = expected, checksum = hash}
+        names[#names + 1] = name
+    end
+    if not required["layers.tsv"] or not required["document.tsv"] or
+       not has_layer then
+        return nil, "Primeira gravação sem arquivos essenciais"
+    end
+    table.sort(names)
+    return {width = width, height = height, title = title,
+            names = names, files = seen}
+end
+
+function Recovery.publish_first(path)
+    local snapshot, err = first_snapshot(path)
+    if not snapshot then return nil, err end
+    local dir = first_dir(path)
+    -- Validar TUDO antes de alterar qualquer arquivo publicado. O marcador
+    -- só será removido depois do índice, permitindo repetir cópias falhas.
+    for _, name in ipairs(snapshot.names) do
+        local target = path .. "/" .. name
+        local ok, copy_err = copy_file(dir .. "/" .. name, target)
+        if not ok then return nil, copy_err or "Falha ao publicar obra" end
+        local size, hash, check_err = checksum_file(target)
+        local expected = snapshot.files[name]
+        if not size or size ~= expected.size or hash ~= expected.checksum then
+            return nil, check_err or "Arquivo publicado difere do original"
+        end
+    end
+    for _, name in ipairs(snapshot_names(path)) do
+        if not snapshot.files[name] and
+           not love.filesystem.remove(path .. "/" .. name) then
+            return nil, "Falha ao limpar gravação inicial incompleta"
+        end
+    end
+    return snapshot
+end
+
+function Recovery.commit_first(path)
+    local dir = first_dir(path)
+    local marker = dir .. "/" .. FIRST_MARKER
+    if love.filesystem.getInfo(marker, "file") and
+       not love.filesystem.remove(marker) then
+        return false, "Falha ao concluir primeira gravação"
+    end
+    -- Uma limpeza posterior pode remover sobras sem reabrir a transação.
+    clear_directory(dir)
+    return true
+end
+
+local function read_index(root)
+    local path = root .. "/index.tsv"
+    if not love.filesystem.getInfo(path, "file") then return "" end
+    local data = love.filesystem.read(path)
+    if not data then return nil, "Falha ao ler índice da galeria" end
+    return data
+end
+
+local function has_key(index, key)
+    for line in index:gmatch("[^\r\n]+") do
+        if line:match("^([%w_%-]+)\t") == key then return true end
+    end
+    return false
+end
+
+-- Reexecutável após falha de publicação ou do índice. Se a obra já aparece
+-- no índice, a publicação terminou; não substituir uma versão mais recente.
+function Recovery.recover_first(root)
+    local entries = love.filesystem.getDirectoryItems(root)
+    table.sort(entries)
+    for _, key in ipairs(entries) do
+        local path = root .. "/" .. key
+        if key:match("^art_%d+_%d+$") and
+           love.filesystem.getInfo(path, "directory") and
+           love.filesystem.getInfo(first_dir(path) .. "/" ..
+                                   FIRST_MARKER, "file") then
+            local index, read_err = read_index(root)
+            if not index then return false, read_err end
+            if not has_key(index, key) then
+                local snapshot, err = Recovery.publish_first(path)
+                if not snapshot then return false, err end
+                local entry = table.concat({key, snapshot.width,
+                    snapshot.height, snapshot.title}, "\t")
+                local new_index = index == "" and entry or
+                    (index:gsub("\n+$", "") .. "\n" .. entry)
+                local ok, write_err = love.filesystem.write(
+                    root .. "/index.tsv", new_index)
+                if not ok then return false, write_err end
+            end
+            local ok, err = Recovery.commit_first(path)
+            if not ok then return false, err end
+        end
+    end
+    return true
+end
+
+function Recovery.first_indexed(root, key)
+    local index = read_index(root)
+    return index and has_key(index, key) or false
+end
+
 return Recovery
