@@ -62,10 +62,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $native = Join-Path $env:RUNNER_TEMP 'setup-msys2\msys64\ucrt64'
-          if (!(Test-Path "$native/bin/libmypaint-0.dll")) {
-            throw 'MSYS2 libmypaint-0.dll missing'
-          }
+          $nativeDll = Get-ChildItem $env:RUNNER_TEMP -Filter 'libmypaint-0.dll' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (!$nativeDll) { throw 'MSYS2 libmypaint-0.dll missing' }
+          $native = Split-Path (Split-Path $nativeDll.FullName -Parent) -Parent
+          Write-Host "MyPaint runtime: $native"
           # Initial experimental runtime: retain transitive UCRT DLLs
           # without replacing libraries already shipped by LÖVE.
           Get-ChildItem "$native/bin" -Filter '*.dll' -File | ForEach-Object {
