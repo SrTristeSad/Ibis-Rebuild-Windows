@@ -61,6 +61,9 @@ local function test_native_mypaint_brush()
             break
         end
     end
+    print(string.format("MYPAINT_DEBUG_RESULTS changed=%s dirty=%s capture=%s alphaCenter=%.5f",
+        tostring(changed), tostring(p.dirty), tostring(not first),
+        select(4, layer.pixels:getPixel(30, 30))))
     assert(changed and p.dirty and not first,
            "Dabs nativos não pintaram pixels na camada")
     assert(Engine.undo(p), "Pincel MyPaint não produziu histórico reversível")
