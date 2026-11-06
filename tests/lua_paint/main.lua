@@ -49,6 +49,25 @@ local function test_interrupted_save_recovery()
     assert(not love.filesystem.getInfo(root .. "/.save-recovery/pending.tsv"))
     assert(Recovery.restore(root), "Restaurar duas vezes deve ser seguro")
 
+    -- Arquivo de 256 KiB + 16 bytes ultrapassa múltiplos blocos de 64 KiB.
+    local large = string.rep("0123456789abcdef", 16385)
+    assert(love.filesystem.write(root .. "/layer_3.png", large))
+    assert(Recovery.begin(root), "Falha ao copiar arquivo grande")
+    assert(love.filesystem.write(root .. "/layer_3.png", "interrupted"))
+    local original_read = love.filesystem.read
+    love.filesystem.read = function(filename, ...)
+        if filename:match("layer_3%.png$") then
+            error("Copia de PNG fez leitura integral", 2)
+        end
+        return original_read(filename, ...)
+    end
+    local ok, restored, reason = pcall(Recovery.restore, root)
+    love.filesystem.read = original_read
+    assert(ok and restored, reason or "Falha ao restaurar PNG em blocos")
+    assert(love.filesystem.read(root .. "/layer_3.png") == large,
+           "Copia em blocos mudou os bytes do PNG")
+
+
     -- Commit valido nao restaura a versao antiga.
     assert(Recovery.begin(root))
     assert(love.filesystem.write(root .. "/layer_1.png", "new-committed"))

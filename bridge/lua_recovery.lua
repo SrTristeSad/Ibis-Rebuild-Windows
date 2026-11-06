@@ -27,12 +27,51 @@ local function snapshot_names(path)
     return names
 end
 
+-- Mantém apenas um bloco de cada arquivo em RAM, mesmo para PNGs grandes.
+-- Sem novas dependências: File:read/write/close fazem parte do LÖVE 11.5.
+local COPY_CHUNK = 64 * 1024
 local function copy_file(source, destination)
-    local data, read_err = love.filesystem.read(source)
-    if not data then return false, read_err or "Falha ao ler backup" end
-    local ok, write_err = love.filesystem.write(destination, data)
-    if not ok then return false, write_err or "Falha ao gravar backup" end
-    return true
+    local input = love.filesystem.newFile(source)
+    local opened, err = input:open("r")
+    if not opened then return false, err or "Falha ao abrir origem" end
+    local size = input:getSize()
+    if not size or size < 0 then
+        input:close()
+        return false, "Tamanho de origem inválido"
+    end
+    local output = love.filesystem.newFile(destination)
+    opened, err = output:open("w")
+    if not opened then
+        input:close()
+        return false, err or "Falha ao abrir destino"
+    end
+    local remaining = size
+    local good, reason = true, nil
+    while remaining > 0 do
+        local chunk = input:read(math.min(COPY_CHUNK, remaining))
+        if not chunk or #chunk == 0 then
+            good, reason = false, "Leitura incompleta na cópia de recuperação"
+            break
+        end
+        local wrote, write_err = output:write(chunk)
+        if not wrote then
+            good, reason = false, write_err or "Falha ao escrever cópia"
+            break
+        end
+        remaining = remaining - #chunk
+    end
+    local output_closed = output:close()
+    local input_closed = input:close()
+    if not output_closed or not input_closed then
+        good, reason = false, reason or "Falha ao fechar arquivo da cópia"
+    end
+    if good then
+        local info = love.filesystem.getInfo(destination, "file")
+        if not info or info.size ~= size then
+            good, reason = false, "Tamanho da cópia divergente"
+        end
+    end
+    return good, reason
 end
 
 local function location(path) return path .. "/" .. DIRECTORY end
@@ -70,16 +109,20 @@ function Recovery.restore(path)
             existing[name] = true
         end
     end
-    -- Ler e validar TODOS os backups antes de modificar a obra.
-    local old = {}
+    -- Validar a presença e o tamanho dos backups antes de modificar a obra.
+    -- A transferência é sequencial e nunca mantém todos os PNGs em RAM.
+    local names = {}
     for name in pairs(existing) do
-        local bytes = love.filesystem.read(dir .. "/" .. name)
-        if not bytes then return false, "Cópia de recuperação incompleta" end
-        old[name] = bytes
+        local info = love.filesystem.getInfo(dir .. "/" .. name, "file")
+        if not info or type(info.size) ~= "number" then
+            return false, "Cópia de recuperação incompleta"
+        end
+        names[#names + 1] = name
     end
-    for name, bytes in pairs(old) do
-        local ok = love.filesystem.write(path .. "/" .. name, bytes)
-        if not ok then return false, "Falha ao restaurar obra" end
+    table.sort(names)
+    for _, name in ipairs(names) do
+        local ok, err = copy_file(dir .. "/" .. name, path .. "/" .. name)
+        if not ok then return false, err or "Falha ao restaurar obra" end
     end
     for _, name in ipairs(snapshot_names(path)) do
         if not existing[name] and not love.filesystem.remove(path .. "/" .. name) then
