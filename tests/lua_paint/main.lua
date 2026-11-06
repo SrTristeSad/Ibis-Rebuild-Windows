@@ -33,14 +33,25 @@ local function test_native_mypaint_brush()
                                       18, 1, layer.pixels)
     assert(session, err)
     local first, count = true, 0
+    local first_dab, max_alpha = nil, 0
     for i = 1, 14 do
         local dabs = session:stroke(8 + i * 4, 30)
         count = count + #dabs
+        if not first_dab and #dabs > 0 then first_dab = dabs[1] end
+        for _, dab in ipairs(dabs) do
+            if dab.alpha > max_alpha then max_alpha = dab.alpha end
+        end
         Engine.stroke_mypaint(p, 1, dabs, false, nil, function()
             if first then Engine.begin_stroke(p, 1); first = false end
         end)
     end
     assert(count > 0, "libmypaint não emitiu dabs")
+    if first_dab then
+        print(string.format("MYPAINT_DEBUG count=%d first=(%.2f,%.2f) radius=%.4f alpha=%.5f hard=%.4f maxAlpha=%.5f rgb=(%.3f,%.3f,%.3f)",
+            count, first_dab.x, first_dab.y, first_dab.radius,
+            first_dab.alpha, first_dab.hardness, max_alpha,
+            first_dab.color[1], first_dab.color[2], first_dab.color[3]))
+    end
     local changed = false
     for x = 12, 67 do
         local r, g, b, a = layer.pixels:getPixel(x, 30)
