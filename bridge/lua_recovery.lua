@@ -406,6 +406,7 @@ end
 -- Reexecutável após falha de publicação ou do índice. Se a obra já aparece
 -- no índice, a publicação terminou; não substituir uma versão mais recente.
 function Recovery.recover_first(root)
+    if not love.filesystem.getInfo(root, "directory") then return true end
     local entries = love.filesystem.getDirectoryItems(root)
     table.sort(entries)
     for _, key in ipairs(entries) do
