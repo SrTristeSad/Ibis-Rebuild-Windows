@@ -95,7 +95,9 @@ function MyPaint.begin(rgb, diameter, opacity, data)
     for _, option in ipairs({
         {"color_h", h}, {"color_s", s}, {"color_v", v},
         {"radius_logarithmic", math.log(math.max(0.75, math.min(256, diameter) / 2))},
-        {"opaque", clamp(opacity)}, {"hardness", 0.65}
+        {"opaque", clamp(opacity)}, {"hardness", 0.65},
+        -- Um clique parado também deve resultar em pelo menos um dab.
+        {"dabs_per_second", 10}
     }) do
         local ok, err = set(brush, option[1], option[2])
         if not ok then return nil, err end
@@ -135,6 +137,13 @@ function MyPaint.begin(rgb, diameter, opacity, data)
         local dtime = dt or 1 / 60
         handle.mypaint_brush_stroke_to(self.brush, self.surface,
             x, y, pressure or 1, 0, 0, dtime)
+        if self.count == 1 and #self.dabs == 0 then
+            -- O primeiro evento pode apenas inicializar os estados do
+            -- pincel nativo. Dar tempo a um segundo evento estacionário
+            -- evita que um clique isolado pareça não funcionar.
+            handle.mypaint_brush_stroke_to(self.brush, self.surface,
+                x, y, pressure or 1, 0, 0, 0.1)
+        end
         return self.dabs
     end
     return session
