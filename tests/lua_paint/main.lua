@@ -934,6 +934,98 @@ local function test_save_interrupt_bridge(Bridge, gallery)
     assert(love.filesystem.remove(path))
 end
 
+-- Sair do editor salva o estado confirmado antes de abrir outra obra.
+-- Falha explícita no save deve impedir a navegação, não descartar pixels.
+local function test_gallery_save_guard_bridge(Bridge, gallery)
+    local Selection = require("lua_selection")
+    local Model = {}
+    function Model:open_gallery()
+        assert(self.screen == "editor" or self.screen == "title")
+        self.screen = "gallery"
+        return true
+    end
+    Bridge.install(Model)
+    local model = setmetatable({
+        screen = "editor", document = {width = 16, height = 16},
+        layers = {{id = 1, name = "Gallery guard", visible = true,
+                   opacity = 100, blending = "Normal"}},
+        active_layer_id = 1, active_tool = "transform",
+        background_mode = "transparent_dark"
+    }, {__index = Model})
+    function model:active_layer() return self.layers[1] end
+    local view = {zoom = 10, rotation = 0, pan_x = 0, pan_y = 0}
+    local prefs = {tool_position = "left"}
+    local function point(x, y)
+        return 62 + (1024 - 62 - 34) / 2 + (x + .5 - 8) * 11,
+               62 + (768 - 160) / 2 + (y + .5 - 8) * 11
+    end
+    local function press(id, x, y)
+        local sx, sy = point(x, y)
+        assert(Bridge.mousepressed(model, id, sx, sy, 1024, 768,
+                                   view, prefs, {255, 0, 0}, 1, 100, nil))
+    end
+    local function release(x, y)
+        local sx, sy = point(x, y)
+        return Bridge.mousereleased(model, sx, sy, 1)
+    end
+    local a = gallery:add_artwork(16, 16, "Gallery lifecycle A")
+    Bridge.create(model, a, gallery)
+    press(a, 2, 2)
+    assert(release(4, 4))
+    local before = assert(Bridge.selection_snapshot())
+    assert(before.count == 9 and Selection.contains(before, 3, 3))
+    local previous_history = Bridge.selection_history_snapshot().undo
+    press(a, 10, 10)
+    assert(not Bridge.selection_snapshot(),
+           "Replace provisório deveria ocultar a seleção")
+    assert(model:open_gallery() and model.screen == "gallery",
+           "Nao conseguiu sair com obra valida")
+    assert(not release(12, 12),
+           "Mouseup atrasado confirmou selecao depois da galeria")
+
+    -- Outra obra não deve herdar máscaras nem histórico da anterior.
+    model.screen = "editor"
+    local b = gallery:add_artwork(16, 16, "Gallery lifecycle B")
+    Bridge.create(model, b, gallery)
+    assert(not Bridge.selection_snapshot()
+           and Bridge.selection_history_snapshot().undo == 0,
+           "Obra nova herdou selecao ou historico da anterior")
+    assert(model:open_gallery())
+    model.screen = "editor"
+    Bridge.open(model, a)
+    local restored = assert(Bridge.selection_snapshot())
+    assert(restored.count == 9 and Selection.contains(restored, 3, 3)
+           and not Selection.contains(restored, 11, 11),
+           "Obra reaberta perdeu máscara confirmada ao sair do editor")
+    assert(Bridge.selection_history_snapshot().undo == previous_history,
+           "Troca de obras alterou historico persistido")
+
+    -- Um ID sem registro causa Bridge.save() == false. Não navegar.
+    Bridge.open(model, -1)
+    assert(model.screen == "editor" and model:open_gallery() == false
+           and model.screen == "editor",
+           "Galeria abriu mesmo quando o salvamento falhou")
+
+    local paths = {}
+    local index = assert(love.filesystem.read("lua-artworks/index.tsv"))
+    for line in index:gmatch("[^\r\n]+") do
+        if line:find("Gallery lifecycle A", 1, true)
+           or line:find("Gallery lifecycle B", 1, true) then
+            paths[#paths + 1] = "lua-artworks/" ..
+                assert(line:match("^(art_%d+_%d+)\t"))
+        end
+    end
+    assert(#paths == 2)
+    for _, path in ipairs(paths) do
+        require("lua_history").cleanup(path)
+        require("lua_selection_history").cleanup(path)
+        for _, filename in ipairs(love.filesystem.getDirectoryItems(path)) do
+            love.filesystem.remove(path .. "/" .. filename)
+        end
+        assert(love.filesystem.remove(path))
+    end
+end
+
 local function test_mousepress_preempts_gesture_bridge(Bridge, gallery)
     local Selection = require("lua_selection")
     local model = {
@@ -7185,6 +7277,8 @@ function love.load()
     test_selection_command_interrupt_bridge(Bridge, gallery)
     checkpoint("drag context changes cancel stale brush and selection")
     test_stale_drag_context_bridge(Bridge, gallery)
+    checkpoint("gallery navigation preserves confirmed artwork and rejects failed saves")
+    test_gallery_save_guard_bridge(Bridge, gallery)
     checkpoint("saving interrupts provisional selection and brush")
     test_save_interrupt_bridge(Bridge, gallery)
     checkpoint("new mousepress preempts unfinished brush or selection")

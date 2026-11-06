@@ -447,7 +447,9 @@ function Bridge.install(Model)
     local original = Model.open_gallery
     function Model:open_gallery(...)
         if self.screen == "editor" and project and project.model == self then
-            Bridge.save()
+            -- Não abandonar a obra quando a persistência recusou salvar.
+            -- Erros de escrita seguem propagados sem trocar de tela.
+            if not Bridge.save() then return false end
         end
         return original(self, ...)
     end
