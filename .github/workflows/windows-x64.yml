@@ -62,7 +62,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $native = 'C:\msys64\ucrt64'
+          $native = Join-Path $env:RUNNER_TEMP 'setup-msys2\msys64\ucrt64'
           if (!(Test-Path "$native/bin/libmypaint-0.dll")) {
             throw 'MSYS2 libmypaint-0.dll missing'
           }
