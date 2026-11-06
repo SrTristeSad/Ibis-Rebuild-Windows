@@ -125,6 +125,8 @@ local function test_first_save_recovery()
 end
 
 local function test_interrupted_save_recovery()
+    checkpoint("recover initial artwork publication")
+    test_first_save_recovery()
     local Recovery = require("lua_recovery")
     local root = "lua-recovery-regression"
     assert(love.filesystem.createDirectory(root))
@@ -7102,8 +7104,6 @@ local function test_flip_bridge(Bridge, gallery)
 end
 
 function love.load()
-    checkpoint("recover initial artwork publication")
-    test_first_save_recovery()
     checkpoint("interrupted save rollback")
     test_interrupted_save_recovery()
     checkpoint("begin")
