@@ -388,12 +388,153 @@ function Recovery.commit_first(path)
     return true
 end
 
-local function read_index(root)
+-- Índice da galeria: não sobrescrever o único catálogo sem antes guardar
+-- uma versão nova íntegra e uma versão anterior verificável. Como
+-- love.filesystem não expõe rename atômico, o marcador permite completar
+-- a publicação (ou restaurar o catálogo anterior) em um novo início.
+local INDEX_DIRECTORY = ".gallery-index"
+local INDEX_MARKER = "pending.tsv"
+local INDEX_HEADER = "IBIS_LUA_GALLERY_INDEX_TX_V1"
+
+local function index_dir(root) return root .. "/" .. INDEX_DIRECTORY end
+
+local function index_fingerprint(data)
+    local a, b = adler_update(1, 0, data)
+    return #data, string.format("%08x", b * 65536 + a)
+end
+
+local function read_verified(filename, size, hash)
+    local info = love.filesystem.getInfo(filename, "file")
+    if not info or info.size ~= size then return nil end
+    local contents = love.filesystem.read(filename)
+    if not contents then return nil end
+    local actual_size, actual_hash = index_fingerprint(contents)
+    if actual_size ~= size or actual_hash ~= hash then return nil end
+    return contents
+end
+
+local function write_verified(filename, contents)
+    local ok, err = love.filesystem.write(filename, contents)
+    if not ok then return false, err or "Falha ao escrever índice" end
+    local size, hash = index_fingerprint(contents)
+    if read_verified(filename, size, hash) ~= contents then
+        return false, "Índice gravado diverge dos dados esperados"
+    end
+    return true
+end
+
+local function raw_index(root)
     local path = root .. "/index.tsv"
     if not love.filesystem.getInfo(path, "file") then return "" end
     local data = love.filesystem.read(path)
     if not data then return nil, "Falha ao ler índice da galeria" end
     return data
+end
+
+function Recovery.recover_index(root)
+    if not love.filesystem.getInfo(root, "directory") then return true end
+    local dir = index_dir(root)
+    local marker = dir .. "/" .. INDEX_MARKER
+    if not love.filesystem.getInfo(marker, "file") then return true end
+    local contents = love.filesystem.read(marker)
+    local size, hash, had_old, old_size, old_hash
+    if contents then
+        size, hash, had_old, old_size, old_hash = contents:match(
+            "^" .. INDEX_HEADER ..
+            "\n(%d+)\t(%x%x%x%x%x%x%x%x)\n([01])\t(%d+)\t(%x%x%x%x%x%x%x%x)\n$")
+    end
+    if not size then
+        return false, "Transação do índice inválida; arquivos preservados"
+    end
+    size, old_size = tonumber(size), tonumber(old_size)
+    local target = root .. "/index.tsv"
+    local current = raw_index(root)
+    local current_size, current_hash
+    if current then current_size, current_hash = index_fingerprint(current) end
+
+    if not (current_size == size and current_hash == hash) then
+        local staged = read_verified(dir .. "/after.tsv", size, hash)
+        if staged then
+            local ok, err = write_verified(target, staged)
+            if not ok then return false, err end
+        else
+            -- A cópia nova está corrompida: só voltar à versão antiga se
+            -- ela puder ser verificada. Não apagar o índice às cegas.
+            if had_old == "1" then
+                local previous = read_verified(
+                    dir .. "/before.tsv", old_size, old_hash)
+                if not previous then
+                    return false, "Cópias do índice inválidas; nada foi apagado"
+                end
+                local ok, err = write_verified(target, previous)
+                if not ok then return false, err end
+            elseif love.filesystem.getInfo(target, "file") and
+                   not love.filesystem.remove(target) then
+                return false, "Falha ao descartar índice inicial incompleto"
+            end
+        end
+    end
+    if not love.filesystem.remove(marker) then
+        return false, "Falha ao finalizar transação do índice"
+    end
+    -- Marcador removido primeiro: limpeza interrompida não reabre a
+    -- transação nem reverte um índice já publicado.
+    clear_directory(dir)
+    return true
+end
+
+function Recovery.read_index(root)
+    local ok, err = Recovery.recover_index(root)
+    if not ok then return nil, err end
+    return raw_index(root)
+end
+
+function Recovery.write_index(root, contents)
+    if type(contents) ~= "string" then
+        return false, "Índice da galeria inválido"
+    end
+    local ok, err = Recovery.recover_index(root)
+    if not ok then return false, err end
+    if not love.filesystem.createDirectory(root) then
+        return false, "Falha ao criar diretório da galeria"
+    end
+    local dir = index_dir(root)
+    ok, err = clear_directory(dir)
+    if not ok then return false, err end
+    if not love.filesystem.createDirectory(dir) then
+        return false, "Falha ao preparar transação do índice"
+    end
+    local index_path = root .. "/index.tsv"
+    local had_old = love.filesystem.getInfo(index_path, "file") ~= nil
+    local previous, read_err = raw_index(root)
+    if not previous then return false, read_err end
+    if had_old then
+        ok, err = write_verified(dir .. "/before.tsv", previous)
+        if not ok then return false, err end
+    end
+    ok, err = write_verified(dir .. "/after.tsv", contents)
+    if not ok then return false, err end
+
+    local size, hash = index_fingerprint(contents)
+    local old_size, old_hash = index_fingerprint(previous)
+    local journal = table.concat({
+        INDEX_HEADER, size .. "\t" .. hash,
+        (had_old and "1" or "0") .. "\t" .. old_size .. "\t" .. old_hash
+    }, "\n") .. "\n"
+    ok, err = write_verified(dir .. "/" .. INDEX_MARKER, journal)
+    if not ok then return false, err end
+    -- A partir daqui, qualquer falha conserva o marcador e permite replay.
+    ok, err = write_verified(index_path, contents)
+    if not ok then return false, err end
+    if not love.filesystem.remove(dir .. "/" .. INDEX_MARKER) then
+        return false, "Falha ao concluir escrita do índice"
+    end
+    clear_directory(dir)
+    return true
+end
+
+local function read_index(root)
+    return Recovery.read_index(root)
 end
 
 local function has_key(index, key)
@@ -424,8 +565,8 @@ function Recovery.recover_first(root)
                     snapshot.height, snapshot.title}, "\t")
                 local new_index = index == "" and entry or
                     (index:gsub("\n+$", "") .. "\n" .. entry)
-                local ok, write_err = love.filesystem.write(
-                    root .. "/index.tsv", new_index)
+                local ok, write_err = Recovery.write_index(
+                    root, new_index)
                 if not ok then return false, write_err end
             end
             local ok, err = Recovery.commit_first(path)
