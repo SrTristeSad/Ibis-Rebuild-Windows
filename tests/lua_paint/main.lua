@@ -19,6 +19,55 @@ end
 -- gravar tudo no staging, com retomada se o processo cair antes do índice.
 -- Toda atualização do catálogo deve poder ser repetida se o processo
 -- terminar durante a escrita de index.tsv ou se o staging se corromper.
+-- Exercita a DLL real libmypaint no Windows: callbacks C->Lua recebem
+-- dabs calculados pelo núcleo nativo e os pintam na camada do LÖVE.
+local function test_native_mypaint_brush()
+    local MyPaint = require("lua_mypaint")
+    local ready, reason = MyPaint.available()
+    assert(ready, reason or "libmypaint não carregou no LÖVE")
+    local Engine = require("lua_engine")
+    local p = Engine.new(96, 64)
+    Engine.sync(p, {layers = {{id = 1}}})
+    local layer = p.layers[1]
+    local session, err = MyPaint.begin({0.96, 0.08, 0.05},
+                                      18, 1, layer.pixels)
+    assert(session, err)
+    local first, count = true, 0
+    for i = 1, 14 do
+        local dabs = session:stroke(8 + i * 4, 30)
+        count = count + #dabs
+        Engine.stroke_mypaint(p, 1, dabs, false, nil, function()
+            if first then Engine.begin_stroke(p, 1); first = false end
+        end)
+    end
+    assert(count > 0, "libmypaint não emitiu dabs")
+    local changed = false
+    for x = 12, 67 do
+        local r, g, b, a = layer.pixels:getPixel(x, 30)
+        if a > 0 then
+            changed = true
+            assert(r > g and r > b, "Cor de MyPaint não foi preservada")
+            break
+        end
+    end
+    assert(changed and p.dirty and not first,
+           "Dabs nativos não pintaram pixels na camada")
+    -- Um clique sem arraste também deve produzir pigmento.
+    local dot = assert(MyPaint.begin({0.1, 0.7, 0.2}, 10, 1, layer.pixels))
+    local dot_dabs = dot:stroke(75, 15)
+    assert(#dot_dabs > 0, "Pincel nativo ignorou clique sem arraste")
+    Engine.stroke_mypaint(p, 1, dot_dabs, false, nil, function()
+        if first then Engine.begin_stroke(p, 1); first = false end
+    end)
+    assert(select(4, layer.pixels:getPixel(75, 15)) > 0,
+           "Clique MyPaint não gravou pigmento no canvas")
+    assert(Engine.undo(p), "Pincel MyPaint não produziu histórico reversível")
+    for x = 12, 67 do
+        assert(select(4, p.layers[1].pixels:getPixel(x, 30)) == 0,
+               "Desfazer não restaurou transparência após pincel MyPaint")
+    end
+end
+
 local function test_gallery_index_transaction()
     local Recovery = require("lua_recovery")
     local root = "lua-gallery-index-regression"
@@ -106,6 +155,8 @@ local function test_gallery_index_transaction()
 end
 
 local function test_first_save_recovery()
+    checkpoint("native MyPaint brush integration")
+    test_native_mypaint_brush()
     checkpoint("transactional gallery index recovery")
     test_gallery_index_transaction()
     local Recovery = require("lua_recovery")

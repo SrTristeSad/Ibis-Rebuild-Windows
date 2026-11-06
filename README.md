@@ -10,6 +10,15 @@
 
 ## Implementação ativa em Lua/LÖVE
 
+**Pincel MyPaint experimental (opcional):** a integração com a biblioteca
+nativa libmypaint 1.6 pode ser ativada e desativada por **Ctrl+Alt+P** no
+editor. A interface Ibis-Lua e a borracha existente não mudam; o pincel
+original continua como padrão. O pacote portátil inclui as DLLs de
+terceiros e avisos de licença. Veja
+[escopo, instalação e limites](docs/LIBMYPAINT_ADAPTER.md).
+A libmypaint não implementa Texto, Varinha Mágica nem os filtros.
+
+
 A interface é o [Ibis-Lua](ui/Ibis-Lua), incorporado por submódulo Git sem
 alterações visuais. O motor de edição ativo fica em [bridge/](bridge),
 sem DLL C++ do projeto. Possui pintura circular, borracha, balde contíguo,

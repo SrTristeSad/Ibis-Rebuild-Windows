@@ -51,6 +51,36 @@ jobs:
           if (!(Test-Path (Join-Path $rt 'lovec.exe'))) { throw 'lovec.exe missing' }
           "LOVE_RUNTIME=$rt" >> $env:GITHUB_ENV
 
+      - name: Install official MSYS2 UCRT64 libmypaint 1.6 runtime
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: mingw-w64-ucrt-x86_64-libmypaint
+
+      - name: Stage third-party MyPaint DLLs and license notices
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nativeDll = Get-ChildItem $env:RUNNER_TEMP -Filter 'libmypaint-0.dll' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (!$nativeDll) { throw 'MSYS2 libmypaint-0.dll missing' }
+          $native = Split-Path (Split-Path $nativeDll.FullName -Parent) -Parent
+          Write-Host "MyPaint runtime: $native"
+          # Initial experimental runtime: retain transitive UCRT DLLs
+          # without replacing libraries already shipped by LÖVE.
+          Get-ChildItem "$native/bin" -Filter '*.dll' -File | ForEach-Object {
+            $destination = Join-Path $env:LOVE_RUNTIME $_.Name
+            if (!(Test-Path $destination)) {
+              Copy-Item $_.FullName $destination
+            }
+          }
+          $notices = Join-Path $env:LOVE_RUNTIME 'third-party-licenses'
+          New-Item -ItemType Directory -Path $notices -Force | Out-Null
+          Copy-Item "$native/share/licenses/*" $notices -Recurse -Force
+          if (!(Test-Path "$notices/libmypaint/COPYING")) {
+            throw 'libmypaint ISC notice missing'
+          }
+
       - name: Prepare Mesa software OpenGL only on CI
         shell: pwsh
         run: |
@@ -84,6 +114,7 @@ jobs:
           Copy-Item bridge/lua_history.lua tests/lua_paint/lua_history.lua -Force
           Copy-Item bridge/lua_selection_history.lua tests/lua_paint/lua_selection_history.lua -Force
           Copy-Item bridge/lua_recovery.lua tests/lua_paint/lua_recovery.lua -Force
+          Copy-Item bridge/lua_mypaint.lua tests/lua_paint/lua_mypaint.lua -Force
           Copy-Item tests/lua_paint/main.lua tests/lua_syntax/paint_main.lua -Force
           Copy-Item bridge/lua_engine.lua tests/lua_syntax/lua_engine.lua -Force
           Copy-Item bridge/lua_bridge.lua tests/lua_syntax/lua_bridge.lua -Force
@@ -91,6 +122,7 @@ jobs:
           Copy-Item bridge/lua_history.lua tests/lua_syntax/lua_history.lua -Force
           Copy-Item bridge/lua_selection_history.lua tests/lua_syntax/lua_selection_history.lua -Force
           Copy-Item bridge/lua_recovery.lua tests/lua_syntax/lua_recovery.lua -Force
+          Copy-Item bridge/lua_mypaint.lua tests/lua_syntax/lua_mypaint.lua -Force
           $syntaxOut = Join-Path $env:RUNNER_TEMP 'lua-syntax-stdout.log'
           $syntaxErr = Join-Path $env:RUNNER_TEMP 'lua-syntax-stderr.log'
           $syntax = Start-Process -FilePath "$env:LOVE_RUNTIME/lovec.exe" `
@@ -127,7 +159,7 @@ jobs:
           & "$env:LOVE_RUNTIME/lovec.exe" (Resolve-Path 'build/lua-app').Path
           if ($LASTEXITCODE -ne 0) { throw "Ibis-Lua UI E2E failed ($LASTEXITCODE)" }
 
-      - name: Package Windows runtime and Lua app (no project C++ DLL)
+      - name: Package Windows LÖVE app with optional libmypaint 1.6 runtime
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -142,6 +174,7 @@ jobs:
             Where-Object { $_.Name -notin @('opengl32.dll', 'libgallium_wgl.dll') } |
             Copy-Item -Destination $portable
           Copy-Item $loveFile (Join-Path $portable 'IbisLua-Windows.love')
+          Copy-Item (Join-Path $env:LOVE_RUNTIME 'third-party-licenses') (Join-Path $portable 'third-party-licenses') -Recurse -Force
           Set-Content -Path (Join-Path $portable 'Iniciar-IbisLua.cmd') -Value '@echo off' -Encoding Ascii
           Add-Content -Path (Join-Path $portable 'Iniciar-IbisLua.cmd') -Value 'cd /d "%~dp0"' -Encoding Ascii
           Add-Content -Path (Join-Path $portable 'Iniciar-IbisLua.cmd') -Value 'start "" "%~dp0love.exe" "%~dp0IbisLua-Windows.love"' -Encoding Ascii

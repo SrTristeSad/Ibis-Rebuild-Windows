@@ -4,10 +4,12 @@ local Selection = require("lua_selection")
 local History = require("lua_history")
 local SelectionHistory = require("lua_selection_history")
 local Recovery = require("lua_recovery")
+local MyPaint = require("lua_mypaint")
 local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
 local selection, gesture, clipboard = nil, nil, nil
+local mypaint_enabled = false  -- Opt-in: Ctrl+Alt+P, reversível em qualquer sessão.
 local function discard_preview(d)
     if d and d.preview then
         if d.preview.image then d.preview.image:release() end
@@ -619,17 +621,22 @@ local function canvas_point(model, x, y, w, h, view, preferences,
 end
 
 local function paint(p, d, x, y, start_x, start_y)
-    Engine.stroke(p, d.layer, start_x or d.x, start_y or d.y,
-                  x, y, d.size, d.color,
-                  d.opacity, d.eraser, d.alpha_lock, d.selection_at_start,
-                  function()
-                      -- O snapshot só existe se algum pixel realmente
-                      -- mudar. Um gesto inteiro sem efeito preserva redo.
-                      if not d.history_started then
-                          Engine.begin_stroke(p, d.layer)
-                          d.history_started = true
-                      end
-                  end, d.covered_pixels)
+    local function capture()
+        if not d.history_started then
+            Engine.begin_stroke(p, d.layer)
+            d.history_started = true
+        end
+    end
+    if d.mypaint then
+        local dabs = d.mypaint:stroke(x, y)
+        Engine.stroke_mypaint(p, d.layer, dabs, d.alpha_lock,
+                              d.selection_at_start, capture)
+    else
+        Engine.stroke(p, d.layer, start_x or d.x, start_y or d.y,
+                      x, y, d.size, d.color, d.opacity, d.eraser,
+                      d.alpha_lock, d.selection_at_start, capture,
+                      d.covered_pixels)
+    end
     d.x, d.y = x, y
 end
 
@@ -840,6 +847,11 @@ function Bridge.mousepressed(model, id, x, y, w, h, view, preferences,
                covered_pixels = (normalized_opacity < 1 or
                    (selection and Selection.is_soft(selection)))
                    and {} or nil}
+    if tool == "brush" and mypaint_enabled then
+        local session = MyPaint.begin(rgb, size, normalized_opacity,
+                                      p.layers[info.id].pixels)
+        drawing.mypaint = session
+    end
     paint(p, drawing, px, py)
     return true
 end
@@ -1355,6 +1367,19 @@ function Bridge.keypressed(key, model, notice)
     if key == "d" then Bridge.clear_selection(); return true end
     local shift = love.keyboard.isDown("lshift", "rshift")
     local alt = love.keyboard.isDown("lalt", "ralt")
+    if alt and not shift and key == "p" then
+        local available, reason = MyPaint.available()
+        if available then
+            interrupt_active_gesture()
+            mypaint_enabled = not mypaint_enabled
+            if notice then notice(mypaint_enabled and
+                "Pincel MyPaint experimental ativado." or
+                "Pincel Lua original ativado.") end
+        elseif notice then
+            notice(reason or "Núcleo MyPaint não disponível.")
+        end
+        return true
+    end
     if alt and (key == "z" or key == "y") then
         -- Capturar também com pilha vazia: nunca deixar Ctrl+Alt+Z/Y
         -- cair nos atalhos de histórico raster da interface original.
