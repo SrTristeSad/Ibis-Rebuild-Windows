@@ -231,7 +231,9 @@ function Engine.stroke_mypaint(project, id, dabs, alpha_lock, selection,
         local opacity = math.max(0, math.min(1, item.alpha))
         if opacity > 0 and dab(layer, project.w, project.h,
             item.x, item.y, radius, item.color, opacity,
-            item.eraser and item.eraser >= 0.5 or false,
+            -- MyPaint 1.6 envia alpha_eraser=1 para pintura NORMAL.
+            -- Zero indica apagar; não inverter essa semântica.
+            item.eraser ~= nil and item.eraser < 0.5 or false,
             alpha_lock, selection, capture_once, nil,
             math.max(0, math.min(1, item.hardness or 1))) then
             changed = true
