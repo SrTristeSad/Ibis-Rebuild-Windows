@@ -99,7 +99,8 @@ end
 -- Usar a mesma margem de quantização do Balde (RGBA 8-bit).
 local STROKE_EPSILON = 0.5 / 255
 local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
-                   alpha_lock, selection, before_first_change, covered_pixels)
+                   alpha_lock, selection, before_first_change, covered_pixels,
+                   hardness)
     local data = layer.pixels
     local xmin = math.max(0, math.floor(x - radius))
     local xmax = math.min(w - 1, math.ceil(x + radius))
@@ -115,6 +116,14 @@ local function dab(layer, w, h, x, y, radius, rgb, alpha, eraser,
             if dx * dx + dy * dy <= rr and
                (not covered_pixels or not covered_pixels[py * w + px]) then
                 local effective_alpha = alpha * Selection.coverage(selection, px, py)
+                -- MyPaint fornece dureza por dab; a versão Lua anterior
+                -- continua com borda dura se hardness não for informado.
+                if hardness and hardness < 1 then
+                    local distance = math.sqrt(dx * dx + dy * dy) / radius
+                    local feather = math.max(0, math.min(1,
+                        (1 - distance) / math.max(0.001, 1 - hardness)))
+                    effective_alpha = effective_alpha * feather
+                end
                 if effective_alpha > 0 then
                     local dr, dg, db, da = data:getPixel(px, py)
                     local nr, ng, nb, na
@@ -193,6 +202,38 @@ function Engine.stroke(project, id, x0, y0, x1, y1, diameter, rgb, alpha,
         if dab(layer, project.w, project.h, x0 + dx * t, y0 + dy * t,
                radius, rgb, alpha, eraser, alpha_lock, selection,
                capture_once, covered_pixels) then
+            changed = true
+        end
+    end
+    if changed then
+        layer.image:replacePixels(layer.pixels)
+        project.dirty = true
+    end
+    return changed
+end
+
+-- Dabs calculados pelo núcleo MyPaint; o motor Lua continua responsável
+-- por máscaras, histórico, RGBA, upload e persistência em camadas PNG.
+-- Um único upload GPU por lote de dabs, nunca um por chamada nativa.
+function Engine.stroke_mypaint(project, id, dabs, alpha_lock, selection,
+                               on_first_change)
+    local layer = assert(project.layers[id], "Camada inexistente")
+    local changed, captured = false, false
+    local function capture_once()
+        if not captured then
+            captured = true
+            if on_first_change then on_first_change() end
+        end
+    end
+    for i = 1, math.min(#dabs, 4096) do
+        local item = dabs[i]
+        local radius = math.max(0.1, math.min(128, item.radius))
+        local opacity = math.max(0, math.min(1, item.alpha))
+        if opacity > 0 and dab(layer, project.w, project.h,
+            item.x, item.y, radius, item.color, opacity,
+            item.eraser and item.eraser >= 0.5 or false,
+            alpha_lock, selection, capture_once, nil,
+            math.max(0, math.min(1, item.hardness or 1))) then
             changed = true
         end
     end
