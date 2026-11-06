@@ -14,6 +14,69 @@ end
 
 -- Pincel e borracha não devem criar dirty, upload nem um passo
 -- reversível antes de existir alguma alteração RGBA de fato.
+-- Recuperação de arquivo parcialmente persistido antes de reabrir a obra.
+local function test_interrupted_save_recovery()
+    local Recovery = require("lua_recovery")
+    local root = "lua-recovery-regression"
+    assert(love.filesystem.createDirectory(root))
+    local initial = {
+        ["layers.tsv"] = "1\\tLayer\\t1\\t100",
+        ["document.tsv"] = "1\\twhite",
+        ["layer_1.png"] = "old-layer-binary",
+        ["selection.png"] = "old-selection-binary",
+        ["history.tsv"] = "old-history",
+        ["history_123_456_undo_1.png"] = "old-raster-snapshot",
+        ["selection_history.tsv"] = "old-selection-history",
+        ["selection_history_123_456_undo_1.png"] = "old-mask-snapshot"
+    }
+    for name, data in pairs(initial) do
+        assert(love.filesystem.write(root .. "/" .. name, data))
+    end
+    assert(Recovery.begin(root), "Nao criou backup antes de salvar")
+    assert(love.filesystem.getInfo(root .. "/.save-recovery/pending.tsv"),
+           "Marcador nao foi publicado apos backup")
+    for name in pairs(initial) do
+        assert(love.filesystem.write(root .. "/" .. name, "new-uncommitted"))
+    end
+    assert(love.filesystem.write(root .. "/layer_2.png", "new-layer"))
+    assert(Recovery.restore(root), "Falha ao recuperar versao confirmada")
+    for name, data in pairs(initial) do
+        assert(love.filesystem.read(root .. "/" .. name) == data,
+               "Restauracao inconsistente: " .. name)
+    end
+    assert(not love.filesystem.getInfo(root .. "/layer_2.png"),
+           "Nova camada incompleta sobreviveu a restauracao")
+    assert(not love.filesystem.getInfo(root .. "/.save-recovery/pending.tsv"))
+    assert(Recovery.restore(root), "Restaurar duas vezes deve ser seguro")
+
+    -- Commit valido nao restaura a versao antiga.
+    assert(Recovery.begin(root))
+    assert(love.filesystem.write(root .. "/layer_1.png", "new-committed"))
+    assert(Recovery.commit(root))
+    assert(Recovery.restore(root))
+    assert(love.filesystem.read(root .. "/layer_1.png") == "new-committed",
+           "Commit valido foi desfeito")
+
+    -- Backup incompleto: rejeitar sem sobrescrever o arquivo atual.
+    assert(Recovery.begin(root))
+    local pending = root .. "/.save-recovery"
+    assert(love.filesystem.remove(pending .. "/layer_1.png"))
+    assert(love.filesystem.write(root .. "/layer_1.png", "must-not-touch"))
+    assert(not Recovery.restore(root),
+           "Backup ausente foi considerado valido")
+    assert(love.filesystem.read(root .. "/layer_1.png") == "must-not-touch",
+           "Restauracao parcial sobrescreveu obra apesar de backup invalido")
+    -- Limpeza somente do diretório efêmero usado no teste.
+    for _, name in ipairs(love.filesystem.getDirectoryItems(pending)) do
+        assert(love.filesystem.remove(pending .. "/" .. name))
+    end
+    assert(love.filesystem.remove(pending))
+    for _, name in ipairs(love.filesystem.getDirectoryItems(root)) do
+        assert(love.filesystem.remove(root .. "/" .. name))
+    end
+    assert(love.filesystem.remove(root))
+end
+
 local function test_lazy_stroke_history(E)
     local Selection = require("lua_selection")
     local p = E.new(16, 16)
@@ -6814,6 +6877,8 @@ local function test_flip_bridge(Bridge, gallery)
 end
 
 function love.load()
+    checkpoint("interrupted save rollback")
+    test_interrupted_save_recovery()
     checkpoint("begin")
     local E = require("lua_engine")
     test_uniform_stroke_opacity(E)
