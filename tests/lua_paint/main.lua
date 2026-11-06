@@ -111,6 +111,68 @@ local function test_interrupted_save_recovery()
     assert(love.filesystem.read(root .. "/layer_1.png") == previous,
            "Recuperacao v1 alterou bytes antigos")
 
+    -- Uma falha realista no destino acontece após outros arquivos já
+    -- terem sido restaurados. Os backups e o marcador devem sobreviver
+    -- para permitir uma nova tentativa, sem apagar camadas provisórias.
+    local function inject_restore_write_failure(silent_corruption)
+        local original_new_file = love.filesystem.newFile
+        local target = root .. "/layer_1.png"
+        local injected = false
+        love.filesystem.newFile = function(filename, ...)
+            local file = original_new_file(filename, ...)
+            if filename ~= target then return file end
+            return setmetatable({}, {
+                __index = function(_, method)
+                    return function(_, ...)
+                        if method == "write" and not injected then
+                            injected = true
+                            local bytes = (...)
+                            if silent_corruption then
+                                -- Mesmo tamanho, bytes alterados, e sucesso
+                                -- informado pela API de escrita.
+                                return file:write(string.rep("Z", #bytes))
+                            end
+                            -- Escreve parte dos bytes e falha explicitamente.
+                            assert(file:write(bytes:sub(
+                                1, math.max(1, math.floor(#bytes / 2)))))
+                            return false, "falha de escrita simulada"
+                        end
+                        return file[method](file, ...)
+                    end
+                end
+            })
+        end
+        local ran, restored, reason = pcall(Recovery.restore, root)
+        love.filesystem.newFile = original_new_file
+        assert(ran and not restored and injected,
+               reason or "Falha de escrita nao foi detectada")
+    end
+    for _, silent_corruption in ipairs({false, true}) do
+        local saved_layer = assert(love.filesystem.read(root .. "/layer_1.png"))
+        local saved_document = assert(love.filesystem.read(root .. "/document.tsv"))
+        assert(Recovery.begin(root))
+        assert(love.filesystem.write(root .. "/layer_1.png", "new-layer"))
+        assert(love.filesystem.write(root .. "/document.tsv", "new-document"))
+        assert(love.filesystem.write(root .. "/layer_99.png", "uncommitted"))
+        inject_restore_write_failure(silent_corruption)
+        assert(love.filesystem.getInfo(root .. "/.save-recovery/pending.tsv"),
+               "Falha de restauracao apagou marcador de rollback")
+        assert(love.filesystem.read(
+            root .. "/.save-recovery/layer_1.png") == saved_layer,
+               "Falha de restauracao danificou backup original")
+        assert(love.filesystem.getInfo(root .. "/layer_99.png"),
+               "Falha parcial apagou camada nova antes do sucesso")
+        assert(Recovery.restore(root), "Nova tentativa nao recuperou obra")
+        assert(love.filesystem.read(root .. "/layer_1.png") == saved_layer
+               and love.filesystem.read(
+                   root .. "/document.tsv") == saved_document,
+               "Nova tentativa nao recuperou os arquivos confirmados")
+        assert(not love.filesystem.getInfo(root .. "/layer_99.png")
+               and not love.filesystem.getInfo(
+                   root .. "/.save-recovery/pending.tsv"),
+               "Nova tentativa nao encerrou corretamente o rollback")
+    end
+
     -- Backup incompleto: rejeitar sem sobrescrever o arquivo atual.
     assert(Recovery.begin(root))
     local pending = root .. "/.save-recovery"
