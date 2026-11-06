@@ -17,7 +17,97 @@ end
 -- Recuperação de arquivo parcialmente persistido antes de reabrir a obra.
 -- Uma obra nova ainda não tem versão anterior: publicar apenas depois de
 -- gravar tudo no staging, com retomada se o processo cair antes do índice.
+-- Toda atualização do catálogo deve poder ser repetida se o processo
+-- terminar durante a escrita de index.tsv ou se o staging se corromper.
+local function test_gallery_index_transaction()
+    local Recovery = require("lua_recovery")
+    local root = "lua-gallery-index-regression"
+    assert(love.filesystem.createDirectory(root))
+    local old_index = "art_100_1\t16\t16\tPrimeira"
+    local next_index = old_index .. "\nart_100_2\t32\t32\tSegunda"
+    assert(Recovery.write_index(root, old_index))
+    assert(Recovery.read_index(root) == old_index)
+
+    local function fail_once(filename, expected)
+        local original_write = love.filesystem.write
+        local injected = false
+        love.filesystem.write = function(path, contents, ...)
+            if path == filename and not injected then
+                injected = true
+                assert(original_write(path, contents:sub(
+                    1, math.max(1, math.floor(#contents / 2)))))
+                return false, "falha de escrita simulada"
+            end
+            return original_write(path, contents, ...)
+        end
+        local ran, saved = pcall(Recovery.write_index, root, expected)
+        love.filesystem.write = original_write
+        assert(ran and not saved and injected,
+               "Falha de escrita no índice não foi detectada")
+    end
+
+    -- Falha ao preparar a versão nova: índice anterior não é tocado.
+    fail_once(root .. "/.gallery-index/after.tsv", next_index)
+    assert(Recovery.read_index(root) == old_index,
+           "Falha antes do marcador danificou índice anterior")
+    assert(not love.filesystem.getInfo(
+        root .. "/.gallery-index/pending.tsv"),
+        "Marcador apareceu antes da cópia nova completa")
+
+    -- Escrita parcial do índice, depois de tornar o marcador durável:
+    -- próxima leitura deve publicar os dados novos exatamente uma vez.
+    fail_once(root .. "/index.tsv", next_index)
+    assert(love.filesystem.getInfo(
+        root .. "/.gallery-index/pending.tsv"),
+        "Falha durante publicação perdeu o diário")
+    assert(Recovery.read_index(root) == next_index,
+           "Retomada não restaurou índice completo")
+    assert(not love.filesystem.getInfo(
+        root .. "/.gallery-index/pending.tsv"))
+    assert(Recovery.read_index(root) == next_index,
+           "Segunda retomada duplicou ou alterou entradas")
+
+    -- Se o staging novo for corrompido, voltar à cópia anterior validada,
+    -- nunca publicar bytes truncados ou um índice misturado.
+    local third = next_index .. "\nart_100_3\t8\t8\tTerceira"
+    fail_once(root .. "/index.tsv", third)
+    local after = root .. "/.gallery-index/after.tsv"
+    local contents = assert(love.filesystem.read(after))
+    assert(love.filesystem.write(after, string.rep("X", #contents)))
+    assert(Recovery.read_index(root) == next_index,
+           "Staging corrompido não reverteu para catálogo confirmado")
+    assert(not love.filesystem.getInfo(
+        root .. "/.gallery-index/pending.tsv"))
+
+    -- Índice inicial inexistente: uma falha parcial também pode ser
+    -- recuperada com staging válido e sem cópia anterior.
+    assert(love.filesystem.remove(root .. "/index.tsv"))
+    fail_once(root .. "/index.tsv", old_index)
+    assert(Recovery.read_index(root) == old_index,
+           "Primeira publicação de índice não pôde ser retomada")
+
+    -- Um marcador truncado deve causar erro sem apagar dados atuais.
+    fail_once(root .. "/index.tsv", next_index)
+    local marker = root .. "/.gallery-index/pending.tsv"
+    assert(love.filesystem.write(marker, "incomplete"))
+    local current = assert(love.filesystem.read(root .. "/index.tsv"))
+    local recovered = Recovery.recover_index(root)
+    assert(not recovered and love.filesystem.read(
+        root .. "/index.tsv") == current,
+        "Marcador inválido provocou perda silenciosa de dados")
+    assert(love.filesystem.remove(marker))
+    for _, name in ipairs(love.filesystem.getDirectoryItems(
+            root .. "/.gallery-index")) do
+        assert(love.filesystem.remove(root .. "/.gallery-index/" .. name))
+    end
+    assert(love.filesystem.remove(root .. "/.gallery-index"))
+    assert(love.filesystem.remove(root .. "/index.tsv"))
+    assert(love.filesystem.remove(root))
+end
+
 local function test_first_save_recovery()
+    checkpoint("transactional gallery index recovery")
+    test_gallery_index_transaction()
     local Recovery = require("lua_recovery")
     local root = "lua-first-save-regression"
     local key = "art_123456_1"
