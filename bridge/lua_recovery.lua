@@ -74,6 +74,40 @@ local function copy_file(source, destination)
     return good, reason
 end
 
+-- Adler-32 incremental, para detectar truncamentos e alterações de bytes
+-- com memória constante. Checksum de integridade, não criptográfico.
+local function adler_update(a, b, bytes)
+    for i = 1, #bytes do
+        a = (a + bytes:byte(i)) % 65521
+        b = (b + a) % 65521
+    end
+    return a, b
+end
+
+local function checksum_file(filename)
+    local file = love.filesystem.newFile(filename)
+    local opened, err = file:open("r")
+    if not opened then return nil, nil, err or "Arquivo inacessível" end
+    local size = file:getSize()
+    if not size or size < 0 then
+        file:close()
+        return nil, nil, "Tamanho de arquivo inválido"
+    end
+    local a, b, remaining = 1, 0, size
+    local valid = true
+    while remaining > 0 do
+        local bytes = file:read(math.min(COPY_CHUNK, remaining))
+        if not bytes or #bytes == 0 then valid = false; break end
+        a, b = adler_update(a, b, bytes)
+        remaining = remaining - #bytes
+    end
+    local closed = file:close()
+    if not valid or not closed then
+        return nil, nil, "Leitura incompleta ao verificar backup"
+    end
+    return size, string.format("%08x", b * 65536 + a)
+end
+
 local function location(path) return path .. "/" .. DIRECTORY end
 
 local function clear_stale(path)
@@ -97,27 +131,41 @@ function Recovery.restore(path)
     local marker = dir .. "/" .. MARKER
     if not love.filesystem.getInfo(marker, "file") then return true end
     local contents = love.filesystem.read(marker)
-    if not contents or not contents:match("^v1\n") then
+    if not contents or not contents:match("^v[12]\n") then
         return false, "Manifesto de recuperação inválido"
     end
-    local existing = {}
-    for name in contents:gmatch("([^\n]+)\n?") do
-        if name ~= "v1" then
-            if not managed(name) or existing[name] then
+    -- v1 foi usado nas obras anteriores; v2 adiciona tamanho + Adler-32.
+    local version = contents:match("^(v[12])\n")
+    if not version then return false, "Versão de recuperação inválida" end
+    local existing, names = {}, {}
+    for line in contents:gmatch("([^\n]+)") do
+        if line ~= version then
+            local name, size, hash
+            if version == "v2" then
+                name, size, hash = line:match("^([^\t]+)\t(%d+)\t(%x%x%x%x%x%x%x%x)$")
+            else
+                name = line
+            end
+            if not name or not managed(name) or existing[name] then
                 return false, "Arquivo inesperado na recuperação"
             end
+            local info = love.filesystem.getInfo(dir .. "/" .. name, "file")
+            if not info or type(info.size) ~= "number" then
+                return false, "Cópia de recuperação incompleta"
+            end
+            if version == "v2" then
+                local expected = tonumber(size)
+                if not expected or expected ~= info.size then
+                    return false, "Tamanho do backup não confere"
+                end
+                local measured, actual, err = checksum_file(dir .. "/" .. name)
+                if not measured or measured ~= expected or actual ~= hash then
+                    return false, err or "Checksum de recuperação divergente"
+                end
+            end
             existing[name] = true
+            names[#names + 1] = name
         end
-    end
-    -- Validar a presença e o tamanho dos backups antes de modificar a obra.
-    -- A transferência é sequencial e nunca mantém todos os PNGs em RAM.
-    local names = {}
-    for name in pairs(existing) do
-        local info = love.filesystem.getInfo(dir .. "/" .. name, "file")
-        if not info or type(info.size) ~= "number" then
-            return false, "Cópia de recuperação incompleta"
-        end
-        names[#names + 1] = name
     end
     table.sort(names)
     for _, name in ipairs(names) do
@@ -152,13 +200,17 @@ function Recovery.begin(path)
         return false, "Falha ao criar diretório de recuperação"
     end
     local names = snapshot_names(path)
+    local entries = {}
     for _, name in ipairs(names) do
         ok, err = copy_file(path .. "/" .. name, dir .. "/" .. name)
         if not ok then return false, err end
+        local size, hash, check_err = checksum_file(dir .. "/" .. name)
+        if not size then return false, check_err end
+        entries[#entries + 1] = name .. "\t" .. size .. "\t" .. hash
     end
-    -- Só publica o marcador após copiar o conjunto inteiro.
+    -- Só publica o marcador após verificar todas as cópias.
     return love.filesystem.write(dir .. "/" .. MARKER,
-        "v1\n" .. table.concat(names, "\n") .. "\n")
+        "v2\n" .. table.concat(entries, "\n") .. "\n")
 end
 
 function Recovery.commit(path)
