@@ -369,12 +369,15 @@ end
 
 function Bridge.restore_gallery(gallery)
     gallery_ref = gallery
-    -- Completa as primeiras gravações que terminaram no staging, mas
-    -- foram interrompidas antes da publicação no índice da galeria.
+    -- Reparar o índice ANTES de consultar se uma primeira gravação já foi
+    -- publicada; uma escrita interrompida não pode ocultar obras salvas.
+    local index_ok, index_err = Recovery.recover_index(ROOT)
+    assert(index_ok, index_err)
     local recovered, err = Recovery.recover_first(ROOT)
     assert(recovered, err)
-    local index = love.filesystem.read(ROOT .. "/index.tsv")
-    if not index then return end
+    local index, read_err = Recovery.read_index(ROOT)
+    assert(index, read_err)
+    if index == "" then return end
     for line in index:gmatch("[^\r\n]+") do
         local key, width, height, title = line:match("^([%w_%-]+)\t(%d+)\t(%d+)\t(.*)$")
         width, height = tonumber(width), tonumber(height)
@@ -475,14 +478,11 @@ function Bridge.save()
     -- verdadeiramente não salvos. O índice só anuncia a primeira obra
     -- após todos os arquivos terem sido publicados e verificados.
     local index_by_key = {}
-    local index_path = ROOT .. "/index.tsv"
-    if love.filesystem.getInfo(index_path, "file") then
-        local previous = assert(love.filesystem.read(index_path),
-                                "Falha ao ler índice da galeria")
-        for line in previous:gmatch("[^\r\n]+") do
-            local key = line:match("^([%w_%-]+)\t")
-            if key then index_by_key[key] = line end
-        end
+    local previous, index_err = Recovery.read_index(ROOT)
+    assert(previous, index_err)
+    for line in previous:gmatch("[^\r\n]+") do
+        local key = line:match("^([%w_%-]+)\t")
+        if key then index_by_key[key] = line end
     end
     for _, r in pairs(records) do
         if r.saved or r == record then
@@ -495,7 +495,9 @@ function Bridge.save()
         index[#index + 1] = line
     end
     table.sort(index)
-    assert(love.filesystem.write(index_path, table.concat(index, "\n")))
+    local written, write_err = Recovery.write_index(
+        ROOT, table.concat(index, "\n"))
+    assert(written, write_err)
     record.saved = true
     local commit_ok, commit_err
     if first then
