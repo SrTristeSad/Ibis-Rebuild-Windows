@@ -33,25 +33,14 @@ local function test_native_mypaint_brush()
                                       18, 1, layer.pixels)
     assert(session, err)
     local first, count = true, 0
-    local first_dab, max_alpha = nil, 0
     for i = 1, 14 do
         local dabs = session:stroke(8 + i * 4, 30)
         count = count + #dabs
-        if not first_dab and #dabs > 0 then first_dab = dabs[1] end
-        for _, dab in ipairs(dabs) do
-            if dab.alpha > max_alpha then max_alpha = dab.alpha end
-        end
         Engine.stroke_mypaint(p, 1, dabs, false, nil, function()
             if first then Engine.begin_stroke(p, 1); first = false end
         end)
     end
     assert(count > 0, "libmypaint não emitiu dabs")
-    if first_dab then
-        print(string.format("MYPAINT_DEBUG count=%d first=(%.2f,%.2f) radius=%.4f alpha=%.5f hard=%.4f maxAlpha=%.5f rgb=(%.3f,%.3f,%.3f)",
-            count, first_dab.x, first_dab.y, first_dab.radius,
-            first_dab.alpha, first_dab.hardness, max_alpha,
-            first_dab.color[1], first_dab.color[2], first_dab.color[3]))
-    end
     local changed = false
     for x = 12, 67 do
         local r, g, b, a = layer.pixels:getPixel(x, 30)
@@ -61,11 +50,17 @@ local function test_native_mypaint_brush()
             break
         end
     end
-    print(string.format("MYPAINT_DEBUG_RESULTS changed=%s dirty=%s capture=%s alphaCenter=%.5f",
-        tostring(changed), tostring(p.dirty), tostring(not first),
-        select(4, layer.pixels:getPixel(30, 30))))
     assert(changed and p.dirty and not first,
            "Dabs nativos não pintaram pixels na camada")
+    -- Um clique sem arraste também deve produzir pigmento.
+    local dot = assert(MyPaint.begin({0.1, 0.7, 0.2}, 10, 1, layer.pixels))
+    local dot_dabs = dot:stroke(75, 15)
+    assert(#dot_dabs > 0, "Pincel nativo ignorou clique sem arraste")
+    Engine.stroke_mypaint(p, 1, dot_dabs, false, nil, function()
+        if first then Engine.begin_stroke(p, 1); first = false end
+    end)
+    assert(select(4, layer.pixels:getPixel(75, 15)) > 0,
+           "Clique MyPaint não gravou pigmento no canvas")
     assert(Engine.undo(p), "Pincel MyPaint não produziu histórico reversível")
     for x = 12, 67 do
         assert(select(4, p.layers[1].pixels:getPixel(x, 30)) == 0,
