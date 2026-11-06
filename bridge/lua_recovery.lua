@@ -163,14 +163,28 @@ function Recovery.restore(path)
                     return false, err or "Checksum de recuperação divergente"
                 end
             end
-            existing[name] = true
+            existing[name] = version == "v2" and
+                {size = tonumber(size), checksum = hash} or true
             names[#names + 1] = name
         end
     end
     table.sort(names)
     for _, name in ipairs(names) do
-        local ok, err = copy_file(dir .. "/" .. name, path .. "/" .. name)
+        local target = path .. "/" .. name
+        local ok, err = copy_file(dir .. "/" .. name, target)
         if not ok then return false, err or "Falha ao restaurar obra" end
+        -- Uma falha silenciosa na gravação pode conservar o tamanho correto.
+        -- Conferir o destino ANTES de remover o marcador de recuperação:
+        -- se houver divergência, a próxima tentativa ainda tem o backup.
+        if version == "v2" then
+            local size, hash, check_err = checksum_file(target)
+            local expected = existing[name]
+            if not size or size ~= expected.size or
+               hash ~= expected.checksum then
+                return false, check_err or
+                    "Arquivo restaurado diverge do backup"
+            end
+        end
     end
     for _, name in ipairs(snapshot_names(path)) do
         if not existing[name] and not love.filesystem.remove(path .. "/" .. name) then
