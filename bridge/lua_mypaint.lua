@@ -17,7 +17,7 @@ local function library()
         typedef struct MyPaintBrush MyPaintBrush;
         typedef struct MyPaintSurface MyPaintSurface;
         typedef int (*MyPaintDrawDab)(MyPaintSurface *, float, float, float,
-            float, float, float, float, float, float, float, float, float);
+            float, float, float, float, float, float, float, float, float, float);
         typedef void (*MyPaintGetColor)(MyPaintSurface *, float, float, float,
             float *, float *, float *, float *);
         typedef void (*MyPaintBeginAtomic)(MyPaintSurface *);
