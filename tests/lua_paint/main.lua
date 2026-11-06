@@ -15,7 +15,118 @@ end
 -- Pincel e borracha não devem criar dirty, upload nem um passo
 -- reversível antes de existir alguma alteração RGBA de fato.
 -- Recuperação de arquivo parcialmente persistido antes de reabrir a obra.
+-- Uma obra nova ainda não tem versão anterior: publicar apenas depois de
+-- gravar tudo no staging, com retomada se o processo cair antes do índice.
+local function test_first_save_recovery()
+    local Recovery = require("lua_recovery")
+    local root = "lua-first-save-regression"
+    local key = "art_123456_1"
+    local path = root .. "/" .. key
+    assert(Recovery.recover_first(root),
+           "Primeiro início sem diretório de obras deve funcionar")
+    assert(love.filesystem.createDirectory(path))
+    local stage = assert(Recovery.begin_first(path))
+    assert(love.filesystem.write(stage .. "/layer_1.png", "incomplete"))
+    -- Uma gravação interrompida ANTES do marcador não fica visível.
+    assert(Recovery.recover_first(root))
+    assert(not love.filesystem.getInfo(root .. "/index.tsv")
+           and not love.filesystem.getInfo(path .. "/layer_1.png"),
+           "Uma primeira gravação incompleta foi publicada")
+    stage = assert(Recovery.begin_first(path))
+    assert(not love.filesystem.getInfo(stage .. "/layer_1.png"),
+           "Nova tentativa não descartou staging incompleto")
+
+    local initial = {
+        ["document.tsv"] = "1\twhite",
+        ["layers.tsv"] = "1\tFirst artwork\t1\t100",
+        ["layer_1.png"] = string.rep("initial pixels!", 19000),
+        ["preview.png"] = "preview-first-save"
+    }
+    for name, bytes in pairs(initial) do
+        assert(love.filesystem.write(stage .. "/" .. name, bytes))
+    end
+    assert(Recovery.ready_first(path, 16, 16, "First save test"))
+    local marker = stage .. "/ready.tsv"
+    assert(love.filesystem.getInfo(marker))
+    -- Mesmo número de bytes, conteúdo corrompido no staging: recusar
+    -- ANTES de modificar o diretório publicado ou o índice.
+    local original_layer = initial["layer_1.png"]
+    assert(love.filesystem.write(stage .. "/layer_1.png",
+                                 string.rep("X", #original_layer)))
+    assert(not Recovery.publish_first(path))
+    assert(not love.filesystem.getInfo(path .. "/layers.tsv"))
+    assert(not love.filesystem.getInfo(root .. "/index.tsv"))
+    assert(love.filesystem.write(stage .. "/layer_1.png", original_layer))
+
+    -- Falha de escrita parcial durante a publicação: guardar o marcador,
+    -- permitindo repetir a publicação após reiniciar.
+    local old_new_file = love.filesystem.newFile
+    local failed = false
+    love.filesystem.newFile = function(filename, ...)
+        local file = old_new_file(filename, ...)
+        if filename ~= path .. "/layer_1.png" then return file end
+        return setmetatable({}, {
+            __index = function(_, method)
+                return function(_, ...)
+                    if method == "write" and not failed then
+                        failed = true
+                        local bytes = (...)
+                        assert(file:write(bytes:sub(
+                            1, math.max(1, math.floor(#bytes / 2)))))
+                        return false, "primeira gravação interrompida"
+                    end
+                    return file[method](file, ...)
+                end
+            end
+        })
+    end
+    local ran, published = pcall(Recovery.publish_first, path)
+    love.filesystem.newFile = old_new_file
+    assert(ran and not published and failed,
+           "Falha na primeira publicação passou como sucesso")
+    assert(love.filesystem.getInfo(marker) and
+           not love.filesystem.getInfo(root .. "/index.tsv"),
+           "Publicação parcial removeu marcador ou criou entrada na galeria")
+    assert(Recovery.recover_first(root),
+           "Retomar primeira publicação falhou")
+    local index = assert(love.filesystem.read(root .. "/index.tsv"))
+    assert(index:find(key .. "\t16\t16\tFirst save test", 1, true),
+           "Primeira obra recuperada não apareceu na galeria")
+    for name, bytes in pairs(initial) do
+        assert(love.filesystem.read(path .. "/" .. name) == bytes,
+               "Arquivo recuperado difere do staging: " .. name)
+    end
+    assert(not love.filesystem.getInfo(marker),
+           "Staging concluído ainda tem marcador")
+    assert(Recovery.recover_first(root))
+    assert(love.filesystem.read(root .. "/index.tsv") == index,
+           "Retomar recuperação duplicou entrada da galeria")
+
+    -- A recuperação com índice já publicado nunca deve sobrescrever uma
+    -- versão mais recente da mesma obra.
+    stage = assert(Recovery.begin_first(path))
+    for name, bytes in pairs(initial) do
+        assert(love.filesystem.write(stage .. "/" .. name, bytes))
+    end
+    assert(Recovery.ready_first(path, 16, 16, "First save test"))
+    assert(love.filesystem.write(path .. "/layer_1.png", "newer-content"))
+    assert(Recovery.recover_first(root))
+    assert(love.filesystem.read(path .. "/layer_1.png") == "newer-content"
+           and not love.filesystem.getInfo(stage .. "/ready.tsv"),
+           "Marcador antigo sobrescreveu obra que já estava no índice")
+
+    -- Limpeza estritamente da obra sintética.
+    for _, name in ipairs(love.filesystem.getDirectoryItems(path)) do
+        assert(love.filesystem.remove(path .. "/" .. name))
+    end
+    assert(love.filesystem.remove(path))
+    assert(love.filesystem.remove(root .. "/index.tsv"))
+    assert(love.filesystem.remove(root))
+end
+
 local function test_interrupted_save_recovery()
+    checkpoint("recover initial artwork publication")
+    test_first_save_recovery()
     local Recovery = require("lua_recovery")
     local root = "lua-recovery-regression"
     assert(love.filesystem.createDirectory(root))

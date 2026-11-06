@@ -186,8 +186,12 @@ function Bridge.create(model, id, gallery)
     project.bucket_diagonal = false
     project.bucket_sample_all = false
     Engine.sync(project, model)
-    counter = counter + 1
-    local key = string.format("art_%d_%d", os.time(), counter)
+    -- Um reinício rápido não pode reutilizar o diretório de outra obra.
+    local key
+    repeat
+        counter = counter + 1
+        key = string.format("art_%d_%d", os.time(), counter)
+    until not love.filesystem.getInfo(project_path(key))
     local item = gallery:get(id)
     records[id] = {key = key, w = project.w, h = project.h,
                    name = item and item.name or "Untitled"}
@@ -365,6 +369,10 @@ end
 
 function Bridge.restore_gallery(gallery)
     gallery_ref = gallery
+    -- Completa as primeiras gravações que terminaram no staging, mas
+    -- foram interrompidas antes da publicação no índice da galeria.
+    local recovered, err = Recovery.recover_first(ROOT)
+    assert(recovered, err)
     local index = love.filesystem.read(ROOT .. "/index.tsv")
     if not index then return end
     for line in index:gmatch("[^\r\n]+") do
@@ -372,7 +380,8 @@ function Bridge.restore_gallery(gallery)
         width, height = tonumber(width), tonumber(height)
         if key and width and height and title ~= "" then
             local ok, id = pcall(function() return gallery:add_artwork(width, height, title) end)
-            if ok then records[id] = {key = key, w = width, h = height, name = title} end
+            if ok then records[id] = {key = key, w = width, h = height,
+                                         name = title, saved = true} end
         end
     end
 end
@@ -387,14 +396,30 @@ function Bridge.save()
     interrupt_active_gesture()
     local path = project_path(record.key)
     assert(love.filesystem.createDirectory(path), "Não foi possível criar diretório da obra")
-    local recovery_ok, recovery_err = Recovery.begin(path)
-    assert(recovery_ok, recovery_err)
+    if not record.saved then
+        -- Uma primeira gravação já preparada pode sobreviver à falha no
+        -- índice. Publicá-la antes de salvar novas modificações.
+        local recovered, err = Recovery.recover_first(ROOT)
+        assert(recovered, err)
+        if Recovery.first_indexed(ROOT, record.key) then
+            record.saved = true
+        end
+    end
+    local work_path = path
+    if record.saved then
+        local recovery_ok, recovery_err = Recovery.begin(path)
+        assert(recovery_ok, recovery_err)
+    else
+        local first_path, first_err = Recovery.begin_first(path)
+        assert(first_path, first_err)
+        work_path = first_path
+    end
     Engine.sync(project, project.model)
     local lines = {}
     for _, info in ipairs(project.model.layers) do
         local layer = project.layers[info.id]
         if layer then
-            layer.pixels:encode("png", path .. "/layer_" .. info.id .. ".png")
+            layer.pixels:encode("png", work_path .. "/layer_" .. info.id .. ".png")
             lines[#lines + 1] = table.concat({
                 tostring(info.id), safe(info.name), info.visible and "1" or "0",
                 tostring(info.opacity or 100), info.blending or "Normal",
@@ -404,10 +429,10 @@ function Bridge.save()
         end
     end
     local preview = Engine.thumbnail(project, project.model)
-    preview:encode("png", path .. "/preview.png")
+    preview:encode("png", work_path .. "/preview.png")
     gallery_images[project.id] = nil
-    assert(love.filesystem.write(path .. "/layers.tsv", table.concat(lines, "\n")))
-    assert(love.filesystem.write(path .. "/document.tsv",
+    assert(love.filesystem.write(work_path .. "/layers.tsv", table.concat(lines, "\n")))
+    assert(love.filesystem.write(work_path .. "/document.tsv",
         table.concat({tostring(project.model.active_layer_id or 0),
             safe(project.model.background_mode or "white"),
             tostring(project.wand_tolerance or 0),
@@ -422,7 +447,7 @@ function Bridge.save()
             project.bucket_sample_all and "1" or "0"}, "\t")))
     -- Salvar a máscara separadamente mantém o formato PNG/TSV das obras
     -- retrocompatível e evita que a seleção contamine qualquer camada.
-    local mask_path = path .. "/selection.png"
+    local mask_path = work_path .. "/selection.png"
     if selection and selection.count > 0 and
        selection.w == project.w and selection.h == project.h then
         local ok, reason = Selection.save(selection, mask_path)
@@ -431,23 +456,53 @@ function Bridge.save()
         assert(love.filesystem.remove(mask_path),
             "Não foi possível limpar seleção anterior.")
     end
-    local history_ok, history_error = History.save(project, path, selection)
+    local history_ok, history_error = History.save(project, work_path, selection)
     assert(history_ok, history_error)
     local mask_history_ok, mask_history_error = SelectionHistory.save(
-        path, project.w, project.h, selection, mask_undo, mask_redo)
+        work_path, project.w, project.h, selection, mask_undo, mask_redo)
     assert(mask_history_ok, mask_history_error)
     local item = gallery_ref and gallery_ref:get(project.id)
     if item then record.name = item.name end
-    record.saved = true
-    local index = {}
-    for _, r in pairs(records) do
-        if r.saved or love.filesystem.getInfo(project_path(r.key) .. "/layers.tsv") then
-            index[#index + 1] = table.concat({r.key, r.w, r.h, safe(r.name)}, "\t")
+    local first = work_path ~= path
+    if first then
+        local ready, ready_err = Recovery.ready_first(
+            path, record.w, record.h, safe(record.name))
+        assert(ready, ready_err)
+        local published, publish_err = Recovery.publish_first(path)
+        assert(published, publish_err)
+    end
+    -- Preservar entradas já recuperadas e descartar somente registros
+    -- verdadeiramente não salvos. O índice só anuncia a primeira obra
+    -- após todos os arquivos terem sido publicados e verificados.
+    local index_by_key = {}
+    local index_path = ROOT .. "/index.tsv"
+    if love.filesystem.getInfo(index_path, "file") then
+        local previous = assert(love.filesystem.read(index_path),
+                                "Falha ao ler índice da galeria")
+        for line in previous:gmatch("[^\r\n]+") do
+            local key = line:match("^([%w_%-]+)\t")
+            if key then index_by_key[key] = line end
         end
     end
+    for _, r in pairs(records) do
+        if r.saved or r == record then
+            index_by_key[r.key] = table.concat(
+                {r.key, r.w, r.h, safe(r.name)}, "\t")
+        end
+    end
+    local index = {}
+    for _, line in pairs(index_by_key) do
+        index[#index + 1] = line
+    end
     table.sort(index)
-    assert(love.filesystem.write(ROOT .. "/index.tsv", table.concat(index, "\n")))
-    local commit_ok, commit_err = Recovery.commit(path)
+    assert(love.filesystem.write(index_path, table.concat(index, "\n")))
+    record.saved = true
+    local commit_ok, commit_err
+    if first then
+        commit_ok, commit_err = Recovery.commit_first(path)
+    else
+        commit_ok, commit_err = Recovery.commit(path)
+    end
     assert(commit_ok, commit_err)
     project.dirty = false
     return true
