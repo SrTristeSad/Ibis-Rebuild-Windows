@@ -3,6 +3,7 @@ local Engine = require("lua_engine")
 local Selection = require("lua_selection")
 local History = require("lua_history")
 local SelectionHistory = require("lua_selection_history")
+local Recovery = require("lua_recovery")
 local Bridge = {}
 local ROOT = "lua-artworks"
 local records, project, gallery_ref, drawing = {}, nil, nil, nil
@@ -324,6 +325,11 @@ function Bridge.open(model, id)
     selection, gesture, drawing = nil, nil, nil
     clear_mask_history()
     local record = records[id]
+    -- Restaurar antes de carregar qualquer PNG ou manifesto da obra.
+    if record then
+        local ok, err = Recovery.restore(project_path(record.key))
+        assert(ok, err)
+    end
     project = Engine.new(model.document.width, model.document.height)
     project.model, project.document, project.id = model, model.document, id
     project.wand_tolerance = 0
@@ -381,6 +387,8 @@ function Bridge.save()
     interrupt_active_gesture()
     local path = project_path(record.key)
     assert(love.filesystem.createDirectory(path), "Não foi possível criar diretório da obra")
+    local recovery_ok, recovery_err = Recovery.begin(path)
+    assert(recovery_ok, recovery_err)
     Engine.sync(project, project.model)
     local lines = {}
     for _, info in ipairs(project.model.layers) do
@@ -439,6 +447,8 @@ function Bridge.save()
     end
     table.sort(index)
     assert(love.filesystem.write(ROOT .. "/index.tsv", table.concat(index, "\n")))
+    local commit_ok, commit_err = Recovery.commit(path)
+    assert(commit_ok, commit_err)
     project.dirty = false
     return true
 end
