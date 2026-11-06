@@ -124,7 +124,7 @@ class IntegrationLayoutTest(unittest.TestCase):
         self.assertIn("model.active_tool == d.tool", bridge)
         self.assertIn("info.id == d.layer and info.visible and not info.locked", bridge)
         self.assertIn("selection == d.selection_at_start", bridge)
-        self.assertIn("d.opacity, d.eraser, d.alpha_lock, d.selection_at_start,", bridge)
+        self.assertIn("d.alpha_lock, d.selection_at_start, capture,", bridge)
         self.assertIn("tool = tool, selection_at_start = selection", bridge)
         self.assertIn("tool = tool, active_layer_id = info and info.id", bridge)
         self.assertIn("(drawing and not stroke_context_valid(model, drawing))", bridge)
