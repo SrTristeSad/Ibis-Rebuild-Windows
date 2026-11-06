@@ -9,7 +9,10 @@ local function managed(name)
         name == "preview.png" or name == "selection.png" or
         name == "history.tsv" or name == "selection_history.tsv" or
         name:match("^layer_%d+%.png$") or
-        name:match("^history_%d+_%d+_[a-z]+_[1-8](_selection)?%.png$") or
+        name:match("^history_%d+_%d+_undo_[1-8]%.png$") or
+        name:match("^history_%d+_%d+_redo_[1-8]%.png$") or
+        name:match("^history_%d+_%d+_undo_[1-8]_selection%.png$") or
+        name:match("^history_%d+_%d+_redo_[1-8]_selection%.png$") or
         name:match("^selection_history_%d+_%d+_[a-z]+_%d+%.png$")
 end
 
@@ -88,7 +91,8 @@ function Recovery.restore(path)
     if not love.filesystem.remove(marker) then
         return false, "Falha ao finalizar recuperação"
     end
-    return clear_stale(path)
+    clear_stale(path)
+    return true
 end
 
 function Recovery.begin(path)
